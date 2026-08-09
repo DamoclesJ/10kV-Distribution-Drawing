@@ -1,0 +1,14 @@
+# Visual Studio
+.vs/
+bin/
+obj/
+
+# Build output
+*.user
+*.suo
+
+# macOS
+.DS_Store
+
+# Temporary
+*.tmp0
