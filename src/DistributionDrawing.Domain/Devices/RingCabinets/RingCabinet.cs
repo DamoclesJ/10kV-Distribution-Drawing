@@ -164,6 +164,69 @@ public sealed class RingCabinet : Device
         return Create(RingCabinetDefinition.Create(id, displayName, intervals));
     }
 
+    public SwitchAssemblyEvaluation EvaluateIntegratedFeederInterval(Guid intervalId)
+    {
+        if (intervalId == Guid.Empty)
+        {
+            throw new ArgumentException("Interval ID cannot be empty.", nameof(intervalId));
+        }
+
+        ValidateStructure();
+
+        RingCabinetInterval interval = _intervals
+            .FirstOrDefault(candidate => candidate.IntervalId == intervalId)
+            ?? throw new InvalidOperationException(
+                $"Interval '{intervalId}' does not belong to cabinet '{Id}'.");
+
+        if (interval.IntervalKind != IntervalKind.IntegratedFeederInterval ||
+            interval.GroundingStructureKind is not GroundingStructureKind groundingStructureKind)
+        {
+            throw new InvalidOperationException(
+                $"Interval '{intervalId}' is not an integrated-feeder interval.");
+        }
+
+        SwitchDevice isolationSwitch = GetSingleSwitch(
+            interval,
+            SwitchKind.IsolationSwitch,
+            expectedDeviceCount: 3);
+        SwitchDevice circuitBreaker = GetSingleSwitch(interval, SwitchKind.CircuitBreaker);
+        SwitchDevice groundSwitch = GetSingleSwitch(interval, SwitchKind.GroundSwitch);
+
+        SwitchAssemblyEvaluation interlockEvaluation = interval.SwitchAssembly.Evaluate();
+
+        if (!interlockEvaluation.IsValid)
+        {
+            return new SwitchAssemblyEvaluation(
+                false,
+                OperationalState.Unclassified,
+                false,
+                interlockEvaluation.ViolatedRuleCodes);
+        }
+
+        SwitchState isolationState = GetRequiredSwitchState(isolationSwitch);
+        SwitchState circuitBreakerState = GetRequiredSwitchState(circuitBreaker);
+        SwitchState groundState = GetRequiredSwitchState(groundSwitch);
+        OperationalState operationalState = EvaluateIntegratedFeederOperationalState(
+            groundingStructureKind,
+            isolationState,
+            circuitBreakerState,
+            groundState);
+
+        Dictionary<Guid, ElectricalNode> nodes =
+            _electricalNodes.ToDictionary(node => node.Id);
+        Dictionary<Guid, Terminal> terminals = _terminals.ToDictionary(terminal => terminal.Id);
+        bool isEffectivelyGrounded = HasClosedPathFromExternalTerminalToEarth(
+            interval,
+            nodes,
+            terminals);
+
+        return new SwitchAssemblyEvaluation(
+            true,
+            operationalState,
+            isEffectivelyGrounded,
+            []);
+    }
+
     internal void ValidateStructure()
     {
         if (_intervals.Count == 0)
@@ -426,9 +489,10 @@ public sealed class RingCabinet : Device
             TenKilovolts,
             intervalId);
 
-        SwitchAssembly switchAssembly = SwitchAssembly.CreateIntegratedFeederBase(
+        SwitchAssembly switchAssembly = SwitchAssembly.CreateIntegratedFeeder(
             Guid.NewGuid(),
             intervalId,
+            groundingStructureKind,
             isolationSwitch,
             circuitBreaker,
             groundSwitch);
@@ -636,7 +700,9 @@ public sealed class RingCabinet : Device
         EnsureSwitchAssemblyIsValid(
             interval,
             SwitchAssemblyType.IntegratedFeeder,
-            requireRules: false);
+            requireRules: true,
+            expectedRuleSetRef:
+                SwitchAssembly.GetIntegratedFeederRuleSetRef(groundingStructureKind));
 
         ElectricalNode intermediateNode = GetRequiredNode(
             nodes,
@@ -794,6 +860,152 @@ public sealed class RingCabinet : Device
         throw new InvalidOperationException("The cabinet has no supported ordinary intervals.");
     }
 
+    private static OperationalState EvaluateIntegratedFeederOperationalState(
+        GroundingStructureKind groundingStructureKind,
+        SwitchState isolationSwitchState,
+        SwitchState circuitBreakerState,
+        SwitchState groundSwitchState)
+    {
+        return groundingStructureKind switch
+        {
+            GroundingStructureKind.UpperIsolationGrounding =>
+                (isolationSwitchState, circuitBreakerState, groundSwitchState) switch
+                {
+                    (SwitchState.Open, SwitchState.Open, SwitchState.Open) =>
+                        OperationalState.ColdStandby,
+                    (SwitchState.Open, SwitchState.Closed, SwitchState.Closed) =>
+                        OperationalState.Maintenance,
+                    (SwitchState.Closed, SwitchState.Open, SwitchState.Open) =>
+                        OperationalState.HotStandby,
+                    (SwitchState.Closed, SwitchState.Closed, SwitchState.Open) =>
+                        OperationalState.Running,
+                    _ => OperationalState.Unclassified
+                },
+            GroundingStructureKind.UpperLowerGrounding =>
+                (isolationSwitchState, circuitBreakerState, groundSwitchState) switch
+                {
+                    (SwitchState.Open, SwitchState.Open, SwitchState.Open) =>
+                        OperationalState.ColdStandby,
+                    (SwitchState.Open, SwitchState.Open, SwitchState.Closed) =>
+                        OperationalState.Grounded,
+                    (SwitchState.Closed, SwitchState.Open, SwitchState.Open) =>
+                        OperationalState.HotStandby,
+                    (SwitchState.Closed, SwitchState.Closed, SwitchState.Open) =>
+                        OperationalState.Running,
+                    _ => OperationalState.Unclassified
+                },
+            GroundingStructureKind.LowerLowerGrounding =>
+                (isolationSwitchState, circuitBreakerState, groundSwitchState) switch
+                {
+                    (SwitchState.Open, SwitchState.Open, SwitchState.Closed) =>
+                        OperationalState.Grounded,
+                    _ => OperationalState.Unclassified
+                },
+            _ => throw new ArgumentOutOfRangeException(nameof(groundingStructureKind))
+        };
+    }
+
+    private static bool HasClosedPathFromExternalTerminalToEarth(
+        RingCabinetInterval interval,
+        IReadOnlyDictionary<Guid, ElectricalNode> nodes,
+        IReadOnlyDictionary<Guid, Terminal> terminals)
+    {
+        if (!terminals.TryGetValue(interval.ExternalTerminalId, out Terminal? externalTerminal) ||
+            externalTerminal.ElectricalNodeId is not Guid externalNodeId)
+        {
+            throw new InvalidOperationException(
+                $"Interval '{interval.IntervalId}' has an invalid external terminal.");
+        }
+
+        if (!nodes.ContainsKey(externalNodeId) || !nodes.ContainsKey(interval.EarthNodeId))
+        {
+            throw new InvalidOperationException(
+                $"Interval '{interval.IntervalId}' has an invalid grounding topology.");
+        }
+
+        var adjacency = new Dictionary<Guid, HashSet<Guid>>();
+
+        foreach (SwitchDevice switchDevice in interval.SwitchDevices)
+        {
+            if (GetRequiredSwitchState(switchDevice) != SwitchState.Closed)
+            {
+                continue;
+            }
+
+            if (!terminals.TryGetValue(switchDevice.TerminalIds[0], out Terminal? firstTerminal) ||
+                !terminals.TryGetValue(switchDevice.TerminalIds[1], out Terminal? secondTerminal) ||
+                firstTerminal.ElectricalNodeId is not Guid firstNodeId ||
+                secondTerminal.ElectricalNodeId is not Guid secondNodeId ||
+                !nodes.TryGetValue(firstNodeId, out ElectricalNode? firstNode) ||
+                !nodes.TryGetValue(secondNodeId, out ElectricalNode? secondNode) ||
+                !firstNode.TerminalIds.Contains(firstTerminal.Id) ||
+                !secondNode.TerminalIds.Contains(secondTerminal.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Switch '{switchDevice.Id}' has invalid electrical-node references.");
+            }
+
+            AddGraphEdge(adjacency, firstNodeId, secondNodeId);
+        }
+
+        var visited = new HashSet<Guid> { externalNodeId };
+        var pending = new Queue<Guid>();
+        pending.Enqueue(externalNodeId);
+
+        while (pending.Count > 0)
+        {
+            Guid currentNodeId = pending.Dequeue();
+
+            if (currentNodeId == interval.EarthNodeId)
+            {
+                return true;
+            }
+
+            if (!adjacency.TryGetValue(currentNodeId, out HashSet<Guid>? neighbours))
+            {
+                continue;
+            }
+
+            foreach (Guid neighbour in neighbours)
+            {
+                if (visited.Add(neighbour))
+                {
+                    pending.Enqueue(neighbour);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static void AddGraphEdge(
+        IDictionary<Guid, HashSet<Guid>> adjacency,
+        Guid firstNodeId,
+        Guid secondNodeId)
+    {
+        if (!adjacency.TryGetValue(firstNodeId, out HashSet<Guid>? firstNeighbours))
+        {
+            firstNeighbours = [];
+            adjacency.Add(firstNodeId, firstNeighbours);
+        }
+
+        if (!adjacency.TryGetValue(secondNodeId, out HashSet<Guid>? secondNeighbours))
+        {
+            secondNeighbours = [];
+            adjacency.Add(secondNodeId, secondNeighbours);
+        }
+
+        firstNeighbours.Add(secondNodeId);
+        secondNeighbours.Add(firstNodeId);
+    }
+
+    private static SwitchState GetRequiredSwitchState(SwitchDevice switchDevice)
+    {
+        return switchDevice.SwitchState
+            ?? throw new InvalidOperationException(
+                $"Switch '{switchDevice.Id}' does not have a switch state.");
+    }
+
     private static SwitchDevice GetSingleSwitch(
         RingCabinetInterval interval,
         SwitchKind switchKind,
@@ -821,7 +1033,8 @@ public sealed class RingCabinet : Device
     private static void EnsureSwitchAssemblyIsValid(
         RingCabinetInterval interval,
         SwitchAssemblyType expectedAssemblyType,
-        bool requireRules)
+        bool requireRules,
+        string? expectedRuleSetRef = null)
     {
         bool hasRules = interval.SwitchAssembly.InterlockRules.Count > 0;
 
@@ -829,7 +1042,12 @@ public sealed class RingCabinet : Device
             interval.SwitchAssembly.AssemblyType != expectedAssemblyType ||
             !interval.SwitchAssembly.MemberSwitchIds.ToHashSet().SetEquals(
                 interval.SwitchDevices.Select(device => device.Id)) ||
-            hasRules != requireRules)
+            hasRules != requireRules ||
+            (expectedRuleSetRef is not null &&
+             !string.Equals(
+                 interval.SwitchAssembly.RuleSetRef,
+                 expectedRuleSetRef,
+                 StringComparison.Ordinal)))
         {
             throw new InvalidOperationException(
                 $"Interval '{interval.IntervalId}' has an invalid switch assembly.");

@@ -1,11 +1,13 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 
 namespace DistributionDrawing.Domain.Devices.SwitchAssemblies;
 
 public sealed class SwitchAssembly
 {
     private const string LoadSwitchRuleSet = "load-switch-three-position/v1";
-    private const string IntegratedFeederBaseRuleSet = "integrated-feeder-base/v1";
+    private const string IntegratedFeederMutualExclusionRule =
+        "IF-IS-GS-MUTUAL-EXCLUSION";
 
     private readonly IReadOnlyList<SwitchDevice> _memberSwitches;
     private readonly IReadOnlyList<Guid> _memberSwitchIds;
@@ -53,10 +55,12 @@ public sealed class SwitchAssembly
                 nameof(memberSwitches));
         }
 
-        if (assemblyType == SwitchAssemblyType.LoadSwitchThreePosition && rules.Length == 0)
+        if ((assemblyType == SwitchAssemblyType.LoadSwitchThreePosition ||
+             assemblyType == SwitchAssemblyType.IntegratedFeeder) &&
+            rules.Length == 0)
         {
             throw new ArgumentException(
-                "A load-switch three-position assembly requires interlock rules.",
+                "A switch assembly requires rules for its confirmed constraints.",
                 nameof(interlockRules));
         }
 
@@ -133,9 +137,10 @@ public sealed class SwitchAssembly
         return assembly;
     }
 
-    internal static SwitchAssembly CreateIntegratedFeederBase(
+    internal static SwitchAssembly CreateIntegratedFeeder(
         Guid assemblyId,
         Guid parentIntervalId,
+        GroundingStructureKind groundingStructureKind,
         SwitchDevice isolationSwitch,
         SwitchDevice circuitBreaker,
         SwitchDevice groundSwitch)
@@ -174,8 +179,23 @@ public sealed class SwitchAssembly
             parentIntervalId,
             SwitchAssemblyType.IntegratedFeeder,
             [isolationSwitch, circuitBreaker, groundSwitch],
-            IntegratedFeederBaseRuleSet,
-            []);
+            GetIntegratedFeederRuleSetRef(groundingStructureKind),
+            CreateIntegratedFeederRules());
+    }
+
+    internal static string GetIntegratedFeederRuleSetRef(
+        GroundingStructureKind groundingStructureKind)
+    {
+        return groundingStructureKind switch
+        {
+            GroundingStructureKind.UpperIsolationGrounding =>
+                "integrated-feeder/upper-isolation-grounding/v1",
+            GroundingStructureKind.UpperLowerGrounding =>
+                "integrated-feeder/upper-lower-grounding/v1",
+            GroundingStructureKind.LowerLowerGrounding =>
+                "integrated-feeder/lower-lower-grounding/v1",
+            _ => throw new ArgumentOutOfRangeException(nameof(groundingStructureKind))
+        };
     }
 
     public SwitchAssemblyEvaluation Evaluate()
@@ -303,6 +323,22 @@ public sealed class SwitchAssembly
                 },
                 "The external circuit is effectively grounded.",
                 isEffectivelyGrounded: true)
+        ];
+    }
+
+    private static IReadOnlyList<InterlockRule> CreateIntegratedFeederRules()
+    {
+        return
+        [
+            new InterlockRule(
+                IntegratedFeederMutualExclusionRule,
+                InterlockRuleType.MutualExclusion,
+                new Dictionary<SwitchKind, SwitchState>
+                {
+                    [SwitchKind.IsolationSwitch] = SwitchState.Closed,
+                    [SwitchKind.GroundSwitch] = SwitchState.Closed
+                },
+                "Isolation switch and ground switch cannot both be closed.")
         ];
     }
 
