@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DistributionDrawing.Application\DistributionDrawing.Application.csproj" />
+    <ProjectReference Include="..\DistributionDrawing.Infrastructure\DistributionDrawing.Infrastructure.csproj" />
+    <ProjectReference Include="..\DistributionDrawing.Rendering.Wpf\DistributionDrawing.Rendering.Wpf.csproj" />
+  </ItemGroup>
+
+</Project>
