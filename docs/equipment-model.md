@@ -6,7 +6,7 @@
 
 ## 1. 目的与范围
 
-本文统一定义第一阶段 MVP 的设备、端子、连接、节点、状态和布局模型，作为后续领域对象、工程文件和画布渲染的共同语义基线。
+本文统一定义第一阶段 MVP 的设备、端子、连接、节点、状态、工作范围、工作地线和布局模型，作为后续领域对象、工程文件和画布渲染的共同语义基线。
 
 本文只覆盖以下已确认对象：
 
@@ -17,17 +17,16 @@
 5. 架空线路。
 6. 柱上设备：柱上断路器、柱上负荷开关、柱上隔离开关、跌落式熔断器。
 
-环网柜内部的负荷开关、隔离刀闸、断路器和接地刀闸，是上述两类环网柜的组成对象，不是新增的设备库类别。
+环网柜内部的负荷开关、隔离刀闸、断路器、接地刀闸和 PT，是上述两类环网柜的组成对象，不是新增的设备库类别。PT 只作为一二次融合环网柜内部的 `PTInterval`；DTU 是与 PT 固定关联的独立布局柜体，不是一次设备。
 
 本模型明确不包含：
 
-- PT 柜和 DTU 柜。其已有设计保留在 `docs/ring-cabinet-design.md`，但不进入当前 MVP 对象模型和验收。
 - 配电变压器、箱式站、三工位设备、站内其他开关设备及规范中的其他图元。
-- 工作接地线、工作范围、环境对象和独立自由标注模型。
+- 现场勘察环境对象和独立自由标注模型。
 - 生命周期、在运/拆除、运行/检修位置等未列入当前 MVP 的状态维度。
 - 潮流计算、电气仿真、自动带电传播和状态联锁控制。
 
-本文中的英文名称是领域概念名称，不代表已经创建代码类型。其他文档中的 `Equipment` 与本文 `Device` 表达同一“设备实例”概念；本模型统一使用 `Device`，避免后续出现两套基础设备对象。
+本文中的英文名称是领域概念名称，不代表已经创建代码类型。本项目统一使用 `Device` 表达设备实例，其他文档不得再以 `Equipment` 建立第二套基础设备对象。
 
 ## 2. 建模原则
 
@@ -38,6 +37,7 @@
 5. **操作状态与电气状态分离。** `拉开/合入` 决定开关图元及内部导通定义；`带电/停电` 决定颜色。
 6. **组合对象保持内部语义。** 环网柜不是一张不可拆分的图片，间隔、开关、端子和内部节点均可单独识别。
 7. **只建模当前需求。** 不通过通用扩展字典、插件类型或预留空对象提前实现后续设备。
+8. **安全措施由人工定义。** 工作范围和工作地线保存结构化关联，但不根据拓扑自动推导停电范围或生成接地点。
 
 ## 3. MVP 对象分类
 
@@ -48,9 +48,12 @@
 | 普通环网柜 | `Device` → `RingCabinet` | 柜型为普通负荷开关型，包含固定数量间隔和内部开关 |
 | 一二次融合环网柜 | `Device` → `RingCabinet` | 柜型为一二次融合型，包含固定数量间隔和内部开关 |
 | 电缆 | `Connection` | 两个端子之间的电缆连接，不再建立重复的电缆 Device |
-| 水泥杆 | `Device` → `CementPole` | 非导电承载设备，可提供架空线路连接锚点并承载柱上设备 |
+| 水泥杆 | `Device` → `Pole` | 架空系统基础对象；当前 PoleType 为水泥杆，提供连接端子和附属设备关系 |
 | 架空线路 | `Connection` | 两个端子之间的架空连接，可引用有序水泥杆列表 |
 | 柱上设备 | `Device` → `SwitchDevice` | 安装于水泥杆，类型限定为规范已列出的四种柱上设备 |
+| 电缆终端 | `Device` → `CableTermination` | 安装于杆塔，连接电缆侧和架空侧，是两个系统的转换点 |
+| 工作范围 | `WorkScope` | 由两个端子边界和描述定义，不是普通矩形图元 |
+| 工作地线 | `GroundingPoint` | 人工关联到端子，保存编号和备注 |
 
 电缆和架空线路虽然在界面中可从设备库拖放或创建，但在领域拓扑中均是 `Connection`。同一条线路不得同时保存为 Device 和 Connection。
 
@@ -61,25 +64,38 @@ classDiagram
     class DrawingDocument
     class Device
     class RingCabinet
-    class RingCabinetBay
+    class RingCabinetInterval
     class SwitchDevice
-    class CementPole
+    class Pole
+    class PoleAttachment
+    class CableTermination
+    class PT
+    class PTInterval
+    class DTUCabinet
     class Terminal
     class ElectricalNode
     class Connection
     class State
     class Layout
+    class WorkScope
+    class BoundaryPoint
+    class GroundingPoint
 
     DrawingDocument "1" o-- "0..*" Device : 文档范围索引
     DrawingDocument "1" *-- "0..*" Connection
     DrawingDocument "1" *-- "0..*" ElectricalNode
     Device <|-- RingCabinet
     Device <|-- SwitchDevice
-    Device <|-- CementPole
-    RingCabinet "1" *-- "3..6" RingCabinetBay
-    RingCabinetBay "1" *-- "2..3" SwitchDevice
+    Device <|-- Pole
+    Device <|-- CableTermination
+    Device <|-- PT
+    RingCabinet "1" *-- "3..6" RingCabinetInterval
+    RingCabinet "1" *-- "0..1" PTInterval
+    RingCabinet "1" *-- "0..1" DTUCabinet
+    PTInterval "1" *-- "1" PT
+    RingCabinetInterval "1" *-- "2..3" SwitchDevice
     Device "1" *-- "0..*" Terminal
-    RingCabinetBay "1" *-- "1" Terminal
+    RingCabinetInterval "1" *-- "1" Terminal
     Connection "1" --> "2" Terminal
     Terminal "0..*" --> "0..1" ElectricalNode
     Device "1" *-- "1" Layout
@@ -88,7 +104,17 @@ classDiagram
     Connection "1" *-- "1" State
     Terminal "1" *-- "0..1" State
     ElectricalNode "1" *-- "0..1" State
+    Pole "1" *-- "0..*" PoleAttachment
+    PoleAttachment "1" --> "1" Device
+    DrawingDocument "1" *-- "0..*" WorkScope
+    WorkScope "1" *-- "2" BoundaryPoint
+    WorkScope "1" --> "0..*" GroundingPoint
+    DrawingDocument "1" *-- "0..*" GroundingPoint
+    BoundaryPoint "1" --> "1" Terminal
+    GroundingPoint "1" --> "1" Terminal
 ```
+
+`DrawingDocument` 是文档聚合根，直接保存或索引 `Devices`、`Connections`、`Terminals`、`ElectricalNodes`、`WorkScopes` 和 `GroundingPoints`。`Layout` 与这些语义对象分开保存；任何图形对象都不得反向成为领域事实源。
 
 图中的 `3..6` 表达环网柜组合数量范围；普通柜允许 3、4、5、6 间隔，一二次融合柜只允许 4、6 间隔。每个普通柜间隔包含 2 台开关，一二次融合柜间隔包含 3 台开关。
 
@@ -96,30 +122,30 @@ classDiagram
 
 ### 5.1 Device 定义
 
-`Device` 表示具有独立身份、属性和画布位置的设备实例。第一阶段只有环网柜、水泥杆和开关设备使用该基础模型。
+`Device` 表示具有独立身份、属性和画布位置的设备实例。第一阶段由环网柜、杆塔、开关设备、电缆终端和 PT 使用该基础模型。
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | DeviceId | 是 | 在工程内稳定唯一；保存、重开后不改变 |
-| DeviceClass | 是 | 仅允许 `RingCabinet`、`Switch`、`CementPole` |
+| DeviceClass | 是 | 仅允许 `RingCabinet`、`Switch`、`Pole`、`CableTermination`、`PT` |
 | DisplayName | 条件必填 | 环网柜和开关设备必填；水泥杆可由 PoleNumber 独立形成图面标注 |
 | VoltageLevel | 条件必填 | 导电设备固定为 10kV；水泥杆不适用 |
 | TerminalIds | 否 | 本设备拥有的端子标识集合；环网柜外部端子由间隔拥有 |
 | State | 条件必填 | 仅有状态能力的设备保存适用状态 |
-| ParentRef | 否 | 内部开关指向所属间隔；柱上设备指向所安装水泥杆 |
+| ParentRef | 否 | 仅内部设备使用，指向所属普通间隔或 PTInterval |
 | Layout | 是 | 设备位置、尺寸及标签锚点，不包含 WPF 类型 |
 | SymbolRef | 是 | 指向经确认的专业图元及版本，不保存图元几何副本 |
 
 `DeviceClass` 是基础结构分类，不等同于设备库菜单。内部开关通过 `SwitchKind` 和安装位置进一步限定，不新增任意 DeviceClass。
 
-`ParentRef` 是 ParentBayId 或 HostPoleId 的统一概念表达，持久化时只能有一个有效父引用，不重复保存两份互相可能冲突的父关系。
+`ParentRef` 表达柜内设备的组合所有权。杆塔附属关系只以 PoleAttachment 为事实源，附属 Device 不重复保存 PoleId 或 AttachmentId。
 
 ### 5.2 Device 所有权
 
-- 图纸文档直接拥有顶层环网柜、水泥杆和柱上设备。
-- 环网柜聚合拥有普通间隔；普通间隔拥有柜内开关设备。
+- 图纸文档直接拥有顶层环网柜、杆塔，以及通过杆塔附属关系索引的柱上设备和电缆终端。
+- 环网柜聚合拥有普通间隔；一二次融合柜还必须拥有一个 PTInterval 和关联 DTUCabinet。普通间隔拥有柜内开关设备，PTInterval 拥有隔离刀闸、PT 和接地刀闸。
 - 柜内开关仍具有全工程唯一 DeviceId，但不得脱离所属间隔独立存在。
-- 柱上设备具有独立 DeviceId，同时必须通过 `HostPoleId` 指向一根水泥杆。
+- 柱上设备和电缆终端具有独立 DeviceId，并通过 `PoleAttachment` 关联到一根杆塔，不得作为悬空设备存在。
 - 一个对象只能有一个语义所有者；不得同时在顶层设备集合和环网柜内部重复保存同一开关实例。
 
 ### 5.3 SwitchDevice 统一模型
@@ -129,10 +155,9 @@ classDiagram
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | DeviceId | 是 | 继承 Device 的稳定标识 |
-| SwitchKind | 是 | 仅允许 `LoadSwitch`、`Disconnector`、`CircuitBreaker`、`EarthingSwitch`、`DropoutFuse` |
-| InstallationKind | 是 | `CabinetBay` 或 `Pole` |
-| ParentBayId | 条件必填 | 柜内开关必填，柱上设备不得设置 |
-| HostPoleId | 条件必填 | 柱上设备必填，柜内开关不得设置 |
+| SwitchKind | 是 | 仅允许 `LoadSwitch`、`IsolationSwitch`、`CircuitBreaker`、`GroundSwitch`、`DropoutFuse` |
+| InstallationKind | 是 | `CabinetInterval` 或 `Pole` |
+| ParentIntervalId | 条件必填 | 柜内开关必填，柱上设备不得设置；可指向普通 RingCabinetInterval 或 PTInterval |
 | TerminalIds | 是 | 固定两个，角色由 SwitchKind 和安装位置确定 |
 | OperationState | 是 | `Open` 或 `Closed`，每台设备独立保存 |
 | DispatchNumber | 否 | 需要在图面标注调度编号时使用 |
@@ -141,9 +166,10 @@ classDiagram
 
 | 安装位置 | 允许的 SwitchKind |
 | --- | --- |
-| 普通负荷开关型间隔 | `LoadSwitch`（负荷开关）、`EarthingSwitch`（接地刀闸） |
-| 一二次融合型间隔 | `Disconnector`（隔离刀闸）、`CircuitBreaker`（断路器）、`EarthingSwitch`（接地刀闸） |
-| 水泥杆 | `LoadSwitch`（柱上负荷开关）、`Disconnector`（柱上隔离开关）、`CircuitBreaker`（柱上断路器）、`DropoutFuse`（跌落式熔断器） |
+| 普通负荷开关型间隔 | `LoadSwitch`（负荷开关）、`GroundSwitch`（接地刀闸） |
+| 一二次融合型间隔 | `IsolationSwitch`（隔离刀闸）、`CircuitBreaker`（断路器）、`GroundSwitch`（接地刀闸） |
+| PT 间隔 | `IsolationSwitch`（隔离刀闸）、`GroundSwitch`（接地刀闸） |
+| 水泥杆 | `LoadSwitch`（柱上负荷开关）、`IsolationSwitch`（柱上隔离开关）、`CircuitBreaker`（柱上断路器）、`DropoutFuse`（跌落式熔断器） |
 
 表中的“柱上”表示安装语境，不建立另一套基础开关类。例如柱上断路器仍是 `SwitchKind = CircuitBreaker`、`InstallationKind = Pole` 的 SwitchDevice。
 
@@ -156,7 +182,7 @@ classDiagram
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | TerminalId | 是 | 工程内稳定唯一 |
-| OwnerKind | 是 | `Device` 或 `RingCabinetBay` |
+| OwnerKind | 是 | `Device`、`RingCabinetInterval` 或 `PTInterval` |
 | OwnerId | 是 | 所属设备或间隔标识 |
 | Role | 是 | 端子在所属对象中的稳定语义角色 |
 | VoltageLevel | 条件必填 | 回路、母线和线路端子固定为 10kV；接地侧端子不适用 |
@@ -179,16 +205,18 @@ classDiagram
 | 接地刀闸 | 设备侧、接地侧 |
 | 普通间隔 | 对外回路 |
 | 柱上开关设备 | 线路侧 A、线路侧 B |
-| 水泥杆 | 架空线路锚点 |
+| 杆塔 | 架空线路锚点 |
+| 电缆终端 | 电缆侧、架空侧 |
+| PT | 上游侧、接地侧 |
 
-水泥杆的“架空线路锚点”表示该杆位上的导线连接或延续点，不表示水泥杆本体导电。只有连接到同一 Junction 端子或同一显式电气节点的线路才视为导通。
+杆塔的“架空线路锚点”表示该杆位上的导线连接或延续点，不表示杆塔本体导电。只有连接到同一 Junction 端子或同一显式电气节点的线路才视为导通。
 
 ### 6.3 端子占用规则
 
 - `Single` 端子最多连接一条外部 Connection，适用于间隔对外回路端子和柱上设备普通线路端子。
 - `Junction` 端子允许多条架空线路连接，适用于水泥杆上的显式架空线路连接锚点。
 - 柜内 Internal 端子不允许用户从画布直接连线，其连接由环网柜模板固定生成。
-- Connection 不得直接连接 DeviceId、BayId 或屏幕坐标，必须引用 TerminalId。
+- Connection 不得直接连接 DeviceId、IntervalId 或屏幕坐标，必须引用 TerminalId。
 - 删除拥有端子的对象前，必须先删除或明确处理引用这些端子的外部连接。
 
 ## 7. ElectricalNode 辅助拓扑模型
@@ -222,6 +250,11 @@ classDiagram
 | ElectricalState | 是 | 人工设置的 `Energized` 或 `Deenergized` |
 | Route | 是 | 文档坐标下的连接折点；不保存 WPF Geometry |
 | SupportPoleIds | 条件必填 | 仅架空线路使用，按线路经过顺序引用水泥杆 |
+| LineModel | 条件必填 | 仅架空线路使用，保存线路型号 |
+| Length | 否 | 仅架空线路使用，可选长度 |
+| IsContinued | 条件必填 | 仅架空线路使用；表示图面终点后是否省略后续线路 |
+| ContinuationState | 条件必填 | IsContinued 为 true 时必填，只允许 `Energized` 或 `Unknown` |
+| ContinuationLabel | 否 | 线路继续符号旁的文字说明 |
 
 ### 8.2 通用连接规则
 
@@ -239,7 +272,7 @@ classDiagram
 
 - 必须正好连接两个允许电缆接入的 External 端子。
 - 不使用 SupportPoleIds。
-- 可连接环网柜间隔对外端子或柱上设备线路端子。
+- 典型场景连接环网柜间隔对外端子与 CableTermination 的电缆侧端子；不得直接以坐标接到杆塔或架空线路。
 - 电缆名称、电气状态和路线独立保存。
 - MVP 不增加电缆型号、截面、长度、敷设方式等未确认字段。
 
@@ -248,11 +281,14 @@ classDiagram
 架空线路是 `ConnectionKind = OverheadLine` 的连接实例：
 
 - 必须正好连接两个允许架空线路接入的 External 端子。
-- 可以连接柱上设备线路端子或水泥杆架空线路锚点。
-- `SupportPoleIds` 保存线路经过的水泥杆顺序；每个引用必须指向现存的 CementPole。
+- 可以连接 CableTermination 架空侧端子、柱上设备线路端子或杆塔架空线路锚点。
+- `SupportPoleIds` 保存线路经过的水泥杆顺序；每个引用必须指向现存的 Pole。
 - 同一根水泥杆可以支撑多条架空线路，但每条线路应分别保存其连接关系。
 - 移动水泥杆时，线路经过顺序和端子引用不变，仅重新计算相关显示段。
-- MVP 不增加导线型号、档距、相序或线路参数等未确认字段。
+- `LineModel` 保存线路型号，`Length` 为可选属性；MVP 不增加档距、相序等未确认参数。
+- `IsContinued = true` 表示画到某杆位后以“线路继续符号 + 文字”省略后续线路。
+- 延续部分的 `ContinuationState` 由用户人工指定为 `Energized` 或 `Unknown`，不得从当前连接或开关状态自动推导。
+- `ContinuationState` 只描述图外延续部分，不覆盖当前 Connection 的 ElectricalState。
 
 ## 9. State 基础模型
 
@@ -326,22 +362,24 @@ classDiagram
 | DisplayName | 是 | 柜体名称 |
 | VoltageLevel | 是 | 固定 10kV |
 | MainBusNodeId | 是 | 本柜唯一主母线节点 |
-| Bays | 是 | 按从左到右顺序保存的普通间隔 |
+| Intervals | 是 | 按从左到右顺序保存的普通 RingCabinetInterval |
+| PTInterval | 条件必填 | 一二次融合柜必须有且仅有一个，保存 Left/Right 位置及固定内部结构 |
+| DTUCabinet | 条件必填 | 一二次融合柜必须有且仅有一个；位置由 PT 位置派生，仅保存 Size 和 Label |
 | Layout | 是 | 柜体整体位置、尺寸和标签位置 |
 
-当前 MVP 的 RingCabinet 不包含 PT、DTU 或其他特殊间隔字段。
+PT 不是独立柜体或顶层 Device。DTU 不是一次设备，不具有 Terminal、ElectricalNode 或状态；其 `Position` 不单独保存可编辑值，而满足 `DTUPosition = PTPosition`。
 
-### 10.2 RingCabinetBay
+### 10.2 RingCabinetInterval
 
-`RingCabinetBay` 是环网柜内部子对象，不是可脱离柜体独立放置的顶层 Device。
+`RingCabinetInterval` 是环网柜内部普通间隔，不是可脱离柜体独立放置的顶层 Device。
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| BayId | 是 | 工程内稳定唯一 |
+| IntervalId | 是 | 工程内稳定唯一 |
 | ParentCabinetId | 是 | 所属 RingCabinet |
 | Sequence | 是 | 从左到右连续编号 1 至 N |
 | DisplayName | 是 | 间隔显示名称 |
-| BayKind | 是 | 与 CabinetKind 对应的普通间隔类型 |
+| IntervalKind | 是 | `LoadSwitchInterval` 或 `CircuitBreakerInterval`，必须与 CabinetKind 对应 |
 | SwitchDevices | 是 | 由柜型固定生成，不允许缺项或任意替换 |
 | CircuitNodeId | 是 | 本间隔回路节点 |
 | IntermediateNodeId | 条件必填 | 仅一二次融合间隔需要 |
@@ -393,67 +431,155 @@ classDiagram
 - 移动或重排间隔只改变 Layout；已连接 Connection 的 TerminalId 不变。
 - 调整间隔数量涉及创建或删除语义对象，不属于普通移动操作；删除已连接间隔前必须处理其外部连接。
 
+### 10.6 PTInterval 与 DTUCabinet
+
+一二次融合柜的 `PTInterval` 固定包含一台隔离刀闸、一台 PT 和一台接地刀闸：
+
+```text
+主母线—隔离刀闸—PT—接地刀闸—大地节点
+```
+
+- 隔离刀闸和接地刀闸分别保存 OperationState；PT 本体不保存操作状态。
+- PTInterval 不产生普通间隔对外端子，也不计入 4/6 个普通间隔数量。
+- PTPosition 只允许 Left 或 Right。
+- PT 存在时 DTUCabinet 必须存在并自动位于同侧外部；左侧为 `DTU | PT | 普通间隔`，右侧为 `普通间隔 | PT | DTU`。
+- 用户不得单独创建、删除或改变 DTU 的左右位置。
+
 ## 11. 柱上设备与架空对象关系
 
-### 11.1 CementPole
+### 11.1 Pole
 
-水泥杆是 `DeviceClass = CementPole` 的非导电承载设备。
+`Pole` 是架空系统的基础对象。当前 MVP 只实现水泥杆，因此 `PoleType` 固定为 `Cement`，但领域名称统一使用 Pole。
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | DeviceId | 是 | 水泥杆标识 |
 | PoleNumber | 是 | 图面杆号 |
+| PoleType | 是 | 当前固定为 `Cement` |
 | DisplayName | 否 | 除杆号外需要显示的名称 |
 | OverheadAnchorTerminals | 否 | 架空线路在该杆位连接或延续时使用 |
+| AttachmentIds | 否 | 本杆塔上的附属关系标识集合 |
 | Layout | 是 | 杆位坐标、图元尺寸和标签位置 |
 
-水泥杆不保存 OperationState 或 ElectricalState。其锚点只表示导线连接位置，不使杆体成为电气导体。
+Pole 不保存 OperationState 或 ElectricalState。其端子只表示导线连接位置，不使杆体成为电气导体。
 
-### 11.2 柱上 SwitchDevice
+### 11.2 PoleAttachment
+
+`PoleAttachment` 明确表达杆塔与附属设备之间的安装关系：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| AttachmentId | 是 | 工程内稳定唯一 |
+| PoleId | 是 | 指向现存 Pole |
+| DeviceId | 是 | 指向柱上开关或 CableTermination |
+| RelativeLayout | 是 | 设备相对杆塔的位置和标签锚点 |
+
+同一 Device 只能关联一根 Pole。柱上隔离开关、柱上负荷开关、柱上断路器、跌落式熔断器和电缆终端均不得脱离 PoleAttachment 悬空存在。
+
+### 11.3 柱上 SwitchDevice
 
 柱上设备统一使用 SwitchDevice，并满足：
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | DeviceId | 是 | 柱上设备标识 |
-| SwitchKind | 是 | 仅允许 `CircuitBreaker`、`LoadSwitch`、`Disconnector`、`DropoutFuse`，分别显示为四类已确认柱上设备 |
-| HostPoleId | 是 | 必须引用现存 CementPole |
+| SwitchKind | 是 | 仅允许 `CircuitBreaker`、`LoadSwitch`、`IsolationSwitch`、`DropoutFuse`，分别显示为四类已确认柱上设备 |
 | DisplayName | 是 | 设备名称或图面标注 |
 | OperationState | 是 | `Open` 或 `Closed` |
 | LineTerminalA | 是 | 第一线路端子 |
 | LineTerminalB | 是 | 第二线路端子 |
-| RelativeLayout | 是 | 相对所属水泥杆的位置和标签锚点 |
 
 - 一台柱上设备只能安装在一根水泥杆上。
 - 水泥杆可以承载多台柱上设备，但每台设备独立保存状态和端子。
-- 移动水泥杆时，其柱上设备随杆整体移动，RelativeLayout 不变，连接端点标识不变。
-- 单独调整柱上设备位置只改变 RelativeLayout，不改变 HostPoleId。
-- 更换所属水泥杆必须显式修改 HostPoleId，不能通过图元拖到另一根杆附近自动完成。
+- 移动水泥杆时，其柱上设备随杆整体移动，PoleAttachment.RelativeLayout 不变，连接端点标识不变。
+- 单独调整柱上设备位置只改变 PoleAttachment.RelativeLayout，不改变 PoleId。
+- 更换所属水泥杆必须显式修改 PoleAttachment.PoleId，不能通过图元拖到另一根杆附近自动完成。
 
-### 11.3 典型对象关系
+### 11.4 CableTermination
+
+`CableTermination` 是电缆系统与架空系统之间的转换设备，必须通过 PoleAttachment 安装在杆塔上。
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| DeviceId | 是 | 电缆终端设备标识 |
+| CableSideTerminalId | 是 | 只允许 Cable 接入 |
+| OverheadSideTerminalId | 是 | 只允许 OverheadLine 接入 |
+| DisplayName | 否 | 图面名称或说明 |
+| Layout | 是 | 由 PoleAttachment 的相对布局确定 |
+
+典型关系为：`环网柜出线端子—Cable—电缆终端电缆侧—电缆终端架空侧—OverheadLine—杆塔/柱上设备`。电缆终端两侧通过设备内部固定导通关系连接，不允许电缆直接以屏幕坐标接到架空线路。
+
+### 11.5 典型对象关系
 
 ```mermaid
 flowchart LR
     BAY["环网柜间隔对外端子"]
     CABLE["Connection：Cable"]
-    PSW1["柱上设备：线路端子 A"]
-    PSW2["柱上设备：线路端子 B"]
+    CT1["电缆终端：电缆侧"]
+    CT2["电缆终端：架空侧"]
     OHL["Connection：OverheadLine"]
     ANCHOR["水泥杆架空线路锚点"]
 
     BAY --- CABLE
-    CABLE --- PSW1
-    PSW2 --- OHL
+    CABLE --- CT1
+    CT1 --- CT2
+    CT2 --- OHL
     OHL --- ANCHOR
 ```
 
-水泥杆与柱上设备之间是安装关系；线路与设备之间是端子连接关系。两种关系不得合并为一个“连接”字段。
+杆塔与附属设备之间是 PoleAttachment 安装关系；线路与设备之间是端子连接关系。两种关系不得合并为一个“连接”字段。
 
-## 12. Layout 模型
+## 12. WorkScope 与 GroundingPoint
+
+### 12.1 BoundaryPoint
+
+`BoundaryPoint` 表示工作范围的一端，不是画布坐标：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| DeviceId | 是 | 边界所属设备 |
+| TerminalId | 是 | 设备上明确的边界端子 |
+| Side | 是 | 端子对应的业务侧别，例如 `LineSide`、`SourceSide` |
+
+DeviceId 必须是 TerminalId 的实际所属设备或其组合所有者，Side 必须与端子角色一致。边界标记的画布位置由端子锚点和布局计算，不保存为拓扑事实。
+
+### 12.2 WorkScope
+
+`WorkScope` 由两个电气边界点定义：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| WorkScopeId | 是 | 工程内稳定唯一 |
+| StartBoundary | 是 | 起始 BoundaryPoint |
+| EndBoundary | 是 | 终止 BoundaryPoint |
+| Description | 是 | 工作范围文字说明 |
+| GroundingPointIds | 否 | 与本工作范围关联的工作地线 |
+
+- 工作范围不是普通矩形框；范围框、引线或高亮只是模型的可视化。
+- 软件不得根据两个边界点自动判断停电、带电或工作范围内对象集合。
+- 边界两侧和工作范围外对象的 ElectricalState 由用户人工设置并确认。
+
+### 12.3 GroundingPoint
+
+`GroundingPoint` 表示人工添加的工作地线，与设备中的接地刀闸不同：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| GroundingPointId | 是 | 工程内稳定唯一 |
+| Location | 是 | 面向用户的位置说明，例如“3 号杆线路侧” |
+| TerminalId | 是 | 工作地线关联的明确端子 |
+| Number | 条件必填 | 工作票附图必填且同一文档内唯一；勘察附图不显示具体编号 |
+| Note | 否 | 现场条件或其他说明 |
+
+- 工作地线只能由用户人工添加、移动关联或删除。
+- 停电范围、开关状态和拓扑变化不得自动创建、删除或重定位 GroundingPoint。
+- GroundingPoint 通过 TerminalId 保存语义位置，图形位置属于 Layout。
+
+## 13. Layout 模型
 
 布局数据服务于拖放和移动，不参与电气拓扑判断。
 
-### 12.1 设备布局
+### 13.1 设备布局
 
 设备布局至少保存：
 
@@ -464,7 +590,7 @@ flowchart LR
 
 当前 MVP 不因模型设计自行增加旋转、自由缩放或自动布局能力。
 
-### 12.2 连接布局
+### 13.2 连接布局
 
 Connection 的 Route 保存零个或多个文档坐标折点：
 
@@ -473,7 +599,7 @@ Connection 的 Route 保存零个或多个文档坐标折点：
 - 中间折点只影响线条路线。
 - 移动设备后可以更新首尾段，但不得修改连接端点标识。
 
-## 13. 属性编辑边界
+## 14. 属性编辑边界
 
 MVP 属性面板只编辑当前模型已经定义的字段：
 
@@ -483,12 +609,15 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 | 柜内开关 | 设备名称或调度编号、OperationState |
 | 电缆 | 显示名称、ElectricalState |
 | 水泥杆 | 杆号、显示名称 |
-| 架空线路 | 显示名称、ElectricalState、经过水泥杆顺序 |
-| 柱上设备 | 显示名称、所属水泥杆、OperationState |
+| 架空线路 | 显示名称、线路型号、可选长度、ElectricalState、经过水泥杆顺序、延续标识及延续状态 |
+| 柱上设备 | 显示名称、PoleAttachment、OperationState |
+| 电缆终端 | 显示名称、PoleAttachment |
+| 工作范围 | 起始边界、终止边界、说明、关联工作地线 |
+| 工作地线 | 位置说明、连接端子、编号、备注 |
 
 图元颜色不是自由属性；颜色由 ElectricalState 和 `docs/drawing-rule.md` 共同决定。图元几何、端子数量和环网柜固定设备组合也不是普通属性编辑项。
 
-## 14. 工程文件保存边界
+## 15. 工程文件保存边界
 
 设备模型保存时至少应完整包含：
 
@@ -497,7 +626,12 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - Terminal 的所属对象、角色、暴露范围和连接能力。
 - Connection 的类型、两个端点、电气状态及 Route。
 - 架空线路的 SupportPoleIds。
-- 柱上设备的 HostPoleId 和 RelativeLayout。
+- 架空线路的 LineModel、可选 Length、IsContinued、ContinuationState 和 ContinuationLabel。
+- PoleAttachment 的 PoleId、DeviceId 和 RelativeLayout。
+- 电缆终端两侧端子及其 PoleAttachment。
+- 一二次融合环网柜的 PTInterval、PTPosition 和关联 DTUCabinet。
+- WorkScope 的两个 BoundaryPoint、Description 和 GroundingPointIds。
+- GroundingPoint 的 Location、TerminalId、Number 和 Note。
 - 每台开关独立的 OperationState。
 - 设备、间隔和连接的 Layout。
 
@@ -506,21 +640,21 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - WPF Visual、Geometry、Brush、Transform 或屏幕像素坐标。
 - 可从图元定义和 Layout 重新计算的端子实际坐标。
 - 同一电缆或架空线路的重复 Device 副本。
-- PT、DTU 或其他非 MVP 设备的空占位字段。
+- 其他非 MVP 设备的空占位字段。
 - 自动潮流、电气仿真或数据库引用。
 
 保存后重新打开必须恢复相同的设备所有权、端子引用、连接端点、状态和布局。
 
-## 15. 模型校验规则
+## 16. 模型校验规则
 
-### 15.1 基础对象
+### 16.1 基础对象
 
-- 所有 DeviceId、TerminalId、ConnectionId、NodeId 和 BayId 在工程内唯一。
+- 所有 DeviceId、TerminalId、ConnectionId、NodeId 和 IntervalId 在工程内唯一。
 - 所有引用目标必须存在，且对象类型符合引用要求。
 - DeviceClass、SwitchKind、ConnectionKind 和状态值只能取本文定义的集合。
 - 不允许保存没有所有者的 Terminal 或没有两个有效端点的 Connection。
 
-### 15.2 环网柜
+### 16.2 环网柜
 
 - 普通负荷开关型只能有 3、4、5、6 个普通间隔。
 - 一二次融合型只能有 4、6 个普通间隔。
@@ -530,25 +664,30 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - 每台柜内开关必须有独立 OperationState。
 - 每个间隔必须有且只有一个对外回路端子。
 - 柜内端子、节点和固定设备关系必须符合第 10 节。
-- 当前 MVP 环网柜不得包含 PT、DTU 或特殊间隔。
+- 普通负荷开关型不得包含 PT 或 DTU；一二次融合柜必须包含且只能包含一个 PTInterval 和一个 DTUCabinet。
+- PTInterval 必须包含隔离刀闸、PT、接地刀闸及固定内部关系；PTPosition 只能为 Left 或 Right。
+- PT 存在时必须关联一个 DTUCabinet；DTU 不得单独存在、包含电气对象或拥有独立左右位置。
 
-### 15.3 电缆和架空线路
+### 16.3 电缆和架空线路
 
 - ConnectionKind 只能为 Cable 或 OverheadLine。
 - 两端端子必须允许相应连接类型，且均为 10kV。
 - Cable 不得保存 SupportPoleIds。
-- OverheadLine 的 SupportPoleIds 只能引用 CementPole，并保持明确顺序。
+- OverheadLine 的 SupportPoleIds 只能引用 Pole，并保持明确顺序。
+- OverheadLine 的 LineModel 必填；Length 可选。
+- IsContinued 为 true 时 ContinuationState 必须为 Energized 或 Unknown；否则不得保存 ContinuationState。
 - 连接线视觉相交不创建隐含端子、节点或分支。
 
-### 15.4 水泥杆和柱上设备
+### 16.4 杆塔和附属设备
 
 - PoleNumber 必填并参与图面标注；对象身份以 DeviceId 为准，当前 MVP 不自行规定杆号唯一性规则。
-- 柱上设备的 HostPoleId 必须引用现存水泥杆。
+- 每个柱上设备和电缆终端必须且只能通过一个 PoleAttachment 关联现存 Pole。
 - 柱上 SwitchKind 只能是已确认的四种柱上设备。
 - 每台柱上设备必须具有两个线路端子和独立 OperationState。
-- 删除水泥杆前必须处理其柱上设备、架空线路支撑引用和锚点连接。
+- 电缆终端必须分别具有电缆侧和架空侧端子，且两侧只允许对应 ConnectionKind。
+- 删除水泥杆前必须处理其 PoleAttachment、附属设备、架空线路支撑引用和锚点连接。
 
-### 15.5 状态
+### 16.5 状态
 
 - OperationState 只能为 Open 或 Closed。
 - ElectricalState 只能为 Energized 或 Deenergized。
@@ -556,7 +695,14 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - 修改单台开关后，其他开关状态保持原值。
 - OperationState 和 ElectricalState 不得相互自动覆盖。
 
-## 16. MVP 验收示例
+### 16.6 工作范围和工作地线
+
+- WorkScope 必须具有两个有效且不同的 BoundaryPoint。
+- BoundaryPoint 的 Device、Terminal 和 Side 必须一致。
+- GroundingPoint 必须引用现存端子；工作票附图中的 Number 必填且唯一。
+- 修改工作范围不得自动修改 ElectricalState 或生成 GroundingPoint。
+
+## 17. MVP 验收示例
 
 | 验收场景 | 预期模型结果 |
 | --- | --- |
@@ -565,15 +711,19 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 | 单独拉开一个断路器 | 只更新目标 Device 的 OperationState；同间隔另外两台开关状态不变 |
 | 环网柜通过电缆连接柱上设备 | Cable 的两个端点分别引用间隔对外端子和柱上设备线路端子 |
 | 柱上设备通过架空线路连接杆位 | OverheadLine 的端点引用柱上设备端子和水泥杆锚点，并保存经过杆位顺序 |
+| 电缆经终端转为架空线路 | Cable 和 OverheadLine 分别连接 CableTermination 两侧端子，终端通过 PoleAttachment 安装在杆塔 |
+| 标记后续线路 | IsContinued 为 true，人工选择 Energized 或 Unknown，并显示继续符号和说明 |
 | 移动环网柜 | Device Layout 改变，Cable 端点 TerminalId 不变，路线首段刷新 |
-| 移动水泥杆 | 水泥杆和所承载柱上设备位置更新，HostPoleId、线路端点及支撑顺序不变 |
+| 移动水泥杆 | 水泥杆和所承载附属设备位置更新，PoleAttachment、线路端点及支撑顺序不变 |
+| 定义工作范围 | 两个 BoundaryPoint 分别关联明确端子及侧别，不自动改变任何 ElectricalState |
+| 添加工作地线 | 人工创建 GroundingPoint、关联端子并编号，保存重开后关联不变 |
 | 保存并重新打开 | Device、Bay、Terminal、Node、Connection、State 和 Layout 语义完全一致 |
 | 线条交叉但未连接 | 不生成 Terminal、Node 或 Connection 关系，电气拓扑保持不变 |
 
-## 17. 与其他设计文档的关系
+## 18. 与其他设计文档的关系
 
 - MVP 交付边界以 `docs/requirements.md` 为准。
-- 两类环网柜的间隔数量和内部开关结构以 `docs/ring-cabinet-design.md` 为专业设计依据；其中 PT、DTU 内容不进入当前 MVP。
+- 两类环网柜的间隔数量和内部开关结构以 `docs/ring-cabinet-design.md` 为专业设计依据；PT/DTU 作为一二次融合环网柜组合结构实现，不是独立设备库类别。
 - 状态图元、带电/停电颜色和文字显示遵循 `docs/drawing-rule.md`。
 - 领域对象、持久化 DTO、ViewModel 和 WPF 渲染对象之间的分层映射遵循 `docs/implementation-plan.md`。
 - 如后续增加设备或状态，必须先变更 MVP 需求和本模型文档，不能通过未知类型或自由属性绕过范围管理。
