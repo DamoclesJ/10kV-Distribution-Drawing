@@ -6,11 +6,13 @@ public sealed class Terminal
 
     public Terminal(
         Guid id,
-        Guid ownerDeviceId,
+        TopologyOwnerType ownerType,
+        Guid ownerId,
         string role,
         string? voltageLevel,
         bool isExternal,
         bool allowsMultipleConnections,
+        Guid? electricalNodeId = null,
         IEnumerable<ConnectionType>? allowedConnectionTypes = null)
     {
         if (id == Guid.Empty)
@@ -18,9 +20,16 @@ public sealed class Terminal
             throw new ArgumentException("Terminal ID cannot be empty.", nameof(id));
         }
 
-        if (ownerDeviceId == Guid.Empty)
+        if (ownerId == Guid.Empty)
         {
-            throw new ArgumentException("Owner device ID cannot be empty.", nameof(ownerDeviceId));
+            throw new ArgumentException("Terminal owner ID cannot be empty.", nameof(ownerId));
+        }
+
+        if (electricalNodeId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Electrical node ID cannot be empty when specified.",
+                nameof(electricalNodeId));
         }
 
         if (string.IsNullOrWhiteSpace(role))
@@ -45,16 +54,20 @@ public sealed class Terminal
         }
 
         Id = id;
-        OwnerDeviceId = ownerDeviceId;
+        OwnerType = ownerType;
+        OwnerId = ownerId;
         Role = role.Trim();
         VoltageLevel = string.IsNullOrWhiteSpace(voltageLevel) ? null : voltageLevel.Trim();
         IsExternal = isExternal;
         AllowsMultipleConnections = allowsMultipleConnections;
+        ElectricalNodeId = electricalNodeId;
     }
 
     public Guid Id { get; }
 
-    public Guid OwnerDeviceId { get; }
+    public TopologyOwnerType OwnerType { get; }
+
+    public Guid OwnerId { get; }
 
     public string Role { get; }
 
@@ -63,6 +76,8 @@ public sealed class Terminal
     public bool IsExternal { get; }
 
     public bool AllowsMultipleConnections { get; }
+
+    public Guid? ElectricalNodeId { get; }
 
     public IReadOnlySet<ConnectionType> AllowedConnectionTypes => _allowedConnectionTypes;
 

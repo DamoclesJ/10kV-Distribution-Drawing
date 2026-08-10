@@ -1,6 +1,6 @@
 namespace DistributionDrawing.Domain.Devices;
 
-public sealed class Device
+public class Device
 {
     public Device(
         Guid id,
