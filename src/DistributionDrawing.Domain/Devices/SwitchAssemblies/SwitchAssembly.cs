@@ -5,6 +5,7 @@ namespace DistributionDrawing.Domain.Devices.SwitchAssemblies;
 public sealed class SwitchAssembly
 {
     private const string LoadSwitchRuleSet = "load-switch-three-position/v1";
+    private const string IntegratedFeederBaseRuleSet = "integrated-feeder-base/v1";
 
     private readonly IReadOnlyList<SwitchDevice> _memberSwitches;
     private readonly IReadOnlyList<Guid> _memberSwitchIds;
@@ -52,10 +53,10 @@ public sealed class SwitchAssembly
                 nameof(memberSwitches));
         }
 
-        if (rules.Length == 0)
+        if (assemblyType == SwitchAssemblyType.LoadSwitchThreePosition && rules.Length == 0)
         {
             throw new ArgumentException(
-                "A switch assembly requires interlock rules.",
+                "A load-switch three-position assembly requires interlock rules.",
                 nameof(interlockRules));
         }
 
@@ -130,6 +131,51 @@ public sealed class SwitchAssembly
         }
 
         return assembly;
+    }
+
+    internal static SwitchAssembly CreateIntegratedFeederBase(
+        Guid assemblyId,
+        Guid parentIntervalId,
+        SwitchDevice isolationSwitch,
+        SwitchDevice circuitBreaker,
+        SwitchDevice groundSwitch)
+    {
+        ArgumentNullException.ThrowIfNull(isolationSwitch);
+        ArgumentNullException.ThrowIfNull(circuitBreaker);
+        ArgumentNullException.ThrowIfNull(groundSwitch);
+
+        if (isolationSwitch.SwitchKind != SwitchKind.IsolationSwitch)
+        {
+            throw new ArgumentException(
+                "The isolation-switch role requires an IsolationSwitch device.",
+                nameof(isolationSwitch));
+        }
+
+        if (circuitBreaker.SwitchKind != SwitchKind.CircuitBreaker)
+        {
+            throw new ArgumentException(
+                "The circuit-breaker role requires a CircuitBreaker device.",
+                nameof(circuitBreaker));
+        }
+
+        if (groundSwitch.SwitchKind != SwitchKind.GroundSwitch)
+        {
+            throw new ArgumentException(
+                "The ground-switch role requires a GroundSwitch device.",
+                nameof(groundSwitch));
+        }
+
+        EnsureCabinetIntervalMember(isolationSwitch, parentIntervalId);
+        EnsureCabinetIntervalMember(circuitBreaker, parentIntervalId);
+        EnsureCabinetIntervalMember(groundSwitch, parentIntervalId);
+
+        return new SwitchAssembly(
+            assemblyId,
+            parentIntervalId,
+            SwitchAssemblyType.IntegratedFeeder,
+            [isolationSwitch, circuitBreaker, groundSwitch],
+            IntegratedFeederBaseRuleSet,
+            []);
     }
 
     public SwitchAssemblyEvaluation Evaluate()

@@ -15,6 +15,7 @@ public sealed class RingCabinetInterval
         IntervalKind intervalKind,
         IEnumerable<SwitchDevice> switchDevices,
         SwitchAssembly switchAssembly,
+        Guid? intermediateNodeId,
         Guid circuitNodeId,
         Guid earthNodeId,
         Guid externalTerminalId)
@@ -56,33 +57,57 @@ public sealed class RingCabinetInterval
                 nameof(externalTerminalId));
         }
 
+        if (intermediateNodeId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Intermediate node ID cannot be empty when specified.",
+                nameof(intermediateNodeId));
+        }
+
         SwitchDevice[] devices = switchDevices?.ToArray()
             ?? throw new ArgumentNullException(nameof(switchDevices));
         ArgumentNullException.ThrowIfNull(switchAssembly);
 
-        if (intervalKind != IntervalKind.LoadSwitchInterval)
+        switch (intervalKind)
         {
-            throw new NotSupportedException(
-                "Only normal load-switch intervals are implemented in M1.2-A.");
-        }
+            case IntervalKind.LoadSwitchInterval:
+                if (intermediateNodeId is not null)
+                {
+                    throw new ArgumentException(
+                        "A load-switch interval cannot have an intermediate node.",
+                        nameof(intermediateNodeId));
+                }
 
-        if (devices.Length != 2 ||
-            devices.Count(device => device.SwitchKind == SwitchKind.LoadSwitch) != 1 ||
-            devices.Count(device => device.SwitchKind == SwitchKind.GroundSwitch) != 1)
-        {
-            throw new ArgumentException(
-                "A load-switch interval requires one load switch and one ground switch.",
-                nameof(switchDevices));
-        }
+                EnsureSwitchStructure(
+                    devices,
+                    switchAssembly,
+                    id,
+                    SwitchAssemblyType.LoadSwitchThreePosition,
+                    [SwitchKind.LoadSwitch, SwitchKind.GroundSwitch]);
+                break;
 
-        if (switchAssembly.ParentIntervalId != id ||
-            switchAssembly.AssemblyType != SwitchAssemblyType.LoadSwitchThreePosition ||
-            !switchAssembly.MemberSwitchIds.ToHashSet().SetEquals(
-                devices.Select(device => device.Id)))
-        {
-            throw new ArgumentException(
-                "The switch assembly must contain exactly the switches owned by this interval.",
-                nameof(switchAssembly));
+            case IntervalKind.CircuitBreakerInterval:
+                if (intermediateNodeId is null)
+                {
+                    throw new ArgumentException(
+                        "A circuit-breaker interval requires an intermediate node.",
+                        nameof(intermediateNodeId));
+                }
+
+                EnsureSwitchStructure(
+                    devices,
+                    switchAssembly,
+                    id,
+                    SwitchAssemblyType.IntegratedFeeder,
+                    [
+                        SwitchKind.IsolationSwitch,
+                        SwitchKind.CircuitBreaker,
+                        SwitchKind.GroundSwitch
+                    ]);
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(intervalKind));
         }
 
         IntervalId = id;
@@ -92,6 +117,7 @@ public sealed class RingCabinetInterval
         IntervalKind = intervalKind;
         _switchDevices = Array.AsReadOnly(devices);
         SwitchAssembly = switchAssembly;
+        IntermediateNodeId = intermediateNodeId;
         CircuitNodeId = circuitNodeId;
         EarthNodeId = earthNodeId;
         ExternalTerminalId = externalTerminalId;
@@ -111,9 +137,38 @@ public sealed class RingCabinetInterval
 
     public SwitchAssembly SwitchAssembly { get; }
 
+    public Guid? IntermediateNodeId { get; }
+
     public Guid CircuitNodeId { get; }
 
     public Guid EarthNodeId { get; }
 
     public Guid ExternalTerminalId { get; }
+
+    private static void EnsureSwitchStructure(
+        IReadOnlyCollection<SwitchDevice> devices,
+        SwitchAssembly switchAssembly,
+        Guid intervalId,
+        SwitchAssemblyType expectedAssemblyType,
+        IReadOnlyCollection<SwitchKind> expectedSwitchKinds)
+    {
+        if (devices.Count != expectedSwitchKinds.Count ||
+            expectedSwitchKinds.Any(expectedKind =>
+                devices.Count(device => device.SwitchKind == expectedKind) != 1))
+        {
+            throw new ArgumentException(
+                "The interval does not contain the required switch devices.",
+                nameof(devices));
+        }
+
+        if (switchAssembly.ParentIntervalId != intervalId ||
+            switchAssembly.AssemblyType != expectedAssemblyType ||
+            !switchAssembly.MemberSwitchIds.ToHashSet().SetEquals(
+                devices.Select(device => device.Id)))
+        {
+            throw new ArgumentException(
+                "The switch assembly must contain exactly the switches owned by this interval.",
+                nameof(switchAssembly));
+        }
+    }
 }
