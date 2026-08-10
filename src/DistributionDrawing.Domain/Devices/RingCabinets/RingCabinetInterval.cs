@@ -86,11 +86,11 @@ public sealed class RingCabinetInterval
                     [SwitchKind.LoadSwitch, SwitchKind.GroundSwitch]);
                 break;
 
-            case IntervalKind.CircuitBreakerInterval:
+            case IntervalKind.IntegratedFeederInterval:
                 if (intermediateNodeId is null)
                 {
                     throw new ArgumentException(
-                        "A circuit-breaker interval requires an intermediate node.",
+                        "An integrated-feeder interval requires an intermediate node.",
                         nameof(intermediateNodeId));
                 }
 
