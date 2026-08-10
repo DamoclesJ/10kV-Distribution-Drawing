@@ -25,6 +25,11 @@ public class Device
             throw new ArgumentException("Only switch devices can have a switch state.", nameof(switchState));
         }
 
+        if (switchState is SwitchState state && !Enum.IsDefined(state))
+        {
+            throw new ArgumentOutOfRangeException(nameof(switchState));
+        }
+
         Id = id;
         Type = type;
         DisplayName = NormalizeOptionalText(displayName);
@@ -50,11 +55,16 @@ public class Device
         DisplayName = NormalizeOptionalText(displayName);
     }
 
-    public void SetSwitchState(SwitchState state)
+    internal void SetSwitchState(SwitchState state)
     {
         if (Type != DeviceType.Switch)
         {
             throw new InvalidOperationException("Only switch devices can change switch state.");
+        }
+
+        if (!Enum.IsDefined(state))
+        {
+            throw new ArgumentOutOfRangeException(nameof(state));
         }
 
         SwitchState = state;

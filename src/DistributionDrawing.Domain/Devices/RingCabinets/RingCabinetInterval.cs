@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.SwitchAssemblies;
 
 namespace DistributionDrawing.Domain.Devices.RingCabinets;
 
@@ -13,6 +14,7 @@ public sealed class RingCabinetInterval
         string displayName,
         IntervalKind intervalKind,
         IEnumerable<SwitchDevice> switchDevices,
+        SwitchAssembly switchAssembly,
         Guid circuitNodeId,
         Guid earthNodeId,
         Guid externalTerminalId)
@@ -56,6 +58,7 @@ public sealed class RingCabinetInterval
 
         SwitchDevice[] devices = switchDevices?.ToArray()
             ?? throw new ArgumentNullException(nameof(switchDevices));
+        ArgumentNullException.ThrowIfNull(switchAssembly);
 
         if (intervalKind != IntervalKind.LoadSwitchInterval)
         {
@@ -72,12 +75,23 @@ public sealed class RingCabinetInterval
                 nameof(switchDevices));
         }
 
+        if (switchAssembly.ParentIntervalId != id ||
+            switchAssembly.AssemblyType != SwitchAssemblyType.LoadSwitchThreePosition ||
+            !switchAssembly.MemberSwitchIds.ToHashSet().SetEquals(
+                devices.Select(device => device.Id)))
+        {
+            throw new ArgumentException(
+                "The switch assembly must contain exactly the switches owned by this interval.",
+                nameof(switchAssembly));
+        }
+
         IntervalId = id;
         ParentCabinetId = parentCabinetId;
         Sequence = sequence;
         DisplayName = displayName.Trim();
         IntervalKind = intervalKind;
         _switchDevices = Array.AsReadOnly(devices);
+        SwitchAssembly = switchAssembly;
         CircuitNodeId = circuitNodeId;
         EarthNodeId = earthNodeId;
         ExternalTerminalId = externalTerminalId;
@@ -94,6 +108,8 @@ public sealed class RingCabinetInterval
     public IntervalKind IntervalKind { get; }
 
     public IReadOnlyList<SwitchDevice> SwitchDevices => _switchDevices;
+
+    public SwitchAssembly SwitchAssembly { get; }
 
     public Guid CircuitNodeId { get; }
 

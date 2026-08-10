@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.SwitchAssemblies;
 using DistributionDrawing.Domain.Topology;
 
 namespace DistributionDrawing.Domain.Documents;
@@ -9,6 +10,7 @@ public sealed class DrawingDocument
     private readonly List<Device> _devices = [];
     private readonly List<Terminal> _terminals = [];
     private readonly List<ElectricalNode> _electricalNodes = [];
+    private readonly List<SwitchAssembly> _switchAssemblies = [];
     private readonly List<Connection> _connections = [];
     private readonly HashSet<Guid> _internalAggregateOwnerIds = [];
 
@@ -37,6 +39,8 @@ public sealed class DrawingDocument
     public IReadOnlyList<Terminal> Terminals => _terminals;
 
     public IReadOnlyList<ElectricalNode> ElectricalNodes => _electricalNodes;
+
+    public IReadOnlyList<SwitchAssembly> SwitchAssemblies => _switchAssemblies;
 
     public IReadOnlyList<Connection> Connections => _connections;
 
@@ -151,6 +155,7 @@ public sealed class DrawingDocument
         ringCabinet.ValidateStructure();
 
         SwitchDevice[] internalSwitches = ringCabinet.InternalSwitchDevices.ToArray();
+        SwitchAssembly[] internalAssemblies = ringCabinet.InternalSwitchAssemblies.ToArray();
 
         EnsureObjectIdIsAvailable(ringCabinet.Id, nameof(RingCabinet));
 
@@ -162,6 +167,11 @@ public sealed class DrawingDocument
         foreach (SwitchDevice switchDevice in internalSwitches)
         {
             EnsureObjectIdIsAvailable(switchDevice.Id, nameof(SwitchDevice));
+        }
+
+        foreach (SwitchAssembly switchAssembly in internalAssemblies)
+        {
+            EnsureObjectIdIsAvailable(switchAssembly.AssemblyId, nameof(SwitchAssembly));
         }
 
         foreach (ElectricalNode electricalNode in ringCabinet.ElectricalNodes)
@@ -182,6 +192,7 @@ public sealed class DrawingDocument
         }
 
         _devices.AddRange(internalSwitches);
+        _switchAssemblies.AddRange(internalAssemblies);
         _electricalNodes.AddRange(ringCabinet.ElectricalNodes);
         _terminals.AddRange(ringCabinet.Terminals);
     }
@@ -207,6 +218,7 @@ public sealed class DrawingDocument
         if (_devices.Any(device => device.Id == objectId) ||
             _terminals.Any(terminal => terminal.Id == objectId) ||
             _electricalNodes.Any(node => node.Id == objectId) ||
+            _switchAssemblies.Any(assembly => assembly.AssemblyId == objectId) ||
             _connections.Any(connection => connection.Id == objectId) ||
             _internalAggregateOwnerIds.Contains(objectId))
         {

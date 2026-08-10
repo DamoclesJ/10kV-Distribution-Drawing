@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.SwitchAssemblies;
 using DistributionDrawing.Domain.Topology;
 
 namespace DistributionDrawing.Domain.Devices.RingCabinets;
@@ -45,6 +46,9 @@ public sealed class RingCabinet : Device
 
     internal IEnumerable<SwitchDevice> InternalSwitchDevices =>
         _intervals.SelectMany(interval => interval.SwitchDevices);
+
+    internal IEnumerable<SwitchAssembly> InternalSwitchAssemblies =>
+        _intervals.Select(interval => interval.SwitchAssembly);
 
     public static RingCabinet CreateNormalLoadSwitchCabinet(
         Guid id,
@@ -128,6 +132,12 @@ public sealed class RingCabinet : Device
                 TenKilovolts,
                 intervalId);
 
+            SwitchAssembly switchAssembly = SwitchAssembly.CreateLoadSwitchThreePosition(
+                Guid.NewGuid(),
+                intervalId,
+                loadSwitch,
+                groundSwitch);
+
             AddTerminal(
                 terminals,
                 mainBusNode,
@@ -205,6 +215,7 @@ public sealed class RingCabinet : Device
                     $"{sequence}号间隔",
                     IntervalKind.LoadSwitchInterval,
                     [loadSwitch, groundSwitch],
+                    switchAssembly,
                     circuitNodeId,
                     earthNodeId,
                     externalTerminalId));
@@ -284,6 +295,17 @@ public sealed class RingCabinet : Device
 
             EnsureCabinetSwitchIsValid(loadSwitch, interval.IntervalId);
             EnsureCabinetSwitchIsValid(groundSwitch, interval.IntervalId);
+
+            if (interval.SwitchAssembly.ParentIntervalId != interval.IntervalId ||
+                interval.SwitchAssembly.AssemblyType !=
+                    SwitchAssemblyType.LoadSwitchThreePosition ||
+                !interval.SwitchAssembly.MemberSwitchIds.ToHashSet().SetEquals(
+                    interval.SwitchDevices.Select(device => device.Id)) ||
+                !interval.SwitchAssembly.Evaluate().IsValid)
+            {
+                throw new InvalidOperationException(
+                    $"Interval '{interval.IntervalId}' has an invalid switch assembly.");
+            }
 
             ElectricalNode circuitNode = GetRequiredNode(
                 nodes,
@@ -429,6 +451,7 @@ public sealed class RingCabinet : Device
         foreach (RingCabinetInterval interval in _intervals)
         {
             AddUniqueId(ids, interval.IntervalId, nameof(RingCabinetInterval));
+            AddUniqueId(ids, interval.SwitchAssembly.AssemblyId, nameof(SwitchAssembly));
 
             foreach (SwitchDevice switchDevice in interval.SwitchDevices)
             {
