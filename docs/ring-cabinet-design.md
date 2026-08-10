@@ -1,16 +1,17 @@
 # 10kV 配电环网柜模型设计
 
-> 文档状态：设计基线<br>
-> 编制日期：2026-08-10<br>
+> 文档状态：M1.2-C2.0 混合间隔模型修订<br>
+> 编制日期：2026-08-11<br>
 > 依据：`docs/architecture.md`、配电专业附图规范、本阶段明确的环网柜产品需求
 
 ## 1. 目的与范围
 
 本文定义 10kV 配电附图编辑器中的环网柜领域模型，覆盖：
 
-- 普通负荷开关型环网柜：3、4、5、6 个普通间隔。
-- 一二次融合环网柜：4、6 个普通间隔。
-- 一二次融合环网柜 PT 间隔：作为柜内特殊间隔，位于普通间隔组左侧或右侧。
+- 仅含普通负荷开关间隔的环网柜。
+- 仅含一二次融合断路器间隔的环网柜。
+- 同时包含负荷开关间隔和一二次融合断路器间隔的混合型环网柜。
+- PT 间隔：作为柜内特殊间隔，位于普通电气间隔组左侧或右侧。
 - DTU 柜：与 PT 固定关联的独立布局柜体，自动跟随 PT 位于同一侧。
 - 柜体、间隔、设备、开关组合、联锁规则、端子、连接和状态之间的关系。
 
@@ -18,8 +19,8 @@
 
 ## 2. 设计原则
 
-1. **柜体是组合容器，不是单张图片。** 柜内间隔和开关设备保持独立对象，能够单独设置状态和参与端子连接。
-2. **普通间隔数量与 PT 间隔分开计数。** 3/4/5/6 或 4/6 指普通电气间隔数量；PT 不替换普通间隔，也不改变该计数，DTU 不属于环网柜电气间隔。
+1. **柜体是组合容器，不是间隔类型来源。** 柜内间隔和开关设备保持独立对象；`RingCabinet` 不得依据柜体分类把所有间隔强制为同一种类型。
+2. **普通电气间隔数量与 PT 间隔分开计数。** 普通电气间隔数量由间隔配置列表计算；PT 不替换普通电气间隔，也不改变该计数，DTU 不属于环网柜电气间隔。
 3. **设备状态独立。** 同一间隔内的负荷开关、隔离刀闸、断路器和接地刀闸分别保存状态；修改一个设备不得隐式修改其他设备。
 4. **拓扑与布局分离。** 左右位置、柜宽、图元坐标属于布局；母线、端子和导通关系属于电气拓扑。
 5. **开关位置与带电状态分离。** `拉开/合入` 描述设备操作位置；`带电/停电` 描述设备或连接的电气状态，两者不能使用同一字段代替。
@@ -27,14 +28,16 @@
 7. **PT 与 DTU 位置联动。** 用户只选择 PT 位于普通间隔组左侧或右侧，DTU 自动置于 PT 外侧，不允许独立设置 DTU 位置。
 8. **单设备状态是事实，组合状态是派生结果。** `SwitchState` 只保存单台开关的 `Open/Closed`；间隔运行方式和有效接地结论由开关组合类型、成员状态及联锁规则计算，不重复保存。
 9. **联锁不替代独立设备。** `SwitchAssembly` 只表达多个 `SwitchDevice` 的功能组合、机械约束和状态判定，不合并设备标识、端子或操作状态。
+10. **间隔配置是结构事实的唯一来源。** 柜体由有序的 `RingCabinetInterval` 组成；每个间隔根据自己的 `IntervalKind` 建立设备、组合、端子和固定拓扑，不从柜体分类反向推断。
 
 ## 3. 术语
 
 | 术语 | 定义 |
 | --- | --- |
-| 环网柜组合 | 一组普通间隔；一二次融合柜另包含必需的 PT 间隔及其关联 DTU |
-| 普通间隔 | 按柜型固定包含一组开关设备、一个外部回路端子并连接主母线的电气单元 |
-| PT 间隔 | 一二次融合环网柜内部的特殊间隔，包含隔离刀闸、PT 和接地刀闸 |
+| 环网柜组合 | 一个 RingCabinet、其有序间隔列表，以及存在 PT 时与之固定关联的 DTU 布局对象 |
+| 普通电气间隔 | 由自身 IntervalKind 固定内部结构、具有外部回路端子并连接主母线的电气单元 |
+| 混合型环网柜 | 同一 RingCabinet 的普通电气间隔列表中同时存在 LoadSwitchInterval 和 IntegratedFeederInterval |
+| PT 间隔 | RingCabinet 内部的特殊间隔，包含隔离刀闸、PT 和接地刀闸，不是柜体顶层属性 |
 | 主母线 | 将各普通间隔和 PT 间隔连接到同一电气节点的柜内母线 |
 | 回路节点 | 普通间隔中开关设备下游与外部电缆/线路端子相连的节点 |
 | 大地节点 | 接地刀闸合入时所连接的逻辑接地节点 |
@@ -54,32 +57,38 @@
 | --- | --- | --- |
 | 组合标识 | 是 | 在一张图内稳定唯一 |
 | 柜体名称 | 是 | 图纸上显示的柜体或站点名称 |
-| 柜型 | 是 | 普通负荷开关型或一二次融合型 |
 | 电压等级 | 是 | 本模型固定为 10kV，仍作为设备语义保存 |
-| 普通间隔数量 | 是 | 由柜型限定允许值 |
+| 间隔配置 | 是 | 按物理顺序保存的 RingCabinetInterval 列表；每项独立指定 IntervalKind |
+| 普通电气间隔数量 | 派生 | 由间隔配置中非 PT 间隔数量计算，不独立保存 |
 | 主母线 | 是 | 一个共享的柜内电气节点 |
-| 普通间隔列表 | 是 | 按从左到右的顺序保存 |
-| PT 间隔 | 条件必填 | 一二次融合柜必须有且仅有一个；普通负荷开关型不得有；指定左侧或右侧 |
-| DTU 柜 | 条件必填 | 一二次融合柜必须有且仅有一个，并自动跟随 PT；普通负荷开关型不得有 |
+| 间隔列表 | 是 | 同一有序集合包含普通电气间隔和可选 PTInterval |
+| 柜体组成分类 | 派生 | 根据普通电气间隔类型计算，不作为创建或校验间隔结构的输入 |
+| DTU 柜 | 条件必填 | 存在 PTInterval 时必须有且仅有一个，并自动跟随 PT；不存在 PT 时不得有 |
 | 布局信息 | 是 | 柜体位置、尺寸、方向以及特殊柜排列顺序 |
 
-### 4.2 柜型约束
+### 4.2 柜体分类与间隔配置
 
-| 柜型 | 普通间隔允许数量 | 每个普通间隔的固定设备 |
+原 `CabinetKind=LoadSwitchType/PrimarySecondaryIntegrated` 隐含“柜型决定全部间隔”的关系，不再作为目标领域模型的结构约束。M1.2-C2 后续实现应逐步停止使用该字段决定间隔类型。
+
+柜体组成可根据普通电气间隔列表派生为 `CabinetCompositionKind`，但该值不得独立保存：
+
+| 派生值 | 判定条件 |
 | --- | --- | --- |
-| 普通负荷开关型 | 3、4、5、6 | 负荷开关 1 台、接地刀闸 1 台 |
-| 一二次融合型 | 4、6 | 隔离刀闸 1 台、断路器 1 台、接地刀闸 1 台 |
+| `LoadSwitchOnly` | 所有普通电气间隔均为 LoadSwitchInterval |
+| `IntegratedFeederOnly` | 所有普通电气间隔均为 IntegratedFeederInterval |
+| `Mixed` | 两种普通电气间隔同时存在 |
 
-普通间隔数量不允许取上述集合以外的值。PT 间隔和 DTU 不计入普通间隔数量；普通负荷开关型不得包含 PT 或 DTU。
+若后续确需表达厂家柜体系列、自动化能力或壳体结构，应另设 `CabinetStructureKind`；该字段只能描述柜体能力或模板元数据，不能决定间隔类型、设备数量或 PT 是否存在。本阶段不预设未经设备资料确认的 `CabinetStructureKind` 枚举值。
+
+既有纯类型模板继续保留：纯 LoadSwitch 模板允许 3、4、5、6 个普通电气间隔；纯 IntegratedFeeder 模板允许 4、6 个普通电气间隔。混合柜由模板或显式 `IntervalDefinition` 列表给出，不把“任意 3～6 个任意组合”扩展成未经确认的全局规则。PTInterval 和 DTU 不计入普通电气间隔数量。
 
 ### 4.3 组合层次
 
 ```mermaid
 classDiagram
     class RingCabinet {
-        柜型
-        普通间隔数量
         电压等级
+        派生组成分类
     }
     class MainBus {
         母线节点
@@ -87,6 +96,7 @@ classDiagram
     class RingCabinetInterval {
         间隔序号
         间隔名称
+        IntervalKind
     }
     class SwitchAssembly {
         组合类型
@@ -94,26 +104,66 @@ classDiagram
     }
     class SwitchDevice
     class InterlockRule
-    class PTInterval {
-        左右位置
-    }
     class DTUCabinet {
         左右位置
     }
 
     RingCabinet "1" *-- "1" MainBus
-    RingCabinet "1" *-- "3..6" RingCabinetInterval
-    RingCabinetInterval "1" *-- "1" SwitchAssembly
+    RingCabinet "1" *-- "1..*" RingCabinetInterval
+    RingCabinetInterval "1" *-- "0..1" SwitchAssembly
     SwitchAssembly "1" --> "2..3" SwitchDevice
     SwitchAssembly "1" *-- "1..*" InterlockRule
-    RingCabinet "1" *-- "0..1" PTInterval
     RingCabinet "1" *-- "0..1" DTUCabinet
-    PTInterval "1" --> "1" DTUCabinet : 固定关联
+    RingCabinetInterval "0..1" --> "0..1" DTUCabinet : PTInterval 固定关联
 ```
 
-图中的 `3..6` 仅表达组合关系；具体允许数量仍以柜型约束表为准。
+普通电气间隔必须有一个 SwitchAssembly；PTInterval 的组合规则在其实现阶段单独确认，不得套用现有两种普通间隔组合。具体数量由所选模板或显式间隔配置校验。
 
-## 5. 普通负荷开关型环网柜
+### 4.4 混合型环网柜
+
+混合型环网柜不是新的 Device 类型，也不引入新的聚合层。它仍是 `RingCabinet : Device`，区别只在于其有序间隔配置同时包含两种普通电气间隔。
+
+六间隔示例：
+
+```text
+RingCabinet
+├── 1: LoadSwitchInterval
+│   └── SwitchAssembly(LoadSwitchThreePosition)
+├── 2: LoadSwitchInterval
+│   └── SwitchAssembly(LoadSwitchThreePosition)
+├── 3: IntegratedFeederInterval
+│   └── SwitchAssembly(IntegratedFeeder)
+├── 4: IntegratedFeederInterval
+│   └── SwitchAssembly(IntegratedFeeder)
+├── 5: LoadSwitchInterval
+│   └── SwitchAssembly(LoadSwitchThreePosition)
+└── 6: LoadSwitchInterval
+    └── SwitchAssembly(LoadSwitchThreePosition)
+```
+
+每个间隔独立保持自己的设备成员、SwitchAssembly、内部 ElectricalNode、Terminal 和状态。相邻或同柜的另一种间隔不得改变这些不变量。主母线节点由 RingCabinet 共享，外部线路仍只连接目标普通电气间隔自己的 ExternalTerminal。
+
+### 4.5 创建定义
+
+目标工厂不再以柜体类型生成同质间隔，而是接收受控定义：
+
+```text
+CreateRingCabinet(RingCabinetDefinition)
+
+RingCabinetDefinition
+├── CabinetId
+├── DisplayName
+├── TemplateRef（可选）
+└── IntervalDefinitions（按物理顺序）
+    ├── LoadSwitchIntervalDefinition
+    ├── IntegratedFeederIntervalDefinition
+    ├── IntegratedFeederIntervalDefinition
+    └── LoadSwitchIntervalDefinition
+```
+
+每个 `IntervalDefinition` 只能包含创建该类型所需的输入；具体 SwitchDevice、SwitchAssembly、ElectricalNode 和 Terminal 必须由聚合工厂一次性完整生成，外部调用方仍不能自由拼装内部对象。现有纯类型工厂可在迁移期作为预置定义的便捷入口，但不得继续承担柜体结构校验的唯一来源。
+
+## 5. LoadSwitchInterval
 
 ### 5.1 间隔组成
 
@@ -127,7 +177,7 @@ classDiagram
 - 1 个逻辑大地节点连接端。
 - 1 个由负荷开关和接地刀闸组成的 `SwitchAssembly`。
 
-间隔不得缺少负荷开关或接地刀闸，也不得在此柜型的普通间隔中以断路器、隔离刀闸替代它们。
+间隔不得缺少负荷开关或接地刀闸，也不得在 `LoadSwitchInterval` 中以断路器、隔离刀闸替代它们。该约束只由间隔类型决定，与同柜其他间隔的类型无关。
 
 ### 5.2 端子定义
 
@@ -181,11 +231,11 @@ flowchart TB
 
 `Running`、`Disconnected` 和 `Grounded` 均在读取或校验时根据两台开关状态计算。
 
-## 6. 一二次融合环网柜
+## 6. IntegratedFeederInterval
 
 ### 6.1 间隔组成
 
-每个普通间隔固定包含：
+每个 `IntegratedFeederInterval` 固定包含：
 
 - 1 台隔离刀闸。
 - 1 台断路器。
@@ -257,18 +307,20 @@ flowchart TB
 
 单台开关状态改变时，其他设备状态保持原值；若目标组合违反硬联锁，状态变更应被拒绝，而不是自动操作其他开关。
 
-## 7. PT 间隔
+## 7. PTInterval
 
 ### 7.1 定位和存在性
 
-PT 不是独立柜体，只能作为一二次融合环网柜内部的特殊间隔。每个一二次融合环网柜必须包含且只能包含 1 个 PT 间隔；普通负荷开关型环网柜不得包含 PT 间隔。
+PT 不是独立柜体，也不是 `RingCabinet` 的独立结构属性。它以 `IntervalKind=PTInterval` 作为环网柜有序间隔列表中的特殊成员存在。
 
-- 创建一二次融合环网柜时，用户必须选择 PT 位于普通间隔组左侧或右侧。
-- PT 间隔不计入 4/6 个普通间隔数量。
+- PT 是否存在由柜体模板或显式间隔配置决定，不由其他普通间隔是否为 IntegratedFeederInterval 推导。
+- 同一 RingCabinet 最多包含 1 个 PTInterval；存在时用户必须选择其位于普通电气间隔组左侧或右侧。
+- PTInterval 不计入普通电气间隔数量，也不改变普通电气间隔序号。
+- 本次修订只确定其归属和计数方式，不实现 PT 内部对象。
 
-### 7.2 PTInterval 结构
+### 7.2 PTInterval 结构边界
 
-`PTInterval` 固定包含：
+后续实现的 `PTInterval` 固定包含：
 
 - 1 台隔离刀闸，独立保存 `Open` 或 `Closed`。
 - 1 台 PT，不保存操作状态。
@@ -287,7 +339,7 @@ PT 不是独立柜体，只能作为一二次融合环网柜内部的特殊间�
 
 `PTPosition` 只允许 `Left` 或 `Right`，表示 PT 间隔位于普通间隔组哪一侧。位置只改变组合布局，不改变 PT 与本柜主母线的拓扑关系。
 
-## 8. DTU 柜
+## 8. DTUCabinet
 
 ### 8.1 对象范围
 
@@ -303,7 +355,7 @@ DTU 不具有 `Terminal`、`ElectricalNode`、操作状态或电气状态，不�
 
 ### 8.2 与 PT 的固定关联
 
-- 一二次融合柜的 PT 必须关联一个 DTU；普通负荷开关型不得单独创建 DTU。
+- 存在 PTInterval 时必须关联一个 DTU；不存在 PTInterval 时不得单独创建 DTU。
 - 用户只能选择 PT 位置，`DTUPosition = PTPosition`。
 - DTU 始终位于 PT 外侧。
 - PT 在左侧时，布局为 `DTU | PT | 普通间隔`。
@@ -312,28 +364,38 @@ DTU 不具有 `Terminal`、`ElectricalNode`、操作状态或电气状态，不�
 
 ## 9. 间隔模型
 
-### 9.1 普通间隔字段
+### 9.1 统一间隔字段
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | 间隔标识 | 是 | 在环网柜组合内唯一 |
-| 间隔序号 | 是 | 从左到右连续编号 1 至 N |
+| 间隔序号 | 是 | 在柜内有序间隔列表中的稳定顺序；普通电气间隔显示序号可排除 PT 后连续计算 |
 | 间隔名称 | 是 | 图纸显示名称或调度名称 |
-| 间隔类型 | 是 | `LoadSwitchInterval`（普通负荷开关间隔）或 `CircuitBreakerInterval`（断路器间隔） |
-| 设备列表 | 是 | 由柜型固定生成，不允许缺项 |
-| 开关组合 | 是 | 一个 `SwitchAssembly`，引用本间隔全部开关并绑定联锁规则 |
-| 接地结构类型 | 条件必填 | 一二次融合普通间隔必填；普通负荷开关间隔不适用 |
+| 间隔类型 | 是 | `LoadSwitchInterval`、`IntegratedFeederInterval` 或 `PTInterval` |
+| 设备列表 | 是 | 由本间隔 IntervalKind 固定生成，不允许由柜体分类覆盖 |
+| 开关组合 | 条件必填 | 两种普通电气间隔各有一个 SwitchAssembly；PTInterval 的组合规则留待 PT 实现阶段确认 |
+| 接地结构类型 | 条件必填 | IntegratedFeederInterval 必填；LoadSwitchInterval 不适用；PTInterval 另行定义 |
 | 主母线连接引用 | 是 | 指向环网柜主母线 |
-| 对外回路端子 | 是 | 供电缆或线路连接 |
+| 对外回路端子 | 条件必填 | 两种普通电气间隔各有一个；PTInterval 不产生普通回路对外端子 |
 | 回路名称 | 否 | 有线路名称时用于图纸标注 |
 | 布局信息 | 是 | 间隔宽度、位置和标签锚点 |
 
+`IntervalKind` 分类建议如下：
+
+| IntervalKind | 用途 | SwitchAssembly |
+| --- | --- | --- |
+| `LoadSwitchInterval` | 普通负荷开关间隔 | `LoadSwitchThreePosition` |
+| `IntegratedFeederInterval` | 含隔离刀闸、断路器和接地刀闸的一二次融合馈线间隔 | `IntegratedFeeder` |
+| `PTInterval` | 柜内 PT 特殊间隔 | 留待 PT 实现阶段确认，不复用前两种组合 |
+
+`IntegratedFeederInterval` 替代当前容易被理解为“任意断路器间隔”的 `CircuitBreakerInterval`。`OtherSpecialInterval` 只作为未来可能的扩展方向，本次不加入当前枚举，也不定义其设备或拓扑。
+
 ### 9.2 间隔顺序
 
-- 普通间隔列表按从左到右顺序保存。
-- 间隔序号必须连续，不因 PT 间隔插入而改变。
+- RingCabinet 的统一间隔列表按从左到右物理顺序保存，PTInterval 也是该列表成员。
+- 普通电气间隔的业务序号排除 PTInterval 后从 1 连续计算；不得因为 PT 的存在改变其稳定对象标识。
 - PT 与 DTU 的顺序固定，不能由用户调整；DTU 始终在 PT 外侧。
-- 调整普通间隔顺序时，只改变布局顺序和显示序号，不自动重接对外线路。
+- 调整间隔顺序时，只改变布局顺序和显示序号，不自动重接对外线路。
 
 ## 10. 开关设备模型
 
@@ -420,9 +482,9 @@ MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚�
 
 ## 11. 布局与绘制约束
 
-1. 普通间隔采用从左到右的线性排列，并共享同一主母线图形。
-2. 每个普通间隔具有独立分隔区域，柜型相同时间隔宽度保持一致。
-3. PT 只能是一二次融合柜内部特殊间隔，并位于普通间隔组最左侧或最右侧。
+1. 所有柜内间隔采用从左到右的线性排列；两种普通电气间隔和 PTInterval 共享本柜主母线图形。
+2. 每个间隔具有独立分隔区域；混合柜允许不同 IntervalKind 使用各自受控宽度，不要求因同柜而使用同一种内部布局。
+3. PTInterval 位于普通电气间隔组最左侧或最右侧，是统一间隔列表中的特殊成员。
 4. DTU 使用独立柜体框，与 PT 同侧且始终位于 PT 外侧。
 5. 用户只编辑 PTPosition；DTUPosition 始终等于 PTPosition，不改变主母线和普通间隔拓扑。
 6. 负荷开关、隔离刀闸、断路器、接地刀闸和 PT 使用统一配电专业图元；DTU 只绘制柜体框和名称。
@@ -433,23 +495,22 @@ MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚�
 
 ### 12.1 结构校验
 
-- 普通负荷开关型的普通间隔数量必须是 3、4、5 或 6。
-- 一二次融合型的普通间隔数量必须是 4 或 6。
-- 普通间隔序号必须从 1 开始连续且唯一。
-- 柜型和普通间隔类型必须一致。
-- 每个普通间隔的固定设备数量和类型必须完整。
+- RingCabinet 必须具有一个按物理顺序保存的间隔配置；不得根据 CabinetKind 把全部间隔强制成同一类型。
+- 纯 LoadSwitch 模板的普通电气间隔数量必须是 3、4、5 或 6；纯 IntegratedFeeder 模板必须是 4 或 6；混合模板按其已确认定义校验。
+- 普通电气间隔序号必须排除 PTInterval 后从 1 开始连续且唯一；所有间隔对象标识必须唯一。
+- 每个间隔的固定设备数量和类型必须与自己的 IntervalKind 一致。
 - 每个开关设备必须有唯一标识、两个有效端子和独立操作状态。
-- 每个普通间隔必须有且只有一个 `SwitchAssembly`，其成员集合必须与本间隔固定开关集合完全一致。
-- 普通负荷开关组合必须绑定 `LoadSwitchThreePosition` 规则；一二次融合组合必须绑定 `IntegratedFeeder` 规则和一个明确的 `GroundingStructureKind`。
-- 一二次融合柜必须包含且只能包含一个 PT，并关联一个 DTU；普通负荷开关型不得包含二者。
+- 每个 LoadSwitchInterval 和 IntegratedFeederInterval 必须有且只有一个 `SwitchAssembly`，其成员集合必须与本间隔固定开关集合完全一致。
+- LoadSwitchInterval 必须绑定 `LoadSwitchThreePosition`；IntegratedFeederInterval 必须绑定 `IntegratedFeeder` 和明确的 `GroundingStructureKind`。两种规则可在同一 RingCabinet 内并存且分别校验。
+- 同一 RingCabinet 最多包含一个 PTInterval；存在 PTInterval 时必须关联一个 DTU，不存在 PTInterval 时不得包含 DTU。
 - DTU 不得脱离 PT 单独存在，其 Position 必须与 PTPosition 相同。
 - DTU 不得具有电气端子、开关状态或拓扑连接。
 
 ### 12.2 拓扑校验
 
-- 所有普通间隔必须连接同一主母线对象。
-- 每个普通间隔只能有一个对外回路端子。
-- 普通负荷开关型的回路节点必须同时连接负荷开关回路侧、接地刀闸设备侧和对外回路端子。
+- 所有柜内电气间隔必须连接同一主母线对象，但各间隔内部节点和端子只归属于本间隔。
+- 每个 LoadSwitchInterval 和 IntegratedFeederInterval 只能有一个对外回路端子；PTInterval 不产生该端子。
+- LoadSwitchInterval 的回路节点必须同时连接负荷开关回路侧、接地刀闸设备侧和对外回路端子。
 - 上刀上接地的接地刀闸设备侧必须连接隔离刀闸与断路器之间的中间节点。
 - 上刀下接地的接地刀闸设备侧必须连接断路器下游回路节点。
 - 下刀下接地必须按“断路器—隔离刀闸—回路节点”的次序连接，接地刀闸设备侧连接隔离刀闸下游回路节点。
@@ -476,6 +537,8 @@ MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚�
 | 创建 6 间隔普通负荷开关型 | 生成 6 组相互独立的负荷开关和接地刀闸状态 |
 | 普通负荷开关与接地刀闸同时合入 | 联锁规则拒绝该目标组合，不自动拉开任一设备 |
 | 创建 4 间隔一二次融合型 | 生成 4 台隔离刀闸、4 台断路器、4 台接地刀闸及 4 个对外回路端子 |
+| 创建 6 间隔混合柜：L、L、I、I、L、L | 生成 4 个 LoadSwitchInterval 和 2 个 IntegratedFeederInterval；各自绑定正确 SwitchAssembly 并共享同一主母线 |
+| 修改混合柜某个 IntegratedFeederInterval 状态 | 只校验该间隔的 IntegratedFeeder 规则，不改变同柜 LoadSwitchInterval 的设备或状态 |
 | 上刀上接地进入检修 | 隔离刀闸拉开、断路器合入、接地刀闸合入，派生 Maintenance 且有效接地 |
 | 上刀下接地进入接地 | 隔离刀闸拉开、断路器拉开、接地刀闸合入，派生 Grounded 且有效接地 |
 | 切换接地结构类型 | 重新建立与结构匹配的固定节点关系；不得只修改显示标签 |
@@ -484,3 +547,14 @@ MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚�
 | 添加右侧 PT 间隔 | 普通间隔数量不变；布局为 `普通间隔 - PT - DTU`，PT 连接主母线 |
 | 切换 PT 至另一侧 | DTU 自动跟随到同侧外侧，普通间隔和电气连接保持不变 |
 | 尝试单独创建或移动 DTU | 模型拒绝；DTU 只能通过 PT 的存在和位置派生 |
+
+## 14. 对 M1.2-C2-2 的实现约束
+
+M1.2-C2-2 实现一二次融合接地结构时，必须以单个 `IntegratedFeederInterval` 为作用边界：
+
+1. `GroundingStructureKind` 属于 IntegratedFeederInterval 或其 IntegratedFeeder SwitchAssembly，不属于 RingCabinet。
+2. 每个 IntegratedFeederInterval 独立选择上刀上接地、上刀下接地或下刀下接地，并据此一次性建立本间隔端子—节点关系。
+3. 同柜其他 LoadSwitchInterval 或 IntegratedFeederInterval 的 SwitchDevice、SwitchState、ElectricalNode 和 Terminal 不得因目标间隔的结构选择而改变。
+4. 聚合校验必须按 IntervalKind 分派：LoadSwitchInterval 使用既有三工位规则，IntegratedFeederInterval 使用所选接地结构规则；不得按 CabinetKind 选择整柜校验分支。
+5. 当前 Domain 中 `CircuitBreakerInterval` 应迁移命名为 `IntegratedFeederInterval`；现有纯类型工厂可保留为兼容入口，但应委托基于 `RingCabinetDefinition.IntervalDefinitions` 的统一创建逻辑。
+6. 本阶段确认的混合模型不授权 M1.2-C2-2 顺带实现 PTInterval、DTUCabinet 或其他特殊间隔。
