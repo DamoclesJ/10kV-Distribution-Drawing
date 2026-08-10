@@ -15,6 +15,7 @@ public sealed class RingCabinetInterval
         IntervalKind intervalKind,
         IEnumerable<SwitchDevice> switchDevices,
         SwitchAssembly switchAssembly,
+        GroundingStructureKind? groundingStructureKind,
         Guid? intermediateNodeId,
         Guid circuitNodeId,
         Guid earthNodeId,
@@ -71,6 +72,13 @@ public sealed class RingCabinetInterval
         switch (intervalKind)
         {
             case IntervalKind.LoadSwitchInterval:
+                if (groundingStructureKind is not null)
+                {
+                    throw new ArgumentException(
+                        "A load-switch interval cannot have a grounding structure.",
+                        nameof(groundingStructureKind));
+                }
+
                 if (intermediateNodeId is not null)
                 {
                     throw new ArgumentException(
@@ -87,6 +95,18 @@ public sealed class RingCabinetInterval
                 break;
 
             case IntervalKind.IntegratedFeederInterval:
+                if (groundingStructureKind is not GroundingStructureKind structureKind)
+                {
+                    throw new ArgumentException(
+                        "An integrated-feeder interval requires a grounding structure.",
+                        nameof(groundingStructureKind));
+                }
+
+                if (!Enum.IsDefined(structureKind))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(groundingStructureKind));
+                }
+
                 if (intermediateNodeId is null)
                 {
                     throw new ArgumentException(
@@ -117,6 +137,7 @@ public sealed class RingCabinetInterval
         IntervalKind = intervalKind;
         _switchDevices = Array.AsReadOnly(devices);
         SwitchAssembly = switchAssembly;
+        GroundingStructureKind = groundingStructureKind;
         IntermediateNodeId = intermediateNodeId;
         CircuitNodeId = circuitNodeId;
         EarthNodeId = earthNodeId;
@@ -136,6 +157,8 @@ public sealed class RingCabinetInterval
     public IReadOnlyList<SwitchDevice> SwitchDevices => _switchDevices;
 
     public SwitchAssembly SwitchAssembly { get; }
+
+    public GroundingStructureKind? GroundingStructureKind { get; }
 
     public Guid? IntermediateNodeId { get; }
 

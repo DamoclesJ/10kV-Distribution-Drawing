@@ -83,10 +83,11 @@ public sealed class RingCabinet : Device
                     mainBusNode,
                     electricalNodes,
                     terminals),
-                IntervalKind.IntegratedFeederInterval => CreateIntegratedFeederIntervalBase(
+                IntervalKind.IntegratedFeederInterval => CreateIntegratedFeederInterval(
                     definition.CabinetId,
                     sequence,
                     intervalDefinition,
+                    mainBusNode,
                     electricalNodes,
                     terminals),
                 _ => throw new ArgumentOutOfRangeException(
@@ -138,6 +139,7 @@ public sealed class RingCabinet : Device
         Guid id,
         string displayName,
         int intervalCount,
+        GroundingStructureKind groundingStructureKind,
         SwitchState initialIsolationSwitchState,
         SwitchState initialCircuitBreakerState,
         SwitchState initialGroundSwitchState)
@@ -152,6 +154,7 @@ public sealed class RingCabinet : Device
         RingCabinetIntervalDefinition[] intervals = Enumerable
             .Range(1, intervalCount)
             .Select(sequence => RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                groundingStructureKind,
                 initialIsolationSwitchState,
                 initialCircuitBreakerState,
                 initialGroundSwitchState,
@@ -202,7 +205,8 @@ public sealed class RingCabinet : Device
                         ValidateLoadSwitchInterval(interval, nodes, terminals));
                     break;
                 case IntervalKind.IntegratedFeederInterval:
-                    ValidateIntegratedFeederIntervalBase(interval, nodes, terminals);
+                    expectedMainBusTerminalIds.Add(
+                        ValidateIntegratedFeederInterval(interval, nodes, terminals));
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -338,18 +342,23 @@ public sealed class RingCabinet : Device
             [loadSwitch, groundSwitch],
             switchAssembly,
             null,
+            null,
             circuitNodeId,
             earthNodeId,
             externalTerminalId);
     }
 
-    private static RingCabinetInterval CreateIntegratedFeederIntervalBase(
+    private static RingCabinetInterval CreateIntegratedFeederInterval(
         Guid cabinetId,
         int sequence,
         RingCabinetIntervalDefinition definition,
+        ElectricalNode mainBusNode,
         ICollection<ElectricalNode> electricalNodes,
         ICollection<Terminal> terminals)
     {
+        GroundingStructureKind groundingStructureKind = definition.GroundingStructureKind
+            ?? throw new InvalidOperationException(
+                "An integrated-feeder interval definition requires a grounding structure.");
         SwitchState initialIsolationSwitchState = definition.InitialIsolationSwitchState
             ?? throw new InvalidOperationException(
                 "An integrated-feeder interval definition requires an isolation-switch state.");
@@ -424,31 +433,57 @@ public sealed class RingCabinet : Device
             circuitBreaker,
             groundSwitch);
 
-        terminals.Add(CreateUnboundInternalTerminal(
+        (
+            ElectricalNode isolationFirstNode,
+            ElectricalNode isolationSecondNode,
+            ElectricalNode breakerFirstNode,
+            ElectricalNode breakerSecondNode,
+            ElectricalNode groundSwitchDeviceNode) = groundingStructureKind switch
+        {
+            GroundingStructureKind.UpperIsolationGrounding =>
+                (mainBusNode, intermediateNode, intermediateNode, circuitNode, intermediateNode),
+            GroundingStructureKind.UpperLowerGrounding =>
+                (mainBusNode, intermediateNode, intermediateNode, circuitNode, circuitNode),
+            GroundingStructureKind.LowerLowerGrounding =>
+                (intermediateNode, circuitNode, mainBusNode, intermediateNode, circuitNode),
+            _ => throw new ArgumentOutOfRangeException(nameof(groundingStructureKind))
+        };
+
+        AddInternalSwitchTerminal(
+            terminals,
+            isolationFirstNode,
             isolationFirstTerminalId,
             isolationSwitch.Id,
             FirstTerminalRole,
-            TenKilovolts));
-        terminals.Add(CreateUnboundInternalTerminal(
+            TenKilovolts);
+        AddInternalSwitchTerminal(
+            terminals,
+            isolationSecondNode,
             isolationSecondTerminalId,
             isolationSwitch.Id,
             SecondTerminalRole,
-            TenKilovolts));
-        terminals.Add(CreateUnboundInternalTerminal(
+            TenKilovolts);
+        AddInternalSwitchTerminal(
+            terminals,
+            breakerFirstNode,
             breakerFirstTerminalId,
             circuitBreaker.Id,
             FirstTerminalRole,
-            TenKilovolts));
-        terminals.Add(CreateUnboundInternalTerminal(
+            TenKilovolts);
+        AddInternalSwitchTerminal(
+            terminals,
+            breakerSecondNode,
             breakerSecondTerminalId,
             circuitBreaker.Id,
             SecondTerminalRole,
-            TenKilovolts));
-        terminals.Add(CreateUnboundInternalTerminal(
+            TenKilovolts);
+        AddInternalSwitchTerminal(
+            terminals,
+            groundSwitchDeviceNode,
             groundSwitchDeviceTerminalId,
             groundSwitch.Id,
             DeviceSideRole,
-            TenKilovolts));
+            TenKilovolts);
         AddTerminal(
             terminals,
             earthNode,
@@ -478,6 +513,7 @@ public sealed class RingCabinet : Device
             IntervalKind.IntegratedFeederInterval,
             [isolationSwitch, circuitBreaker, groundSwitch],
             switchAssembly,
+            groundingStructureKind,
             intermediateNodeId,
             circuitNodeId,
             earthNodeId,
@@ -570,11 +606,17 @@ public sealed class RingCabinet : Device
         return loadBusTerminal.Id;
     }
 
-    private static void ValidateIntegratedFeederIntervalBase(
+    private Guid ValidateIntegratedFeederInterval(
         RingCabinetInterval interval,
         IReadOnlyDictionary<Guid, ElectricalNode> nodes,
         IReadOnlyDictionary<Guid, Terminal> terminals)
     {
+        if (interval.GroundingStructureKind is not GroundingStructureKind groundingStructureKind)
+        {
+            throw new InvalidOperationException(
+                $"Integrated-feeder interval '{interval.IntervalId}' requires a grounding structure.");
+        }
+
         if (interval.IntermediateNodeId is not Guid intermediateNodeId)
         {
             throw new InvalidOperationException(
@@ -596,16 +638,6 @@ public sealed class RingCabinet : Device
             SwitchAssemblyType.IntegratedFeeder,
             requireRules: false);
 
-        SwitchAssemblyEvaluation evaluation = interval.SwitchAssembly.Evaluate();
-
-        if (!evaluation.IsValid ||
-            evaluation.OperationalState != OperationalState.Unclassified ||
-            evaluation.IsEffectivelyGrounded)
-        {
-            throw new InvalidOperationException(
-                $"Interval '{interval.IntervalId}' has an invalid integrated-feeder base evaluation.");
-        }
-
         ElectricalNode intermediateNode = GetRequiredNode(
             nodes,
             intermediateNodeId,
@@ -622,40 +654,60 @@ public sealed class RingCabinet : Device
             ElectricalNodeType.Earth,
             interval.IntervalId);
 
-        GetRequiredTerminal(
+        (
+            Guid isolationFirstNodeId,
+            Guid isolationSecondNodeId,
+            Guid breakerFirstNodeId,
+            Guid breakerSecondNodeId,
+            Guid groundSwitchDeviceNodeId) = groundingStructureKind switch
+        {
+            GroundingStructureKind.UpperIsolationGrounding =>
+                (MainBusNodeId, intermediateNodeId, intermediateNodeId,
+                    interval.CircuitNodeId, intermediateNodeId),
+            GroundingStructureKind.UpperLowerGrounding =>
+                (MainBusNodeId, intermediateNodeId, intermediateNodeId,
+                    interval.CircuitNodeId, interval.CircuitNodeId),
+            GroundingStructureKind.LowerLowerGrounding =>
+                (intermediateNodeId, interval.CircuitNodeId, MainBusNodeId,
+                    intermediateNodeId, interval.CircuitNodeId),
+            _ => throw new InvalidOperationException(
+                $"Interval '{interval.IntervalId}' has an unsupported grounding structure.")
+        };
+
+        Terminal isolationFirstTerminal = GetRequiredTerminal(
             terminals,
             isolationSwitch.TerminalIds[0],
             TopologyOwnerType.Device,
             isolationSwitch.Id,
-            null,
+            isolationFirstNodeId,
             false);
-        GetRequiredTerminal(
+        Terminal isolationSecondTerminal = GetRequiredTerminal(
             terminals,
             isolationSwitch.TerminalIds[1],
             TopologyOwnerType.Device,
             isolationSwitch.Id,
-            null,
+            isolationSecondNodeId,
             false);
-        GetRequiredTerminal(
+        Terminal breakerFirstTerminal = GetRequiredTerminal(
             terminals,
             circuitBreaker.TerminalIds[0],
             TopologyOwnerType.Device,
             circuitBreaker.Id,
-            null,
+            breakerFirstNodeId,
             false);
-        GetRequiredTerminal(
+        Terminal breakerSecondTerminal = GetRequiredTerminal(
             terminals,
             circuitBreaker.TerminalIds[1],
             TopologyOwnerType.Device,
             circuitBreaker.Id,
-            null,
+            breakerSecondNodeId,
             false);
-        GetRequiredTerminal(
+        Terminal groundDeviceTerminal = GetRequiredTerminal(
             terminals,
             groundSwitch.TerminalIds[0],
             TopologyOwnerType.Device,
             groundSwitch.Id,
-            null,
+            groundSwitchDeviceNodeId,
             false);
         Terminal groundSideTerminal = GetRequiredTerminal(
             terminals,
@@ -673,9 +725,30 @@ public sealed class RingCabinet : Device
             true);
 
         EnsureExternalTerminalPolicy(interval, externalTerminal);
-        EnsureNodeTerminals(intermediateNode, []);
-        EnsureNodeTerminals(circuitNode, [externalTerminal.Id]);
+        Terminal[] mainCircuitTerminals =
+        [
+            isolationFirstTerminal,
+            isolationSecondTerminal,
+            breakerFirstTerminal,
+            breakerSecondTerminal,
+            groundDeviceTerminal
+        ];
+
+        EnsureNodeTerminals(
+            intermediateNode,
+            mainCircuitTerminals
+                .Where(terminal => terminal.ElectricalNodeId == intermediateNodeId)
+                .Select(terminal => terminal.Id));
+        EnsureNodeTerminals(
+            circuitNode,
+            mainCircuitTerminals
+                .Where(terminal => terminal.ElectricalNodeId == interval.CircuitNodeId)
+                .Select(terminal => terminal.Id)
+                .Append(externalTerminal.Id));
         EnsureNodeTerminals(earthNode, [groundSideTerminal.Id]);
+
+        return mainCircuitTerminals.Single(
+            terminal => terminal.ElectricalNodeId == MainBusNodeId).Id;
     }
 
     private void ValidatePureTemplateIntervalCount()
@@ -789,20 +862,26 @@ public sealed class RingCabinet : Device
         electricalNode.AttachTerminal(terminal.Id);
     }
 
-    private static Terminal CreateUnboundInternalTerminal(
+    private static void AddInternalSwitchTerminal(
+        ICollection<Terminal> terminals,
+        ElectricalNode electricalNode,
         Guid terminalId,
         Guid switchDeviceId,
         string role,
         string voltageLevel)
     {
-        return new Terminal(
-            terminalId,
-            TopologyOwnerType.Device,
-            switchDeviceId,
-            role,
-            voltageLevel,
-            false,
-            false);
+        AddTerminal(
+            terminals,
+            electricalNode,
+            new Terminal(
+                terminalId,
+                TopologyOwnerType.Device,
+                switchDeviceId,
+                role,
+                voltageLevel,
+                false,
+                false,
+                electricalNode.Id));
     }
 
     private static void EnsureCabinetSwitchIsValid(SwitchDevice switchDevice, Guid intervalId)

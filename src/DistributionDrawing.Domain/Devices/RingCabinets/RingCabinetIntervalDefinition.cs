@@ -10,7 +10,8 @@ public sealed class RingCabinetIntervalDefinition
         SwitchState? initialLoadSwitchState,
         SwitchState? initialIsolationSwitchState,
         SwitchState? initialCircuitBreakerState,
-        SwitchState initialGroundSwitchState)
+        SwitchState initialGroundSwitchState,
+        GroundingStructureKind? groundingStructureKind)
     {
         IntervalKind = intervalKind;
         DisplayName = NormalizeOptionalText(displayName);
@@ -18,6 +19,7 @@ public sealed class RingCabinetIntervalDefinition
         InitialIsolationSwitchState = initialIsolationSwitchState;
         InitialCircuitBreakerState = initialCircuitBreakerState;
         InitialGroundSwitchState = initialGroundSwitchState;
+        GroundingStructureKind = groundingStructureKind;
     }
 
     public IntervalKind IntervalKind { get; }
@@ -31,6 +33,8 @@ public sealed class RingCabinetIntervalDefinition
     public SwitchState? InitialCircuitBreakerState { get; }
 
     public SwitchState InitialGroundSwitchState { get; }
+
+    public GroundingStructureKind? GroundingStructureKind { get; }
 
     public static RingCabinetIntervalDefinition CreateLoadSwitch(
         SwitchState initialLoadSwitchState,
@@ -46,15 +50,18 @@ public sealed class RingCabinetIntervalDefinition
             initialLoadSwitchState,
             null,
             null,
-            initialGroundSwitchState);
+            initialGroundSwitchState,
+            null);
     }
 
     public static RingCabinetIntervalDefinition CreateIntegratedFeeder(
+        GroundingStructureKind groundingStructureKind,
         SwitchState initialIsolationSwitchState,
         SwitchState initialCircuitBreakerState,
         SwitchState initialGroundSwitchState,
         string? displayName = null)
     {
+        EnsureDefined(groundingStructureKind, nameof(groundingStructureKind));
         EnsureDefined(initialIsolationSwitchState, nameof(initialIsolationSwitchState));
         EnsureDefined(initialCircuitBreakerState, nameof(initialCircuitBreakerState));
         EnsureDefined(initialGroundSwitchState, nameof(initialGroundSwitchState));
@@ -65,7 +72,18 @@ public sealed class RingCabinetIntervalDefinition
             null,
             initialIsolationSwitchState,
             initialCircuitBreakerState,
-            initialGroundSwitchState);
+            initialGroundSwitchState,
+            groundingStructureKind);
+    }
+
+    private static void EnsureDefined(
+        GroundingStructureKind kind,
+        string parameterName)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(parameterName);
+        }
     }
 
     private static void EnsureDefined(SwitchState state, string parameterName)
