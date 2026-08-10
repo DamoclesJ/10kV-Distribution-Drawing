@@ -1,6 +1,6 @@
 # 10kV 配电环网柜模型设计
 
-> 文档状态：M1.2-C2.0 混合间隔模型修订<br>
+> 文档状态：M1.2-C2-2 接地结构模型设计修订<br>
 > 编制日期：2026-08-11<br>
 > 依据：`docs/architecture.md`、配电专业附图规范、本阶段明确的环网柜产品需求
 
@@ -253,11 +253,15 @@ flowchart TB
 | `UpperIsolationLowerGrounding` | 上刀下接地 | 主母线—隔离刀闸—断路器—电缆 | 断路器下游回路节点 |
 | `LowerIsolationLowerGrounding` | 下刀下接地 | 主母线—断路器—隔离刀闸—电缆 | 隔离刀闸下游回路节点 |
 
-接地结构类型是拓扑事实，创建间隔时必须明确选择；不得只更换显示图元而沿用另一种结构的节点关系。
+`GroundingStructureKind` 是单个 `IntegratedFeederInterval` 的必填拓扑事实，不属于 `RingCabinet`，也不在 `SwitchAssembly` 中重复保存。创建间隔时必须明确选择；间隔工厂根据它同时选择固定端子—节点拓扑和规则集。只更换显示图元、只更换规则集或只修改枚举值而不重建匹配拓扑均属于非法模型。
+
+`SwitchAssembly` 保存成员开关引用和与结构匹配的 `RuleSetRef`，评估时以所属间隔的 `GroundingStructureKind` 作为结构上下文。聚合校验必须保证 IntervalKind、GroundingStructureKind、内部拓扑和 RuleSetRef 四者一致。
+
+以下所有状态表的组合顺序统一为 `IsolationSwitch / CircuitBreaker / GroundSwitch`。
 
 ### 6.2 上刀上接地
 
-上刀上接地为主流结构。固定拓扑为：
+上刀上接地为主流结构。固定端子—节点拓扑为：
 
 ```mermaid
 flowchart TB
@@ -270,14 +274,25 @@ flowchart TB
     ES1 --- EARTH["大地节点"]
 ```
 
-| OperationalState | IsolationSwitch | CircuitBreaker | GroundSwitch | 含义 |
-| --- | --- | --- | --- | --- |
-| `ColdStandby` | `Open` | `Open` | `Open` | 隔离、断路器和接地均断开 |
-| `HotStandby` | `Closed` | `Open` | `Open` | 断路器合闸即可送电 |
-| `Running` | `Closed` | `Closed` | `Open` | 主回路导通 |
-| `Maintenance` | `Open` | `Closed` | `Closed` | 接地刀闸经合入的断路器对下方电缆形成有效接地 |
+| ElectricalNode | 必须连接的端子 |
+| --- | --- |
+| MainBusNode | IsolationSwitch 母线侧端子 |
+| IntermediateNode | IsolationSwitch 下游端子、CircuitBreaker 上游端子、GroundSwitch 设备侧端子 |
+| CircuitNode | CircuitBreaker 下游端子、ExternalTerminal |
+| EarthNode | GroundSwitch 接地侧端子 |
 
-上刀上接地至少满足：隔离刀闸与接地刀闸不得同时合入；只有隔离刀闸拉开、接地刀闸合入且断路器合入时，才判定下方电缆 `Grounded=true`。接地刀闸合入而断路器拉开时，不得误判为有效电缆接地。
+| 状态组合 | IsValid | OperationalState | IsEffectivelyGrounded | 说明 |
+| --- | --- | --- | --- | --- |
+| Open / Open / Open | true | `ColdStandby` | false | 三台开关均断开 |
+| Open / Open / Closed | true | `Unclassified` | false | 接地刀闸位于断路器上游，断路器断开使外部回路未形成有效接地 |
+| Open / Closed / Open | true | `Unclassified` | false | 尚无已确认运行方式映射 |
+| Open / Closed / Closed | true | `Maintenance` | true | 经合入断路器对外部回路形成有效接地 |
+| Closed / Open / Open | true | `HotStandby` | false | 断路器合入即可送电 |
+| Closed / Open / Closed | false | `Unclassified` | false | 隔离刀闸与接地刀闸同时合入，违反互斥规则 |
+| Closed / Closed / Open | true | `Running` | false | 主回路导通 |
+| Closed / Closed / Closed | false | `Unclassified` | false | 隔离刀闸与接地刀闸同时合入，违反互斥规则 |
+
+有效接地条件严格为：`IsValid && IsolationSwitch=Open && CircuitBreaker=Closed && GroundSwitch=Closed`。
 
 ### 6.3 上刀下接地
 
@@ -286,7 +301,25 @@ flowchart TB
                                             └—接地刀闸—大地节点
 ```
 
-接地刀闸位于断路器下游。隔离刀闸拉开、断路器拉开、接地刀闸合入时，派生 `OperationalState=Grounded`，并判定电缆有效接地，不要求断路器合入。`ColdStandby`、`HotStandby` 和 `Running` 的已确认组合与上刀上接地相同。隔离刀闸与接地刀闸同时合入属于禁止组合；其他未列组合只判定为 `Unclassified`，在没有设备厂家联锁依据前不得自行扩展为合法运行方式。
+| ElectricalNode | 必须连接的端子 |
+| --- | --- |
+| MainBusNode | IsolationSwitch 母线侧端子 |
+| IntermediateNode | IsolationSwitch 下游端子、CircuitBreaker 上游端子 |
+| CircuitNode | CircuitBreaker 下游端子、GroundSwitch 设备侧端子、ExternalTerminal |
+| EarthNode | GroundSwitch 接地侧端子 |
+
+| 状态组合 | IsValid | OperationalState | IsEffectivelyGrounded | 说明 |
+| --- | --- | --- | --- | --- |
+| Open / Open / Open | true | `ColdStandby` | false | 三台开关均断开 |
+| Open / Open / Closed | true | `Grounded` | true | 下游接地，不要求断路器合入 |
+| Open / Closed / Open | true | `Unclassified` | false | 尚无已确认运行方式映射 |
+| Open / Closed / Closed | true | `Unclassified` | true | 外部回路存在直接接地路径，但该组合尚无已确认运行方式名称 |
+| Closed / Open / Open | true | `HotStandby` | false | 断路器合入即可送电 |
+| Closed / Open / Closed | false | `Unclassified` | false | 隔离刀闸与接地刀闸同时合入，违反互斥规则 |
+| Closed / Closed / Open | true | `Running` | false | 主回路导通 |
+| Closed / Closed / Closed | false | `Unclassified` | false | 隔离刀闸与接地刀闸同时合入，违反互斥规则 |
+
+有效接地条件为：`IsValid && IsolationSwitch=Open && GroundSwitch=Closed`；CircuitBreaker 状态不参与该结构的有效接地判断。
 
 ### 6.4 下刀下接地
 
@@ -295,15 +328,53 @@ flowchart TB
                                             └—接地刀闸—大地节点
 ```
 
-该结构与上刀下接地均不需要通过合入断路器实现电缆接地，但断路器与隔离刀闸在主回路中的先后顺序不同，必须保存为不同 `GroundingStructureKind`，并生成不同的内部节点—端子关系。断路器拉开、隔离刀闸拉开、接地刀闸合入时，派生 `OperationalState=Grounded`。
+| ElectricalNode | 必须连接的端子 |
+| --- | --- |
+| MainBusNode | CircuitBreaker 母线侧端子 |
+| IntermediateNode | CircuitBreaker 下游端子、IsolationSwitch 上游端子 |
+| CircuitNode | IsolationSwitch 下游端子、GroundSwitch 设备侧端子、ExternalTerminal |
+| EarthNode | GroundSwitch 接地侧端子 |
 
-不得把下刀下接地按上刀上接地规则处理，也不得为了复用图形而要求检修接地时合入断路器。尚未由设备资料确认的其他机械动作顺序保持 `Unclassified`，不在本设计中自行认定。
+| 状态组合 | IsValid | OperationalState | IsEffectivelyGrounded | 说明 |
+| --- | --- | --- | --- | --- |
+| Open / Open / Open | true | `Unclassified` | false | 尚未确认该结构的冷备用命名映射 |
+| Open / Open / Closed | true | `Grounded` | true | 下游接地，不要求断路器合入 |
+| Open / Closed / Open | true | `Unclassified` | false | 尚无已确认运行方式映射 |
+| Open / Closed / Closed | true | `Unclassified` | true | 外部回路存在直接接地路径，但该组合尚无已确认运行方式名称 |
+| Closed / Open / Open | true | `Unclassified` | false | 尚未确认该结构的热备用命名映射 |
+| Closed / Open / Closed | false | `Unclassified` | false | 隔离刀闸与接地刀闸同时合入，违反互斥规则 |
+| Closed / Closed / Open | true | `Unclassified` | false | 主回路物理导通，但 `Running` 命名映射仍待设备资料确认 |
+| Closed / Closed / Closed | false | `Unclassified` | false | 隔离刀闸与接地刀闸同时合入，违反互斥规则 |
+
+该结构与上刀下接地均不需要通过合入断路器实现电缆接地，但主回路设备顺序不同，必须建立不同节点关系。有效接地条件为：`IsValid && IsolationSwitch=Open && GroundSwitch=Closed`；CircuitBreaker 状态不参与有效接地判断。除 `Open/Open/Closed → Grounded` 外，尚未由设备资料确认的运行方式名称保持 `Unclassified`。
 
 ### 6.5 状态独立性与组合判定
 
 隔离刀闸、断路器和接地刀闸必须各自保存 `Open/Closed`。模型不得把三台设备压缩成单一三工位 Device，也不得保存一个间隔级状态覆盖三台设备。
 
-`SwitchAssembly` 根据三台成员当前状态、`GroundingStructureKind` 和关联的 `InterlockRule` 实时计算：组合是否合法、`OperationalState`、是否形成有效电缆接地及违反的规则。上述结果均不进入工程事实数据。
+三种结构当前共同确认的硬联锁只有：`IsolationSwitch=Closed` 与 `GroundSwitch=Closed` 互斥。不得自行增加“断路器与接地刀闸互斥”、动作先后顺序或自动联动规则；取得厂家闭锁资料后再版本化补充。
+
+当前规则集内容明确为：
+
+| RuleType | 适用结构 | 条件或来源 | 结果 |
+| --- | --- | --- | --- |
+| `MutualExclusion` | 三种结构 | IsolationSwitch=Closed 且 GroundSwitch=Closed | IsValid=false，记录统一互斥规则标识 |
+| `InvalidCombination` | 暂无新增 | 尚无其他已确认厂家闭锁组合 | 不创建推测规则 |
+| `OperationalStateMapping` | 分结构 | 严格匹配第 6.2～6.4 节完整状态表 | 命中已确认名称；否则 Unclassified |
+| `EffectiveGrounding` | 上刀上接地 | IsValid 且 Open/Closed/Closed | true |
+| `EffectiveGrounding` | 两种下接地 | IsValid 且 IsolationSwitch=Open、GroundSwitch=Closed，CircuitBreaker 任意 | true |
+
+RuleSetRef 必须按三种 GroundingStructureKind 分别版本化；三个规则集可以引用同一条互斥规则定义，但不能通过一个“通用融合柜规则集”掩盖不同拓扑、状态映射和有效接地条件。
+
+`SwitchAssembly` 根据三台成员当前状态、所属间隔的 `GroundingStructureKind` 和关联的 `InterlockRule` 实时计算：组合是否合法、`OperationalState`、是否形成有效电缆接地及违反的规则。评估顺序固定为：
+
+1. 读取三台成员的当前 SwitchState，不修改任何成员。
+2. 匹配 MutualExclusion 和已确认 InvalidCombination。
+3. 存在硬联锁违规时返回 `IsValid=false`、`OperationalState=Unclassified`、`IsEffectivelyGrounded=false` 和违规规则标识。
+4. 无违规时按“结构类型 + 完整状态组合”匹配 OperationalStateMapping；未命中返回 `Unclassified`。
+5. 无违规时按该结构的固定接地路径计算 IsEffectivelyGrounded；该结果可以为 true 而 OperationalState 仍为 Unclassified。
+
+`IsValid=true` 只表示没有违反当前已确认的硬联锁，不等于该组合已获得运行方式名称或已由厂家确认推荐使用。`OperationalState`、`IsEffectivelyGrounded` 和违规结果均不进入工程事实数据，不得保存、反写 SwitchState 或用于自动推导真实现场停电状态。
 
 单台开关状态改变时，其他设备状态保持原值；若目标组合违反硬联锁，状态变更应被拒绝，而不是自动操作其他开关。
 
@@ -448,10 +519,10 @@ DTU 不具有 `Terminal`、`ElectricalNode`、操作状态或电气状态，不�
 | ParentIntervalId | 是 | 所属普通间隔；组合不能脱离间隔存在 |
 | AssemblyType | 是 | `LoadSwitchThreePosition` 或 `IntegratedFeeder` |
 | MemberSwitchIds | 是 | 按明确角色引用 2 或 3 台 `SwitchDevice` |
-| GroundingStructureKind | 条件必填 | 仅 `IntegratedFeeder` 必填 |
+| RuleSetRef | 是 | 指向与 AssemblyType 及所属间隔结构匹配的版本化固定规则集 |
 | InterlockRules | 是 | 由组合类型和接地结构确定的受限规则集合 |
 
-普通负荷开关组合的成员角色固定为 `LoadSwitch`、`GroundSwitch`；一二次融合组合固定为 `IsolationSwitch`、`CircuitBreaker`、`GroundSwitch`。成员设备仍独立拥有 DeviceId、Terminal 和 SwitchState，组合不得复制这些状态。
+普通负荷开关组合的成员角色固定为 `LoadSwitch`、`GroundSwitch`；一二次融合组合固定为 `IsolationSwitch`、`CircuitBreaker`、`GroundSwitch`。成员设备仍独立拥有 DeviceId、Terminal 和 SwitchState，组合不得复制这些状态。IntegratedFeeder 的 `GroundingStructureKind` 只从 ParentIntervalId 指向的 IntegratedFeederInterval 读取，SwitchAssembly 不保存第二份结构类型。
 
 ### 10.5 InterlockRule
 
@@ -462,7 +533,7 @@ DTU 不具有 `Terminal`、`ElectricalNode`、操作状态或电气状态，不�
 - `OperationalStateMapping`：把已确认组合映射为派生 `OperationalState`。
 - `EffectiveGrounding`：按接地结构判断外部回路端子是否通过当前导通路径连接大地节点。
 
-MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚本或任意表达式。规则属于组合模板；工程实例保存组合类型、成员引用、接地结构和必要的规则集版本引用，不保存每次计算结果。
+MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚本或任意表达式。规则属于组合模板；工程实例由间隔保存接地结构，由 SwitchAssembly 保存组合类型、成员引用和必要的规则集版本引用，不保存每次计算结果。
 
 ### 10.6 OperationalState
 
@@ -501,7 +572,7 @@ MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚�
 - 每个间隔的固定设备数量和类型必须与自己的 IntervalKind 一致。
 - 每个开关设备必须有唯一标识、两个有效端子和独立操作状态。
 - 每个 LoadSwitchInterval 和 IntegratedFeederInterval 必须有且只有一个 `SwitchAssembly`，其成员集合必须与本间隔固定开关集合完全一致。
-- LoadSwitchInterval 必须绑定 `LoadSwitchThreePosition`；IntegratedFeederInterval 必须绑定 `IntegratedFeeder` 和明确的 `GroundingStructureKind`。两种规则可在同一 RingCabinet 内并存且分别校验。
+- LoadSwitchInterval 必须绑定 `LoadSwitchThreePosition`；IntegratedFeederInterval 必须保存明确的 `GroundingStructureKind`，并绑定 `IntegratedFeeder` 及与该结构匹配的 RuleSetRef。SwitchAssembly 不得重复保存 GroundingStructureKind。
 - 同一 RingCabinet 最多包含一个 PTInterval；存在 PTInterval 时必须关联一个 DTU，不存在 PTInterval 时不得包含 DTU。
 - DTU 不得脱离 PT 单独存在，其 Position 必须与 PTPosition 相同。
 - DTU 不得具有电气端子、开关状态或拓扑连接。
@@ -523,9 +594,11 @@ MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚�
 - 一个设备不得同时保存多个操作状态。
 - 修改某台设备状态后，同间隔其他设备状态必须保持原值。
 - 普通负荷开关与接地刀闸不得同时合入。
-- 一二次融合间隔的隔离刀闸与接地刀闸不得同时合入。
+- IntegratedFeederInterval 的隔离刀闸与接地刀闸不得同时合入；当前不增加其他未经确认的硬联锁。
 - 上刀上接地只有在隔离刀闸拉开、断路器合入、接地刀闸合入时才判定外部电缆有效接地。
-- 上刀下接地和下刀下接地不要求断路器合入即可形成已定义的有效接地组合。
+- 上刀下接地和下刀下接地在组合合法、隔离刀闸拉开且接地刀闸合入时判定有效接地，断路器状态不参与判断。
+- 命中硬联锁违规时 OperationalState 必须为 Unclassified，IsEffectivelyGrounded 必须为 false。
+- 未命中已确认状态映射的合法组合必须返回 Unclassified，不得自动套用另一种接地结构的名称。
 - `OperationalState`、有效接地结果和联锁违规结果必须实时计算，不得作为独立事实保存。
 - PT 本体和 DTU 不得出现拉开、合入或电气状态；PT 间隔内的隔离刀闸和接地刀闸必须分别保存操作状态。
 
@@ -541,6 +614,9 @@ MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚�
 | 修改混合柜某个 IntegratedFeederInterval 状态 | 只校验该间隔的 IntegratedFeeder 规则，不改变同柜 LoadSwitchInterval 的设备或状态 |
 | 上刀上接地进入检修 | 隔离刀闸拉开、断路器合入、接地刀闸合入，派生 Maintenance 且有效接地 |
 | 上刀下接地进入接地 | 隔离刀闸拉开、断路器拉开、接地刀闸合入，派生 Grounded 且有效接地 |
+| 上刀上接地 Open/Open/Closed | 组合不违反当前硬联锁，但 OperationalState=Unclassified 且 IsEffectivelyGrounded=false |
+| 上刀下接地 Open/Closed/Closed | OperationalState=Unclassified，但因接地刀闸直接连接回路节点，IsEffectivelyGrounded=true |
+| 下刀下接地 Closed/Closed/Open | 主回路物理导通，但在资料确认前 OperationalState=Unclassified |
 | 切换接地结构类型 | 重新建立与结构匹配的固定节点关系；不得只修改显示标签 |
 | 单独拉开某间隔断路器 | 只改变目标断路器状态及内部导通，隔离刀闸和接地刀闸状态不变 |
 | 添加左侧 PT 间隔 | 普通间隔数量不变；布局为 `DTU - PT - 普通间隔`，PT 连接主母线 |
@@ -548,13 +624,15 @@ MVP 规则使用按开关角色定义的固定条件表，不引入可执行脚�
 | 切换 PT 至另一侧 | DTU 自动跟随到同侧外侧，普通间隔和电气连接保持不变 |
 | 尝试单独创建或移动 DTU | 模型拒绝；DTU 只能通过 PT 的存在和位置派生 |
 
-## 14. 对 M1.2-C2-2 的实现约束
+## 14. 后续代码实现调整点
 
-M1.2-C2-2 实现一二次融合接地结构时，必须以单个 `IntegratedFeederInterval` 为作用边界：
+后续实现本设计时必须以单个 `IntegratedFeederInterval` 为作用边界：
 
-1. `GroundingStructureKind` 属于 IntegratedFeederInterval 或其 IntegratedFeeder SwitchAssembly，不属于 RingCabinet。
-2. 每个 IntegratedFeederInterval 独立选择上刀上接地、上刀下接地或下刀下接地，并据此一次性建立本间隔端子—节点关系。
-3. 同柜其他 LoadSwitchInterval 或 IntegratedFeederInterval 的 SwitchDevice、SwitchState、ElectricalNode 和 Terminal 不得因目标间隔的结构选择而改变。
-4. 聚合校验必须按 IntervalKind 分派：LoadSwitchInterval 使用既有三工位规则，IntegratedFeederInterval 使用所选接地结构规则；不得按 CabinetKind 选择整柜校验分支。
-5. 当前 Domain 中 `CircuitBreakerInterval` 应迁移命名为 `IntegratedFeederInterval`；现有纯类型工厂可保留为兼容入口，但应委托基于 `RingCabinetDefinition.IntervalDefinitions` 的统一创建逻辑。
-6. 本阶段确认的混合模型不授权 M1.2-C2-2 顺带实现 PTInterval、DTUCabinet 或其他特殊间隔。
+1. 新增 `GroundingStructureKind` 枚举，并把必填属性放在 IntegratedFeederInterval；RingCabinet、SwitchAssembly 均不保存副本。
+2. `RingCabinetIntervalDefinition.CreateIntegratedFeeder` 必须接收 GroundingStructureKind；统一工厂按结构调用三个受控拓扑构建分支，不再生成未绑定节点的融合间隔。
+3. IntegratedFeeder 的 SwitchAssembly 工厂根据所属间隔结构选择版本化 RuleSetRef 和固定 InterlockRule，不允许外部传入任意规则表达式。
+4. SwitchAssembly 的评估方法需要接收或读取所属间隔结构上下文，并按第 6.5 节顺序返回 IsValid、OperationalState、IsEffectivelyGrounded 和 ViolatedRuleCodes。
+5. RingCabinet 聚合校验继续按 IntervalKind 逐间隔分派；IntegratedFeederInterval 还必须校验 GroundingStructureKind、RuleSetRef 和实际端子—节点拓扑一致。
+6. 三种结构的状态测试必须覆盖各自 8 个完整组合，特别覆盖上刀上接地 `Open/Open/Closed=false`、两种下接地结构 `Open/Closed/Closed=true 且 Unclassified`、以及两种互斥非法组合。
+7. 修改某个融合间隔的结构时必须重新生成该间隔内部拓扑；不得影响同柜其他间隔的对象标识、设备状态或连接关系。若 ExternalTerminalId 需要保持稳定，重建流程必须显式保留该标识。
+8. 本设计不授权顺带实现 PTInterval、DTUCabinet、UI、Rendering、保存格式或其他 M1 后续功能。

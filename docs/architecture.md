@@ -282,7 +282,7 @@ flowchart TB
 
 - 断路器/负荷开关/隔离开关：合入时两端导通，拉开时两端断开。
 - 接地刀闸：合入时设备端连接大地端，拉开时断开。
-- 三工位机构：各 SwitchDevice 分别保存 Open/Closed；SwitchAssembly 根据成员状态、接地结构和联锁规则判定允许组合、运行方式及有效接地，不重复保存组合状态。
+- 三工位机构：各 SwitchDevice 分别保存 Open/Closed；IntegratedFeederInterval 保存自身 GroundingStructureKind，SwitchAssembly 根据成员状态、所属间隔结构和联锁规则判定允许组合、运行方式及有效接地，不重复保存组合状态或接地结构。
 - 熔断器：正常时可导通；熔断、拆除等状态应按业务需要单独定义，不能误用开关拉开状态。
 - 母线：多个端子属于同一导电节点，但视觉上可由多个线段组成。
 
@@ -322,6 +322,7 @@ PT 不是独立柜体或 RingCabinet 的单独结构属性，而是有序间隔�
 - 一个端子不得被不允许的多条连接占用。
 - 相连端子的电压等级必须兼容；跨电压等级只能通过变压器等允许设备。
 - SwitchAssembly 必须拒绝其联锁规则明确禁止的状态组合；运行方式和有效接地结论只能由成员 SwitchState 与结构规则计算。
+- GroundingStructureKind 只能属于单个 IntegratedFeederInterval；RingCabinet 和 SwitchAssembly 不得保存可与间隔冲突的副本，RuleSetRef 与端子—节点拓扑必须同时匹配该结构。
 - RingCabinet 的每个普通电气间隔必须按自身 IntervalKind 校验设备、SwitchAssembly 和内部拓扑；不得使用 CabinetKind 要求同柜全部间隔同型。
 - 工作接地线编号在同一工作票内唯一且非空。
 - 工作票中的接地刀闸必须有调度编号。

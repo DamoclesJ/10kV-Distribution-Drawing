@@ -1,6 +1,6 @@
 # 10kV 配电附图 MVP 设备模型设计
 
-> 文档状态：M1.2-C2.0 混合间隔模型修订<br>
+> 文档状态：M1.2-C2-2 接地结构模型设计修订<br>
 > 编制日期：2026-08-11<br>
 > 依据：`docs/requirements.md`、`docs/architecture.md`、`docs/ring-cabinet-design.md`、`docs/drawing-rule.md`、`docs/implementation-plan.md`
 
@@ -367,8 +367,9 @@ LoadSwitchInterval 和 IntegratedFeederInterval 内的 `SwitchDevice` 必须属�
 | ParentIntervalId | 是 | 所属普通间隔 |
 | AssemblyType | 是 | `LoadSwitchThreePosition` 或 `IntegratedFeeder` |
 | MemberSwitchIds | 是 | 按角色引用本间隔 2 或 3 台 SwitchDevice |
-| GroundingStructureKind | 条件必填 | 一二次融合间隔必填，普通负荷开关间隔不适用 |
 | RuleSetRef | 是 | 指向与组合类型、接地结构匹配的固定联锁规则集及版本 |
+
+`GroundingStructureKind` 只属于 ParentIntervalId 指向的 IntegratedFeederInterval，SwitchAssembly 不重复保存。聚合必须校验 RuleSetRef 与所属间隔的 GroundingStructureKind 和实际端子—节点拓扑一致。
 
 `InterlockRule` 当前只采用受限规则类型，不引入任意脚本：
 
@@ -477,7 +478,7 @@ PT 不是独立柜体或顶层 Device，也不是 RingCabinet 的独立 PT 属�
 | `Running` | `Closed` | `Closed` | `Open` | 否 |
 | `Maintenance` | `Open` | `Closed` | `Closed` | 是 |
 
-隔离刀闸与接地刀闸不得同时合入。由于接地刀闸连接断路器上游中间节点，只有断路器合入时接地路径才延伸到下方电缆；`Open/Open/Closed` 不得判定电缆有效接地。
+隔离刀闸与接地刀闸不得同时合入。由于接地刀闸连接断路器上游中间节点，只有组合合法且 `IsolationSwitch=Open/CircuitBreaker=Closed/GroundSwitch=Closed` 时才判定有效接地；`Open/Open/Closed` 返回 `Unclassified` 且不得判定有效接地。
 
 #### 10.4.2 上刀下接地（UpperIsolationLowerGrounding）
 
@@ -486,7 +487,7 @@ PT 不是独立柜体或顶层 Device，也不是 RingCabinet 的独立 PT 属�
                                             └—接地刀闸—大地节点
 ```
 
-隔离刀闸拉开、断路器拉开、接地刀闸合入时派生 `Grounded`，电缆有效接地，不要求断路器合入。`ColdStandby`、`HotStandby`、`Running` 的已确认组合与上刀上接地相同。
+隔离刀闸拉开、断路器拉开、接地刀闸合入时派生 `Grounded`，电缆有效接地，不要求断路器合入。`ColdStandby`、`HotStandby`、`Running` 的已确认组合与上刀上接地相同。组合合法且 `IsolationSwitch=Open/GroundSwitch=Closed` 时即判定有效接地；因此 `Open/Closed/Closed` 的 OperationalState 仍为 `Unclassified`，但 IsEffectivelyGrounded 为 true。
 
 #### 10.4.3 下刀下接地（LowerIsolationLowerGrounding）
 
@@ -495,9 +496,11 @@ PT 不是独立柜体或顶层 Device，也不是 RingCabinet 的独立 PT 属�
                                             └—接地刀闸—大地节点
 ```
 
-断路器拉开、隔离刀闸拉开、接地刀闸合入时派生 `Grounded`，电缆有效接地。该结构虽然与上刀下接地都不要求为接地而合入断路器，但主回路设备顺序不同，必须保存不同结构类型并建立不同节点关系。
+断路器拉开、隔离刀闸拉开、接地刀闸合入时派生 `Grounded`，电缆有效接地。该结构虽然与上刀下接地都不要求为接地而合入断路器，但主回路设备顺序不同，必须保存不同结构类型并建立不同节点关系。组合合法且 `IsolationSwitch=Open/GroundSwitch=Closed` 时判定有效接地，CircuitBreaker 不参与该判断。
 
-三种结构中，隔离刀闸、断路器和接地刀闸始终分别保存 SwitchState；任一状态变化不隐式改变另外两台设备。未列出的组合派生 `Unclassified`，除明确命中 InvalidCombination 或 MutualExclusion 外不自行判为合法或非法。
+下刀下接地当前只确认 `Open/Open/Closed → Grounded`；包括 `Closed/Closed/Open` 在内的其他非互斥组合，在取得设备资料前保持 `Unclassified`。三种结构中，隔离刀闸、断路器和接地刀闸始终分别保存 SwitchState；任一状态变化不隐式改变另外两台设备。
+
+三种结构当前共同的硬联锁仅为 IsolationSwitch 与 GroundSwitch 不得同时 Closed。未命中明确 MutualExclusion 或 InvalidCombination 的组合返回 IsValid=true，但这不表示已经确认其运行方式；完整 8 组合状态矩阵和评估顺序以 `docs/ring-cabinet-design.md` 第 6 节为准。
 
 ### 10.5 外部连接边界
 
@@ -697,7 +700,7 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 
 | 对象 | 可编辑业务属性 |
 | --- | --- |
-| 环网柜 | 柜体名称、柜型允许范围内的间隔配置、间隔名称；创建一二次融合间隔时明确选择接地结构类型 |
+| 环网柜 | 柜体名称、有序间隔配置、间隔名称；创建 IntegratedFeederInterval 时明确选择接地结构类型 |
 | 柜内开关 | 设备名称或调度编号、SwitchState |
 | 电缆 | 显示名称、ElectricalState |
 | 水泥杆 | 杆号、显示名称 |
@@ -715,7 +718,7 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 
 - 顶层 Device 及环网柜内部 Device 的稳定标识和属性。
 - 环网柜、间隔、内部开关和节点的所有权关系。
-- SwitchAssembly 的稳定标识、组合类型、所属间隔、成员开关角色引用、GroundingStructureKind 和 RuleSetRef。
+- IntegratedFeederInterval 的 GroundingStructureKind，以及 SwitchAssembly 的稳定标识、组合类型、所属间隔、成员开关角色引用和 RuleSetRef。
 - Terminal 的所属对象、角色、暴露范围和连接能力。
 - Connection 的类型、两个端点、电气状态及 Route。
 - 架空线路的 SupportPoleIds。
@@ -757,7 +760,7 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - IntegratedFeederInterval 必须且只能包含一台隔离刀闸、一台断路器和一台接地刀闸。
 - 每台柜内开关必须有独立 SwitchState。
 - 每个 LoadSwitchInterval 和 IntegratedFeederInterval 必须有且只有一个 SwitchAssembly，其 MemberSwitchIds 与本间隔 SwitchDevices 完全一致且角色不重复。
-- LoadSwitchInterval 的 AssemblyType 必须为 LoadSwitchThreePosition；IntegratedFeederInterval 必须为 IntegratedFeeder 并具有明确 GroundingStructureKind。两类组合允许在同一柜内并存。
+- LoadSwitchInterval 的 AssemblyType 必须为 LoadSwitchThreePosition；IntegratedFeederInterval 必须具有明确 GroundingStructureKind，并绑定 IntegratedFeeder 及匹配的 RuleSetRef。SwitchAssembly 不得保存第二份 GroundingStructureKind。
 - 每个普通电气间隔必须有且只有一个对外回路端子；PTInterval 不产生该端子。
 - 柜内端子、节点和固定设备关系必须符合第 10 节。
 - 上刀上接地的接地刀闸必须连接隔离刀闸与断路器之间节点；上刀下接地必须连接断路器下游；下刀下接地必须按断路器—隔离刀闸顺序建立主回路并在隔离刀闸下游接地。
@@ -792,9 +795,10 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - 修改单台开关后，其他开关状态保持原值。
 - SwitchState 和 ElectricalState 不得相互自动覆盖。
 - 普通负荷开关与接地刀闸同时 Closed 必须被联锁拒绝。
-- 一二次融合间隔的隔离刀闸与接地刀闸同时 Closed 必须被联锁拒绝。
+- IntegratedFeederInterval 的隔离刀闸与接地刀闸同时 Closed 必须被联锁拒绝；本阶段不增加其他未经确认的硬联锁。
 - 上刀上接地只有 `IsolationSwitch=Open`、`CircuitBreaker=Closed`、`GroundSwitch=Closed` 才判定外部回路有效接地。
-- 上刀下接地和下刀下接地的已定义接地组合不要求 CircuitBreaker=Closed。
+- 上刀下接地和下刀下接地在组合合法、`IsolationSwitch=Open`、`GroundSwitch=Closed` 时判定有效接地，不要求 CircuitBreaker=Closed。
+- 命中硬联锁违规时必须返回 OperationalState=Unclassified 和 IsEffectivelyGrounded=false。
 - OperationalState、有效接地和违规结果只能计算，不得保存或反向覆盖设备状态。
 
 ### 16.6 工作范围和工作地线
