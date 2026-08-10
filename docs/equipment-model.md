@@ -21,10 +21,10 @@
 
 本模型明确不包含：
 
-- 配电变压器、箱式站、三工位设备、站内其他开关设备及规范中的其他图元。
+- 配电变压器、箱式站、把三工位机构建成单一三值 Device 的模型、站内其他开关设备及规范中的其他图元。由多个独立 SwitchDevice 组成的 `SwitchAssembly` 属于当前环网柜模型。
 - 现场勘察环境对象和独立自由标注模型。
-- 生命周期、在运/拆除、运行/检修位置等未列入当前 MVP 的状态维度。
-- 潮流计算、电气仿真、自动带电传播和状态联锁控制。
+- 人工保存的生命周期、在运/拆除、运行/检修位置等状态维度。本文新增的 OperationalState 是由开关组合计算的只读运行方式，不属于人工保存字段。
+- 潮流计算、电气仿真、自动带电传播和自动联动操作。机械联锁只校验目标状态组合，不自动操作其他开关。
 
 本文中的英文名称是领域概念名称，不代表已经创建代码类型。本项目统一使用 `Device` 表达设备实例，其他文档不得再以 `Equipment` 建立第二套基础设备对象。
 
@@ -38,6 +38,7 @@
 6. **组合对象保持内部语义。** 环网柜不是一张不可拆分的图片，间隔、开关、端子和内部节点均可单独识别。
 7. **只建模当前需求。** 不通过通用扩展字典、插件类型或预留空对象提前实现后续设备。
 8. **安全措施由人工定义。** 工作范围和工作地线保存结构化关联，但不根据拓扑自动推导停电范围或生成接地点。
+9. **开关事实与组合结论分离。** 单台 `SwitchDevice` 的 `SwitchState` 是保存事实；`SwitchAssembly` 的运行方式、有效接地和联锁违规是根据成员状态与结构规则计算的派生结果。
 
 ## 3. MVP 对象分类
 
@@ -66,6 +67,8 @@ classDiagram
     class RingCabinet
     class RingCabinetInterval
     class SwitchDevice
+    class SwitchAssembly
+    class InterlockRule
     class Pole
     class PoleAttachment
     class CableTermination
@@ -94,6 +97,9 @@ classDiagram
     RingCabinet "1" *-- "0..1" DTUCabinet
     PTInterval "1" *-- "1" PT
     RingCabinetInterval "1" *-- "2..3" SwitchDevice
+    RingCabinetInterval "1" *-- "1" SwitchAssembly
+    SwitchAssembly "1" --> "2..3" SwitchDevice
+    SwitchAssembly "1" *-- "1..*" InterlockRule
     Device "1" *-- "0..*" Terminal
     RingCabinetInterval "1" *-- "1" Terminal
     Connection "1" --> "2" Terminal
@@ -117,6 +123,8 @@ classDiagram
 `DrawingDocument` 是文档聚合根，直接保存或索引 `Devices`、`Connections`、`Terminals`、`ElectricalNodes`、`WorkScopes` 和 `GroundingPoints`。`Layout` 与这些语义对象分开保存；任何图形对象都不得反向成为领域事实源。
 
 图中的 `3..6` 表达环网柜组合数量范围；普通柜允许 3、4、5、6 间隔，一二次融合柜只允许 4、6 间隔。每个普通柜间隔包含 2 台开关，一二次融合柜间隔包含 3 台开关。
+
+`SwitchAssembly` 不是 Device，不拥有 Terminal，也不复制成员开关的 SwitchState。它只保存组合身份、成员角色引用和接地结构等组合事实，并应用固定联锁规则计算运行方式。
 
 ## 5. Device 基础模型
 
@@ -159,7 +167,7 @@ classDiagram
 | InstallationKind | 是 | `CabinetInterval` 或 `Pole` |
 | ParentIntervalId | 条件必填 | 柜内开关必填，柱上设备不得设置；可指向普通 RingCabinetInterval 或 PTInterval |
 | TerminalIds | 是 | 固定两个，角色由 SwitchKind 和安装位置确定 |
-| OperationState | 是 | `Open` 或 `Closed`，每台设备独立保存 |
+| SwitchState | 是 | `Open` 或 `Closed`，每台设备独立保存 |
 | DispatchNumber | 否 | 需要在图面标注调度编号时使用 |
 
 允许组合仅限：
@@ -172,6 +180,8 @@ classDiagram
 | 水泥杆 | `LoadSwitch`（柱上负荷开关）、`IsolationSwitch`（柱上隔离开关）、`CircuitBreaker`（柱上断路器）、`DropoutFuse`（跌落式熔断器） |
 
 表中的“柱上”表示安装语境，不建立另一套基础开关类。例如柱上断路器仍是 `SwitchKind = CircuitBreaker`、`InstallationKind = Pole` 的 SwitchDevice。
+
+柜内 `SwitchDevice` 必须属于本间隔唯一的 `SwitchAssembly`。状态变更仍以单台设备为目标，但提交前由所属组合校验目标状态集合；规则不得通过隐式修改其他设备来“修正”非法组合。
 
 ## 6. Terminal 基础模型
 
@@ -294,11 +304,11 @@ classDiagram
 
 ### 9.1 状态维度
 
-`State` 是由所属对象保存的值，不作为具有独立标识的实体。当前 MVP 只定义两个互不替代的状态维度：
+`State` 是由所属对象保存的值，不作为具有独立标识的实体。当前 MVP 保存两个互不替代的事实状态维度；组合运行方式是派生值，不作为第三个保存字段。为避免与 `OperationalState` 混淆，Domain 中单台开关状态统一命名为 `SwitchState`。
 
 | 状态维度 | 允许值 | 适用对象 | 作用 |
 | --- | --- | --- | --- |
-| OperationState | `Open`、`Closed` | 柜内开关、柱上开关设备 | 选择拉开/合入图元，定义设备两端是否内部导通 |
+| SwitchState（单设备操作状态） | `Open`、`Closed` | 柜内开关、柱上开关设备 | 选择拉开/合入图元，定义设备两端是否内部导通 |
 | ElectricalState | `Energized`、`Deenergized` | 电缆、架空线路、可见电气节点或端子 | 选择带电红色或停电黑色/蓝色 |
 
 中文界面分别显示为：
@@ -312,7 +322,7 @@ classDiagram
 
 ### 9.2 状态适用矩阵
 
-| 对象 | OperationState | ElectricalState |
+| 对象 | SwitchState | ElectricalState |
 | --- | --- | --- |
 | 环网柜组合 | 不适用 | 不保存柜体级统一状态 |
 | 普通间隔 | 不适用 | 由内部节点分别保存，不保存间隔统一状态 |
@@ -345,9 +355,33 @@ classDiagram
 
 - 每次状态修改只针对一个目标对象和一个状态维度。
 - 修改某台柜内开关不得隐式修改同间隔其他开关。
-- 修改 OperationState 不得自动改写任何 ElectricalState。
-- 修改线路 ElectricalState 不得自动改变相连开关的 OperationState。
-- 本阶段不实现联锁动作、潮流、电气仿真或状态自动传播。
+- 修改 SwitchState 不得自动改写任何 ElectricalState。
+- 修改线路 ElectricalState 不得自动改变相连开关的 SwitchState。
+- 本阶段不实现自动联动动作、潮流、电气仿真或状态自动传播。机械联锁只校验状态变更后的目标组合是否合法。
+
+### 9.5 SwitchAssembly、InterlockRule 与 OperationalState
+
+`SwitchAssembly` 表示同一间隔内多个开关构成的功能单元，不能替代 `SwitchDevice`。
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| AssemblyId | 是 | 工程内稳定唯一 |
+| ParentIntervalId | 是 | 所属普通间隔 |
+| AssemblyType | 是 | `LoadSwitchThreePosition` 或 `IntegratedFeeder` |
+| MemberSwitchIds | 是 | 按角色引用本间隔 2 或 3 台 SwitchDevice |
+| GroundingStructureKind | 条件必填 | 一二次融合间隔必填，普通负荷开关间隔不适用 |
+| RuleSetRef | 是 | 指向与组合类型、接地结构匹配的固定联锁规则集及版本 |
+
+`InterlockRule` 当前只采用受限规则类型，不引入任意脚本：
+
+- `MutualExclusion`：哪些角色不能同时 Closed。
+- `InvalidCombination`：哪些完整状态组合必须拒绝。
+- `OperationalStateMapping`：哪些已确认组合对应命名运行方式。
+- `EffectiveGrounding`：外部回路端子在何种组合下通过固定节点和已合入开关连接大地节点。
+
+派生 `OperationalState` 当前允许 `Running`、`Disconnected`、`ColdStandby`、`HotStandby`、`Maintenance`、`Grounded`、`Unclassified`。计算结果还应包含 `IsValid`、`IsEffectivelyGrounded` 和违反的规则标识。
+
+`Unclassified` 表示组合尚无已确认的运行方式名称，不自动等同于非法。`OperationalState`、有效接地结论和违规结果均不得持久化，也不得反写任何 SwitchState 或 ElectricalState。
 
 ## 10. 环网柜与间隔模型
 
@@ -381,6 +415,8 @@ PT 不是独立柜体或顶层 Device。DTU 不是一次设备，不具有 Termi
 | DisplayName | 是 | 间隔显示名称 |
 | IntervalKind | 是 | `LoadSwitchInterval` 或 `CircuitBreakerInterval`，必须与 CabinetKind 对应 |
 | SwitchDevices | 是 | 由柜型固定生成，不允许缺项或任意替换 |
+| SwitchAssembly | 是 | 本间隔唯一开关组合，成员必须与 SwitchDevices 完全一致 |
+| GroundingStructureKind | 条件必填 | 仅一二次融合间隔必填，允许三种已确认接地结构 |
 | CircuitNodeId | 是 | 本间隔回路节点 |
 | IntermediateNodeId | 条件必填 | 仅一二次融合间隔需要 |
 | ExternalTerminalId | 是 | 对外连接电缆或架空线路的唯一回路端子 |
@@ -402,7 +438,16 @@ PT 不是独立柜体或顶层 Device。DTU 不是一次设备，不具有 Termi
                          └—接地刀闸—大地节点
 ```
 
-负荷开关和接地刀闸分别保存 OperationState，互不覆盖。
+负荷开关和接地刀闸分别保存 SwitchState，互不覆盖，并属于一个 `AssemblyType=LoadSwitchThreePosition` 的 SwitchAssembly。
+
+| OperationalState | LoadSwitch | GroundSwitch | 规则结果 |
+| --- | --- | --- | --- |
+| `Running` | `Closed` | `Open` | 合法，回路导通 |
+| `Disconnected` | `Open` | `Open` | 合法，断开且未接地 |
+| `Grounded` | `Open` | `Closed` | 合法，回路节点有效接地 |
+| 非法 | `Closed` | `Closed` | 违反 MutualExclusion，拒绝状态变更 |
+
+运行与接地之间的合法转换必须经过 `Disconnected`。该要求是组合校验规则，不授权模型自动拉开或合入另一台开关。
 
 ### 10.4 一二次融合型关系
 
@@ -411,18 +456,48 @@ PT 不是独立柜体或顶层 Device。DTU 不是一次设备，不具有 Termi
 - 1 台隔离刀闸。
 - 1 台断路器。
 - 1 台接地刀闸。
-- 1 个隔离刀闸与断路器之间的中间节点。
-- 1 个回路节点。
+- 1 个 `AssemblyType=IntegratedFeeder` 的 SwitchAssembly。
+- 1 个必填 GroundingStructureKind。
+- 按接地结构生成的中间节点、回路节点和大地节点。
 - 1 个对外回路端子。
 
-端子和节点关系：
+三种接地结构的固定拓扑为：
+
+#### 10.4.1 上刀上接地（UpperIsolationUpperGrounding）
+
+```text
+主母线—隔离刀闸—中间节点—断路器—回路节点—对外回路端子
+                         └—接地刀闸—大地节点
+```
+
+| OperationalState | IsolationSwitch | CircuitBreaker | GroundSwitch | 有效接地 |
+| --- | --- | --- | --- | --- |
+| `ColdStandby` | `Open` | `Open` | `Open` | 否 |
+| `HotStandby` | `Closed` | `Open` | `Open` | 否 |
+| `Running` | `Closed` | `Closed` | `Open` | 否 |
+| `Maintenance` | `Open` | `Closed` | `Closed` | 是 |
+
+隔离刀闸与接地刀闸不得同时合入。由于接地刀闸连接断路器上游中间节点，只有断路器合入时接地路径才延伸到下方电缆；`Open/Open/Closed` 不得判定电缆有效接地。
+
+#### 10.4.2 上刀下接地（UpperIsolationLowerGrounding）
 
 ```text
 主母线节点—隔离刀闸—中间节点—断路器—回路节点—对外回路端子
                                             └—接地刀闸—大地节点
 ```
 
-隔离刀闸、断路器和接地刀闸分别保存 OperationState，任一状态变化不改变另外两台设备。
+隔离刀闸拉开、断路器拉开、接地刀闸合入时派生 `Grounded`，电缆有效接地，不要求断路器合入。`ColdStandby`、`HotStandby`、`Running` 的已确认组合与上刀上接地相同。
+
+#### 10.4.3 下刀下接地（LowerIsolationLowerGrounding）
+
+```text
+主母线节点—断路器—中间节点—隔离刀闸—回路节点—对外回路端子
+                                            └—接地刀闸—大地节点
+```
+
+断路器拉开、隔离刀闸拉开、接地刀闸合入时派生 `Grounded`，电缆有效接地。该结构虽然与上刀下接地都不要求为接地而合入断路器，但主回路设备顺序不同，必须保存不同结构类型并建立不同节点关系。
+
+三种结构中，隔离刀闸、断路器和接地刀闸始终分别保存 SwitchState；任一状态变化不隐式改变另外两台设备。未列出的组合派生 `Unclassified`，除明确命中 InvalidCombination 或 MutualExclusion 外不自行判为合法或非法。
 
 ### 10.5 外部连接边界
 
@@ -439,7 +514,7 @@ PT 不是独立柜体或顶层 Device。DTU 不是一次设备，不具有 Termi
 主母线—隔离刀闸—PT—接地刀闸—大地节点
 ```
 
-- 隔离刀闸和接地刀闸分别保存 OperationState；PT 本体不保存操作状态。
+- 隔离刀闸和接地刀闸分别保存 SwitchState；PT 本体不保存操作状态。
 - PTInterval 不产生普通间隔对外端子，也不计入 4/6 个普通间隔数量。
 - PTPosition 只允许 Left 或 Right。
 - PT 存在时 DTUCabinet 必须存在并自动位于同侧外部；左侧为 `DTU | PT | 普通间隔`，右侧为 `普通间隔 | PT | DTU`。
@@ -461,7 +536,7 @@ PT 不是独立柜体或顶层 Device。DTU 不是一次设备，不具有 Termi
 | AttachmentIds | 否 | 本杆塔上的附属关系标识集合 |
 | Layout | 是 | 杆位坐标、图元尺寸和标签位置 |
 
-Pole 不保存 OperationState 或 ElectricalState。其端子只表示导线连接位置，不使杆体成为电气导体。
+Pole 不保存 SwitchState 或 ElectricalState。其端子只表示导线连接位置，不使杆体成为电气导体。
 
 ### 11.2 PoleAttachment
 
@@ -485,7 +560,7 @@ Pole 不保存 OperationState 或 ElectricalState。其端子只表示导线连�
 | DeviceId | 是 | 柱上设备标识 |
 | SwitchKind | 是 | 仅允许 `CircuitBreaker`、`LoadSwitch`、`IsolationSwitch`、`DropoutFuse`，分别显示为四类已确认柱上设备 |
 | DisplayName | 是 | 设备名称或图面标注 |
-| OperationState | 是 | `Open` 或 `Closed` |
+| SwitchState | 是 | `Open` 或 `Closed` |
 | LineTerminalA | 是 | 第一线路端子 |
 | LineTerminalB | 是 | 第二线路端子 |
 
@@ -605,12 +680,12 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 
 | 对象 | 可编辑业务属性 |
 | --- | --- |
-| 环网柜 | 柜体名称、柜型允许范围内的间隔配置、间隔名称 |
-| 柜内开关 | 设备名称或调度编号、OperationState |
+| 环网柜 | 柜体名称、柜型允许范围内的间隔配置、间隔名称；创建一二次融合间隔时明确选择接地结构类型 |
+| 柜内开关 | 设备名称或调度编号、SwitchState |
 | 电缆 | 显示名称、ElectricalState |
 | 水泥杆 | 杆号、显示名称 |
 | 架空线路 | 显示名称、线路型号、可选长度、ElectricalState、经过水泥杆顺序、延续标识及延续状态 |
-| 柱上设备 | 显示名称、PoleAttachment、OperationState |
+| 柱上设备 | 显示名称、PoleAttachment、SwitchState |
 | 电缆终端 | 显示名称、PoleAttachment |
 | 工作范围 | 起始边界、终止边界、说明、关联工作地线 |
 | 工作地线 | 位置说明、连接端子、编号、备注 |
@@ -623,6 +698,7 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 
 - 顶层 Device 及环网柜内部 Device 的稳定标识和属性。
 - 环网柜、间隔、内部开关和节点的所有权关系。
+- SwitchAssembly 的稳定标识、组合类型、所属间隔、成员开关角色引用、GroundingStructureKind 和 RuleSetRef。
 - Terminal 的所属对象、角色、暴露范围和连接能力。
 - Connection 的类型、两个端点、电气状态及 Route。
 - 架空线路的 SupportPoleIds。
@@ -632,7 +708,7 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - 一二次融合环网柜的 PTInterval、PTPosition 和关联 DTUCabinet。
 - WorkScope 的两个 BoundaryPoint、Description 和 GroundingPointIds。
 - GroundingPoint 的 Location、TerminalId、Number 和 Note。
-- 每台开关独立的 OperationState。
+- 每台开关独立的 SwitchState。
 - 设备、间隔和连接的 Layout。
 
 不得保存：
@@ -642,6 +718,7 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - 同一电缆或架空线路的重复 Device 副本。
 - 其他非 MVP 设备的空占位字段。
 - 自动潮流、电气仿真或数据库引用。
+- 可由 SwitchAssembly、成员 SwitchState 和规则集重新计算的 OperationalState、IsEffectivelyGrounded 与联锁违规结果。
 
 保存后重新打开必须恢复相同的设备所有权、端子引用、连接端点、状态和布局。
 
@@ -661,9 +738,12 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - 间隔序号从 1 开始连续且唯一。
 - 普通柜每间隔必须且只能包含一台负荷开关和一台接地刀闸。
 - 一二次融合柜每间隔必须且只能包含一台隔离刀闸、一台断路器和一台接地刀闸。
-- 每台柜内开关必须有独立 OperationState。
+- 每台柜内开关必须有独立 SwitchState。
+- 每个普通间隔必须有且只有一个 SwitchAssembly，其 MemberSwitchIds 与本间隔 SwitchDevices 完全一致且角色不重复。
+- 普通负荷开关间隔的 AssemblyType 必须为 LoadSwitchThreePosition；一二次融合间隔必须为 IntegratedFeeder 并具有明确 GroundingStructureKind。
 - 每个间隔必须有且只有一个对外回路端子。
 - 柜内端子、节点和固定设备关系必须符合第 10 节。
+- 上刀上接地的接地刀闸必须连接隔离刀闸与断路器之间节点；上刀下接地必须连接断路器下游；下刀下接地必须按断路器—隔离刀闸顺序建立主回路并在隔离刀闸下游接地。
 - 普通负荷开关型不得包含 PT 或 DTU；一二次融合柜必须包含且只能包含一个 PTInterval 和一个 DTUCabinet。
 - PTInterval 必须包含隔离刀闸、PT、接地刀闸及固定内部关系；PTPosition 只能为 Left 或 Right。
 - PT 存在时必须关联一个 DTUCabinet；DTU 不得单独存在、包含电气对象或拥有独立左右位置。
@@ -683,17 +763,22 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - PoleNumber 必填并参与图面标注；对象身份以 DeviceId 为准，当前 MVP 不自行规定杆号唯一性规则。
 - 每个柱上设备和电缆终端必须且只能通过一个 PoleAttachment 关联现存 Pole。
 - 柱上 SwitchKind 只能是已确认的四种柱上设备。
-- 每台柱上设备必须具有两个线路端子和独立 OperationState。
+- 每台柱上设备必须具有两个线路端子和独立 SwitchState。
 - 电缆终端必须分别具有电缆侧和架空侧端子，且两侧只允许对应 ConnectionKind。
 - 删除水泥杆前必须处理其 PoleAttachment、附属设备、架空线路支撑引用和锚点连接。
 
 ### 16.5 状态
 
-- OperationState 只能为 Open 或 Closed。
+- SwitchState 只能为 Open 或 Closed。
 - ElectricalState 只能为 Energized 或 Deenergized。
 - 不适用状态的对象不得保存该状态字段。
 - 修改单台开关后，其他开关状态保持原值。
-- OperationState 和 ElectricalState 不得相互自动覆盖。
+- SwitchState 和 ElectricalState 不得相互自动覆盖。
+- 普通负荷开关与接地刀闸同时 Closed 必须被联锁拒绝。
+- 一二次融合间隔的隔离刀闸与接地刀闸同时 Closed 必须被联锁拒绝。
+- 上刀上接地只有 `IsolationSwitch=Open`、`CircuitBreaker=Closed`、`GroundSwitch=Closed` 才判定外部回路有效接地。
+- 上刀下接地和下刀下接地的已定义接地组合不要求 CircuitBreaker=Closed。
+- OperationalState、有效接地和违规结果只能计算，不得保存或反向覆盖设备状态。
 
 ### 16.6 工作范围和工作地线
 
@@ -707,8 +792,12 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 | 验收场景 | 预期模型结果 |
 | --- | --- |
 | 创建 3 间隔普通柜 | 生成 1 个主母线节点、3 个间隔、3 台负荷开关、3 台接地刀闸和 3 个对外端子 |
+| 普通柜负荷开关与接地刀闸同时合入 | SwitchAssembly 拒绝目标组合，不自动修改任一设备 |
 | 创建 6 间隔一二次融合柜 | 生成 6 个间隔，每个间隔含隔离刀闸、断路器、接地刀闸及独立状态 |
-| 单独拉开一个断路器 | 只更新目标 Device 的 OperationState；同间隔另外两台开关状态不变 |
+| 上刀上接地检修组合 | Open/Closed/Closed 派生 Maintenance，且外部回路有效接地 |
+| 上刀下接地接地组合 | Open/Open/Closed 派生 Grounded，且不要求断路器合入 |
+| 下刀下接地间隔 | 保存独立结构类型，主回路按断路器—隔离刀闸顺序建立 |
+| 单独拉开一个断路器 | 只更新目标 Device 的 SwitchState；同间隔另外两台开关状态不变 |
 | 环网柜通过电缆连接柱上设备 | Cable 的两个端点分别引用间隔对外端子和柱上设备线路端子 |
 | 柱上设备通过架空线路连接杆位 | OverheadLine 的端点引用柱上设备端子和水泥杆锚点，并保存经过杆位顺序 |
 | 电缆经终端转为架空线路 | Cable 和 OverheadLine 分别连接 CableTermination 两侧端子，终端通过 PoleAttachment 安装在杆塔 |
