@@ -4,7 +4,8 @@ namespace DistributionDrawing.Infrastructure.Persistence;
 
 /// <summary>
 /// Coordinates the project create, save, and load lifecycle.
-/// This phase persists Domain data only; Layout and editor state remain out of scope.
+/// This phase persists Domain and external topology data only; Layout and editor state
+/// remain out of scope.
 /// </summary>
 public sealed class ProjectService
 {
@@ -33,10 +34,7 @@ public sealed class ProjectService
             metadata,
             createdAtUtc);
 
-        DrawingDocument domain = ProjectDomainMapper.ToDomain(
-            document.Domain ?? ProjectDomainDto.Empty(
-                document.Manifest.ProjectId,
-                document.Metadata.Title));
+        DrawingDocument domain = RestoreDomain(document);
         ProjectSession candidate = new(filePath, document, domain, isDirty: false);
         Current = candidate;
         return candidate;
@@ -58,10 +56,7 @@ public sealed class ProjectService
         // Reopen the written archive so the session observes the persisted
         // manifest timestamps and validates the complete container round trip.
         ProjectFileDocument persistedDocument = _container.Open(current.FilePath);
-        DrawingDocument domain = ProjectDomainMapper.ToDomain(
-            persistedDocument.Domain ?? ProjectDomainDto.Empty(
-                persistedDocument.Manifest.ProjectId,
-                persistedDocument.Metadata.Title));
+        DrawingDocument domain = RestoreDomain(persistedDocument);
         ProjectSession candidate = new(
             current.FilePath,
             persistedDocument,
@@ -78,10 +73,7 @@ public sealed class ProjectService
 
         // Build and validate the candidate before replacing the current session.
         ProjectFileDocument document = _container.Open(filePath);
-        DrawingDocument domain = ProjectDomainMapper.ToDomain(
-            document.Domain ?? ProjectDomainDto.Empty(
-                document.Manifest.ProjectId,
-                document.Metadata.Title));
+        DrawingDocument domain = RestoreDomain(document);
         ProjectSession candidate = new(filePath, document, domain, isDirty: false);
         Current = candidate;
         return candidate;
@@ -103,5 +95,13 @@ public sealed class ProjectService
     {
         return Current
             ?? throw new InvalidOperationException("No project is currently open.");
+    }
+
+    private static DrawingDocument RestoreDomain(ProjectFileDocument document)
+    {
+        ProjectDomainDto domain = document.Domain ?? ProjectDomainDto.Empty(
+            document.Manifest.ProjectId,
+            document.Metadata.Title);
+        return ProjectDomainMapper.ToDomain(domain);
     }
 }

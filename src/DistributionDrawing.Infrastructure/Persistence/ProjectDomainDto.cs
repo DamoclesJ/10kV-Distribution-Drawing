@@ -9,11 +9,16 @@ public sealed record ProjectDomainDto(
     Guid DocumentId,
     string Title,
     IReadOnlyList<ProjectDeviceDto> Devices,
-    IReadOnlyList<ProjectRingCabinetDto> RingCabinets)
+    IReadOnlyList<ProjectRingCabinetDto> RingCabinets,
+    IReadOnlyList<ProjectElectricalNodeDto>? ElectricalNodes = null,
+    IReadOnlyList<ProjectTerminalDto>? Terminals = null,
+    IReadOnlyList<ProjectConnectionDto>? Connections = null,
+    IReadOnlyList<ProjectOverheadLineDto>? OverheadLines = null,
+    IReadOnlyList<ProjectPoleAttachmentDto>? PoleAttachments = null)
 {
     public static ProjectDomainDto Empty(Guid documentId, string title)
     {
-        return new ProjectDomainDto(documentId, title, [], []);
+        return new ProjectDomainDto(documentId, title, [], [], [], [], [], [], []);
     }
 }
 
@@ -27,7 +32,13 @@ public sealed record ProjectDeviceDto(
     string? SwitchState,
     string? PoleNumber,
     string? PoleType,
-    IReadOnlyList<Guid>? OverheadAnchorTerminalIds);
+    IReadOnlyList<Guid>? OverheadAnchorTerminalIds,
+    ProjectCableTerminationDto? CableTermination = null);
+
+public sealed record ProjectCableTerminationDto(
+    Guid CableSideTerminalId,
+    Guid OverheadSideTerminalId,
+    Guid InternalNodeId);
 
 public sealed record ProjectRingCabinetDto(
     Guid CabinetId,
@@ -80,6 +91,29 @@ public sealed record ProjectTerminalDto(
     Guid? ElectricalNodeId,
     IReadOnlyList<string> AllowedConnectionTypes);
 
+public sealed record ProjectConnectionDto(
+    Guid ConnectionId,
+    string ConnectionType,
+    Guid StartTerminalId,
+    Guid EndTerminalId,
+    string DisplayName,
+    string VoltageLevel);
+
+public sealed record ProjectOverheadLineDto(
+    Guid ConnectionId,
+    string LineModel,
+    double? LengthMeters,
+    IReadOnlyList<Guid> SupportPoleIds,
+    bool IsContinued,
+    Guid? ContinuationTerminalId,
+    string? ContinuationState,
+    string? ContinuationDescription);
+
+public sealed record ProjectPoleAttachmentDto(
+    Guid AttachmentId,
+    Guid PoleId,
+    Guid AttachedDeviceId);
+
 internal static class ProjectDomainMapper
 {
     public static ProjectDomainDto ToDto(DrawingDocument document)
@@ -88,6 +122,11 @@ internal static class ProjectDomainMapper
 
         var devices = new List<ProjectDeviceDto>();
         var ringCabinets = new List<ProjectRingCabinetDto>();
+        HashSet<Guid> ringCabinetObjectIds = document.Devices
+            .OfType<RingCabinet>()
+            .SelectMany(cabinet => cabinet.ElectricalNodes.Select(node => node.Id)
+                .Concat(cabinet.Terminals.Select(terminal => terminal.Id)))
+            .ToHashSet();
         HashSet<Guid> ringCabinetSwitchIds = document.Devices
             .OfType<RingCabinet>()
             .SelectMany(cabinet => cabinet.Intervals)
@@ -119,6 +158,23 @@ internal static class ProjectDomainMapper
                         pole.PoleNumber,
                         Encode(pole.PoleType),
                         pole.OverheadAnchorTerminalIds.ToArray()));
+                    break;
+                case CableTermination termination:
+                    devices.Add(new ProjectDeviceDto(
+                        termination.Id,
+                        "cable-termination",
+                        Encode(termination.Type),
+                        termination.DisplayName,
+                        termination.VoltageLevel,
+                        termination.ParentId,
+                        null,
+                        null,
+                        null,
+                        null,
+                        new ProjectCableTerminationDto(
+                            termination.CableSideTerminalId,
+                            termination.OverheadSideTerminalId,
+                            termination.InternalNodeId)));
                     break;
                 case SwitchDevice:
                     if (ringCabinetSwitchIds.Contains(device.Id))
@@ -156,11 +212,25 @@ internal static class ProjectDomainMapper
             }
         }
 
-        return new ProjectDomainDto(
+        ProjectDomainDto result = new(
             document.Id,
             document.Title,
             devices,
-            ringCabinets);
+            ringCabinets,
+            document.ElectricalNodes
+                .Where(node => !ringCabinetObjectIds.Contains(node.Id))
+                .Select(ToDto)
+                .ToArray(),
+            document.Terminals
+                .Where(terminal => !ringCabinetObjectIds.Contains(terminal.Id))
+                .Select(ToDto)
+                .ToArray(),
+            document.Connections.Select(ToDto).ToArray(),
+            document.OverheadLines.Select(line => ToDto(line, document)).ToArray(),
+            document.PoleAttachments.Select(ToDto).ToArray());
+
+        ValidateTopology(document, result);
+        return result;
     }
 
     public static DrawingDocument ToDomain(ProjectDomainDto dto)
@@ -185,6 +255,7 @@ internal static class ProjectDomainMapper
             Device device = deviceDto.DeviceKind switch
             {
                 "pole" => RestorePole(deviceDto),
+                "cable-termination" => RestoreCableTermination(deviceDto),
                 "device" => RestoreBasicDevice(deviceDto),
                 _ => throw new InvalidDataException(
                     $"Unsupported device kind '{deviceDto.DeviceKind}'.")
@@ -199,6 +270,37 @@ internal static class ProjectDomainMapper
             document.AddDevice(RestoreRingCabinet(cabinetDto));
         }
 
+        foreach (ProjectElectricalNodeDto nodeDto in dto.ElectricalNodes ?? [])
+        {
+            document.AddElectricalNode(RestoreElectricalNode(nodeDto));
+        }
+
+        foreach (ProjectTerminalDto terminalDto in dto.Terminals ?? [])
+        {
+            document.AddTerminal(RestoreTerminal(terminalDto));
+        }
+
+        foreach (ProjectPoleAttachmentDto attachmentDto in dto.PoleAttachments ?? [])
+        {
+            document.AddPoleAttachment(
+                new PoleAttachment(
+                    attachmentDto.AttachmentId,
+                    attachmentDto.PoleId,
+                    attachmentDto.AttachedDeviceId));
+        }
+
+        foreach (ProjectConnectionDto connectionDto in dto.Connections ?? [])
+        {
+            document.AddConnection(RestoreConnection(connectionDto));
+        }
+
+        foreach (ProjectOverheadLineDto overheadLineDto in dto.OverheadLines ?? [])
+        {
+            document.AddOverheadLine(RestoreOverheadLine(overheadLineDto));
+        }
+
+        ValidateTopology(document, dto);
+
         return document;
     }
 
@@ -211,6 +313,48 @@ internal static class ProjectDomainMapper
             cabinet.Intervals.Select(ToDto).ToArray(),
             cabinet.ElectricalNodes.Select(ToDto).ToArray(),
             cabinet.Terminals.Select(ToDto).ToArray());
+    }
+
+    private static ProjectConnectionDto ToDto(Connection connection)
+    {
+        return new ProjectConnectionDto(
+            connection.Id,
+            Encode(connection.Type),
+            connection.StartTerminalId,
+            connection.EndTerminalId,
+            connection.DisplayName,
+            connection.VoltageLevel);
+    }
+
+    private static ProjectOverheadLineDto ToDto(
+        OverheadLine overheadLine,
+        DrawingDocument document)
+    {
+        Connection connection = document.Connections.SingleOrDefault(
+                candidate => candidate.Id == overheadLine.ConnectionId)
+            ?? throw new InvalidDataException(
+                $"Overhead line '{overheadLine.ConnectionId}' has no connection.");
+        overheadLine.ValidateAgainst(connection);
+
+        return new ProjectOverheadLineDto(
+            overheadLine.ConnectionId,
+            overheadLine.LineModel,
+            overheadLine.LengthMeters,
+            overheadLine.SupportPoleIds.ToArray(),
+            overheadLine.IsContinued,
+            overheadLine.ContinuationTerminalId,
+            overheadLine.ContinuationState is ContinuationState state
+                ? Encode(state)
+                : null,
+            overheadLine.ContinuationDescription);
+    }
+
+    private static ProjectPoleAttachmentDto ToDto(PoleAttachment attachment)
+    {
+        return new ProjectPoleAttachmentDto(
+            attachment.AttachmentId,
+            attachment.PoleId,
+            attachment.AttachedDeviceId);
     }
 
     private static ProjectRingCabinetIntervalDto ToDto(RingCabinetInterval interval)
@@ -328,6 +472,220 @@ internal static class ProjectDomainMapper
             dto.DisplayName,
             dto.VoltageLevel,
             null);
+    }
+
+    private static CableTermination RestoreCableTermination(ProjectDeviceDto dto)
+    {
+        if (!string.Equals(dto.DeviceType, "cable-termination", StringComparison.Ordinal) ||
+            dto.CableTermination is null)
+        {
+            throw new InvalidDataException(
+                $"Cable termination '{dto.DeviceId}' is missing its device details.");
+        }
+
+        if (dto.ParentId is not null || dto.SwitchState is not null ||
+            dto.PoleNumber is not null || dto.PoleType is not null ||
+            dto.OverheadAnchorTerminalIds is not null)
+        {
+            throw new InvalidDataException(
+                $"Cable termination '{dto.DeviceId}' contains incompatible fields.");
+        }
+
+        ProjectCableTerminationDto details = dto.CableTermination;
+        return new CableTermination(
+            dto.DeviceId,
+            details.CableSideTerminalId,
+            details.OverheadSideTerminalId,
+            details.InternalNodeId,
+            dto.DisplayName,
+            dto.VoltageLevel ?? "10kV");
+    }
+
+    private static ElectricalNode RestoreElectricalNode(ProjectElectricalNodeDto dto)
+    {
+        return new ElectricalNode(
+            dto.NodeId,
+            Parse<ElectricalNodeType>(dto.NodeType, dto.NodeId, "nodeType"),
+            Parse<TopologyOwnerType>(dto.OwnerType, dto.NodeId, "ownerType"),
+            dto.OwnerId,
+            dto.ElectricalState is null
+                ? null
+                : Parse<ElectricalState>(dto.ElectricalState, dto.NodeId, "electricalState"));
+    }
+
+    private static Terminal RestoreTerminal(ProjectTerminalDto dto)
+    {
+        ConnectionType[] allowedConnectionTypes = (dto.AllowedConnectionTypes ?? [])
+            .Select(value => Parse<ConnectionType>(value, dto.TerminalId, "allowedConnectionType"))
+            .ToArray();
+
+        return new Terminal(
+            dto.TerminalId,
+            Parse<TopologyOwnerType>(dto.OwnerType, dto.TerminalId, "ownerType"),
+            dto.OwnerId,
+            dto.Role,
+            dto.VoltageLevel,
+            dto.IsExternal,
+            dto.AllowsMultipleConnections,
+            dto.ElectricalNodeId,
+            allowedConnectionTypes);
+    }
+
+    private static Connection RestoreConnection(ProjectConnectionDto dto)
+    {
+        return new Connection(
+            dto.ConnectionId,
+            Parse<ConnectionType>(dto.ConnectionType, dto.ConnectionId, "connectionType"),
+            dto.StartTerminalId,
+            dto.EndTerminalId,
+            dto.DisplayName,
+            dto.VoltageLevel);
+    }
+
+    private static OverheadLine RestoreOverheadLine(ProjectOverheadLineDto dto)
+    {
+        ContinuationState? continuationState = dto.ContinuationState is null
+            ? null
+            : Parse<ContinuationState>(
+                dto.ContinuationState,
+                dto.ConnectionId,
+                "continuationState");
+
+        return new OverheadLine(
+            dto.ConnectionId,
+            dto.LineModel,
+            dto.LengthMeters,
+            dto.SupportPoleIds ?? throw new InvalidDataException(
+                $"Overhead line '{dto.ConnectionId}' is missing support poles."),
+            dto.IsContinued,
+            dto.ContinuationTerminalId,
+            continuationState,
+            dto.ContinuationDescription);
+    }
+
+    private static void ValidateTopology(
+        DrawingDocument document,
+        ProjectDomainDto dto)
+    {
+        IReadOnlyList<ProjectElectricalNodeDto> nodeDtos = dto.ElectricalNodes ?? [];
+        IReadOnlyList<ProjectTerminalDto> terminalDtos = dto.Terminals ?? [];
+        IReadOnlyList<ProjectConnectionDto> connectionDtos = dto.Connections ?? [];
+        IReadOnlyList<ProjectOverheadLineDto> overheadLineDtos = dto.OverheadLines ?? [];
+
+        HashSet<Guid> rootNodeIds = nodeDtos.Select(node => node.NodeId).ToHashSet();
+        HashSet<Guid> rootTerminalIds = terminalDtos.Select(terminal => terminal.TerminalId).ToHashSet();
+        HashSet<Guid> ringNodeIds = document.Devices
+            .OfType<RingCabinet>()
+            .SelectMany(cabinet => cabinet.ElectricalNodes)
+            .Select(node => node.Id)
+            .ToHashSet();
+        HashSet<Guid> ringTerminalIds = document.Devices
+            .OfType<RingCabinet>()
+            .SelectMany(cabinet => cabinet.Terminals)
+            .Select(terminal => terminal.Id)
+            .ToHashSet();
+
+        if (rootNodeIds.Count != nodeDtos.Count ||
+            rootTerminalIds.Count != terminalDtos.Count ||
+            rootNodeIds.Overlaps(ringNodeIds) ||
+            rootTerminalIds.Overlaps(ringTerminalIds))
+        {
+            throw new InvalidDataException(
+                "Domain topology contains duplicate or cross-aggregate IDs.");
+        }
+
+        HashSet<Guid> actualRootNodeIds = document.ElectricalNodes
+            .Where(node => !ringNodeIds.Contains(node.Id))
+            .Select(node => node.Id)
+            .ToHashSet();
+        HashSet<Guid> actualRootTerminalIds = document.Terminals
+            .Where(terminal => !ringTerminalIds.Contains(terminal.Id))
+            .Select(terminal => terminal.Id)
+            .ToHashSet();
+
+        if (!actualRootNodeIds.SetEquals(rootNodeIds) ||
+            !actualRootTerminalIds.SetEquals(rootTerminalIds))
+        {
+            throw new InvalidDataException(
+                "Domain topology DTO does not match restored nodes or terminals.");
+        }
+
+        foreach (ElectricalNode node in document.ElectricalNodes)
+        {
+            if (node.TerminalIds.Count == 0)
+            {
+                throw new InvalidDataException(
+                    $"Electrical node '{node.Id}' is orphaned.");
+            }
+        }
+
+        foreach (Pole pole in document.Devices.OfType<Pole>())
+        {
+            foreach (Guid terminalId in pole.OverheadAnchorTerminalIds)
+            {
+                Terminal terminal = document.Terminals.SingleOrDefault(
+                        candidate => candidate.Id == terminalId)
+                    ?? throw new InvalidDataException(
+                        $"Pole '{pole.Id}' references missing terminal '{terminalId}'.");
+
+                if (terminal.OwnerType != TopologyOwnerType.Device ||
+                    terminal.OwnerId != pole.Id)
+                {
+                    throw new InvalidDataException(
+                        $"Pole '{pole.Id}' does not own terminal '{terminalId}'.");
+                }
+            }
+        }
+
+        foreach (CableTermination termination in document.Devices.OfType<CableTermination>())
+        {
+            ElectricalNode node = document.ElectricalNodes.SingleOrDefault(
+                    candidate => candidate.Id == termination.InternalNodeId)
+                ?? throw new InvalidDataException(
+                    $"Cable termination '{termination.Id}' internal node is missing.");
+            HashSet<Guid> terminalIds = document.Terminals
+                .Where(terminal => terminal.OwnerId == termination.Id)
+                .Select(terminal => terminal.Id)
+                .ToHashSet();
+
+            if (node.Type != ElectricalNodeType.Intermediate ||
+                node.OwnerType != TopologyOwnerType.Device ||
+                node.OwnerId != termination.Id ||
+                !terminalIds.SetEquals(termination.TerminalIds) ||
+                !node.TerminalIds.SetEquals(termination.TerminalIds))
+            {
+                throw new InvalidDataException(
+                    $"Cable termination '{termination.Id}' topology is incomplete.");
+            }
+        }
+
+        if (connectionDtos.Count != document.Connections.Count ||
+            connectionDtos.Select(connection => connection.ConnectionId).Distinct().Count() !=
+                connectionDtos.Count)
+        {
+            throw new InvalidDataException(
+                "Connection DTOs do not match restored connections.");
+        }
+
+        HashSet<Guid> overheadConnectionIds = overheadLineDtos
+            .Select(line => line.ConnectionId)
+            .ToHashSet();
+        if (overheadConnectionIds.Count != overheadLineDtos.Count ||
+            overheadLineDtos.Count != document.OverheadLines.Count)
+        {
+            throw new InvalidDataException(
+                "Overhead line details contain duplicate or missing connection IDs.");
+        }
+
+        foreach (Connection connection in document.Connections)
+        {
+            bool hasOverheadDetail = overheadConnectionIds.Contains(connection.Id);
+            if ((connection.Type == ConnectionType.OverheadLine) != hasOverheadDetail)
+            {
+                throw new InvalidDataException(
+                    $"Connection '{connection.Id}' has an invalid overhead-line detail relationship.");
+            }
+        }
     }
 
     private static RingCabinet RestoreRingCabinet(ProjectRingCabinetDto dto)
@@ -511,6 +869,13 @@ internal static class ProjectDomainMapper
     {
         ElectricalState.Energized => "energized",
         ElectricalState.Deenergized => "deenergized",
+        _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+
+    private static string Encode(ContinuationState value) => value switch
+    {
+        ContinuationState.Energized => "energized",
+        ContinuationState.Unknown => "unknown",
         _ => throw new ArgumentOutOfRangeException(nameof(value))
     };
 
