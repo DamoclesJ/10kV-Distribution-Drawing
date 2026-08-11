@@ -1,5 +1,6 @@
 using System.Windows;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Rendering;
@@ -71,5 +72,126 @@ public partial class MainWindow : Window
     private void OnClearDrawing(object sender, RoutedEventArgs e)
     {
         DrawingSurface.Clear();
+    }
+
+    private void OnDrawRingCabinetComposition(object sender, RoutedEventArgs e)
+    {
+        RingCabinet cabinet = CreateMixedRingCabinet();
+        RingCabinetLayout layout = CreateMixedRingCabinetLayout(cabinet);
+        DrawingScene scene = _sceneBuilder.Build(cabinet, layout);
+
+        double pixelsPerDip = VisualTreeHelper.GetDpi(DrawingSurface).PixelsPerDip;
+        DrawingSurface.Show(_renderer.Render(scene, pixelsPerDip));
+    }
+
+    private static RingCabinet CreateMixedRingCabinet()
+    {
+        RingCabinetIntervalDefinition[] definitions =
+        [
+            RingCabinetIntervalDefinition.CreateLoadSwitch(
+                SwitchState.Closed,
+                SwitchState.Open,
+                "进线负荷开关"),
+            RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                GroundingStructureKind.UpperIsolationGrounding,
+                SwitchState.Closed,
+                SwitchState.Open,
+                SwitchState.Open,
+                "一二次融合馈线"),
+            RingCabinetIntervalDefinition.CreateLoadSwitch(
+                SwitchState.Open,
+                SwitchState.Open,
+                "出线负荷开关"),
+            RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                GroundingStructureKind.LowerLowerGrounding,
+                SwitchState.Closed,
+                SwitchState.Closed,
+                SwitchState.Open,
+                "融合联络馈线")
+        ];
+
+        return RingCabinet.Create(
+            RingCabinetDefinition.Create(
+                Guid.NewGuid(),
+                "混合型环网柜演示",
+                definitions));
+    }
+
+    private static RingCabinetLayout CreateMixedRingCabinetLayout(RingCabinet cabinet)
+    {
+        var intervalLayouts = new List<RingCabinetIntervalLayout>();
+        const double intervalWidth = 65;
+        const double intervalHeight = 125;
+
+        foreach (RingCabinetInterval interval in cabinet.Intervals)
+        {
+            double x = 10 + (interval.Sequence - 1) * intervalWidth;
+            var switches = new List<RingCabinetSwitchLayout>();
+
+            if (interval.IntervalKind == IntervalKind.LoadSwitchInterval)
+            {
+                switches.Add(CreateSwitchLayout(
+                    interval,
+                    SwitchKind.LoadSwitch,
+                    new DocumentPoint(23, 35)));
+                switches.Add(CreateSwitchLayout(
+                    interval,
+                    SwitchKind.GroundSwitch,
+                    new DocumentPoint(23, 72)));
+            }
+            else
+            {
+                GroundingStructureKind structure = interval.GroundingStructureKind!.Value;
+                SwitchKind upperKind = structure == GroundingStructureKind.LowerLowerGrounding
+                    ? SwitchKind.CircuitBreaker
+                    : SwitchKind.IsolationSwitch;
+                SwitchKind lowerKind = structure == GroundingStructureKind.LowerLowerGrounding
+                    ? SwitchKind.IsolationSwitch
+                    : SwitchKind.CircuitBreaker;
+
+                switches.Add(CreateSwitchLayout(
+                    interval,
+                    upperKind,
+                    new DocumentPoint(18, 28)));
+                switches.Add(CreateSwitchLayout(
+                    interval,
+                    lowerKind,
+                    new DocumentPoint(18, 70)));
+                switches.Add(CreateSwitchLayout(
+                    interval,
+                    SwitchKind.GroundSwitch,
+                    new DocumentPoint(42, structure == GroundingStructureKind.UpperIsolationGrounding ? 49 : 84)));
+            }
+
+            intervalLayouts.Add(
+                new RingCabinetIntervalLayout(
+                    interval.IntervalId,
+                    new DocumentPoint(x, 10),
+                    intervalWidth - 5,
+                    intervalHeight,
+                    switchLayouts: switches));
+        }
+
+        return new RingCabinetLayout(
+            cabinet.Id,
+            new DocumentPoint(45, 80),
+            275,
+            145,
+            25,
+            intervalLayouts);
+    }
+
+    private static RingCabinetSwitchLayout CreateSwitchLayout(
+        RingCabinetInterval interval,
+        SwitchKind switchKind,
+        DocumentPoint position)
+    {
+        SwitchDevice switchDevice = interval.SwitchDevices.Single(
+            candidate => candidate.SwitchKind == switchKind);
+        return new RingCabinetSwitchLayout(
+            switchDevice.Id,
+            position,
+            widthMillimeters: 16,
+            heightMillimeters: 10);
     }
 }
