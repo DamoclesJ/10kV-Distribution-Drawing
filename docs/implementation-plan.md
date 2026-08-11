@@ -1,6 +1,6 @@
 # 10kV 配电工作票附图软件技术实现方案
 
-> 文档状态：M2-D-3 环网柜 Rendering 阶段总结<br>
+> 文档状态：M3-C-1 编辑器基础能力里程碑总结<br>
 > 编制日期：2026-08-11<br>
 > 目标平台：Windows 桌面<br>
 > 输入依据：`README.md`、`docs/requirements.md`、`docs/architecture.md`、`docs/equipment-model.md`、`docs/ring-cabinet-design.md`、`docs/drawing-rule.md`
@@ -17,7 +17,7 @@
 - `docs/architecture.md` 已定义模块化单体、设备—端子—连接模型、状态与表现分离、规则校验和本地工程文件方向。
 - `docs/ring-cabinet-design.md` 已定义普通负荷开关型、一二次融合型、PT、DTU、间隔、端子及设备独立状态。
 - `docs/drawing-rule.md` 已整理配电工作票和现场勘察附图的颜色、标注、接地、工作范围和图元规则。
-- 当前已完成 M2-B 架空线路与杆塔基础 Domain 模型及测试、M2-C Layout 与 Rendering 设计，以及 M2-D-3 环网柜基础组合渲染；后续继续完善尚未实现的专业图元与编辑、保存和输出能力。
+- 当前已完成 M2-B 架空线路与杆塔基础 Domain 模型及测试、M2-C Layout 与 Rendering 设计、M2-D-3 环网柜基础组合渲染，以及 M3 编辑器单选、属性查看、杆塔移动、CommandStack 和杆号属性编辑基础闭环；后续继续完善多对象编辑、对象增删、工程保存和专业工作票能力。
 
 本文以 `docs/requirements.md` 已确认的 MVP 范围及现有配电专业模型、规则为边界。未被需求基线明确列为 MVP 必须实现的能力，均作为后续候选或待确认项，不作为第一阶段交付承诺。操作系统版本、安装方式、纸张、导出分辨率等技术建议，仍应在 MVP 开始前通过目标单位的实际电脑、打印机和真实脱敏图纸验证。
 
@@ -661,7 +661,7 @@ Windows 自带“Microsoft Print to PDF”可作为一种打印机参与测试�
 
 ### 当前里程碑状态
 
-当前阶段：**M2-D-3 环网柜 Rendering 阶段已完成。**
+当前阶段：**M3-C-1 编辑器基础能力里程碑已完成。**
 
 已完成：
 
@@ -684,17 +684,74 @@ Windows 自带“Microsoft Print to PDF”可作为一种打印机参与测试�
 - 普通负荷开关间隔与一二次融合间隔在同一混合环网柜中的组合显示。
 - 环网柜图元对现有 `SymbolLibrary`、`SymbolRenderContext` 和基础 `SwitchSymbol` 的复用。
 - Desktop 环网柜组合演示场景。
+- 基于 `SelectionReference`、HitTestIndex 和 `SelectionManager` 的画布单选。
+- 不修改专业 Symbol 的独立选择高亮 Overlay。
+- 只读 PropertyInspector，以及 SelectionObjectResolver 和 PropertyProjector 属性投影链路。
+- `PoleLayout` 的 Armed、Dragging、Preview、MouseUp Commit 最小拖动闭环。
+- `ICommand` 与基础 `CommandStack`，支持 Execute、Undo、Redo、History、CurrentIndex 和保存点 Dirty 判断。
+- `MoveCommand` 接入 CommandStack，支持杆塔移动后的撤销与重做。
+- `Pole.PoleNumber` 最小 Domain 属性编辑，包括 PropertyEditor、PropertyCommandFactory 和 ChangePropertyCommand。
+- 杆号修改、撤销和重做后的 PropertyInspector、场景及杆号标签刷新。
+
+当前编辑器支持对象：
+
+| 能力 | 当前支持对象 | 当前边界 |
+| --- | --- | --- |
+| 选择与高亮 | RingCabinet、RingCabinetInterval、柜内 SwitchDevice、Pole、PoleAttachment、OverheadLine / Connection | 仅单选，基于稳定 SelectionReference |
+| 属性查看 | RingCabinet、RingCabinetInterval、SwitchDevice、Pole、PoleAttachment、OverheadLine / Connection | 只读投影 Domain、Layout 和 Rendering 信息 |
+| 布局移动 | PoleLayout | 只修改杆塔位置；不修改 PoleAttachment、Terminal 或 Connection |
+| Domain 属性编辑 | Pole.PoleNumber | 通过 Domain 行为和 ChangePropertyCommand 修改 |
+| Undo / Redo | PoleLayout 移动、Pole 杆号修改 | 进程内历史，尚未实现完整命令管理 UI 和持久化 |
+
+已验证操作链路：
+
+```text
+点击图元
+  → HitTest
+  → SelectionManager
+  → 选择高亮
+  → PropertyInspector
+
+拖动 Pole
+  → PoleLayout 预览
+  → MoveCommand
+  → CommandStack
+  → DrawingScene 重建
+  → Undo / Redo 恢复位置
+
+选择 Pole 并输入杆号
+  → PropertyEditor
+  → PropertyCommandFactory
+  → ChangePropertyCommand
+  → CommandStack
+  → Pole Domain 行为
+  → Scene 与 PropertyInspector 刷新
+  → Undo / Redo 恢复杆号
+```
 
 当前尚未实现：
 
 - `PTInterval` 图元及组合渲染。
 - `DTU` 柜体布局与渲染。
-- 画布编辑功能。
+- 多对象选择、框选、批量移动和批量属性编辑。
+- RingCabinet、PoleAttachment、OverheadLine 等对象的布局移动。
+- 除 Pole 杆号外的设备名称、线路参数、电气属性和开关状态编辑。
+- 从设备库新增对象、删除对象、复制对象和 Domain + Layout 原子结构命令。
+- 端子吸附、连接创建、折点编辑、缩放、平移、自动吸附和自动布局。
+- 完整 CompositeCommand、命令合并、历史容量配置和编辑会话管理。
 - 工程保存与重新打开。
+- JPG 导出。
 - 打印及打印预览。
-- 自动布局。
+- `WorkScope`、`BoundaryPoint`、`GroundingPoint` 等专业工作票功能。
 
-下一阶段：继续完成 M2 图元库和渲染内核中尚未实现的专业图元与输出基础能力；具体实施顺序按后续里程碑任务确定。
+下一阶段方向：
+
+- 多对象编辑：扩展多选、批量移动及共同属性编辑，并保持单次操作一个原子 Command。
+- 新增/删除对象：建立设备创建、删除、布局初始化和引用校验的 Domain + Layout 事务。
+- 保存工程：实现版本化 DTO、Domain + Layout 往返、原子保存、重新打开和 Dirty 保存点闭环。
+- 专业工作票功能：实现 WorkScope、BoundaryPoint、GroundingPoint 及其基于 TerminalId 的人工定义和图面表达。
+
+具体实施顺序按后续里程碑任务确定；当前基础编辑器里程碑不代表完整 M3 或 MVP 已完成。
 
 以下顺序保留为第一阶段实施基线。
 
