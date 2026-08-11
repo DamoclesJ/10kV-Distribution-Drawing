@@ -11,23 +11,25 @@ public static class SelectionOverlayBuilder
     {
         ArgumentNullException.ThrowIfNull(hitTestIndex);
 
-        if (selected is null || hitTestIndex.Find(selected) is not SelectionHitTestEntry entry)
+        if (selected is null)
         {
             return [];
         }
 
         const double marginMillimeters = 1.5;
-        DocumentRect bounds = entry.Bounds;
-        return
-        [
-            new SceneRectangle(
-                new DocumentRect(
-                    bounds.XMillimeters - marginMillimeters,
-                    bounds.YMillimeters - marginMillimeters,
-                    bounds.WidthMillimeters + marginMillimeters * 2,
-                    bounds.HeightMillimeters + marginMillimeters * 2),
-                Colors.DeepSkyBlue,
-                1.2)
-        ];
+        return hitTestIndex.FindAll(selected)
+            .Select(entry =>
+            {
+                DocumentRect bounds = entry.Bounds;
+                return (SceneElement)new SceneRectangle(
+                    new DocumentRect(
+                        bounds.XMillimeters - marginMillimeters,
+                        bounds.YMillimeters - marginMillimeters,
+                        bounds.WidthMillimeters + marginMillimeters * 2,
+                        bounds.HeightMillimeters + marginMillimeters * 2),
+                    Colors.DeepSkyBlue,
+                    1.2);
+            })
+            .ToArray();
     }
 }

@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 
 namespace DistributionDrawing.Rendering.Wpf.PropertyInspector;
@@ -26,6 +27,8 @@ public sealed class SelectionObjectResolver
             SelectionTargetKind.Device => ResolveDevice(reference),
             SelectionTargetKind.PoleAttachment => ResolveAttachment(reference),
             SelectionTargetKind.Connection => ResolveConnection(reference),
+            SelectionTargetKind.GroundingPoint => ResolveGroundingPoint(reference),
+            SelectionTargetKind.WorkScope => ResolveWorkScope(reference),
             _ => null
         };
 
@@ -44,6 +47,8 @@ public sealed class SelectionObjectResolver
             PoleAttachment = resolved.PoleAttachment,
             Connection = resolved.Connection,
             OverheadLine = resolved.OverheadLine,
+            WorkScope = resolved.WorkScope,
+            GroundingPoint = resolved.GroundingPoint,
             RingCabinetLayout = resolved.RingCabinetLayout,
             RingCabinetIntervalLayout = resolved.RingCabinetIntervalLayout,
             PoleLayout = resolved.PoleLayout,
@@ -208,5 +213,37 @@ public sealed class SelectionObjectResolver
             OverheadLine = overheadLine,
             OverheadLineLayout = lineLayout
         };
+    }
+
+    private ResolvedSelection? ResolveGroundingPoint(SelectionReference reference)
+    {
+        IReadOnlyList<GroundingPoint> groundingPoints = _source.GroundingPoints.Count > 0
+            ? _source.GroundingPoints
+            : _source.Document?.GroundingPoints ?? [];
+        GroundingPoint? groundingPoint = groundingPoints
+            .SingleOrDefault(candidate => candidate.GroundingPointId == reference.ObjectId);
+        return groundingPoint is null
+            ? null
+            : new ResolvedSelection
+            {
+                Reference = reference,
+                GroundingPoint = groundingPoint
+            };
+    }
+
+    private ResolvedSelection? ResolveWorkScope(SelectionReference reference)
+    {
+        IReadOnlyList<WorkScope> workScopes = _source.WorkScopes.Count > 0
+            ? _source.WorkScopes
+            : _source.Document?.WorkScopes ?? [];
+        WorkScope? workScope = workScopes
+            .SingleOrDefault(candidate => candidate.WorkScopeId == reference.ObjectId);
+        return workScope is null
+            ? null
+            : new ResolvedSelection
+            {
+                Reference = reference,
+                WorkScope = workScope
+            };
     }
 }

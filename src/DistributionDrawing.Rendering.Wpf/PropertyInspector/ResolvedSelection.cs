@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -23,6 +24,10 @@ public sealed class ResolvedSelection
     public Connection? Connection { get; init; }
 
     public OverheadLine? OverheadLine { get; init; }
+
+    public WorkScope? WorkScope { get; init; }
+
+    public GroundingPoint? GroundingPoint { get; init; }
 
     public RingCabinetLayout? RingCabinetLayout { get; init; }
 

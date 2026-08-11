@@ -4,6 +4,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
@@ -16,6 +17,7 @@ public sealed class DrawingSceneBuilder
     private readonly PoleSymbol _poleSymbol;
     private readonly AttachmentSymbol _attachmentSymbol;
     private readonly RingCabinetSymbol _ringCabinetSymbol;
+    private readonly ProfessionalSceneBuilder _professionalSceneBuilder;
 
     public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
     {
@@ -23,6 +25,7 @@ public sealed class DrawingSceneBuilder
         _poleSymbol = new PoleSymbol(_symbolLibrary);
         _attachmentSymbol = new AttachmentSymbol(_symbolLibrary);
         _ringCabinetSymbol = new RingCabinetSymbol(_symbolLibrary);
+        _professionalSceneBuilder = new ProfessionalSceneBuilder(_symbolLibrary);
     }
 
     public DrawingScene Build(
@@ -121,6 +124,13 @@ public sealed class DrawingSceneBuilder
             elements.AddRange(cabinetScene.Elements);
             hitTestEntries.AddRange(cabinetScene.HitTestIndex.Entries);
         }
+
+        ProfessionalSceneResult professionalScene = _professionalSceneBuilder.Build(
+            document,
+            layout.DrawingLayout,
+            layout.RingCabinetLayouts);
+        elements.AddRange(professionalScene.Elements);
+        hitTestEntries.AddRange(professionalScene.HitTestEntries);
 
         return new DrawingScene(elements, new SelectionHitTestIndex(hitTestEntries));
     }

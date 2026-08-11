@@ -43,6 +43,15 @@ public sealed class SelectionHitTestIndex
         return _entries.FirstOrDefault(entry => entry.Target == target);
     }
 
+    public IReadOnlyList<SelectionHitTestEntry> FindAll(SelectionReference target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        return _entries
+            .Where(entry => entry.Target == target)
+            .ToArray();
+    }
+
     private static bool Contains(DocumentRect bounds, DocumentPoint point)
     {
         return point.XMillimeters >= bounds.XMillimeters &&

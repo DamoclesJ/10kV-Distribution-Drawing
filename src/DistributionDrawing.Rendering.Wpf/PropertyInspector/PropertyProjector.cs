@@ -1,6 +1,7 @@
 using System.Globalization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -19,6 +20,16 @@ public sealed class PropertyProjector
                 "未选择对象",
                 "请在画布中选择对象",
                 []);
+        }
+
+        if (selection.GroundingPoint is not null)
+        {
+            return ProjectGroundingPoint(selection);
+        }
+
+        if (selection.WorkScope is not null)
+        {
+            return ProjectWorkScope(selection);
         }
 
         if (selection.RingCabinet is not null && selection.RingCabinetInterval is null)
@@ -74,6 +85,46 @@ public sealed class PropertyProjector
             RenderingSection(selection, SymbolKind.RingCabinet)
         };
         return Snapshot(selection, "环网柜", cabinet.DisplayName ?? "环网柜", sections);
+    }
+
+    private static PropertyInspectorSnapshot ProjectGroundingPoint(ResolvedSelection selection)
+    {
+        GroundingPoint groundingPoint = selection.GroundingPoint!;
+        return Snapshot(
+            selection,
+            "工作地线",
+            groundingPoint.Number ?? groundingPoint.Location,
+            [
+                Section(
+                    "专业属性",
+                    DomainRow("GroundingPointId", "标识", groundingPoint.GroundingPointId),
+                    DomainRow("TerminalId", "端子", groundingPoint.TerminalId),
+                    DomainRow("Location", "位置说明", groundingPoint.Location),
+                    DomainRow("Number", "编号", groundingPoint.Number),
+                    DomainRow("Note", "备注", groundingPoint.Note))
+            ]);
+    }
+
+    private static PropertyInspectorSnapshot ProjectWorkScope(ResolvedSelection selection)
+    {
+        WorkScope workScope = selection.WorkScope!;
+        var rows = new List<PropertyRowViewModel>
+        {
+            DomainRow("WorkScopeId", "标识", workScope.WorkScopeId),
+            DomainRow("Description", "说明", workScope.Description),
+            DomainRow("StartBoundary.DeviceId", "起始设备", workScope.StartBoundary.DeviceId),
+            DomainRow("StartBoundary.TerminalId", "起始端子", workScope.StartBoundary.TerminalId),
+            DomainRow("StartBoundary.Side", "起始侧别", workScope.StartBoundary.Side),
+            DomainRow("EndBoundary.DeviceId", "终止设备", workScope.EndBoundary.DeviceId),
+            DomainRow("EndBoundary.TerminalId", "终止端子", workScope.EndBoundary.TerminalId),
+            DomainRow("EndBoundary.Side", "终止侧别", workScope.EndBoundary.Side),
+            DomainRow("GroundingPointIds", "关联工作地线", string.Join(", ", workScope.GroundingPointIds))
+        };
+        return Snapshot(
+            selection,
+            "工作范围",
+            workScope.Description,
+            [new PropertySectionViewModel("专业属性", rows)]);
     }
 
     private static PropertyInspectorSnapshot ProjectInterval(ResolvedSelection selection)

@@ -284,12 +284,16 @@ public partial class MainWindow : Window
         _currentScene = scene;
         _activeSource = new PropertyInspectionSource
         {
+            Document = source.Document,
             DrawingLayout = layout,
             Poles = source.Poles,
             Devices = source.Devices,
             PoleAttachments = source.PoleAttachments,
             Connections = source.Connections,
             OverheadLines = source.OverheadLines,
+            WorkScopes = source.WorkScopes,
+            GroundingPoints = source.GroundingPoints,
+            Terminals = source.Terminals,
             HitTestIndex = scene.HitTestIndex
         };
         _selectionResolver.SetSource(_activeSource);

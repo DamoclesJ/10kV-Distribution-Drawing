@@ -99,6 +99,7 @@ public sealed class ProjectRuntimeSession
 
         return new PropertyInspectionSource
         {
+            Document = session.Domain,
             RingCabinet = cabinet,
             RingCabinetLayout = cabinetLayout,
             DrawingLayout = layout.DrawingLayout,
@@ -107,6 +108,9 @@ public sealed class ProjectRuntimeSession
             PoleAttachments = session.Domain.PoleAttachments,
             Connections = session.Domain.Connections,
             OverheadLines = session.Domain.OverheadLines,
+            WorkScopes = session.Domain.WorkScopes,
+            GroundingPoints = session.Domain.GroundingPoints,
+            Terminals = session.Domain.Terminals,
             HitTestIndex = scene.HitTestIndex
         };
     }

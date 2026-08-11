@@ -6,7 +6,9 @@ public enum SelectionTargetKind
     RingCabinet,
     RingCabinetInterval,
     PoleAttachment,
-    Connection
+    Connection,
+    GroundingPoint,
+    WorkScope
 }
 
 public sealed record SelectionReference(
