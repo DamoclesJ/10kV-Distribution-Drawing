@@ -71,7 +71,10 @@ public sealed class ProjectFileContainer
                 WriteJsonEntry(
                     archive,
                     ProjectFileFormat.DocumentEntryName,
-                    new ProjectFilePayload(savedDocument.Manifest.ProjectId, savedDocument.Metadata));
+                    new ProjectFilePayload(
+                        savedDocument.Manifest.ProjectId,
+                        savedDocument.Metadata,
+                        savedDocument.Domain));
             }
 
             File.Move(temporaryPath, targetPath, overwrite: true);
@@ -118,7 +121,15 @@ public sealed class ProjectFileContainer
             throw new InvalidDataException("Project metadata is required.");
         }
 
-        return new ProjectFileDocument(manifest, payload.Metadata);
+        if (payload.Domain is { } domain &&
+            (domain.DocumentId != manifest.ProjectId ||
+             !string.Equals(domain.Title, payload.Metadata.Title, StringComparison.Ordinal)))
+        {
+            throw new InvalidDataException(
+                "Domain document identity does not match the project manifest and metadata.");
+        }
+
+        return new ProjectFileDocument(manifest, payload.Metadata, payload.Domain);
     }
 
     private static void WriteJsonEntry<T>(ZipArchive archive, string entryName, T value)
@@ -143,6 +154,14 @@ public sealed class ProjectFileContainer
         if (string.IsNullOrWhiteSpace(document.Metadata.Title))
         {
             throw new InvalidDataException("Project metadata title is required.");
+        }
+
+        if (document.Domain is { } domain &&
+            (domain.DocumentId != document.Manifest.ProjectId ||
+             !string.Equals(domain.Title, document.Metadata.Title, StringComparison.Ordinal)))
+        {
+            throw new InvalidDataException(
+                "Domain document identity does not match the project manifest and metadata.");
         }
     }
 
@@ -207,5 +226,6 @@ public sealed class ProjectFileContainer
 
     private sealed record ProjectFilePayload(
         Guid ProjectId,
-        ProjectFileMetadata Metadata);
+        ProjectFileMetadata Metadata,
+        ProjectDomainDto? Domain);
 }

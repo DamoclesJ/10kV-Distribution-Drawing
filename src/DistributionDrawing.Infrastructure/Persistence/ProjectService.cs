@@ -1,8 +1,10 @@
+using DistributionDrawing.Domain.Documents;
+
 namespace DistributionDrawing.Infrastructure.Persistence;
 
 /// <summary>
-/// Coordinates the minimal project create, save, and load lifecycle.
-/// Domain and Layout persistence are intentionally not part of this phase.
+/// Coordinates the project create, save, and load lifecycle.
+/// This phase persists Domain data only; Layout and editor state remain out of scope.
 /// </summary>
 public sealed class ProjectService
 {
@@ -31,7 +33,11 @@ public sealed class ProjectService
             metadata,
             createdAtUtc);
 
-        ProjectSession candidate = new(filePath, document, isDirty: false);
+        DrawingDocument domain = ProjectDomainMapper.ToDomain(
+            document.Domain ?? ProjectDomainDto.Empty(
+                document.Manifest.ProjectId,
+                document.Metadata.Title));
+        ProjectSession candidate = new(filePath, document, domain, isDirty: false);
         Current = candidate;
         return candidate;
     }
@@ -40,14 +46,26 @@ public sealed class ProjectService
     {
         ProjectSession current = RequireCurrent();
 
-        _container.Save(current.FilePath, current.Document);
+        ProjectFileDocument snapshot = current.Document with
+        {
+            Metadata = new ProjectFileMetadata(
+                current.Domain.Title,
+                current.Metadata.Description),
+            Domain = ProjectDomainMapper.ToDto(current.Domain)
+        };
+        _container.Save(current.FilePath, snapshot);
 
         // Reopen the written archive so the session observes the persisted
         // manifest timestamps and validates the complete container round trip.
         ProjectFileDocument persistedDocument = _container.Open(current.FilePath);
+        DrawingDocument domain = ProjectDomainMapper.ToDomain(
+            persistedDocument.Domain ?? ProjectDomainDto.Empty(
+                persistedDocument.Manifest.ProjectId,
+                persistedDocument.Metadata.Title));
         ProjectSession candidate = new(
             current.FilePath,
             persistedDocument,
+            domain,
             isDirty: false);
 
         Current = candidate;
@@ -60,7 +78,11 @@ public sealed class ProjectService
 
         // Build and validate the candidate before replacing the current session.
         ProjectFileDocument document = _container.Open(filePath);
-        ProjectSession candidate = new(filePath, document, isDirty: false);
+        DrawingDocument domain = ProjectDomainMapper.ToDomain(
+            document.Domain ?? ProjectDomainDto.Empty(
+                document.Manifest.ProjectId,
+                document.Metadata.Title));
+        ProjectSession candidate = new(filePath, document, domain, isDirty: false);
         Current = candidate;
         return candidate;
     }

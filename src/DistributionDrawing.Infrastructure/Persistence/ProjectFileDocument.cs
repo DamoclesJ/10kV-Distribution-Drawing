@@ -2,7 +2,8 @@ namespace DistributionDrawing.Infrastructure.Persistence;
 
 public sealed record ProjectFileDocument(
     ProjectFileManifest Manifest,
-    ProjectFileMetadata Metadata)
+    ProjectFileMetadata Metadata,
+    ProjectDomainDto? Domain = null)
 {
     public static ProjectFileDocument CreateEmpty(
         Guid projectId,
@@ -14,6 +15,7 @@ public sealed record ProjectFileDocument(
         DateTimeOffset created = (createdAtUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
         return new ProjectFileDocument(
             ProjectFileManifest.Create(projectId, created, created),
-            metadata);
+            metadata,
+            ProjectDomainDto.Empty(projectId, metadata.Title));
     }
 }
