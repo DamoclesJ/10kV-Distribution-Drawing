@@ -3,13 +3,22 @@ using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols;
+using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
 namespace DistributionDrawing.Rendering.Wpf.Rendering;
 
 public sealed class DrawingSceneBuilder
 {
-    private readonly PoleSymbol _poleSymbol = new();
-    private readonly AttachmentSymbol _attachmentSymbol = new();
+    private readonly SymbolLibrary _symbolLibrary;
+    private readonly PoleSymbol _poleSymbol;
+    private readonly AttachmentSymbol _attachmentSymbol;
+
+    public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
+    {
+        _symbolLibrary = symbolLibrary ?? new SymbolLibrary();
+        _poleSymbol = new PoleSymbol(_symbolLibrary);
+        _attachmentSymbol = new AttachmentSymbol(_symbolLibrary);
+    }
 
     public DrawingScene Build(
         DrawingLayout layout,
@@ -89,7 +98,8 @@ public sealed class DrawingSceneBuilder
             }
 
             elements.AddRange(
-                OverheadLineSegment.From(overheadLine, lineLayout).CreateElements());
+                _symbolLibrary.CreateOverheadLineSegment(
+                    OverheadLineSegment.From(overheadLine, lineLayout)));
         }
 
         foreach (Pole pole in poleById.Values)

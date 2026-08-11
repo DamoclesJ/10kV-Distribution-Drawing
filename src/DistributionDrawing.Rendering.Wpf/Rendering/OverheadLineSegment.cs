@@ -2,6 +2,7 @@ using System.Windows.Media;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
 namespace DistributionDrawing.Rendering.Wpf.Rendering;
 
@@ -37,26 +38,8 @@ public sealed record OverheadLineSegment(
             layout.ContinuationOffset);
     }
 
-    public IReadOnlyList<SceneElement> CreateElements()
+    public IReadOnlyList<SceneElement> CreateElements(SymbolLibrary? library = null)
     {
-        var elements = new List<SceneElement>
-        {
-            new SceneLine(Start, End, Stroke, ThicknessMillimeters)
-        };
-
-        if (IsContinued)
-        {
-            DocumentPoint offset = ContinuationOffset ?? new DocumentPoint(4, 0);
-            elements.Add(
-                new SceneLine(
-                    new DocumentPoint(End.XMillimeters, End.YMillimeters),
-                    new DocumentPoint(
-                        End.XMillimeters + offset.XMillimeters,
-                        End.YMillimeters + offset.YMillimeters),
-                    Stroke,
-                    ThicknessMillimeters));
-        }
-
-        return elements;
+        return (library ?? new SymbolLibrary()).CreateOverheadLineSegment(this);
     }
 }
