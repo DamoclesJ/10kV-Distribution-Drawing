@@ -16,6 +16,8 @@ public sealed class PropertyInspectionSource
 
     public IReadOnlyList<Pole> Poles { get; init; } = [];
 
+    public IReadOnlyList<Device> Devices { get; init; } = [];
+
     public IReadOnlyList<PoleAttachment> PoleAttachments { get; init; } = [];
 
     public IReadOnlyList<OverheadLine> OverheadLines { get; init; } = [];

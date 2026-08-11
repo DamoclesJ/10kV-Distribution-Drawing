@@ -44,4 +44,17 @@ public sealed class DrawingLayout
                 $"A layout for overhead line '{layout.ConnectionId}' already exists.");
         }
     }
+
+    public void Replace(PoleLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+
+        if (!_poles.ContainsKey(layout.PoleId))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for pole '{layout.PoleId}'.");
+        }
+
+        _poles[layout.PoleId] = layout;
+    }
 }

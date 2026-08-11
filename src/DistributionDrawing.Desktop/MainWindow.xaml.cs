@@ -16,10 +16,12 @@ public partial class MainWindow : Window
     private readonly DrawingSceneBuilder _sceneBuilder = new();
     private readonly DocumentCoordinateSystem _coordinates = new();
     private readonly SelectionManager _selectionManager = new();
+    private readonly PoleLayoutEditor _poleLayoutEditor = new();
     private readonly SelectionObjectResolver _selectionResolver = new();
     private readonly PropertyProjector _propertyProjector = new();
     private readonly PropertyInspectorViewModel _propertyInspector = new();
     private DrawingScene? _currentScene;
+    private PropertyInspectionSource? _activeSource;
 
     public MainWindow()
     {
@@ -81,6 +83,7 @@ public partial class MainWindow : Window
             {
                 DrawingLayout = layout,
                 Poles = [firstPole, secondPole],
+                Devices = [cableTermination],
                 PoleAttachments = [attachment],
                 Connections = [connection],
                 OverheadLines = [overheadLine],
@@ -90,7 +93,10 @@ public partial class MainWindow : Window
 
     private void OnClearDrawing(object sender, RoutedEventArgs e)
     {
+        _poleLayoutEditor.Cancel();
+        DrawingSurface.ReleaseMouseCapture();
         _currentScene = null;
+        _activeSource = null;
         _selectionResolver.SetSource(null);
         _selectionManager.Clear();
         _propertyInspector.Clear();
@@ -126,7 +132,60 @@ public partial class MainWindow : Window
         var documentPoint = new DocumentPoint(
             _coordinates.DipToMillimeters(point.X),
             _coordinates.DipToMillimeters(point.Y));
-        _selectionManager.Select(_currentScene.HitTestIndex.HitTest(documentPoint));
+        SelectionReference? target = _currentScene.HitTestIndex.HitTest(documentPoint);
+        _selectionManager.Select(target);
+
+        if (target is not null &&
+            target.Kind == SelectionTargetKind.Device &&
+            _activeSource?.DrawingLayout is { } layout &&
+            layout.Poles.TryGetValue(target.ObjectId, out PoleLayout poleLayout))
+        {
+            _poleLayoutEditor.BeginDrag(target, documentPoint, poleLayout);
+            DrawingSurface.CaptureMouse();
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnDrawingSurfaceMouseMove(
+        object sender,
+        System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_poleLayoutEditor.IsActive ||
+            e.LeftButton != System.Windows.Input.MouseButtonState.Pressed ||
+            _activeSource?.DrawingLayout is not { } layout)
+        {
+            return;
+        }
+
+        System.Windows.Point point = e.GetPosition(DrawingSurface);
+        DocumentPoint documentPoint = new(
+            _coordinates.DipToMillimeters(point.X),
+            _coordinates.DipToMillimeters(point.Y));
+        PoleLayout preview = _poleLayoutEditor.UpdatePreview(documentPoint);
+        layout.Replace(preview);
+        RefreshDrawingScene();
+        e.Handled = true;
+    }
+
+    private void OnDrawingSurfaceMouseLeftButtonUp(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (!_poleLayoutEditor.IsActive ||
+            _activeSource?.DrawingLayout is not { } layout)
+        {
+            return;
+        }
+
+        MoveCommand? command = _poleLayoutEditor.Commit();
+        DrawingSurface.ReleaseMouseCapture();
+        if (command is not null)
+        {
+            command.Execute(layout);
+            RefreshDrawingScene();
+        }
+
         e.Handled = true;
     }
 
@@ -141,9 +200,44 @@ public partial class MainWindow : Window
     private void ShowScene(DrawingScene scene, PropertyInspectionSource source)
     {
         _currentScene = scene;
+        _activeSource = source;
         _selectionResolver.SetSource(source);
         _selectionManager.Clear();
         _propertyInspector.Clear();
+        RenderCurrentScene();
+    }
+
+    private void RefreshDrawingScene()
+    {
+        if (_activeSource?.DrawingLayout is not { } layout)
+        {
+            RenderCurrentScene();
+            return;
+        }
+
+        PropertyInspectionSource source = _activeSource;
+        DrawingScene scene = _sceneBuilder.Build(
+            layout,
+            source.Poles,
+            source.PoleAttachments,
+            source.Devices,
+            source.Connections,
+            source.OverheadLines);
+        _currentScene = scene;
+        _activeSource = new PropertyInspectionSource
+        {
+            DrawingLayout = layout,
+            Poles = source.Poles,
+            Devices = source.Devices,
+            PoleAttachments = source.PoleAttachments,
+            Connections = source.Connections,
+            OverheadLines = source.OverheadLines,
+            HitTestIndex = scene.HitTestIndex
+        };
+        _selectionResolver.SetSource(_activeSource);
+        _propertyInspector.Apply(
+            _propertyProjector.Project(
+                _selectionResolver.Resolve(_selectionManager.Selected)));
         RenderCurrentScene();
     }
 

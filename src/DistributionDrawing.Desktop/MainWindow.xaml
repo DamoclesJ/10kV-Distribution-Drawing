@@ -34,7 +34,9 @@
               BorderBrush="#D0D0D0"
               BorderThickness="1">
         <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
-                                           MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown" />
+                                           MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown"
+                                           MouseMove="OnDrawingSurfaceMouseMove"
+                                           MouseLeftButtonUp="OnDrawingSurfaceMouseLeftButtonUp" />
       </Border>
 
       <Border x:Name="PropertyInspectorPanel"

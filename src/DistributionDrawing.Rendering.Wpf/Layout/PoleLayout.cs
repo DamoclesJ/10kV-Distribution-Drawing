@@ -39,4 +39,14 @@ public sealed record PoleLayout
     public double HeightMillimeters { get; }
 
     public DocumentPoint LabelOffset { get; }
+
+    public PoleLayout MoveTo(DocumentPoint position)
+    {
+        return new PoleLayout(
+            PoleId,
+            position,
+            WidthMillimeters,
+            HeightMillimeters,
+            LabelOffset);
+    }
 }
