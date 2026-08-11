@@ -1,6 +1,6 @@
 # 10kV 配电附图 MVP 设备模型设计
 
-> 文档状态：M2-A 架空线路与杆塔领域模型设计<br>
+> 文档状态：M2-C 架空线路 Layout 与 Rendering 设计<br>
 > 编制日期：2026-08-11<br>
 > 依据：`docs/requirements.md`、`docs/architecture.md`、`docs/ring-cabinet-design.md`、`docs/drawing-rule.md`、`docs/implementation-plan.md`
 
@@ -566,7 +566,7 @@ PT 不是独立柜体或顶层 Device，也不是 RingCabinet 的独立 PT 属�
 | PoleType | 是 | 当前固定为 `Cement` |
 | DisplayName | 否 | 除杆号外需要显示的名称 |
 
-Pole 不保存 VoltageLevel、SwitchState 或 ElectricalState。杆位 X/Y、图元尺寸和标签位置由以 Pole.DeviceId 为键的 DeviceLayout 保存，不进入 Pole。
+Pole 不保存 VoltageLevel、SwitchState 或 ElectricalState。杆位 X/Y、图元尺寸和标签位置由以 Pole.DeviceId 为键的 PoleLayout 保存，不进入 Pole。
 
 Pole 是否具有 Terminal 取决于该杆位是否承担显式电气连接角色：
 
@@ -676,7 +676,7 @@ flowchart LR
 
 ### 11.8 本阶段设计边界
 
-M2-A 只确定领域对象、关系和不变量，不实现 Pole、PoleAttachment、OverheadLine、CableTermination、柱上设备或其工厂；不实现 WorkScope、BoundaryPoint、GroundingPoint、渲染图元、拖放、线路自动布线、自动状态传播、工程文件 DTO 或非水泥杆类型。
+M2-A 已确定领域对象、关系和不变量；M2-C 在此基础上补充 Layout 与 Rendering 边界，但仍不实现渲染代码。当前设计不实现 WorkScope、BoundaryPoint、GroundingPoint、拖放、线路自动布线、自动状态传播、工程文件 DTO 或非水泥杆类型。
 
 ## 12. WorkScope 与 GroundingPoint
 
@@ -747,7 +747,7 @@ RingCabinetInterval.ExternalTerminal
 
 ## 13. Layout 模型
 
-布局数据服务于拖放和移动，不参与电气拓扑判断。
+布局数据服务于拖放和移动，不参与电气拓扑判断。M2-C 只定义架空线路和杆塔的布局语义，不新增 Domain 坐标字段；所有坐标使用毫米文档坐标，WPF 渲染时再转换为 DIP。
 
 ### 13.1 设备布局
 
@@ -757,20 +757,42 @@ RingCabinetInterval.ExternalTerminal
 - 图元宽度和高度。
 - 标签锚点或标签相对位置。
 - 组合对象内部的相对位置；例如间隔相对环网柜。
-- Pole 的绝对位置以 Pole.DeviceId 为布局键保存。
-- 柱上设备和 CableTermination 相对 Pole 的位置以 PoleAttachment.AttachmentId 或 AttachedDeviceId 为布局键保存；PoleAttachment 本体不保存坐标。
+- `PoleLayout` 以 Pole.DeviceId 为键保存杆塔绝对位置、图元尺寸和标签偏移；Pole 本体不保存这些字段。
+- `AttachmentLayout` 以 PoleAttachment.AttachmentId 为键保存附属设备相对杆塔的 X/Y 偏移、尺寸和标签偏移；PoleAttachment 本体不保存坐标。
+- 附属设备默认位于杆塔右侧，默认偏移只是 Layout 初始化策略，不是 PoleAttachment 的业务事实；用户调整偏移不改变 PoleId、AttachedDeviceId 或任何端子连接。
 
 当前 MVP 不因模型设计自行增加旋转、自由缩放或自动布局能力。
 
 ### 13.2 连接布局
 
-ConnectionLayout 的 Route 保存零个或多个文档坐标折点：
+普通 Connection 可由 `ConnectionLayout` 保存零个或多个文档坐标折点。M2-C 的架空线路不使用复杂 Route，而由 `OverheadLineLayout` 采用固定 `Straight` 绘制模式：
 
 - StartTerminalId 和 EndTerminalId 是拓扑事实。
-- 首尾显示点由端子 AnchorKey 和设备 Layout 计算。
-- 中间折点只影响线条路线。
-- 移动设备后可以更新首尾段，但不得修改连接端点标识。
-- OverheadLine.SupportPoleIds 可参与计算建议路线，但 Route 不是 SupportPoleIds 的替代事实，OverheadLine 也不重复保存 Route。
+- `OverheadLineLayout` 以 ConnectionId 为键保存绘制模式和线路显示相关布局，不重复保存 Connection 端点、LineModel 或 SupportPoleIds。
+- 场景生成器根据两个端子所属对象的 Layout 和符号锚点计算 `LineSegment.Start`、`LineSegment.End`；LineSegment 是场景生成阶段对象，不是 Domain 或持久化拓扑对象。
+- M2-C 只生成一个起点到终点的简单实线，不生成弧垂、曲线、三维路径或自动折点。
+- `SupportPoleIds` 只表达物理经过顺序，不生成中间 LineSegment、Terminal、ElectricalNode 或 Connection；中间支撑杆不改变起止端子。
+- 移动杆塔或附属设备只重新计算端点和场景线段，不修改 ConnectionId、TerminalId 或 SupportPoleIds。
+
+### 13.3 Layout、Symbol 与 Rendering 边界
+
+```text
+Domain Object
+    ↓
+PoleLayout / AttachmentLayout / OverheadLineLayout
+    ↓
+PoleSymbol / AttachmentSymbol / LineSegment
+    ↓
+DrawingScene.SceneElement
+    ↓
+WPF DrawingVisual
+```
+
+- `PoleSymbol` 根据 PoleType 选择基础杆塔图形；没有附属关系时只输出杆塔本体。
+- `AttachmentSymbol` 根据附属设备的实际 Domain 类型选择图形：柱上断路器、柱上负荷开关、隔离刀闸、跌落式熔断器或 CableTermination。开关图形状态读取 SwitchDevice.SwitchState，CableTermination 不读取 SwitchState。
+- 设备杆塔不创建新的 Domain 类型；渲染层将一个 PoleSymbol 与其多个 AttachmentSymbol 按 AttachmentLayout 偏移组合。
+- WPF `DrawingScene` 承载 `SceneLine`、`SceneRectangle`、`SceneText` 等场景元素；`DrawingSceneRenderer` 将其绘制到 `DrawingVisual`。Domain 和 Layout 不引用 WPF 类型。
+- 线路先绘制，杆塔和附属设备后绘制，文字最后绘制；选择框、端子热点和拖动预览属于交互覆盖层，不进入 JPG 或打印场景。
 
 ## 14. 属性编辑边界
 
@@ -800,7 +822,7 @@ MVP 属性面板只编辑当前模型已经定义的字段：
 - Terminal 的所属对象、角色、暴露范围和连接能力。
 - Connection 的类型、两个端点和人工 ElectricalState；Route 作为独立 ConnectionLayout 保存。
 - OverheadLine 与 Connection 的一对一关系，以及 LineModel、可选 LengthMeters、有序 SupportPoleIds、IsContinued、ContinuationTerminalId、ContinuationState 和 ContinuationDescription。
-- Pole 的 PoleNumber、固定 PoleType 和可选 DisplayName；杆位坐标作为独立 DeviceLayout 保存。
+- Pole 的 PoleNumber、固定 PoleType 和可选 DisplayName；杆位坐标作为独立 PoleLayout 保存。
 - PoleAttachment 的 AttachmentId、PoleId 和 AttachedDeviceId；附属设备相对位置作为独立 AttachmentLayout 保存。
 - 电缆终端两侧端子、固定 InternalNode 及其 PoleAttachment。
 - RingCabinet 存在 PTInterval 时的 PTPosition 和关联 DTUCabinet。

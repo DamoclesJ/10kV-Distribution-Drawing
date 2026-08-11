@@ -1,6 +1,6 @@
 # 10kV 配电工作票附图软件技术实现方案
 
-> 文档状态：第一版技术实现建议<br>
+> 文档状态：M2-C 架空线路 Layout 与 Rendering 设计<br>
 > 编制日期：2026-08-10<br>
 > 目标平台：Windows 桌面<br>
 > 输入依据：`README.md`、`docs/requirements.md`、`docs/architecture.md`、`docs/equipment-model.md`、`docs/ring-cabinet-design.md`、`docs/drawing-rule.md`
@@ -17,6 +17,7 @@
 - `docs/architecture.md` 已定义模块化单体、设备—端子—连接模型、状态与表现分离、规则校验和本地工程文件方向。
 - `docs/ring-cabinet-design.md` 已定义普通负荷开关型、一二次融合型、PT、DTU、间隔、端子及设备独立状态。
 - `docs/drawing-rule.md` 已整理配电工作票和现场勘察附图的颜色、标注、接地、工作范围和图元规则。
+- 当前 Domain 已完成 M2-B-1 架空线路与杆塔基础模型，以及 M2-B-2 对应 Domain 测试代码；本阶段只继续定义其 Layout 与 Rendering 映射。
 
 本文以 `docs/requirements.md` 已确认的 MVP 范围及现有配电专业模型、规则为边界。未被需求基线明确列为 MVP 必须实现的能力，均作为后续候选或待确认项，不作为第一阶段交付承诺。操作系统版本、安装方式、纸张、导出分辨率等技术建议，仍应在 MVP 开始前通过目标单位的实际电脑、打印机和真实脱敏图纸验证。
 
@@ -174,7 +175,7 @@ WPF 官方文档说明其使用分辨率无关的矢量渲染，并提供数据�
 
 | 项目 | 职责 | 禁止依赖 |
 | --- | --- | --- |
-| Domain | 设备、端子、连接、环网柜、状态、布局和不变量 | WPF、文件系统、JSON、窗口 |
+| Domain | 设备、端子、连接、环网柜、状态和不变量 | WPF、文件系统、JSON、窗口 |
 | Application | 创建/编辑/删除/连接等用例、撤销重做、规则调度、接口合同 | 具体 WPF 控件、具体文件实现 |
 | Rendering.Wpf | 场景生成、图元、画布、命中测试、JPG、打印页面 | 直接修改领域对象、直接保存文件 |
 | Infrastructure | 工程文件、JSON DTO、迁移、备份、自动恢复 | WPF View/ViewModel |
@@ -205,13 +206,14 @@ flowchart LR
 
 ## 5. 设备模型到代码对象的映射
 
-### 5.1 四层对象分离
+### 5.1 五层对象分离
 
-同一业务对象在实现中分为四种表现，不能使用一个 WPF 控件贯穿全部层：
+同一业务对象在实现中分为领域、布局、持久化、交互和渲染五种表现，不能使用一个 WPF 控件贯穿全部层：
 
 | 层次 | 对象作用 | 示例 |
 | --- | --- | --- |
 | 领域对象 | 保存业务语义和不变量 | `Device`、`Terminal`、`Connection`、`RingCabinet` |
+| Layout 对象 | 保存页面坐标、相对偏移、尺寸和连接路线 | `PoleLayout`、`AttachmentLayout`、`OverheadLineLayout` |
 | 持久化 DTO | 定义版本化文件合同 | 设备 DTO、端子 DTO、连接 DTO、布局 DTO |
 | ViewModel | 支持选择、属性编辑和命令状态 | 设备属性 ViewModel、文档 ViewModel |
 | 渲染对象 | 屏幕、导出和打印的临时矢量对象 | SceneElement、SymbolVisual、ConnectionVisual |
@@ -219,7 +221,7 @@ flowchart LR
 映射顺序为：
 
 ```text
-工程文件 DTO ⇄ 领域对象 → ViewModel / 渲染场景
+工程文件 DTO ⇄ 领域对象 + Layout 对象 → ViewModel / 渲染场景
 ```
 
 领域对象不得保存 `Brush`、`Geometry`、`DrawingVisual`、`Point`、`Transform` 等 WPF 类型。渲染对象不得作为工程文件序列化。
@@ -238,9 +240,13 @@ flowchart LR
 | 架空线路 | `Connection` + 一对一 `OverheadLine` 明细 | Connection 保存端点；OverheadLine 保存型号、长度、经过杆塔及延续语义，不采用继承 |
 | 水泥杆 | `Pole : Device` | 保存杆号和固定杆型；仅在终止、分支或延续点按需拥有架空锚点，位置属于 Layout |
 | 杆塔附属关系 | `PoleAttachment` | 独立关联 Pole 与柱上 Device，不表示导通；相对位置属于 AttachmentLayout |
+| 杆塔布局 | `PoleLayout` | 以 Pole.DeviceId 为键保存毫米坐标、尺寸和标签偏移，不参与拓扑 |
+| 附属设备布局 | `AttachmentLayout` | 以 PoleAttachment.AttachmentId 为键保存相对杆塔偏移和标签布局 |
 | 柱上设备 | `SwitchDevice` + `PoleAttachment` | 保存设备类型、端子、独立开关状态及安装杆塔 |
 | 电缆终端 | `CableTermination : Device` + `PoleAttachment` | 以受限的电缆侧/架空侧端子及固定 ElectricalNode 连接两个系统 |
 | 连接路线 | `ConnectionRoute` | 保存连接线的人工折点和路由模式 |
+| 架空线路布局 | `OverheadLineLayout` | 以 ConnectionId 为键保存 MVP 的 Straight 模式和线路显示布局 |
+| 直线段 | `LineSegment` | 场景生成阶段的起点/终点临时几何，不保存为 Domain 事实 |
 | 工作地线 | `GroundingPoint` | 人工关联端子，保存位置、编号和备注 |
 | 工作范围 | `WorkScope` | 保存两个 BoundaryPoint、说明及关联 GroundingPoint |
 | 标注 | `Annotation` | 文字、引线和非导电说明 |
@@ -309,7 +315,7 @@ PT、DTU 按环网柜组合对象映射，不作为设备库中的独立类别�
 
 ### 6.1 画布总体方案
 
-第一版不采用“一个图形原语一个 WPF 控件”的方式。建议实现一个自定义 `DiagramSurface`，内部维护轻量级 `DrawingVisual` 场景：
+第一版不采用“一个图形原语一个 WPF 控件”的方式。一个领域对象可以生成一个或多个场景元素，例如 Pole 由 PoleSymbol 和零个或多个 AttachmentSymbol 组合而成。建议实现一个自定义 `DiagramSurface`，内部维护轻量级 `DrawingVisual` 场景：
 
 - 一个业务设备、连接或标注可对应一个轻量级 Visual，便于局部重绘和命中测试。
 - 图元内部的线、圆、路径使用 `DrawingGroup`、`GeometryDrawing` 和 `StreamGeometry`，不展开成大量 Shape 控件。
@@ -397,7 +403,7 @@ PTInterval 内的隔离刀闸和接地刀闸使用各自的拉开/合入图元�
 
 ### 6.8 连接线路由
 
-MVP 只实现正交连接：
+普通 Connection 的 MVP 只实现正交连接；架空线路遵循 6.10 的独立规则，固定使用起点到终点的简单直线：
 
 - 新连接先生成直线、L 形或 Z 形基础路线。
 - 用户可插入、移动和删除折点。
@@ -419,7 +425,58 @@ MVP 只实现正交连接：
 - GroundingPoint 由用户选定 Terminal 后创建；画布、JPG 和打印共享同一工作地线图元与编号显示规则。
 - 修改 WorkScope、OperationState 或 ElectricalState 均不得自动创建、删除或移动 GroundingPoint。
 
-### 6.10 编辑命令与撤销重做
+### 6.10 架空线路 Layout 与 Rendering 设计
+
+M2-C 将架空系统的三层职责固定为：
+
+| 层 | 负责内容 | 明确不负责 |
+| --- | --- | --- |
+| Domain | `Pole`、`PoleAttachment`、`SwitchDevice`、`CableTermination`、`OverheadLine`、`Terminal`、`Connection` 及其校验 | 坐标、屏幕位置、图形尺寸、WPF 类型 |
+| Layout | `PoleLayout`、`AttachmentLayout`、`OverheadLineLayout` 和页面坐标 | 设备所有权、电气连接、ElectricalNode 或状态结论 |
+| Rendering | `PoleSymbol`、`AttachmentSymbol`、`LineSegment` 到 `DrawingScene`/`DrawingVisual` 的映射 | 修改 Domain 或把 Visual 作为事实源 |
+
+#### PoleLayout 与 AttachmentLayout
+
+- `PoleLayout` 以 Pole.DeviceId 为键，保存 X/Y、图元尺寸和杆号标签偏移，单位为毫米。
+- `AttachmentLayout` 以 PoleAttachment.AttachmentId 为键，保存附属设备相对 Pole 的 X/Y 偏移、尺寸和标签偏移，单位为毫米。
+- 附属设备默认放置在杆塔右侧；右侧只是初始布局策略，实际偏移由 Layout 保存并可调整。
+- 不创建 EquipmentPole、SwitchPole 等 Domain 继承类型；设备杆由一个 PoleSymbol 和多个 AttachmentSymbol 在渲染层组合。
+
+#### Symbol 映射
+
+- PoleType=Cement 选择基础 `PoleSymbol`；无 Attachment 时只绘制杆塔本体。
+- `SwitchDevice.SwitchKind` 选择柱上断路器、柱上负荷开关、隔离刀闸或跌落式熔断器图元，SwitchState 选择拉开/合入变体。
+- `CableTermination` 选择电缆终端图元，不读取 SwitchState。
+- 每个 PoleAttachment 解析其 AttachedDeviceId，按 AttachmentLayout 偏移组合对应 AttachmentSymbol；组合过程不回写 Domain。
+
+#### OverheadLineLayout 与直线段
+
+- `OverheadLineLayout` 以 ConnectionId 为键，MVP 的 RouteMode 固定为 `Straight`。
+- 场景生成器从 Connection 的两个 TerminalId 解析端子锚点，生成临时 `LineSegment(Start, End)`，再映射为 `DrawingScene.SceneLine`。
+- SupportPoleIds 只表达物理经过顺序，不生成中间节点、连接、折点或额外 LineSegment；中间支撑杆不改变 Connection 起止端点。
+- 移动 Pole 或附属设备后，只重新解析端子锚点和线段首尾；ConnectionId、TerminalId 和 SupportPoleIds 不变。
+- IsContinued=true 时，继续符号和 ContinuationDescription 作为线路附加场景元素；ContinuationState 只使用人工确认值，不自动推导图外带电状态。
+- 本阶段不实现自动布线、曲线、弧垂计算、三维线路、避障或全图自动布局。
+
+#### 当前 WPF 框架映射
+
+```text
+Domain Object
+    ↓
+Layout Object
+    ↓
+PoleSymbol / AttachmentSymbol / LineSegment
+    ↓
+DrawingScene.SceneElement
+    ↓
+DrawingSceneRenderer → DrawingVisual → DrawingVisualHost
+```
+
+`DrawingScene` 继续作为 WPF 无关的场景描述，使用现有 `SceneLine`、`SceneRectangle` 和 `SceneText` 等元素；`DrawingSceneRenderer` 负责实际 WPF 绘制，`DrawingVisualHost` 只承载 Visual。线路先于杆塔符号绘制，附属设备叠加在杆塔上，文字按场景分层最后绘制。
+
+未来 WorkScope 和 GroundingPoint 仍只引用 TerminalId，不引用杆号、坐标或线路折点；M2-C 不实现这些对象。
+
+### 6.11 编辑命令与撤销重做
 
 所有改变文档的操作通过应用命令执行，例如：
 
@@ -604,7 +661,7 @@ Windows 自带“Microsoft Print to PDF”可作为一种打印机参与测试�
 
 ### 当前里程碑状态
 
-当前阶段：**M1.2-D 环网柜 Domain 第一阶段已完成。**
+当前阶段：**M2-C 架空线路 Layout 与 Rendering 设计。**
 
 已完成：
 
@@ -619,18 +676,19 @@ Windows 自带“Microsoft Print to PDF”可作为一种打印机参与测试�
 - 一二次融合间隔状态评估。
 - 隔离刀闸与接地刀闸互斥联锁校验。
 - 环网柜 Domain 测试。
+- M2-B-1 架空线路与杆塔基础 Domain 模型。
+- M2-B-2 架空线路与杆塔 Domain 测试代码。
 
-当前未实现：
+当前 M2-C 尚未实现：
 
-- `PTInterval`。
-- `DTUCabinet`。
-- 图元渲染。
-- 架空线路。
-- 杆塔附属设备。
+- `PoleLayout`、`AttachmentLayout`、`OverheadLineLayout` 实现。
+- `PoleSymbol`、`AttachmentSymbol` 和架空线路 `LineSegment` 图元。
+- Domain 到 `DrawingScene` 的场景生成器。
+- 架空线路的 WPF 绘制、交互命中和布局编辑。
 - 工作范围。
 - 工作地线。
 
-下一阶段：**M1 后续领域模型实现。**
+下一阶段：**M2-C Layout 与 Rendering 实现。**
 
 以下顺序保留为第一阶段实施基线。
 

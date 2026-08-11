@@ -119,18 +119,22 @@ flowchart TB
     UI["应用界面<br/>工具栏、设备面板、属性面板、问题面板"]
     Editor["图形编辑器<br/>选取、吸附、连线、路由、撤销重做"]
     Domain["配电领域核心<br/>设备、端子、连接、状态、工作范围"]
+    Layout["布局层<br/>毫米坐标、相对偏移、路线布局"]
     Rules["规范规则引擎<br/>完整性、拓扑、安全措施、命名检查"]
     Symbols["图元与组合模板库<br/>WPF 矢量图元、端子定义、状态变体"]
-    Render["渲染与排版<br/>颜色派生、标签布局、分页、图例"]
+    Scene["场景生成<br/>PoleSymbol、AttachmentSymbol、LineSegment"]
+    Render["渲染与排版<br/>DrawingScene、颜色派生、分页、图例"]
     Store["工程文件与版本迁移<br/>保存、自动恢复、导入导出"]
     Export["输出适配器<br/>JPG、打印"]
 
     UI --> Editor
     Editor --> Domain
-    Editor --> Symbols
+    Editor --> Layout
     Domain --> Rules
-    Domain --> Render
-    Symbols --> Render
+    Domain --> Scene
+    Layout --> Scene
+    Symbols --> Scene
+    Scene --> Render
     Domain --> Store
     Render --> Export
 ```
@@ -143,6 +147,7 @@ flowchart TB
 | 图形编辑器 | 放置、选择、框选、移动、缩放、吸附、连线、撤销重做 | 不判断专业规则是否正确 |
 | 配电领域核心 | 管理设备、端子、电气连接、运行状态、安全状态和业务约束 | 不依赖具体 UI 框架 |
 | 图元与模板库 | 定义标准图形、端子位置、状态变体和组合设备模板 | 不保存某张图的实例数据 |
+| Layout 层 | 保存页面中的设备位置、附属设备相对偏移和连接路线数据 | 不拥有设备、端子或电气连接事实，不依赖 WPF 类型 |
 | 规则引擎 | 对领域模型执行可重复校验，返回错误、警告和定位对象 | 不自动悄悄修改用户数据 |
 | 渲染与排版 | 将模型稳定渲染为 WPF 矢量场景，处理标签、颜色、线型、页面边界 | 不作为数据源反向解析业务模型 |
 | 工程文件与迁移 | 序列化、文件校验、版本升级、自动恢复 | 不保存仅对本次渲染有效的临时对象 |
@@ -166,9 +171,10 @@ flowchart TB
 
 1. 用户从设备面板或组合模板创建领域对象。
 2. 编辑器创建命令并提交到领域核心。
-3. 领域核心更新拓扑或布局数据，并产生变更事件。
-4. 渲染模块根据最新语义模型生成 WPF 矢量场景。
-5. 规则引擎增量检查受影响对象，问题面板同步更新。
+3. 领域核心只更新设备、端子、连接和状态事实；布局命令只更新独立 Layout 数据。
+4. 场景生成器读取 Domain 对象和 Layout 对象，生成与 WPF 无关的 `DrawingScene` 元素。
+5. WPF 渲染器将 `DrawingScene` 元素绘制为 `DrawingVisual`；Domain 不直接调用 WPF。
+6. 规则引擎增量检查受影响对象，问题面板同步更新。
 
 #### 导出与打印
 
@@ -212,6 +218,12 @@ flowchart TB
 | 设备与安全状态 | 设备位置、在运/拆除、带电/停电、工作/非工作、接地 | 开关拉开、线路停电、S01 接地线已装设 |
 | 业务组织 | 设备属于哪个站、柜、间隔、线路或工作区域 | 负 2 间隔属于纪 3701 环网柜 |
 | 画布表现 | 坐标、方向、尺寸、折点、标签位置 | 图元在第 1 页坐标位置，标签位于右侧 |
+
+M2-C 对三层职责进一步收敛：
+
+- **Domain** 只负责 `Pole`、`PoleAttachment`、`SwitchDevice`、`CableTermination`、`OverheadLine`、`Terminal` 和 `Connection` 等语义事实，不保存坐标、屏幕位置或图形尺寸。
+- **Layout** 负责 `PoleLayout`、`AttachmentLayout`、`OverheadLineLayout` 等实例布局数据，所有坐标使用毫米文档坐标。
+- **Rendering** 负责从 Domain 和 Layout 选择 `SymbolDefinition`、组合 `PoleSymbol`/`AttachmentSymbol`、生成 `LineSegment`，并映射到 `DrawingScene` 和 WPF `DrawingVisual`。
 
 如果把这四类信息混在一个图形对象中，后续会出现拖动设备改变连接、换图元丢失状态、颜色无法解释等问题。
 
@@ -319,7 +331,43 @@ PT 不是独立柜体或 RingCabinet 的单独结构属性，而是有序间隔�
 
 规范 Word 文档中的图元可作为核对依据，但其中大量图元为低分辨率图片。正式开发前应取得权威的可编辑矢量图元或由配电专业人员审核重绘结果，不能直接把截图作为生产图元库。
 
-### 5.7 关键模型约束
+### 5.7 架空系统的 Layout 与 Rendering 映射
+
+架空系统采用以下单向数据流：
+
+```text
+Domain Object
+    ↓
+Layout Object
+    ↓
+Scene Element
+    ↓
+DrawingVisual
+```
+
+#### 杆塔与附属设备
+
+- `Pole` 通过 `PoleLayout` 定位，再由 `PoleSymbol` 绘制基础杆塔符号。
+- `PoleAttachment` 通过 `AttachmentLayout` 保存相对杆塔的偏移，再由 `AttachmentSymbol` 绘制柱上开关或电缆终端。
+- 设备杆不是新的 Domain 类型，不创建 `EquipmentPole`、`SwitchPole` 等继承模型；渲染层只是在同一杆位组合一个 `PoleSymbol` 和零个或多个 `AttachmentSymbol`。
+- 无附属关系时只绘制 `PoleSymbol`；有附属关系时按 Attachment 集合逐个叠加附属图元。附属设备默认放在杆塔右侧，默认偏移属于 Layout 初始化策略，可由用户调整。
+
+#### 架空线路
+
+- `Connection` 提供两个端子，`OverheadLine` 明细提供线路型号、延续语义和有序 SupportPoleIds。
+- `OverheadLineLayout` 仅保存该连接的绘制模式和必要显示布局；MVP 固定为 `Straight`。
+- 场景生成器解析两个端子在 Pole、PoleAttachment 或 CableTermination 上的图形锚点，生成一个临时 `LineSegment(Start, End)`，映射为当前 WPF 场景的 `SceneLine`。
+- `SupportPoleIds` 只表达物理经过顺序，不生成 ElectricalNode、Connection 或中间折点；中间支撑杆不改变 Connection 的两个端点。
+- 不实现自动布线、曲线、弧垂、三维线路或按杆塔自动拆分线路。
+
+#### 当前 WPF 框架的落点
+
+- `DrawingScene` 是渲染层的中间场景，承载 `SceneLine`、`SceneRectangle`、`SceneText` 等与 WPF 无关的元素描述。
+- 杆塔和附属符号的矢量几何在 `SymbolDefinition` 中展开为场景元素；不把 WPF `Geometry` 写回 Domain 或 Layout。
+- `DrawingSceneRenderer` 负责将场景元素绘制到 `DrawingVisual`，`DrawingVisualHost` 只负责承载和显示 Visual。
+- 线路应在杆塔/设备符号之前绘制，附属设备符号叠加在杆塔之上，文字和交互覆盖层按既有场景分层处理。
+
+### 5.8 关键模型约束
 
 至少应实现以下不变量：
 
