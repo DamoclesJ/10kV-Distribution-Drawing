@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -89,6 +90,39 @@ public sealed class DrawingSceneBuilder
         return new DrawingScene(
             _ringCabinetSymbol.CreateElements(cabinet, layout),
             new SelectionHitTestIndex(hitTestEntries));
+    }
+
+    public DrawingScene Build(
+        DrawingDocument document,
+        RuntimeLayoutDocument layout)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(layout);
+
+        DrawingScene baseScene = Build(
+            layout.DrawingLayout,
+            document.Devices.OfType<Pole>(),
+            document.PoleAttachments,
+            document.Devices,
+            document.Connections,
+            document.OverheadLines);
+
+        var elements = baseScene.Elements.ToList();
+        var hitTestEntries = baseScene.HitTestIndex.Entries.ToList();
+        foreach (RingCabinet cabinet in document.Devices.OfType<RingCabinet>())
+        {
+            if (!layout.RingCabinetLayouts.TryGetValue(cabinet.Id, out RingCabinetLayout? cabinetLayout))
+            {
+                throw new InvalidOperationException(
+                    $"No layout exists for ring cabinet '{cabinet.Id}'.");
+            }
+
+            DrawingScene cabinetScene = Build(cabinet, cabinetLayout);
+            elements.AddRange(cabinetScene.Elements);
+            hitTestEntries.AddRange(cabinetScene.HitTestIndex.Entries);
+        }
+
+        return new DrawingScene(elements, new SelectionHitTestIndex(hitTestEntries));
     }
 
     public DrawingScene Build(
