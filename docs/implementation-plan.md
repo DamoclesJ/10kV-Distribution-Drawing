@@ -233,13 +233,13 @@ flowchart LR
 | 开关设备 | `SwitchDevice` | 独立拉开/合入等操作状态和内部导通定义 |
 | 端子 | `Terminal` | 端子角色、电压、所属设备和连接约束 |
 | 电气节点 | `ElectricalNode` | 表示母线节点、回路节点、中间节点和大地节点 |
-| 连接 | `Connection` | 引用两端端子或节点，不保存屏幕线条对象 |
+| 连接 | `Connection` | 唯一保存两个 External Terminal 端点和通用电气属性，不保存屏幕线条对象 |
 | 电缆 | `Connection` + `Cable` 类型 | 保存电缆连接语义、两端端子和可编辑标注属性 |
-| 架空线路 | `Connection` + `OverheadLine` 类型 | 保存架空连接语义、两端引用和可编辑线路属性 |
-| 水泥杆 | `Pole` | 保存杆号、杆型、位置、连接端子和附属关系 |
-| 杆塔附属关系 | `PoleAttachment` | 关联 Pole、附属 Device 和相对布局 |
+| 架空线路 | `Connection` + 一对一 `OverheadLine` 明细 | Connection 保存端点；OverheadLine 保存型号、长度、经过杆塔及延续语义，不采用继承 |
+| 水泥杆 | `Pole : Device` | 保存杆号和固定杆型；仅在终止、分支或延续点按需拥有架空锚点，位置属于 Layout |
+| 杆塔附属关系 | `PoleAttachment` | 独立关联 Pole 与柱上 Device，不表示导通；相对位置属于 AttachmentLayout |
 | 柱上设备 | `SwitchDevice` + `PoleAttachment` | 保存设备类型、端子、独立开关状态及安装杆塔 |
-| 电缆终端 | `CableTermination` + `PoleAttachment` | 以电缆侧和架空侧端子连接两个系统 |
+| 电缆终端 | `CableTermination : Device` + `PoleAttachment` | 以受限的电缆侧/架空侧端子及固定 ElectricalNode 连接两个系统 |
 | 连接路线 | `ConnectionRoute` | 保存连接线的人工折点和路由模式 |
 | 工作地线 | `GroundingPoint` | 人工关联端子，保存位置、编号和备注 |
 | 工作范围 | `WorkScope` | 保存两个 BoundaryPoint、说明及关联 GroundingPoint |
@@ -409,11 +409,12 @@ MVP 只实现正交连接：
 
 ### 6.9 架空系统与安全对象
 
-- `Pole` 是架空系统基础对象，当前 `PoleType` 固定为水泥杆。
-- 柱上开关和 `CableTermination` 必须通过 `PoleAttachment` 安装到 Pole，不允许作为悬空设备保存。
-- CableTermination 的电缆侧端子只接 Cable，架空侧端子只接 OverheadLine。
-- OverheadLine 保存线路型号、可选长度和有序 SupportPoleIds。
-- `IsContinued` 为 true 时，渲染线路继续符号和文字；`ContinuationState` 由用户选择 Energized 或 Unknown，不做自动推导。
+- `Pole` 是 `DeviceType.Pole` 的架空系统基础对象，当前 PoleType 固定为水泥杆；杆体不导电，普通中间支撑杆不自动创建 Terminal。
+- 柱上开关和 `CableTermination` 必须通过独立 `PoleAttachment` 安装到 Pole，不允许作为悬空设备保存；PoleAttachment 不保存布局坐标。
+- CableTermination 的电缆侧端子只接 Cable，架空侧端子只接 OverheadLine，两侧通过固定 ElectricalNode 导通。
+- OverheadLine 不继承或替代 Connection；它与 `ConnectionType=OverheadLine` 的 Connection 一对一组合，保存 LineModel、可选 LengthMeters 和有序 SupportPoleIds。
+- `IsContinued` 为 true 时必须指定 Connection 的一个 ContinuationTerminalId，并由用户选择 Energized 或 Unknown；ContinuationDescription 可保存图外去向，不做自动推导。
+- Pole、附属设备和 Connection 的绝对位置、相对位置及 Route 分别保存在独立 Layout 中，移动不改变端点、安装关系或支撑顺序。
 - WorkScope 由两个 BoundaryPoint 生成边界标记和说明，不通过画布矩形反向生成模型。
 - GroundingPoint 由用户选定 Terminal 后创建；画布、JPG 和打印共享同一工作地线图元与编号显示规则。
 - 修改 WorkScope、OperationState 或 ElectricalState 均不得自动创建、删除或移动 GroundingPoint。

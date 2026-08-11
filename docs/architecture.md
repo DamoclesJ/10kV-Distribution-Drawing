@@ -242,11 +242,15 @@ flowchart TB
 
 #### 连接（Connection）
 
-连接只引用两端或多端的端子，不用画布线段是否相交来判断电气连接。连接应区分电缆、架空线路、母线、封闭母线、低压线路和临时电缆等类型，并保存名称、电压等级、在运状态及线路属性。
+当前 MVP 的 Connection 只引用两个 External Terminal，不用画布线段是否相交来判断电气连接。分支通过 Junction Terminal 或显式 ElectricalNode 组织为多条 Connection，不把 Connection 扩展成多端线。Connection 保存端点和通用电气属性；类型专属属性由一对一明细对象保存。
 
 连接线的折点属于布局数据。用户移动折点不应改变连接的电气含义；只有执行“断开连接”命令才改变拓扑。
 
-架空系统以 `Pole` 为基础对象。柱上开关和电缆终端通过 `PoleAttachment` 表达安装关系，不能作为悬空设备存在。`CableTermination` 分别提供电缆侧和架空侧端子，作为电缆与架空线路的转换点。架空线路仍使用 `Connection`，保存线路型号、可选长度和经过杆塔顺序；图面省略后续线路时，通过 `IsContinued`、人工设置的 `ContinuationState` 及文字说明表达，不自动推导图外线路状态。
+架空系统以 `Pole` 为基础对象。为保持 phase-1.2 冻结后的 DeviceType 和 Terminal 所有者体系，Pole 继续作为 `DeviceType.Pole` 的顶层 Device，但杆体不导电、不保存状态；只有按需创建的架空锚点 Terminal 和显式 ElectricalNode 参与拓扑。中间支撑杆只由线路的有序 SupportPoleIds 引用，不因此自动获得端子。
+
+柱上 SwitchDevice 和 CableTermination 通过独立 `PoleAttachment` 表达安装关系，不能作为悬空设备存在。PoleAttachment 不表示导通，也不保存相对坐标；附属设备相对位置属于 Layout。CableTermination 分别提供只允许 Cable 和 OverheadLine 的两侧端子，并用设备内部固定 ElectricalNode 表达转换点导通。
+
+架空线路采用 `Connection + OverheadLine 明细` 的一对一组合，不继承或替代 Connection。Connection 唯一保存两个端点、名称、电压和人工 ElectricalState；OverheadLine 保存线路型号、可选实际长度、有序 SupportPoleIds，以及 IsContinued、ContinuationTerminalId、人工 ContinuationState 和可选说明。延续状态只描述图外省略部分，不覆盖当前线路状态，也不自动推导图外线路状态。
 
 #### 工作地线（GroundingPoint）
 
