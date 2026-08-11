@@ -2,6 +2,7 @@ using System.Windows;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -12,10 +13,14 @@ public partial class MainWindow : Window
 {
     private readonly DrawingSceneRenderer _renderer = new();
     private readonly DrawingSceneBuilder _sceneBuilder = new();
+    private readonly DocumentCoordinateSystem _coordinates = new();
+    private readonly SelectionManager _selectionManager = new();
+    private DrawingScene? _currentScene;
 
     public MainWindow()
     {
         InitializeComponent();
+        _selectionManager.SelectionChanged += OnSelectionChanged;
     }
 
     private void OnDrawTestContent(object sender, RoutedEventArgs e)
@@ -65,12 +70,13 @@ public partial class MainWindow : Window
             [connection],
             [overheadLine]);
 
-        double pixelsPerDip = VisualTreeHelper.GetDpi(DrawingSurface).PixelsPerDip;
-        DrawingSurface.Show(_renderer.Render(scene, pixelsPerDip));
+        ShowScene(scene);
     }
 
     private void OnClearDrawing(object sender, RoutedEventArgs e)
     {
+        _currentScene = null;
+        _selectionManager.Clear();
         DrawingSurface.Clear();
     }
 
@@ -80,8 +86,52 @@ public partial class MainWindow : Window
         RingCabinetLayout layout = CreateMixedRingCabinetLayout(cabinet);
         DrawingScene scene = _sceneBuilder.Build(cabinet, layout);
 
+        ShowScene(scene);
+    }
+
+    private void OnDrawingSurfaceMouseLeftButtonDown(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_currentScene is null)
+        {
+            return;
+        }
+
+        System.Windows.Point point = e.GetPosition(DrawingSurface);
+        var documentPoint = new DocumentPoint(
+            _coordinates.DipToMillimeters(point.X),
+            _coordinates.DipToMillimeters(point.Y));
+        _selectionManager.Select(_currentScene.HitTestIndex.HitTest(documentPoint));
+        e.Handled = true;
+    }
+
+    private void OnSelectionChanged(object? sender, EventArgs e)
+    {
+        RenderCurrentScene();
+    }
+
+    private void ShowScene(DrawingScene scene)
+    {
+        _currentScene = scene;
+        _selectionManager.Clear();
+        RenderCurrentScene();
+    }
+
+    private void RenderCurrentScene()
+    {
+        if (_currentScene is null)
+        {
+            return;
+        }
+
+        var elements = _currentScene.Elements.ToList();
+        elements.AddRange(
+            SelectionOverlayBuilder.CreateElements(
+                _currentScene.HitTestIndex,
+                _selectionManager.Selected));
         double pixelsPerDip = VisualTreeHelper.GetDpi(DrawingSurface).PixelsPerDip;
-        DrawingSurface.Show(_renderer.Render(scene, pixelsPerDip));
+        DrawingSurface.Show(_renderer.Render(new DrawingScene(elements), pixelsPerDip));
     }
 
     private static RingCabinet CreateMixedRingCabinet()

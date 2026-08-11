@@ -26,7 +26,8 @@
             Background="#FFF"
             BorderBrush="#D0D0D0"
             BorderThickness="1">
-      <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface" />
+      <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
+                                         MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown" />
     </Border>
   </DockPanel>
 </Window>

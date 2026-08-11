@@ -20,6 +20,11 @@ public sealed class DocumentCoordinateSystem
         return millimeters / MillimetersPerInch * DipsPerInch;
     }
 
+    public double DipToMillimeters(double dips)
+    {
+        return dips / DipsPerInch * MillimetersPerInch;
+    }
+
     public Point ToPoint(DocumentPoint point)
     {
         return new Point(

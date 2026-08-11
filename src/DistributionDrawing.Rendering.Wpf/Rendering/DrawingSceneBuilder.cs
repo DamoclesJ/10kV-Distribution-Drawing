@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols;
@@ -30,8 +31,64 @@ public sealed class DrawingSceneBuilder
         ArgumentNullException.ThrowIfNull(cabinet);
         ArgumentNullException.ThrowIfNull(layout);
 
+        var hitTestEntries = new List<SelectionHitTestEntry>
+        {
+            new(
+                new SelectionReference(SelectionTargetKind.RingCabinet, cabinet.Id),
+                new DocumentRect(
+                    layout.Position.XMillimeters,
+                    layout.Position.YMillimeters,
+                    layout.WidthMillimeters,
+                    layout.HeightMillimeters),
+                10)
+        };
+
+        foreach (RingCabinetInterval interval in cabinet.Intervals)
+        {
+            if (!layout.IntervalLayouts.TryGetValue(
+                    interval.IntervalId,
+                    out RingCabinetIntervalLayout intervalLayout))
+            {
+                throw new InvalidOperationException(
+                    $"No layout exists for interval '{interval.IntervalId}'.");
+            }
+
+            DocumentPoint intervalOrigin = new(
+                layout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters,
+                layout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters);
+            hitTestEntries.Add(
+                new SelectionHitTestEntry(
+                    new SelectionReference(
+                        SelectionTargetKind.RingCabinetInterval,
+                        interval.IntervalId,
+                        cabinet.Id),
+                    new DocumentRect(
+                        intervalOrigin.XMillimeters,
+                        intervalOrigin.YMillimeters,
+                        intervalLayout.WidthMillimeters,
+                        intervalLayout.HeightMillimeters),
+                    20));
+
+            foreach (RingCabinetSwitchLayout switchLayout in intervalLayout.SwitchLayouts.Values)
+            {
+                hitTestEntries.Add(
+                    new SelectionHitTestEntry(
+                        new SelectionReference(
+                            SelectionTargetKind.Device,
+                            switchLayout.SwitchDeviceId,
+                            interval.IntervalId),
+                        new DocumentRect(
+                            intervalOrigin.XMillimeters + switchLayout.RelativePosition.XMillimeters,
+                            intervalOrigin.YMillimeters + switchLayout.RelativePosition.YMillimeters,
+                            switchLayout.WidthMillimeters,
+                            switchLayout.HeightMillimeters),
+                        40));
+            }
+        }
+
         return new DrawingScene(
-            _ringCabinetSymbol.CreateElements(cabinet, layout));
+            _ringCabinetSymbol.CreateElements(cabinet, layout),
+            new SelectionHitTestIndex(hitTestEntries));
     }
 
     public DrawingScene Build(
@@ -84,6 +141,7 @@ public sealed class DrawingSceneBuilder
         ArgumentNullException.ThrowIfNull(overheadLines);
 
         var elements = new List<SceneElement>();
+        var hitTestEntries = new List<SelectionHitTestEntry>();
         var poleById = poles.ToDictionary(pole => pole.Id);
         var deviceById = devices.ToDictionary(device => device.Id);
         var connectionById = connections?.ToDictionary(connection => connection.Id);
@@ -114,6 +172,13 @@ public sealed class DrawingSceneBuilder
             elements.AddRange(
                 _symbolLibrary.CreateOverheadLineSegment(
                     OverheadLineSegment.From(overheadLine, lineLayout)));
+            hitTestEntries.Add(
+                new SelectionHitTestEntry(
+                    new SelectionReference(
+                        SelectionTargetKind.Connection,
+                        overheadLine.ConnectionId),
+                    CreateBounds(lineLayout.Start, lineLayout.End, 3),
+                    10));
         }
 
         foreach (Pole pole in poleById.Values)
@@ -125,6 +190,15 @@ public sealed class DrawingSceneBuilder
             }
 
             elements.AddRange(_poleSymbol.CreateElements(pole, poleLayout));
+            hitTestEntries.Add(
+                new SelectionHitTestEntry(
+                    new SelectionReference(SelectionTargetKind.Device, pole.Id),
+                    new DocumentRect(
+                        poleLayout.Position.XMillimeters,
+                        poleLayout.Position.YMillimeters,
+                        poleLayout.WidthMillimeters,
+                        poleLayout.HeightMillimeters),
+                    20));
         }
 
         foreach (PoleAttachment attachment in attachments)
@@ -158,8 +232,32 @@ public sealed class DrawingSceneBuilder
                     attachedDevice,
                     poleLayout,
                     attachmentLayout));
+            hitTestEntries.Add(
+                new SelectionHitTestEntry(
+                    new SelectionReference(
+                        SelectionTargetKind.PoleAttachment,
+                        attachment.AttachmentId,
+                        attachment.PoleId),
+                    new DocumentRect(
+                        poleLayout.Position.XMillimeters + attachmentLayout.Offset.XMillimeters,
+                        poleLayout.Position.YMillimeters + attachmentLayout.Offset.YMillimeters,
+                        attachmentLayout.WidthMillimeters,
+                        attachmentLayout.HeightMillimeters),
+                    40));
         }
 
-        return new DrawingScene(elements);
+        return new DrawingScene(elements, new SelectionHitTestIndex(hitTestEntries));
+    }
+
+    private static DocumentRect CreateBounds(
+        DocumentPoint first,
+        DocumentPoint second,
+        double paddingMillimeters)
+    {
+        double minX = Math.Min(first.XMillimeters, second.XMillimeters) - paddingMillimeters;
+        double minY = Math.Min(first.YMillimeters, second.YMillimeters) - paddingMillimeters;
+        double maxX = Math.Max(first.XMillimeters, second.XMillimeters) + paddingMillimeters;
+        double maxY = Math.Max(first.YMillimeters, second.YMillimeters) + paddingMillimeters;
+        return new DocumentRect(minX, minY, maxX - minX, maxY - minY);
     }
 }

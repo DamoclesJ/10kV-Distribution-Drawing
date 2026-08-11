@@ -23,6 +23,11 @@ public sealed class DrawingVisualHost : FrameworkElement
         _visuals.Clear();
     }
 
+    protected override void OnRender(DrawingContext drawingContext)
+    {
+        drawingContext.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize));
+    }
+
     protected override int VisualChildrenCount => _visuals.Count;
 
     protected override Visual GetVisualChild(int index)
