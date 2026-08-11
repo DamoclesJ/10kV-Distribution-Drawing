@@ -4,7 +4,7 @@ namespace DistributionDrawing.Infrastructure.Persistence;
 
 /// <summary>
 /// Minimal project lifecycle state used until the full editor session is implemented.
-/// It contains restored Domain and persistence-neutral Layout state, but no
+/// It contains restored Domain, Professional, and persistence-neutral Layout state, but no
 /// Rendering, Selection, or Undo state.
 /// </summary>
 public sealed record ProjectSession
@@ -19,6 +19,7 @@ public sealed record ProjectSession
             document,
             domain,
             ProjectLayoutSnapshot.Empty(domain.Id),
+            ProjectProfessionalSnapshot.Empty(domain.Id),
             isDirty)
     {
     }
@@ -29,16 +30,35 @@ public sealed record ProjectSession
         DrawingDocument domain,
         ProjectLayoutSnapshot layout,
         bool isDirty)
+        : this(
+            filePath,
+            document,
+            domain,
+            layout,
+            ProjectProfessionalSnapshot.Empty(domain.Id),
+            isDirty)
+    {
+    }
+
+    public ProjectSession(
+        string filePath,
+        ProjectFileDocument document,
+        DrawingDocument domain,
+        ProjectLayoutSnapshot layout,
+        ProjectProfessionalSnapshot professional,
+        bool isDirty)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(professional);
 
         FilePath = Path.GetFullPath(filePath);
         Document = document;
         Domain = domain;
         Layout = layout;
+        Professional = professional;
         IsDirty = isDirty;
     }
 
@@ -49,6 +69,8 @@ public sealed record ProjectSession
     public DrawingDocument Domain { get; }
 
     public ProjectLayoutSnapshot Layout { get; init; }
+
+    public ProjectProfessionalSnapshot Professional { get; init; }
 
     public ProjectFileManifest Manifest => Document.Manifest;
 

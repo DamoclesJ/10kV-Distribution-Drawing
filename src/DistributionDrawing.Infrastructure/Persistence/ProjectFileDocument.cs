@@ -4,7 +4,8 @@ public sealed record ProjectFileDocument(
     ProjectFileManifest Manifest,
     ProjectFileMetadata Metadata,
     ProjectDomainDto? Domain = null,
-    ProjectLayoutDto? Layout = null)
+    ProjectLayoutDto? Layout = null,
+    ProjectProfessionalDto? Professional = null)
 {
     public static ProjectFileDocument CreateEmpty(
         Guid projectId,
@@ -18,6 +19,7 @@ public sealed record ProjectFileDocument(
             ProjectFileManifest.Create(projectId, created, created),
             metadata,
             ProjectDomainDto.Empty(projectId, metadata.Title),
-            ProjectLayoutDto.Empty(projectId));
+            ProjectLayoutDto.Empty(projectId),
+            ProjectProfessionalDto.Empty(projectId));
     }
 }

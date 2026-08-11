@@ -38,7 +38,18 @@ public sealed class ProjectFileContainer
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(document);
-        ValidateDocument(document);
+
+        ValidateManifest(document.Manifest);
+        ProjectFileDocument normalizedDocument = document with
+        {
+            Manifest = document.Manifest with
+            {
+                FormatVersion = ProjectFileFormat.CurrentVersion
+            },
+            Professional = document.Professional ??
+                ProjectProfessionalDto.Empty(document.Manifest.ProjectId)
+        };
+        ValidateDocument(normalizedDocument);
 
         string targetPath = Path.GetFullPath(filePath);
         string? directory = Path.GetDirectoryName(targetPath);
@@ -52,11 +63,11 @@ public sealed class ProjectFileContainer
             directory,
             $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
 
-        ProjectFileManifest manifest = document.Manifest with
+        ProjectFileManifest manifest = normalizedDocument.Manifest with
         {
             SavedAtUtc = DateTimeOffset.UtcNow
         };
-        ProjectFileDocument savedDocument = document with { Manifest = manifest };
+        ProjectFileDocument savedDocument = normalizedDocument with { Manifest = manifest };
 
         try
         {
@@ -75,7 +86,8 @@ public sealed class ProjectFileContainer
                         savedDocument.Manifest.ProjectId,
                         savedDocument.Metadata,
                         savedDocument.Domain,
-                        savedDocument.Layout));
+                        savedDocument.Layout,
+                        savedDocument.Professional));
             }
 
             File.Move(temporaryPath, targetPath, overwrite: true);
@@ -137,11 +149,34 @@ public sealed class ProjectFileContainer
                 "Layout document ID does not match the project manifest.");
         }
 
+        if (manifest.FormatVersion == ProjectFileFormat.CurrentVersion &&
+            payload.Professional is null)
+        {
+            throw new InvalidDataException(
+                "The current project format requires a Professional section.");
+        }
+
+        ProjectProfessionalDto professional = manifest.FormatVersion ==
+            ProjectFileFormat.PreviousVersion
+            ? ProjectProfessionalDto.Empty(manifest.ProjectId)
+            : payload.Professional!;
+        if (professional.DocumentId != manifest.ProjectId)
+        {
+            throw new InvalidDataException(
+                "Professional document ID does not match the project manifest.");
+        }
+
+        ProjectFileManifest effectiveManifest = manifest.FormatVersion ==
+            ProjectFileFormat.PreviousVersion
+            ? manifest with { FormatVersion = ProjectFileFormat.CurrentVersion }
+            : manifest;
+
         return new ProjectFileDocument(
-            manifest,
+            effectiveManifest,
             payload.Metadata,
             payload.Domain,
-            payload.Layout);
+            payload.Layout,
+            professional);
     }
 
     private static void WriteJsonEntry<T>(ZipArchive archive, string entryName, T value)
@@ -182,6 +217,13 @@ public sealed class ProjectFileContainer
             throw new InvalidDataException(
                 "Layout document ID does not match the project manifest.");
         }
+
+        if (document.Professional is not { } professional ||
+            professional.DocumentId != document.Manifest.ProjectId)
+        {
+            throw new InvalidDataException(
+                "Professional document identity does not match the project manifest.");
+        }
     }
 
     private static void ValidateManifest(ProjectFileManifest manifest)
@@ -191,7 +233,8 @@ public sealed class ProjectFileContainer
             throw new InvalidDataException($"Unsupported project format '{manifest.FormatId}'.");
         }
 
-        if (manifest.FormatVersion != ProjectFileFormat.CurrentVersion)
+        if (manifest.FormatVersion != ProjectFileFormat.PreviousVersion &&
+            manifest.FormatVersion != ProjectFileFormat.CurrentVersion)
         {
             throw new InvalidDataException(
                 $"Unsupported project format version '{manifest.FormatVersion}'.");
@@ -247,5 +290,6 @@ public sealed class ProjectFileContainer
         Guid ProjectId,
         ProjectFileMetadata Metadata,
         ProjectDomainDto? Domain,
-        ProjectLayoutDto? Layout);
+        ProjectLayoutDto? Layout,
+        ProjectProfessionalDto? Professional = null);
 }

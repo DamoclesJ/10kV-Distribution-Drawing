@@ -3,9 +3,8 @@ using DistributionDrawing.Domain.Documents;
 namespace DistributionDrawing.Infrastructure.Persistence;
 
 /// <summary>
-/// Coordinates the project create, save, and load lifecycle.
-/// This phase persists Domain and external topology data only; Layout and editor state
-/// remain out of scope.
+/// Coordinates the project create, save, and load lifecycle, including the
+/// persistence-neutral Professional snapshot.
 /// </summary>
 public sealed class ProjectService
 {
@@ -35,8 +34,15 @@ public sealed class ProjectService
             createdAtUtc);
 
         DrawingDocument domain = RestoreDomain(document);
+        ProjectProfessionalSnapshot professional = RestoreProfessional(document, domain);
         ProjectLayoutSnapshot layout = RestoreLayout(document, domain);
-        ProjectSession candidate = new(filePath, document, domain, layout, isDirty: false);
+        ProjectSession candidate = new(
+            filePath,
+            document,
+            domain,
+            layout,
+            professional,
+            isDirty: false);
         Current = candidate;
         return candidate;
     }
@@ -51,7 +57,8 @@ public sealed class ProjectService
                 current.Domain.Title,
                 current.Metadata.Description),
             Domain = ProjectDomainMapper.ToDto(current.Domain),
-            Layout = ProjectLayoutMapper.ToDto(current.Domain, current.Layout)
+            Layout = ProjectLayoutMapper.ToDto(current.Domain, current.Layout),
+            Professional = ProjectProfessionalMapper.ToDto(current.Domain)
         };
         _container.Save(current.FilePath, snapshot);
 
@@ -59,12 +66,16 @@ public sealed class ProjectService
         // manifest timestamps and validates the complete container round trip.
         ProjectFileDocument persistedDocument = _container.Open(current.FilePath);
         DrawingDocument domain = RestoreDomain(persistedDocument);
+        ProjectProfessionalSnapshot professional = RestoreProfessional(
+            persistedDocument,
+            domain);
         ProjectLayoutSnapshot layout = RestoreLayout(persistedDocument, domain);
         ProjectSession candidate = new(
             current.FilePath,
             persistedDocument,
             domain,
             layout,
+            professional,
             isDirty: false);
 
         Current = candidate;
@@ -78,8 +89,15 @@ public sealed class ProjectService
         // Build and validate the candidate before replacing the current session.
         ProjectFileDocument document = _container.Open(filePath);
         DrawingDocument domain = RestoreDomain(document);
+        ProjectProfessionalSnapshot professional = RestoreProfessional(document, domain);
         ProjectLayoutSnapshot layout = RestoreLayout(document, domain);
-        ProjectSession candidate = new(filePath, document, domain, layout, isDirty: false);
+        ProjectSession candidate = new(
+            filePath,
+            document,
+            domain,
+            layout,
+            professional,
+            isDirty: false);
         Current = candidate;
         return candidate;
     }
@@ -130,5 +148,12 @@ public sealed class ProjectService
         DrawingDocument domain)
     {
         return ProjectLayoutMapper.ToSnapshot(domain, document.Layout);
+    }
+
+    private static ProjectProfessionalSnapshot RestoreProfessional(
+        ProjectFileDocument document,
+        DrawingDocument domain)
+    {
+        return ProjectProfessionalMapper.ToSnapshot(domain, document.Professional);
     }
 }
