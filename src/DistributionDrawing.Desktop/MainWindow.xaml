@@ -11,7 +11,12 @@
   <DockPanel>
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="文件" />
-      <MenuItem Header="编辑" />
+      <MenuItem Header="编辑">
+        <MenuItem Header="撤销"
+                  Click="OnUndo" />
+        <MenuItem Header="重做"
+                  Click="OnRedo" />
+      </MenuItem>
       <MenuItem Header="视图">
         <MenuItem Header="绘制测试内容"
                   Click="OnDrawTestContent" />
@@ -56,6 +61,17 @@
                      Foreground="#666"
                      Text="{Binding ObjectTitle}"
                      TextWrapping="Wrap" />
+          <StackPanel x:Name="PoleNumberEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="杆号" />
+            <TextBox x:Name="PoleNumberInput"
+                     Margin="0,4,0,4" />
+            <Button Content="应用杆号"
+                    Click="OnApplyPoleNumber" />
+          </StackPanel>
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Sections}">
               <ItemsControl.ItemTemplate>

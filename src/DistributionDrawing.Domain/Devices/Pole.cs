@@ -48,9 +48,19 @@ public sealed class Pole : Device
     {
     }
 
-    public string PoleNumber { get; }
+    public string PoleNumber { get; private set; }
 
     public PoleType PoleType { get; }
+
+    public void RenamePoleNumber(string poleNumber)
+    {
+        if (string.IsNullOrWhiteSpace(poleNumber))
+        {
+            throw new ArgumentException("Pole number is required.", nameof(poleNumber));
+        }
+
+        PoleNumber = poleNumber.Trim();
+    }
 
     public IReadOnlySet<Guid> OverheadAnchorTerminalIds => _overheadAnchorTerminalIds;
 

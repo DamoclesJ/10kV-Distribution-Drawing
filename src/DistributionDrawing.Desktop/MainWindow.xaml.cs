@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly DocumentCoordinateSystem _coordinates = new();
     private readonly SelectionManager _selectionManager = new();
     private readonly CommandStack _commandStack = new();
+    private readonly PropertyEditor _propertyEditor;
     private readonly PoleLayoutEditor _poleLayoutEditor = new();
     private readonly SelectionObjectResolver _selectionResolver = new();
     private readonly PropertyProjector _propertyProjector = new();
@@ -27,6 +28,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _propertyEditor = new(_selectionResolver, _commandStack);
         PropertyInspectorPanel.DataContext = _propertyInspector;
         _selectionManager.SelectionChanged += OnSelectionChanged;
     }
@@ -101,7 +103,24 @@ public partial class MainWindow : Window
         _selectionResolver.SetSource(null);
         _selectionManager.Clear();
         _propertyInspector.Clear();
+        PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
         DrawingSurface.Clear();
+    }
+
+    private void OnUndo(object sender, RoutedEventArgs e)
+    {
+        if (_commandStack.Undo())
+        {
+            RefreshDrawingScene();
+        }
+    }
+
+    private void OnRedo(object sender, RoutedEventArgs e)
+    {
+        if (_commandStack.Redo())
+        {
+            RefreshDrawingScene();
+        }
     }
 
     private void OnDrawRingCabinetComposition(object sender, RoutedEventArgs e)
@@ -195,7 +214,45 @@ public partial class MainWindow : Window
         _propertyInspector.Apply(
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
+        UpdatePoleNumberEditor();
         RenderCurrentScene();
+    }
+
+    private void OnApplyPoleNumber(object sender, RoutedEventArgs e)
+    {
+        if (_selectionManager.Selected is not { } target)
+        {
+            return;
+        }
+
+        PropertyEditResult result = _propertyEditor.TryEdit(
+            target,
+            PropertyCommandFactory.PoleNumberPropertyKey,
+            PoleNumberInput.Text);
+        if (!result.IsSuccess)
+        {
+            MessageBox.Show(
+                result.ErrorMessage,
+                "属性修改失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        RefreshDrawingScene();
+    }
+
+    private void UpdatePoleNumberEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.Pole is not { } pole)
+        {
+            PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        PoleNumberEditorPanel.Visibility = Visibility.Visible;
+        PoleNumberInput.Text = pole.PoleNumber;
     }
 
     private void ShowScene(DrawingScene scene, PropertyInspectionSource source)
@@ -239,6 +296,7 @@ public partial class MainWindow : Window
         _propertyInspector.Apply(
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
+        UpdatePoleNumberEditor();
         RenderCurrentScene();
     }
 
