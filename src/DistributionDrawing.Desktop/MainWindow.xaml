@@ -22,12 +22,71 @@
       </MenuItem>
     </Menu>
 
-    <Border Margin="12"
-            Background="#FFF"
-            BorderBrush="#D0D0D0"
-            BorderThickness="1">
-      <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
-                                         MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown" />
-    </Border>
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition />
+        <ColumnDefinition Width="300" />
+      </Grid.ColumnDefinitions>
+
+      <Border Grid.Column="0"
+              Margin="12"
+              Background="#FFF"
+              BorderBrush="#D0D0D0"
+              BorderThickness="1">
+        <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
+                                           MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown" />
+      </Border>
+
+      <Border x:Name="PropertyInspectorPanel"
+              Grid.Column="1"
+              Margin="0,12,12,12"
+              Padding="10"
+              Background="#FFF"
+              BorderBrush="#D0D0D0"
+              BorderThickness="1">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top"
+                     FontSize="16"
+                     FontWeight="SemiBold"
+                     Text="{Binding ObjectType}" />
+          <TextBlock DockPanel.Dock="Top"
+                     Margin="0,4,0,10"
+                     Foreground="#666"
+                     Text="{Binding ObjectTitle}"
+                     TextWrapping="Wrap" />
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Sections}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Expander Header="{Binding Title}"
+                            IsExpanded="True"
+                            Margin="0,0,0,6">
+                    <ItemsControl ItemsSource="{Binding Properties}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="110" />
+                              <ColumnDefinition />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Foreground="#555"
+                                       Text="{Binding DisplayName}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding DisplayValue}"
+                                       TextWrapping="Wrap" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Expander>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Grid>
   </DockPanel>
 </Window>

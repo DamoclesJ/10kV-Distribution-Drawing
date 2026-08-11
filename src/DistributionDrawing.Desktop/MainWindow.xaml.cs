@@ -4,6 +4,7 @@ using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -15,11 +16,15 @@ public partial class MainWindow : Window
     private readonly DrawingSceneBuilder _sceneBuilder = new();
     private readonly DocumentCoordinateSystem _coordinates = new();
     private readonly SelectionManager _selectionManager = new();
+    private readonly SelectionObjectResolver _selectionResolver = new();
+    private readonly PropertyProjector _propertyProjector = new();
+    private readonly PropertyInspectorViewModel _propertyInspector = new();
     private DrawingScene? _currentScene;
 
     public MainWindow()
     {
         InitializeComponent();
+        PropertyInspectorPanel.DataContext = _propertyInspector;
         _selectionManager.SelectionChanged += OnSelectionChanged;
     }
 
@@ -70,13 +75,25 @@ public partial class MainWindow : Window
             [connection],
             [overheadLine]);
 
-        ShowScene(scene);
+        ShowScene(
+            scene,
+            new PropertyInspectionSource
+            {
+                DrawingLayout = layout,
+                Poles = [firstPole, secondPole],
+                PoleAttachments = [attachment],
+                Connections = [connection],
+                OverheadLines = [overheadLine],
+                HitTestIndex = scene.HitTestIndex
+            });
     }
 
     private void OnClearDrawing(object sender, RoutedEventArgs e)
     {
         _currentScene = null;
+        _selectionResolver.SetSource(null);
         _selectionManager.Clear();
+        _propertyInspector.Clear();
         DrawingSurface.Clear();
     }
 
@@ -86,7 +103,14 @@ public partial class MainWindow : Window
         RingCabinetLayout layout = CreateMixedRingCabinetLayout(cabinet);
         DrawingScene scene = _sceneBuilder.Build(cabinet, layout);
 
-        ShowScene(scene);
+        ShowScene(
+            scene,
+            new PropertyInspectionSource
+            {
+                RingCabinet = cabinet,
+                RingCabinetLayout = layout,
+                HitTestIndex = scene.HitTestIndex
+            });
     }
 
     private void OnDrawingSurfaceMouseLeftButtonDown(
@@ -108,13 +132,18 @@ public partial class MainWindow : Window
 
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
+        _propertyInspector.Apply(
+            _propertyProjector.Project(
+                _selectionResolver.Resolve(_selectionManager.Selected)));
         RenderCurrentScene();
     }
 
-    private void ShowScene(DrawingScene scene)
+    private void ShowScene(DrawingScene scene, PropertyInspectionSource source)
     {
         _currentScene = scene;
+        _selectionResolver.SetSource(source);
         _selectionManager.Clear();
+        _propertyInspector.Clear();
         RenderCurrentScene();
     }
 
