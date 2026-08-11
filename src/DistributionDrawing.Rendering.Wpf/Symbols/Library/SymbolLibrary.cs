@@ -24,6 +24,8 @@ public sealed class SymbolLibrary
         Register(new SwitchSymbolDefinition(SymbolKind.GroundSwitch));
         Register(new SwitchSymbolDefinition(SymbolKind.DropoutFuse));
         Register(new CableTerminationSymbolDefinition());
+        Register(new FrameSymbolDefinition(SymbolKind.RingCabinet));
+        Register(new FrameSymbolDefinition(SymbolKind.RingCabinetInterval));
     }
 
     public IReadOnlyCollection<SymbolKind> RegisteredKinds => _definitions.Keys.ToArray();
@@ -221,6 +223,13 @@ public sealed class SymbolLibrary
             throw new InvalidOperationException(
                 "Only SwitchDevice or CableTermination can use an attachment symbol.");
         }
+
+        return ResolveSwitchKind(switchDevice);
+    }
+
+    public static SymbolKind ResolveSwitchKind(SwitchDevice switchDevice)
+    {
+        ArgumentNullException.ThrowIfNull(switchDevice);
 
         return switchDevice.SwitchKind switch
         {

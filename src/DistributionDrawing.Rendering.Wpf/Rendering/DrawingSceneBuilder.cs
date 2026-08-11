@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -12,12 +13,25 @@ public sealed class DrawingSceneBuilder
     private readonly SymbolLibrary _symbolLibrary;
     private readonly PoleSymbol _poleSymbol;
     private readonly AttachmentSymbol _attachmentSymbol;
+    private readonly RingCabinetSymbol _ringCabinetSymbol;
 
     public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
     {
         _symbolLibrary = symbolLibrary ?? new SymbolLibrary();
         _poleSymbol = new PoleSymbol(_symbolLibrary);
         _attachmentSymbol = new AttachmentSymbol(_symbolLibrary);
+        _ringCabinetSymbol = new RingCabinetSymbol(_symbolLibrary);
+    }
+
+    public DrawingScene Build(
+        RingCabinet cabinet,
+        RingCabinetLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(cabinet);
+        ArgumentNullException.ThrowIfNull(layout);
+
+        return new DrawingScene(
+            _ringCabinetSymbol.CreateElements(cabinet, layout));
     }
 
     public DrawingScene Build(
