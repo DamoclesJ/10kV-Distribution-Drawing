@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private readonly DrawingSceneBuilder _sceneBuilder = new();
     private readonly DocumentCoordinateSystem _coordinates = new();
     private readonly SelectionManager _selectionManager = new();
+    private readonly CommandStack _commandStack = new();
     private readonly PoleLayoutEditor _poleLayoutEditor = new();
     private readonly SelectionObjectResolver _selectionResolver = new();
     private readonly PropertyProjector _propertyProjector = new();
@@ -140,7 +141,7 @@ public partial class MainWindow : Window
             _activeSource?.DrawingLayout is { } layout &&
             layout.Poles.TryGetValue(target.ObjectId, out PoleLayout poleLayout))
         {
-            _poleLayoutEditor.BeginDrag(target, documentPoint, poleLayout);
+            _poleLayoutEditor.BeginDrag(target, documentPoint, poleLayout, layout);
             DrawingSurface.CaptureMouse();
         }
 
@@ -182,7 +183,7 @@ public partial class MainWindow : Window
         DrawingSurface.ReleaseMouseCapture();
         if (command is not null)
         {
-            command.Execute(layout);
+            _commandStack.ExecuteCommand(command);
             RefreshDrawingScene();
         }
 

@@ -16,10 +16,12 @@ public sealed class PoleLayoutEditor
     public void BeginDrag(
         SelectionReference target,
         DocumentPoint pointer,
-        PoleLayout layout)
+        PoleLayout layout,
+        DrawingLayout documentLayout)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(documentLayout);
 
         if (target.Kind != SelectionTargetKind.Device ||
             target.ObjectId != layout.PoleId)
@@ -29,7 +31,13 @@ public sealed class PoleLayoutEditor
                 nameof(target));
         }
 
-        _drag = new DragState(target, pointer, layout, layout, DragPhase.Armed);
+        _drag = new DragState(
+            target,
+            pointer,
+            layout,
+            layout,
+            documentLayout,
+            DragPhase.Armed);
     }
 
     public PoleLayout UpdatePreview(DocumentPoint pointer)
@@ -57,7 +65,10 @@ public sealed class PoleLayoutEditor
         }
 
         _drag = null;
-        return new MoveCommand(drag.StartLayout, drag.CurrentLayout);
+        return new MoveCommand(
+            drag.DocumentLayout,
+            drag.StartLayout,
+            drag.CurrentLayout);
     }
 
     public PoleLayout? Cancel()
@@ -76,6 +87,7 @@ public sealed class PoleLayoutEditor
         DocumentPoint StartPointer,
         PoleLayout StartLayout,
         PoleLayout CurrentLayout,
+        DrawingLayout DocumentLayout,
         DragPhase Phase);
 
     private enum DragPhase
