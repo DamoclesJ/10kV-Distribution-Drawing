@@ -12,6 +12,8 @@ public sealed class DrawingDocument
     private readonly List<ElectricalNode> _electricalNodes = [];
     private readonly List<SwitchAssembly> _switchAssemblies = [];
     private readonly List<Connection> _connections = [];
+    private readonly List<PoleAttachment> _poleAttachments = [];
+    private readonly List<OverheadLine> _overheadLines = [];
     private readonly HashSet<Guid> _internalAggregateOwnerIds = [];
 
     public DrawingDocument(Guid id, string title)
@@ -43,6 +45,10 @@ public sealed class DrawingDocument
     public IReadOnlyList<SwitchAssembly> SwitchAssemblies => _switchAssemblies;
 
     public IReadOnlyList<Connection> Connections => _connections;
+
+    public IReadOnlyList<PoleAttachment> PoleAttachments => _poleAttachments;
+
+    public IReadOnlyList<OverheadLine> OverheadLines => _overheadLines;
 
     public void Rename(string title)
     {
@@ -78,6 +84,18 @@ public sealed class DrawingDocument
                 "A switch device must use the SwitchDevice domain type.");
         }
 
+        if (device.Type == DeviceType.Pole && device is not Pole)
+        {
+            throw new InvalidOperationException(
+                "A pole device must use the Pole domain type.");
+        }
+
+        if (device.Type == DeviceType.CableTermination && device is not CableTermination)
+        {
+            throw new InvalidOperationException(
+                "A cable termination device must use the CableTermination domain type.");
+        }
+
         if (device.ParentId is Guid parentId &&
             !_internalAggregateOwnerIds.Contains(parentId))
         {
@@ -94,6 +112,22 @@ public sealed class DrawingDocument
 
         EnsureObjectIdIsAvailable(electricalNode.Id, nameof(ElectricalNode));
         EnsureTopologyOwnerExists(electricalNode.OwnerType, electricalNode.OwnerId);
+
+        if (electricalNode.OwnerType == TopologyOwnerType.Device &&
+            _devices.Single(device => device.Id == electricalNode.OwnerId) is CableTermination termination &&
+            !termination.OwnsInternalNode(electricalNode.Id))
+        {
+            throw new InvalidOperationException(
+                $"Electrical node '{electricalNode.Id}' is not declared by cable termination '{termination.Id}'.");
+        }
+
+        if (electricalNode.OwnerType == TopologyOwnerType.Device &&
+            _devices.Single(device => device.Id == electricalNode.OwnerId) is CableTermination cableTermination &&
+            electricalNode.Type != ElectricalNodeType.Intermediate)
+        {
+            throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' internal node must be an intermediate node.");
+        }
 
         _electricalNodes.Add(electricalNode);
     }
@@ -114,6 +148,53 @@ public sealed class DrawingDocument
                 throw new InvalidOperationException(
                     $"Terminal '{terminal.Id}' is not declared by switch '{owner.Id}'.");
             }
+
+            if (owner is Pole pole && !pole.OwnsTerminal(terminal.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Terminal '{terminal.Id}' is not declared by pole '{owner.Id}'.");
+            }
+
+            if (owner is CableTermination cableTermination &&
+                !cableTermination.OwnsTerminal(terminal.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Terminal '{terminal.Id}' is not declared by cable termination '{owner.Id}'.");
+            }
+
+            if (owner is CableTermination termination &&
+                terminal.ElectricalNodeId != termination.InternalNodeId)
+            {
+                throw new InvalidOperationException(
+                    $"Cable termination terminal '{terminal.Id}' must reference its internal node.");
+            }
+
+            if (owner is CableTermination cableTermination &&
+                terminal.Id == cableTermination.CableSideTerminalId)
+            {
+                EnsureTerminalPolicy(
+                    terminal,
+                    ConnectionType.Cable,
+                    "Cable termination cable-side terminal");
+            }
+
+            if (owner is CableTermination overheadTermination &&
+                terminal.Id == overheadTermination.OverheadSideTerminalId)
+            {
+                EnsureTerminalPolicy(
+                    terminal,
+                    ConnectionType.OverheadLine,
+                    "Cable termination overhead-side terminal");
+            }
+
+            if (owner is Pole)
+            {
+                EnsureTerminalPolicy(
+                    terminal,
+                    ConnectionType.OverheadLine,
+                    "Pole anchor terminal",
+                    allowMultipleConnections: true);
+            }
         }
 
         ElectricalNode? electricalNode = null;
@@ -123,6 +204,24 @@ public sealed class DrawingDocument
             electricalNode = _electricalNodes.FirstOrDefault(node => node.Id == electricalNodeId)
                 ?? throw new InvalidOperationException(
                     $"Electrical node '{electricalNodeId}' does not exist.");
+
+            if (terminal.OwnerType == TopologyOwnerType.Device &&
+                _devices.Single(device => device.Id == terminal.OwnerId) is Pole pole &&
+                (electricalNode.OwnerType != TopologyOwnerType.Device ||
+                 electricalNode.OwnerId != pole.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Pole terminal '{terminal.Id}' must reference a node owned by pole '{pole.Id}'.");
+            }
+
+            if (terminal.OwnerType == TopologyOwnerType.Device &&
+                _devices.Single(device => device.Id == terminal.OwnerId) is CableTermination termination &&
+                (electricalNode.OwnerType != TopologyOwnerType.Device ||
+                 electricalNode.OwnerId != termination.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Cable termination terminal '{terminal.Id}' must reference a node owned by cable termination '{termination.Id}'.");
+            }
         }
 
         _terminals.Add(terminal);
@@ -142,6 +241,80 @@ public sealed class DrawingDocument
         EnsureTerminalAcceptsConnection(end, connection);
 
         _connections.Add(connection);
+    }
+
+    public void AddPoleAttachment(PoleAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+
+        EnsureObjectIdIsAvailable(attachment.AttachmentId, nameof(PoleAttachment));
+
+        if (_devices.FirstOrDefault(device => device.Id == attachment.PoleId) is not Pole)
+        {
+            throw new InvalidOperationException(
+                $"Pole '{attachment.PoleId}' does not exist.");
+        }
+
+        Device attachedDevice = _devices.FirstOrDefault(
+                device => device.Id == attachment.AttachedDeviceId)
+            ?? throw new InvalidOperationException(
+                $"Attached device '{attachment.AttachedDeviceId}' does not exist.");
+
+        if (attachedDevice is not SwitchDevice and not CableTermination)
+        {
+            throw new InvalidOperationException(
+                "Only pole SwitchDevice or CableTermination can be attached to a pole.");
+        }
+
+        if (attachedDevice is SwitchDevice switchDevice &&
+            switchDevice.InstallationType != SwitchInstallationType.Pole)
+        {
+            throw new InvalidOperationException(
+                $"Switch '{switchDevice.Id}' is not a pole-installed switch.");
+        }
+
+        if (_poleAttachments.Any(existing =>
+                existing.AttachedDeviceId == attachment.AttachedDeviceId))
+        {
+            throw new InvalidOperationException(
+                $"Device '{attachment.AttachedDeviceId}' is already attached to a pole.");
+        }
+
+        _poleAttachments.Add(attachment);
+    }
+
+    public void AddOverheadLine(OverheadLine overheadLine)
+    {
+        ArgumentNullException.ThrowIfNull(overheadLine);
+
+        if (_overheadLines.Any(existing => existing.ConnectionId == overheadLine.ConnectionId))
+        {
+            throw new InvalidOperationException(
+                $"Connection '{overheadLine.ConnectionId}' already has an overhead line detail.");
+        }
+
+        Connection connection = _connections.FirstOrDefault(
+                existing => existing.Id == overheadLine.ConnectionId)
+            ?? throw new InvalidOperationException(
+                $"Connection '{overheadLine.ConnectionId}' does not exist.");
+
+        overheadLine.ValidateAgainst(connection);
+
+        foreach (Guid poleId in overheadLine.SupportPoleIds)
+        {
+            if (_devices.FirstOrDefault(device => device.Id == poleId) is not Pole)
+            {
+                throw new InvalidOperationException(
+                    $"Support pole '{poleId}' does not exist.");
+            }
+        }
+
+        ValidateOverheadEndpoint(connection.StartTerminalId, overheadLine.SupportPoleIds[0]);
+        ValidateOverheadEndpoint(
+            connection.EndTerminalId,
+            overheadLine.SupportPoleIds[^1]);
+
+        _overheadLines.Add(overheadLine);
     }
 
     private Terminal GetTerminal(Guid terminalId)
@@ -220,6 +393,7 @@ public sealed class DrawingDocument
             _electricalNodes.Any(node => node.Id == objectId) ||
             _switchAssemblies.Any(assembly => assembly.AssemblyId == objectId) ||
             _connections.Any(connection => connection.Id == objectId) ||
+            _poleAttachments.Any(attachment => attachment.AttachmentId == objectId) ||
             _internalAggregateOwnerIds.Contains(objectId))
         {
             throw new InvalidOperationException($"{objectName} ID '{objectId}' is already in use.");
@@ -249,5 +423,55 @@ public sealed class DrawingDocument
             throw new InvalidOperationException(
                 $"Terminal '{terminal.Id}' already has a connection.");
         }
+    }
+
+    private static void EnsureTerminalPolicy(
+        Terminal terminal,
+        ConnectionType allowedConnectionType,
+        string terminalDescription,
+        bool allowMultipleConnections = false)
+    {
+        if (!terminal.IsExternal ||
+            !allowMultipleConnections && terminal.AllowsMultipleConnections ||
+            !terminal.AllowedConnectionTypes.SetEquals([allowedConnectionType]))
+        {
+            throw new InvalidOperationException(
+                $"{terminalDescription} '{terminal.Id}' has an invalid connection policy.");
+        }
+    }
+
+    private void ValidateOverheadEndpoint(Guid terminalId, Guid expectedPoleId)
+    {
+        Terminal terminal = GetTerminal(terminalId);
+
+        if (terminal.OwnerType != TopologyOwnerType.Device)
+        {
+            return;
+        }
+
+        Device owner = _devices.Single(device => device.Id == terminal.OwnerId);
+
+        Guid? physicalPoleId = owner switch
+        {
+            Pole pole => pole.Id,
+            CableTermination termination => GetAttachedPoleId(termination.Id),
+            SwitchDevice switchDevice when switchDevice.InstallationType == SwitchInstallationType.Pole =>
+                GetAttachedPoleId(switchDevice.Id),
+            _ => null
+        };
+
+        if (physicalPoleId is Guid poleId && poleId != expectedPoleId)
+        {
+            throw new InvalidOperationException(
+                $"Overhead line endpoint '{terminalId}' is not physically located at support pole '{expectedPoleId}'.");
+        }
+    }
+
+    private Guid GetAttachedPoleId(Guid deviceId)
+    {
+        return _poleAttachments.FirstOrDefault(
+                attachment => attachment.AttachedDeviceId == deviceId)?.PoleId
+            ?? throw new InvalidOperationException(
+                $"Device '{deviceId}' must be attached to a pole before it is used by an overhead line.");
     }
 }
