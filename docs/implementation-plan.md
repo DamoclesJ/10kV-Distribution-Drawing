@@ -1,7 +1,7 @@
 # 10kV 配电工作票附图软件技术实现方案
 
-> 文档状态：M2-C 架空线路 Layout 与 Rendering 设计<br>
-> 编制日期：2026-08-10<br>
+> 文档状态：M2-D-3 环网柜 Rendering 阶段总结<br>
+> 编制日期：2026-08-11<br>
 > 目标平台：Windows 桌面<br>
 > 输入依据：`README.md`、`docs/requirements.md`、`docs/architecture.md`、`docs/equipment-model.md`、`docs/ring-cabinet-design.md`、`docs/drawing-rule.md`
 
@@ -17,7 +17,7 @@
 - `docs/architecture.md` 已定义模块化单体、设备—端子—连接模型、状态与表现分离、规则校验和本地工程文件方向。
 - `docs/ring-cabinet-design.md` 已定义普通负荷开关型、一二次融合型、PT、DTU、间隔、端子及设备独立状态。
 - `docs/drawing-rule.md` 已整理配电工作票和现场勘察附图的颜色、标注、接地、工作范围和图元规则。
-- 当前 Domain 已完成 M2-B-1 架空线路与杆塔基础模型，以及 M2-B-2 对应 Domain 测试代码；本阶段只继续定义其 Layout 与 Rendering 映射。
+- 当前已完成 M2-B 架空线路与杆塔基础 Domain 模型及测试、M2-C Layout 与 Rendering 设计，以及 M2-D-3 环网柜基础组合渲染；后续继续完善尚未实现的专业图元与编辑、保存和输出能力。
 
 本文以 `docs/requirements.md` 已确认的 MVP 范围及现有配电专业模型、规则为边界。未被需求基线明确列为 MVP 必须实现的能力，均作为后续候选或待确认项，不作为第一阶段交付承诺。操作系统版本、安装方式、纸张、导出分辨率等技术建议，仍应在 MVP 开始前通过目标单位的实际电脑、打印机和真实脱敏图纸验证。
 
@@ -661,7 +661,7 @@ Windows 自带“Microsoft Print to PDF”可作为一种打印机参与测试�
 
 ### 当前里程碑状态
 
-当前阶段：**M2-C 架空线路 Layout 与 Rendering 设计。**
+当前阶段：**M2-D-3 环网柜 Rendering 阶段已完成。**
 
 已完成：
 
@@ -678,17 +678,23 @@ Windows 自带“Microsoft Print to PDF”可作为一种打印机参与测试�
 - 环网柜 Domain 测试。
 - M2-B-1 架空线路与杆塔基础 Domain 模型。
 - M2-B-2 架空线路与杆塔 Domain 测试代码。
+- `RingCabinetSymbol` 柜体外框、主母线及间隔组合渲染。
+- `LoadSwitchIntervalSymbol` 普通负荷开关间隔渲染。
+- `IntegratedFeederIntervalSymbol` 一二次融合间隔渲染，并支持三种接地结构的图形布局。
+- 普通负荷开关间隔与一二次融合间隔在同一混合环网柜中的组合显示。
+- 环网柜图元对现有 `SymbolLibrary`、`SymbolRenderContext` 和基础 `SwitchSymbol` 的复用。
+- Desktop 环网柜组合演示场景。
 
-当前 M2-C 尚未实现：
+当前尚未实现：
 
-- `PoleLayout`、`AttachmentLayout`、`OverheadLineLayout` 实现。
-- `PoleSymbol`、`AttachmentSymbol` 和架空线路 `LineSegment` 图元。
-- Domain 到 `DrawingScene` 的场景生成器。
-- 架空线路的 WPF 绘制、交互命中和布局编辑。
-- 工作范围。
-- 工作地线。
+- `PTInterval` 图元及组合渲染。
+- `DTU` 柜体布局与渲染。
+- 画布编辑功能。
+- 工程保存与重新打开。
+- 打印及打印预览。
+- 自动布局。
 
-下一阶段：**M2-C Layout 与 Rendering 实现。**
+下一阶段：继续完成 M2 图元库和渲染内核中尚未实现的专业图元与输出基础能力；具体实施顺序按后续里程碑任务确定。
 
 以下顺序保留为第一阶段实施基线。
 
