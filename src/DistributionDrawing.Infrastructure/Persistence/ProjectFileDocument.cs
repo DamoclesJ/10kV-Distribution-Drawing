@@ -3,7 +3,8 @@ namespace DistributionDrawing.Infrastructure.Persistence;
 public sealed record ProjectFileDocument(
     ProjectFileManifest Manifest,
     ProjectFileMetadata Metadata,
-    ProjectDomainDto? Domain = null)
+    ProjectDomainDto? Domain = null,
+    ProjectLayoutDto? Layout = null)
 {
     public static ProjectFileDocument CreateEmpty(
         Guid projectId,
@@ -16,6 +17,7 @@ public sealed record ProjectFileDocument(
         return new ProjectFileDocument(
             ProjectFileManifest.Create(projectId, created, created),
             metadata,
-            ProjectDomainDto.Empty(projectId, metadata.Title));
+            ProjectDomainDto.Empty(projectId, metadata.Title),
+            ProjectLayoutDto.Empty(projectId));
     }
 }

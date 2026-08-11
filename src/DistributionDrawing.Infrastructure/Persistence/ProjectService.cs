@@ -35,7 +35,8 @@ public sealed class ProjectService
             createdAtUtc);
 
         DrawingDocument domain = RestoreDomain(document);
-        ProjectSession candidate = new(filePath, document, domain, isDirty: false);
+        ProjectLayoutSnapshot layout = RestoreLayout(document, domain);
+        ProjectSession candidate = new(filePath, document, domain, layout, isDirty: false);
         Current = candidate;
         return candidate;
     }
@@ -49,7 +50,8 @@ public sealed class ProjectService
             Metadata = new ProjectFileMetadata(
                 current.Domain.Title,
                 current.Metadata.Description),
-            Domain = ProjectDomainMapper.ToDto(current.Domain)
+            Domain = ProjectDomainMapper.ToDto(current.Domain),
+            Layout = ProjectLayoutMapper.ToDto(current.Domain, current.Layout)
         };
         _container.Save(current.FilePath, snapshot);
 
@@ -57,10 +59,12 @@ public sealed class ProjectService
         // manifest timestamps and validates the complete container round trip.
         ProjectFileDocument persistedDocument = _container.Open(current.FilePath);
         DrawingDocument domain = RestoreDomain(persistedDocument);
+        ProjectLayoutSnapshot layout = RestoreLayout(persistedDocument, domain);
         ProjectSession candidate = new(
             current.FilePath,
             persistedDocument,
             domain,
+            layout,
             isDirty: false);
 
         Current = candidate;
@@ -74,7 +78,8 @@ public sealed class ProjectService
         // Build and validate the candidate before replacing the current session.
         ProjectFileDocument document = _container.Open(filePath);
         DrawingDocument domain = RestoreDomain(document);
-        ProjectSession candidate = new(filePath, document, domain, isDirty: false);
+        ProjectLayoutSnapshot layout = RestoreLayout(document, domain);
+        ProjectSession candidate = new(filePath, document, domain, layout, isDirty: false);
         Current = candidate;
         return candidate;
     }
@@ -91,6 +96,21 @@ public sealed class ProjectService
         return candidate;
     }
 
+    public ProjectSession SetLayout(ProjectLayoutSnapshot layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+
+        ProjectSession current = RequireCurrent();
+        ProjectLayoutMapper.ToDto(current.Domain, layout);
+        ProjectSession candidate = current with
+        {
+            Layout = layout,
+            IsDirty = true
+        };
+        Current = candidate;
+        return candidate;
+    }
+
     private ProjectSession RequireCurrent()
     {
         return Current
@@ -103,5 +123,12 @@ public sealed class ProjectService
             document.Manifest.ProjectId,
             document.Metadata.Title);
         return ProjectDomainMapper.ToDomain(domain);
+    }
+
+    private static ProjectLayoutSnapshot RestoreLayout(
+        ProjectFileDocument document,
+        DrawingDocument domain)
+    {
+        return ProjectLayoutMapper.ToSnapshot(domain, document.Layout);
     }
 }

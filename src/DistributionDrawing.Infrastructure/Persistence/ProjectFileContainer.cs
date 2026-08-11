@@ -74,7 +74,8 @@ public sealed class ProjectFileContainer
                     new ProjectFilePayload(
                         savedDocument.Manifest.ProjectId,
                         savedDocument.Metadata,
-                        savedDocument.Domain));
+                        savedDocument.Domain,
+                        savedDocument.Layout));
             }
 
             File.Move(temporaryPath, targetPath, overwrite: true);
@@ -129,7 +130,18 @@ public sealed class ProjectFileContainer
                 "Domain document identity does not match the project manifest and metadata.");
         }
 
-        return new ProjectFileDocument(manifest, payload.Metadata, payload.Domain);
+        if (payload.Layout is { } layout &&
+            layout.DocumentId != manifest.ProjectId)
+        {
+            throw new InvalidDataException(
+                "Layout document ID does not match the project manifest.");
+        }
+
+        return new ProjectFileDocument(
+            manifest,
+            payload.Metadata,
+            payload.Domain,
+            payload.Layout);
     }
 
     private static void WriteJsonEntry<T>(ZipArchive archive, string entryName, T value)
@@ -162,6 +174,13 @@ public sealed class ProjectFileContainer
         {
             throw new InvalidDataException(
                 "Domain document identity does not match the project manifest and metadata.");
+        }
+
+        if (document.Layout is { } layout &&
+            layout.DocumentId != document.Manifest.ProjectId)
+        {
+            throw new InvalidDataException(
+                "Layout document ID does not match the project manifest.");
         }
     }
 
@@ -227,5 +246,6 @@ public sealed class ProjectFileContainer
     private sealed record ProjectFilePayload(
         Guid ProjectId,
         ProjectFileMetadata Metadata,
-        ProjectDomainDto? Domain);
+        ProjectDomainDto? Domain,
+        ProjectLayoutDto? Layout);
 }

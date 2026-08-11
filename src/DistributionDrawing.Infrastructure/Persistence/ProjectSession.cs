@@ -4,7 +4,8 @@ namespace DistributionDrawing.Infrastructure.Persistence;
 
 /// <summary>
 /// Minimal project lifecycle state used until the full editor session is implemented.
-/// It contains the restored Domain model, but no Layout, Rendering, Selection, or Undo state.
+/// It contains restored Domain and persistence-neutral Layout state, but no
+/// Rendering, Selection, or Undo state.
 /// </summary>
 public sealed record ProjectSession
 {
@@ -13,14 +14,31 @@ public sealed record ProjectSession
         ProjectFileDocument document,
         DrawingDocument domain,
         bool isDirty)
+        : this(
+            filePath,
+            document,
+            domain,
+            ProjectLayoutSnapshot.Empty(domain.Id),
+            isDirty)
+    {
+    }
+
+    public ProjectSession(
+        string filePath,
+        ProjectFileDocument document,
+        DrawingDocument domain,
+        ProjectLayoutSnapshot layout,
+        bool isDirty)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(layout);
 
         FilePath = Path.GetFullPath(filePath);
         Document = document;
         Domain = domain;
+        Layout = layout;
         IsDirty = isDirty;
     }
 
@@ -29,6 +47,8 @@ public sealed record ProjectSession
     public ProjectFileDocument Document { get; }
 
     public DrawingDocument Domain { get; }
+
+    public ProjectLayoutSnapshot Layout { get; init; }
 
     public ProjectFileManifest Manifest => Document.Manifest;
 
