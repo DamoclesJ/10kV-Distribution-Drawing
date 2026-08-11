@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Devices.SwitchAssemblies;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 
 namespace DistributionDrawing.Domain.Documents;
@@ -14,6 +15,8 @@ public sealed class DrawingDocument
     private readonly List<Connection> _connections = [];
     private readonly List<PoleAttachment> _poleAttachments = [];
     private readonly List<OverheadLine> _overheadLines = [];
+    private readonly List<WorkScope> _workScopes = [];
+    private readonly List<GroundingPoint> _groundingPoints = [];
     private readonly HashSet<Guid> _internalAggregateOwnerIds = [];
 
     public DrawingDocument(Guid id, string title)
@@ -49,6 +52,10 @@ public sealed class DrawingDocument
     public IReadOnlyList<PoleAttachment> PoleAttachments => _poleAttachments;
 
     public IReadOnlyList<OverheadLine> OverheadLines => _overheadLines;
+
+    public IReadOnlyList<WorkScope> WorkScopes => _workScopes;
+
+    public IReadOnlyList<GroundingPoint> GroundingPoints => _groundingPoints;
 
     public void Rename(string title)
     {
@@ -317,10 +324,230 @@ public sealed class DrawingDocument
         _overheadLines.Add(overheadLine);
     }
 
+    public WorkScope CreateWorkScope(
+        Guid workScopeId,
+        BoundaryPoint startBoundary,
+        BoundaryPoint endBoundary,
+        string description,
+        IEnumerable<Guid>? groundingPointIds = null)
+    {
+        WorkScope workScope = WorkScope.Create(
+            workScopeId,
+            startBoundary,
+            endBoundary,
+            description,
+            groundingPointIds);
+        AddWorkScope(workScope);
+        return workScope;
+    }
+
+    public void AddWorkScope(WorkScope workScope)
+    {
+        ArgumentNullException.ThrowIfNull(workScope);
+
+        EnsureObjectIdIsAvailable(workScope.WorkScopeId, nameof(WorkScope));
+        ValidateBoundaryPoint(workScope.StartBoundary);
+        ValidateBoundaryPoint(workScope.EndBoundary);
+        EnsureGroundingPointReferencesExist(workScope.GroundingPointIds);
+
+        _workScopes.Add(workScope);
+    }
+
+    public void UpdateWorkScope(
+        Guid workScopeId,
+        BoundaryPoint startBoundary,
+        BoundaryPoint endBoundary,
+        string description,
+        IEnumerable<Guid>? groundingPointIds = null)
+    {
+        WorkScope workScope = GetWorkScope(workScopeId);
+        WorkScope replacement = WorkScope.Create(
+            workScopeId,
+            startBoundary,
+            endBoundary,
+            description,
+            groundingPointIds);
+
+        ValidateBoundaryPoint(replacement.StartBoundary);
+        ValidateBoundaryPoint(replacement.EndBoundary);
+        EnsureGroundingPointReferencesExist(replacement.GroundingPointIds);
+        workScope.Update(
+            replacement.StartBoundary,
+            replacement.EndBoundary,
+            replacement.Description,
+            replacement.GroundingPointIds);
+    }
+
+    public void RemoveWorkScope(Guid workScopeId)
+    {
+        WorkScope workScope = GetWorkScope(workScopeId);
+        _workScopes.Remove(workScope);
+    }
+
+    public GroundingPoint CreateGroundingPoint(
+        Guid groundingPointId,
+        Guid terminalId,
+        string location,
+        string? number = null,
+        string? note = null)
+    {
+        GroundingPoint groundingPoint = GroundingPoint.Create(
+            groundingPointId,
+            terminalId,
+            location,
+            number,
+            note);
+        AddGroundingPoint(groundingPoint);
+        return groundingPoint;
+    }
+
+    public void AddGroundingPoint(GroundingPoint groundingPoint)
+    {
+        ArgumentNullException.ThrowIfNull(groundingPoint);
+
+        EnsureObjectIdIsAvailable(
+            groundingPoint.GroundingPointId,
+            nameof(GroundingPoint));
+        ValidateGroundingPointTerminal(groundingPoint.TerminalId);
+
+        if (_groundingPoints.Any(existing =>
+                existing.TerminalId == groundingPoint.TerminalId))
+        {
+            throw new InvalidOperationException(
+                $"Terminal '{groundingPoint.TerminalId}' already has a grounding point.");
+        }
+
+        _groundingPoints.Add(groundingPoint);
+    }
+
+    public void UpdateGroundingPoint(
+        Guid groundingPointId,
+        Guid terminalId,
+        string location,
+        string? number = null,
+        string? note = null)
+    {
+        GroundingPoint groundingPoint = GetGroundingPoint(groundingPointId);
+        GroundingPoint replacement = GroundingPoint.Create(
+            groundingPointId,
+            terminalId,
+            location,
+            number,
+            note);
+
+        ValidateGroundingPointTerminal(replacement.TerminalId);
+        if (_groundingPoints.Any(existing =>
+                existing.GroundingPointId != groundingPointId &&
+                existing.TerminalId == replacement.TerminalId))
+        {
+            throw new InvalidOperationException(
+                $"Terminal '{replacement.TerminalId}' already has a grounding point.");
+        }
+
+        groundingPoint.Update(
+            replacement.TerminalId,
+            replacement.Location,
+            replacement.Number,
+            replacement.Note);
+    }
+
+    public void RemoveGroundingPoint(Guid groundingPointId)
+    {
+        GroundingPoint groundingPoint = GetGroundingPoint(groundingPointId);
+        if (_workScopes.Any(workScope =>
+                workScope.GroundingPointIds.Contains(groundingPointId)))
+        {
+            throw new InvalidOperationException(
+                $"Grounding point '{groundingPointId}' is still referenced by a work scope.");
+        }
+
+        _groundingPoints.Remove(groundingPoint);
+    }
+
     private Terminal GetTerminal(Guid terminalId)
     {
         return _terminals.FirstOrDefault(terminal => terminal.Id == terminalId)
             ?? throw new InvalidOperationException($"Terminal '{terminalId}' does not exist.");
+    }
+
+    public WorkScope GetWorkScope(Guid workScopeId)
+    {
+        return _workScopes.FirstOrDefault(workScope => workScope.WorkScopeId == workScopeId)
+            ?? throw new InvalidOperationException(
+                $"Work scope '{workScopeId}' does not exist.");
+    }
+
+    public GroundingPoint GetGroundingPoint(Guid groundingPointId)
+    {
+        return _groundingPoints.FirstOrDefault(
+                groundingPoint => groundingPoint.GroundingPointId == groundingPointId)
+            ?? throw new InvalidOperationException(
+                $"Grounding point '{groundingPointId}' does not exist.");
+    }
+
+    private void ValidateBoundaryPoint(BoundaryPoint boundaryPoint)
+    {
+        ArgumentNullException.ThrowIfNull(boundaryPoint);
+
+        Device device = _devices.FirstOrDefault(candidate =>
+                candidate.Id == boundaryPoint.DeviceId)
+            ?? throw new InvalidOperationException(
+                $"Boundary device '{boundaryPoint.DeviceId}' does not exist.");
+
+        Terminal terminal = GetTerminal(boundaryPoint.TerminalId);
+        if (terminal.OwnerType == TopologyOwnerType.Device)
+        {
+            if (terminal.OwnerId != device.Id)
+            {
+                throw new InvalidOperationException(
+                    $"Boundary terminal '{terminal.Id}' is not owned by device '{device.Id}'.");
+            }
+
+            return;
+        }
+
+        if (terminal.OwnerType == TopologyOwnerType.InternalAggregate)
+        {
+            RingCabinetInterval? interval = _devices
+                .OfType<RingCabinet>()
+                .SelectMany(cabinet => cabinet.Intervals)
+                .SingleOrDefault(candidate => candidate.IntervalId == terminal.OwnerId);
+
+            if (interval is not null && interval.ParentCabinetId == device.Id)
+            {
+                return;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Boundary terminal '{terminal.Id}' is not owned by or contained in device '{device.Id}'.");
+    }
+
+    private void ValidateGroundingPointTerminal(Guid terminalId)
+    {
+        _ = GetTerminal(terminalId);
+    }
+
+    private void EnsureGroundingPointReferencesExist(IEnumerable<Guid> groundingPointIds)
+    {
+        ArgumentNullException.ThrowIfNull(groundingPointIds);
+
+        Guid[] ids = groundingPointIds.ToArray();
+        if (ids.Distinct().Count() != ids.Length)
+        {
+            throw new InvalidOperationException(
+                "A work scope cannot reference the same grounding point more than once.");
+        }
+
+        foreach (Guid groundingPointId in ids)
+        {
+            if (!_groundingPoints.Any(point =>
+                    point.GroundingPointId == groundingPointId))
+            {
+                throw new InvalidOperationException(
+                    $"Grounding point '{groundingPointId}' does not exist.");
+            }
+        }
     }
 
     private void AddRingCabinet(RingCabinet ringCabinet)
@@ -394,6 +621,8 @@ public sealed class DrawingDocument
             _switchAssemblies.Any(assembly => assembly.AssemblyId == objectId) ||
             _connections.Any(connection => connection.Id == objectId) ||
             _poleAttachments.Any(attachment => attachment.AttachmentId == objectId) ||
+            _workScopes.Any(workScope => workScope.WorkScopeId == objectId) ||
+            _groundingPoints.Any(point => point.GroundingPointId == objectId) ||
             _internalAggregateOwnerIds.Contains(objectId))
         {
             throw new InvalidOperationException($"{objectName} ID '{objectId}' is already in use.");
