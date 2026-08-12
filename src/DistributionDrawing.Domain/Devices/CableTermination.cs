@@ -5,6 +5,10 @@ public sealed class CableTermination : Device
     private const string TenKilovolts = "10kV";
     private readonly Guid[] _terminalIds;
 
+    public const string CableSideRole = "CableSide";
+
+    public const string OverheadSideRole = "OverheadSide";
+
     public CableTermination(
         Guid id,
         Guid cableSideTerminalId,

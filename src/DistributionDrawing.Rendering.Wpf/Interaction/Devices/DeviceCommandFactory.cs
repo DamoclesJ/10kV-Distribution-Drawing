@@ -11,13 +11,20 @@ public sealed class DeviceCommandFactory
 {
     private readonly RingCabinetCreationFactory _ringCabinetCreationFactory;
     private readonly RingCabinetLayoutFactory _ringCabinetLayoutFactory;
+    private readonly CableTerminationAttachmentCreationFactory
+        _cableTerminationAttachmentCreationFactory;
 
     public DeviceCommandFactory(
         RingCabinetCreationFactory? ringCabinetCreationFactory = null,
-        RingCabinetLayoutFactory? ringCabinetLayoutFactory = null)
+        RingCabinetLayoutFactory? ringCabinetLayoutFactory = null,
+        CableTerminationAttachmentCreationFactory?
+            cableTerminationAttachmentCreationFactory = null)
     {
         _ringCabinetCreationFactory = ringCabinetCreationFactory ?? new RingCabinetCreationFactory();
         _ringCabinetLayoutFactory = ringCabinetLayoutFactory ?? new RingCabinetLayoutFactory();
+        _cableTerminationAttachmentCreationFactory =
+            cableTerminationAttachmentCreationFactory ??
+            new CableTerminationAttachmentCreationFactory();
     }
 
     public AddPoleCommand CreateAddPole(
@@ -55,6 +62,69 @@ public sealed class DeviceCommandFactory
             runtimeLayout,
             cabinet,
             _ringCabinetLayoutFactory.Create(cabinet, position));
+    }
+
+    public AddCableTerminationAttachmentCommand CreateAddCableTerminationAttachment(
+        DrawingDocument document,
+        RuntimeLayoutDocument runtimeLayout,
+        Guid poleId,
+        string? displayName,
+        DocumentPoint attachmentOffset)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+
+        CableTerminationAttachmentCreation creation =
+            _cableTerminationAttachmentCreationFactory.Create(
+                poleId,
+                displayName,
+                attachmentOffset);
+        return new AddCableTerminationAttachmentCommand(
+            document,
+            runtimeLayout,
+            creation);
+    }
+
+    public RemoveCableTerminationAttachmentCommand CreateRemoveCableTerminationAttachment(
+        DrawingDocument document,
+        RuntimeLayoutDocument runtimeLayout,
+        Guid attachmentId)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+
+        PoleAttachment attachment = document.PoleAttachments.SingleOrDefault(candidate =>
+                candidate.AttachmentId == attachmentId)
+            ?? throw new InvalidOperationException(
+                $"Pole attachment '{attachmentId}' does not exist.");
+        CableTermination cableTermination = document.Devices.SingleOrDefault(candidate =>
+                candidate.Id == attachment.AttachedDeviceId) as CableTermination
+            ?? throw new InvalidOperationException(
+                $"Attachment '{attachmentId}' does not reference a cable termination.");
+        ElectricalNode internalNode = document.ElectricalNodes.SingleOrDefault(candidate =>
+                candidate.Id == cableTermination.InternalNodeId)
+            ?? throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' internal node is missing.");
+        Terminal cableSideTerminal = document.Terminals.SingleOrDefault(candidate =>
+                candidate.Id == cableTermination.CableSideTerminalId)
+            ?? throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' cable-side terminal is missing.");
+        Terminal overheadSideTerminal = document.Terminals.SingleOrDefault(candidate =>
+                candidate.Id == cableTermination.OverheadSideTerminalId)
+            ?? throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' overhead-side terminal is missing.");
+        AttachmentLayout layout = runtimeLayout.DrawingLayout.Attachments[attachmentId];
+
+        return new RemoveCableTerminationAttachmentCommand(
+            document,
+            runtimeLayout,
+            new CableTerminationAttachmentCreation(
+                cableTermination,
+                internalNode,
+                cableSideTerminal,
+                overheadSideTerminal,
+                attachment,
+                layout));
     }
 
     public ICommand CreateRemove(

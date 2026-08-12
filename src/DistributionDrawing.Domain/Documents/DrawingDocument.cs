@@ -405,6 +405,148 @@ public sealed class DrawingDocument
         _poleAttachments.Add(attachment);
     }
 
+    public void AddCableTerminationAttachment(
+        CableTermination cableTermination,
+        ElectricalNode internalNode,
+        Terminal cableSideTerminal,
+        Terminal overheadSideTerminal,
+        PoleAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(cableTermination);
+        ArgumentNullException.ThrowIfNull(internalNode);
+        ArgumentNullException.ThrowIfNull(cableSideTerminal);
+        ArgumentNullException.ThrowIfNull(overheadSideTerminal);
+        ArgumentNullException.ThrowIfNull(attachment);
+
+        ValidateCableTerminationAttachmentAggregate(
+            cableTermination,
+            internalNode,
+            cableSideTerminal,
+            overheadSideTerminal,
+            attachment);
+
+        Guid[] aggregateIds =
+        [
+            cableTermination.Id,
+            internalNode.Id,
+            cableSideTerminal.Id,
+            overheadSideTerminal.Id,
+            attachment.AttachmentId
+        ];
+        if (aggregateIds.Distinct().Count() != aggregateIds.Length)
+        {
+            throw new InvalidOperationException(
+                "Cable termination aggregate IDs must be unique.");
+        }
+
+        foreach (Guid aggregateId in aggregateIds)
+        {
+            EnsureObjectIdIsAvailable(aggregateId, "Cable termination aggregate");
+        }
+
+        if (_poleAttachments.Any(existing =>
+                existing.AttachedDeviceId == cableTermination.Id))
+        {
+            throw new InvalidOperationException(
+                $"Device '{cableTermination.Id}' is already attached to a pole.");
+        }
+
+        _devices.Add(cableTermination);
+        _electricalNodes.Add(internalNode);
+        _terminals.Add(cableSideTerminal);
+        _terminals.Add(overheadSideTerminal);
+        internalNode.AttachTerminal(cableSideTerminal.Id);
+        internalNode.AttachTerminal(overheadSideTerminal.Id);
+        _poleAttachments.Add(attachment);
+    }
+
+    public void RemoveCableTerminationAttachment(Guid attachmentId)
+    {
+        PoleAttachment attachment = _poleAttachments.SingleOrDefault(existing =>
+                existing.AttachmentId == attachmentId)
+            ?? throw new InvalidOperationException(
+                $"Pole attachment '{attachmentId}' does not exist.");
+        CableTermination cableTermination = _devices.SingleOrDefault(device =>
+                device.Id == attachment.AttachedDeviceId) as CableTermination
+            ?? throw new InvalidOperationException(
+                $"Attachment '{attachmentId}' does not reference a cable termination.");
+        ElectricalNode internalNode = _electricalNodes.SingleOrDefault(node =>
+                node.Id == cableTermination.InternalNodeId)
+            ?? throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' internal node is missing.");
+        Terminal cableSideTerminal = _terminals.SingleOrDefault(terminal =>
+                terminal.Id == cableTermination.CableSideTerminalId)
+            ?? throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' cable-side terminal is missing.");
+        Terminal overheadSideTerminal = _terminals.SingleOrDefault(terminal =>
+                terminal.Id == cableTermination.OverheadSideTerminalId)
+            ?? throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' overhead-side terminal is missing.");
+
+        ValidateCableTerminationAttachmentAggregate(
+            cableTermination,
+            internalNode,
+            cableSideTerminal,
+            overheadSideTerminal,
+            attachment);
+
+        if (_electricalNodes.Count(node => node.OwnerId == cableTermination.Id) != 1 ||
+            _terminals.Count(terminal => terminal.OwnerId == cableTermination.Id) != 2 ||
+            _poleAttachments.Count(existing =>
+                existing.AttachedDeviceId == cableTermination.Id) != 1)
+        {
+            throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' aggregate is incomplete or inconsistent.");
+        }
+
+        HashSet<Guid> terminalIds =
+        [
+            cableTermination.CableSideTerminalId,
+            cableTermination.OverheadSideTerminalId
+        ];
+        Connection[] referencedConnections = _connections
+            .Where(connection =>
+                terminalIds.Contains(connection.StartTerminalId) ||
+                terminalIds.Contains(connection.EndTerminalId))
+            .ToArray();
+        if (referencedConnections.Length > 0)
+        {
+            HashSet<Guid> connectionIds = referencedConnections
+                .Select(connection => connection.Id)
+                .ToHashSet();
+            if (_overheadLines.Any(line => connectionIds.Contains(line.ConnectionId)))
+            {
+                throw new InvalidOperationException(
+                    $"Cable termination '{cableTermination.Id}' is still referenced by an overhead line.");
+            }
+
+            throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' is still referenced by a connection.");
+        }
+
+        if (_groundingPoints.Any(point => terminalIds.Contains(point.TerminalId)))
+        {
+            throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' is still referenced by a grounding point.");
+        }
+
+        if (_workScopes.Any(scope =>
+                scope.StartBoundary.DeviceId == cableTermination.Id ||
+                scope.EndBoundary.DeviceId == cableTermination.Id ||
+                terminalIds.Contains(scope.StartBoundary.TerminalId) ||
+                terminalIds.Contains(scope.EndBoundary.TerminalId)))
+        {
+            throw new InvalidOperationException(
+                $"Cable termination '{cableTermination.Id}' is still referenced by a work scope.");
+        }
+
+        _poleAttachments.Remove(attachment);
+        _terminals.Remove(cableSideTerminal);
+        _terminals.Remove(overheadSideTerminal);
+        _electricalNodes.Remove(internalNode);
+        _devices.Remove(cableTermination);
+    }
+
     public void AddOverheadLine(OverheadLine overheadLine)
     {
         ArgumentNullException.ThrowIfNull(overheadLine);
@@ -736,6 +878,87 @@ public sealed class DrawingDocument
             throw new InvalidOperationException(
                 $"Topology owner '{ownerId}' of type '{ownerType}' does not exist.");
         }
+    }
+
+    private void ValidateCableTerminationAttachmentAggregate(
+        CableTermination cableTermination,
+        ElectricalNode internalNode,
+        Terminal cableSideTerminal,
+        Terminal overheadSideTerminal,
+        PoleAttachment attachment)
+    {
+        if (_devices.FirstOrDefault(device => device.Id == attachment.PoleId) is not Pole)
+        {
+            throw new InvalidOperationException(
+                $"Pole '{attachment.PoleId}' does not exist.");
+        }
+
+        if (attachment.AttachedDeviceId != cableTermination.Id)
+        {
+            throw new InvalidOperationException(
+                "Pole attachment must reference the cable termination.");
+        }
+
+        if (internalNode.Id != cableTermination.InternalNodeId ||
+            internalNode.Type != ElectricalNodeType.Intermediate ||
+            internalNode.OwnerType != TopologyOwnerType.Device ||
+            internalNode.OwnerId != cableTermination.Id)
+        {
+            throw new InvalidOperationException(
+                "Cable termination internal node is inconsistent with its device.");
+        }
+
+        HashSet<Guid> expectedTerminalIds =
+        [
+            cableTermination.CableSideTerminalId,
+            cableTermination.OverheadSideTerminalId
+        ];
+        if (internalNode.TerminalIds.Count != 0 &&
+            !internalNode.TerminalIds.SetEquals(expectedTerminalIds))
+        {
+            throw new InvalidOperationException(
+                "Cable termination internal node contains inconsistent terminals.");
+        }
+
+        ValidateCableTerminationTerminal(
+            cableTermination,
+            cableSideTerminal,
+            cableTermination.CableSideTerminalId,
+            CableTermination.CableSideRole,
+            ConnectionType.Cable);
+        ValidateCableTerminationTerminal(
+            cableTermination,
+            overheadSideTerminal,
+            cableTermination.OverheadSideTerminalId,
+            CableTermination.OverheadSideRole,
+            ConnectionType.OverheadLine);
+    }
+
+    private static void ValidateCableTerminationTerminal(
+        CableTermination cableTermination,
+        Terminal terminal,
+        Guid expectedTerminalId,
+        string expectedRole,
+        ConnectionType expectedConnectionType)
+    {
+        if (terminal.Id != expectedTerminalId ||
+            terminal.OwnerType != TopologyOwnerType.Device ||
+            terminal.OwnerId != cableTermination.Id ||
+            terminal.ElectricalNodeId != cableTermination.InternalNodeId ||
+            !string.Equals(terminal.Role, expectedRole, StringComparison.Ordinal) ||
+            !string.Equals(
+                terminal.VoltageLevel,
+                cableTermination.VoltageLevel,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Cable termination terminal '{terminal.Id}' is inconsistent with its device.");
+        }
+
+        EnsureTerminalPolicy(
+            terminal,
+            expectedConnectionType,
+            $"Cable termination {expectedRole} terminal");
     }
 
     private void EnsureObjectIdIsAvailable(Guid objectId, string objectName)

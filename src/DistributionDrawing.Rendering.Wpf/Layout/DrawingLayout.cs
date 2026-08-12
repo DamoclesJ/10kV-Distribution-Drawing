@@ -68,6 +68,17 @@ public sealed class DrawingLayout
         return layout;
     }
 
+    public AttachmentLayout RemoveAttachment(Guid attachmentId)
+    {
+        if (!_attachments.Remove(attachmentId, out AttachmentLayout? layout))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for attachment '{attachmentId}'.");
+        }
+
+        return layout;
+    }
+
     public OverheadLineLayout RemoveOverheadLine(Guid connectionId)
     {
         if (!_overheadLines.Remove(connectionId, out OverheadLineLayout? layout))
