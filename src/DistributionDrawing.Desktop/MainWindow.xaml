@@ -22,6 +22,7 @@
       <MenuItem Header="设备">
         <MenuItem Header="添加杆塔" Click="OnBeginPlacePole" />
         <MenuItem Header="添加环网柜" Click="OnBeginPlaceRingCabinet" />
+        <MenuItem Header="添加电缆终端" Click="OnAddCableTermination" />
         <MenuItem Header="绘制架空线" Click="OnBeginOverheadLine" />
         <MenuItem Header="取消放置" Click="OnCancelPlacement" />
         <Separator />

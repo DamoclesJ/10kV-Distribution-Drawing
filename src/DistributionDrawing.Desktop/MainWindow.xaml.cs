@@ -14,6 +14,7 @@ using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Desktop.ConnectionEditing;
+using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.Demo;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.RingCabinetCreation;
@@ -37,6 +38,7 @@ public partial class MainWindow : Window
     private readonly ProjectWorkspaceController _workspace;
     private readonly PlacementController _placement;
     private readonly OverheadLineConnectionController _overheadLineConnection;
+    private readonly CableTerminationAttachmentController _cableTerminationAttachment;
     private readonly DrawingToolCoordinator _drawingTools;
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
@@ -62,9 +64,12 @@ public partial class MainWindow : Window
         _placement = new PlacementController(() => _workspace.CurrentSession);
         _overheadLineConnection = new OverheadLineConnectionController(
             () => _workspace.CurrentSession);
+        _cableTerminationAttachment = new CableTerminationAttachmentController(
+            () => _workspace.CurrentSession);
         _drawingTools = new DrawingToolCoordinator(_placement, _overheadLineConnection);
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
+        _cableTerminationAttachment.SceneChanged += OnDrawingToolVisualChanged;
         _viewport.ViewChanged += OnViewportChanged;
         DrawingSurface.SetViewTransform(_viewport.Transform);
     }
@@ -97,6 +102,28 @@ public partial class MainWindow : Window
         CancelDeviceDrag();
         CancelProfessionalPicking();
         _drawingTools.BeginRingCabinet(dialog.Configuration);
+    }
+
+    private void OnAddCableTermination(object sender, RoutedEventArgs e)
+    {
+        var dialog = new CableTerminationCreationDialog { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        CancelDeviceDrag();
+        CancelProfessionalPicking();
+        _drawingTools.Cancel();
+
+        try
+        {
+            _cableTerminationAttachment.AddToSelectedPole(dialog.DisplayName);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ShowCommandError("无法添加电缆终端", exception.Message);
+        }
     }
 
     private void OnBeginOverheadLine(object sender, RoutedEventArgs e)
