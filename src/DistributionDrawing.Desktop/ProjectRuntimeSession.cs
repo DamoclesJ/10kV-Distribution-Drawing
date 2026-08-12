@@ -1,9 +1,11 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -203,12 +205,29 @@ internal static class ProjectLayoutRuntimeMapper
                 layout.WidthMillimeters,
                 layout.HeightMillimeters,
                 Point(layout.LabelOffset))).ToArray();
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            domain,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts);
         var overheadLines = runtime.DrawingLayout.OverheadLines.Values.Select(layout =>
-            new ProjectOverheadLineLayoutDto(
+        {
+            Connection connection = domain.Connections.SingleOrDefault(
+                    item => item.Id == layout.ConnectionId)
+                ?? throw new InvalidDataException(
+                    $"Connection '{layout.ConnectionId}' does not exist for layout snapshot.");
+            if (!anchors.TryGet(connection.StartTerminalId, out TerminalAnchor startAnchor) ||
+                !anchors.TryGet(connection.EndTerminalId, out TerminalAnchor endAnchor))
+            {
+                throw new InvalidDataException(
+                    $"Terminal anchors are missing for connection '{connection.Id}'.");
+            }
+
+            return new ProjectOverheadLineLayoutDto(
                 layout.ConnectionId,
-                Point(layout.Start),
-                Point(layout.End),
-                Point(layout.ContinuationOffset))).ToArray();
+                Point(startAnchor.Position),
+                Point(endAnchor.Position),
+                Point(layout.ContinuationOffset));
+        }).ToArray();
 
         return new ProjectLayoutSnapshot(new ProjectLayoutDto(
             domain.Id,

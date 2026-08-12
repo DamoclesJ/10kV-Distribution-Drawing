@@ -1,7 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
-using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -117,23 +116,6 @@ public sealed class TerminalAnchorIndex
                         origin.YMillimeters + intervalLayout.HeightMillimeters);
                 Set(anchors, interval.ExternalTerminalId, terminalPosition);
             }
-        }
-
-        // A connection layout is the most precise available position for its
-        // endpoint, so it takes precedence over the owning symbol fallback.
-        var connections = document.Connections.ToDictionary(connection => connection.Id);
-        foreach (OverheadLine overheadLine in document.OverheadLines)
-        {
-            if (!drawingLayout.OverheadLines.TryGetValue(
-                    overheadLine.ConnectionId,
-                    out OverheadLineLayout lineLayout) ||
-                !connections.TryGetValue(overheadLine.ConnectionId, out Connection connection))
-            {
-                continue;
-            }
-
-            Set(anchors, connection.StartTerminalId, lineLayout.Start);
-            Set(anchors, connection.EndTerminalId, lineLayout.End);
         }
 
         return new TerminalAnchorIndex(

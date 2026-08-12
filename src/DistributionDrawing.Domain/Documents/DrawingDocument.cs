@@ -323,10 +323,46 @@ public sealed class DrawingDocument
         Terminal start = GetTerminal(connection.StartTerminalId);
         Terminal end = GetTerminal(connection.EndTerminalId);
 
+        if (_connections.Any(existing =>
+                existing.UsesTerminal(connection.StartTerminalId) &&
+                existing.UsesTerminal(connection.EndTerminalId)))
+        {
+            throw new InvalidOperationException(
+                "A connection between the selected terminals already exists.");
+        }
+
+        if (start.OwnerType == end.OwnerType && start.OwnerId == end.OwnerId)
+        {
+            throw new InvalidOperationException(
+                "An external connection cannot connect two terminals of the same topology owner.");
+        }
+
+        if (start.ElectricalNodeId is Guid startNodeId &&
+            end.ElectricalNodeId == startNodeId)
+        {
+            throw new InvalidOperationException(
+                "An external connection cannot reconnect terminals on the same electrical node.");
+        }
+
         EnsureTerminalAcceptsConnection(start, connection);
         EnsureTerminalAcceptsConnection(end, connection);
 
         _connections.Add(connection);
+    }
+
+    public Connection RemoveConnection(Guid connectionId)
+    {
+        Connection connection = _connections.SingleOrDefault(existing => existing.Id == connectionId)
+            ?? throw new InvalidOperationException(
+                $"Connection '{connectionId}' does not exist.");
+        if (_overheadLines.Any(line => line.ConnectionId == connectionId))
+        {
+            throw new InvalidOperationException(
+                $"Connection '{connectionId}' still has an overhead-line detail.");
+        }
+
+        _connections.Remove(connection);
+        return connection;
     }
 
     public void AddPoleAttachment(PoleAttachment attachment)
@@ -401,6 +437,16 @@ public sealed class DrawingDocument
             overheadLine.SupportPoleIds[^1]);
 
         _overheadLines.Add(overheadLine);
+    }
+
+    public OverheadLine RemoveOverheadLine(Guid connectionId)
+    {
+        OverheadLine overheadLine = _overheadLines.SingleOrDefault(
+                existing => existing.ConnectionId == connectionId)
+            ?? throw new InvalidOperationException(
+                $"Overhead line '{connectionId}' does not exist.");
+        _overheadLines.Remove(overheadLine);
+        return overheadLine;
     }
 
     public WorkScope CreateWorkScope(

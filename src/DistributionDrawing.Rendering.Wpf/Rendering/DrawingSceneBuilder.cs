@@ -102,13 +102,18 @@ public sealed class DrawingSceneBuilder
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(layout);
 
-        DrawingScene baseScene = Build(
+        TerminalAnchorIndex terminalAnchors = TerminalAnchorIndex.Build(
+            document,
+            layout.DrawingLayout,
+            layout.RingCabinetLayouts);
+        DrawingScene baseScene = BuildCore(
             layout.DrawingLayout,
             document.Devices.OfType<Pole>(),
             document.PoleAttachments,
             document.Devices,
             document.Connections,
-            document.OverheadLines);
+            document.OverheadLines,
+            terminalAnchors);
 
         var elements = baseScene.Elements.ToList();
         var hitTestEntries = baseScene.HitTestIndex.Entries.ToList();
@@ -148,7 +153,8 @@ public sealed class DrawingSceneBuilder
             attachments,
             devices,
             connections: null,
-            overheadLines: overheadLines);
+            overheadLines: overheadLines,
+            terminalAnchors: null);
     }
 
     public DrawingScene Build(
@@ -167,7 +173,8 @@ public sealed class DrawingSceneBuilder
             attachments,
             devices,
             connections,
-            overheadLines);
+            overheadLines,
+            terminalAnchors: null);
     }
 
     private DrawingScene BuildCore(
@@ -176,7 +183,8 @@ public sealed class DrawingSceneBuilder
         IEnumerable<PoleAttachment> attachments,
         IEnumerable<Device> devices,
         IEnumerable<Connection>? connections,
-        IEnumerable<OverheadLine> overheadLines)
+        IEnumerable<OverheadLine> overheadLines,
+        TerminalAnchorIndex? terminalAnchors)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(poles);
@@ -200,6 +208,7 @@ public sealed class DrawingSceneBuilder
                     $"No layout exists for overhead line '{overheadLine.ConnectionId}'.");
             }
 
+            OverheadLineLayout effectiveLayout = lineLayout;
             if (connectionById is not null)
             {
                 if (!connectionById.TryGetValue(
@@ -211,17 +220,37 @@ public sealed class DrawingSceneBuilder
                 }
 
                 overheadLine.ValidateAgainst(connection);
+                if (terminalAnchors is not null)
+                {
+                    if (!terminalAnchors.TryGet(
+                            connection.StartTerminalId,
+                            out TerminalAnchor startAnchor) ||
+                        !terminalAnchors.TryGet(
+                            connection.EndTerminalId,
+                            out TerminalAnchor endAnchor))
+                    {
+                        throw new InvalidOperationException(
+                            $"No terminal anchor exists for overhead line '{overheadLine.ConnectionId}'.");
+                    }
+
+                    effectiveLayout = new OverheadLineLayout(
+                        lineLayout.ConnectionId,
+                        startAnchor.Position,
+                        endAnchor.Position,
+                        lineLayout.IsContinued,
+                        lineLayout.ContinuationOffset);
+                }
             }
 
             elements.AddRange(
                 _symbolLibrary.CreateOverheadLineSegment(
-                    OverheadLineSegment.From(overheadLine, lineLayout)));
+                    OverheadLineSegment.From(overheadLine, effectiveLayout)));
             hitTestEntries.Add(
                 new SelectionHitTestEntry(
                     new SelectionReference(
                         SelectionTargetKind.Connection,
                         overheadLine.ConnectionId),
-                    CreateBounds(lineLayout.Start, lineLayout.End, 3),
+                    CreateBounds(effectiveLayout.Start, effectiveLayout.End, 3),
                     10));
         }
 

@@ -67,4 +67,15 @@ public sealed class DrawingLayout
 
         return layout;
     }
+
+    public OverheadLineLayout RemoveOverheadLine(Guid connectionId)
+    {
+        if (!_overheadLines.Remove(connectionId, out OverheadLineLayout? layout))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for overhead line '{connectionId}'.");
+        }
+
+        return layout;
+    }
 }

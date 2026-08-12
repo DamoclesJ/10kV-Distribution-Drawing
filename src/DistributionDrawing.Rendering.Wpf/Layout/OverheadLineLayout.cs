@@ -27,8 +27,16 @@ public sealed record OverheadLineLayout
 
     public Guid ConnectionId { get; }
 
+    /// <summary>
+    /// Format-version-2 compatibility cache. Runtime rendering resolves the
+    /// endpoint from the connection's start Terminal anchor.
+    /// </summary>
     public DocumentPoint Start { get; }
 
+    /// <summary>
+    /// Format-version-2 compatibility cache. Runtime rendering resolves the
+    /// endpoint from the connection's end Terminal anchor.
+    /// </summary>
     public DocumentPoint End { get; }
 
     public bool IsContinued { get; }

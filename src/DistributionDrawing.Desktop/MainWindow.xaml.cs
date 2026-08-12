@@ -13,6 +13,8 @@ using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Desktop.Placement;
+using DistributionDrawing.Desktop.ConnectionEditing;
+using DistributionDrawing.Desktop.DrawingTools;
 
 namespace DistributionDrawing.Desktop;
 
@@ -31,6 +33,8 @@ public partial class MainWindow : Window
     private PropertyInspectorViewModel _propertyInspector = new();
     private readonly ProjectWorkspaceController _workspace;
     private readonly PlacementController _placement;
+    private readonly OverheadLineConnectionController _overheadLineConnection;
+    private readonly DrawingToolCoordinator _drawingTools;
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
@@ -53,7 +57,11 @@ public partial class MainWindow : Window
             EnsureTransientEditsCommitted);
         _workspace.SessionChanged += OnWorkspaceSessionChanged;
         _placement = new PlacementController(() => _workspace.CurrentSession);
-        _placement.SceneChanged += OnPlacementSceneChanged;
+        _overheadLineConnection = new OverheadLineConnectionController(
+            () => _workspace.CurrentSession);
+        _drawingTools = new DrawingToolCoordinator(_placement, _overheadLineConnection);
+        _placement.SceneChanged += OnDrawingToolVisualChanged;
+        _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
     }
 
     private void OnNewProject(object sender, RoutedEventArgs e) => _workspace.NewProject();
@@ -68,28 +76,43 @@ public partial class MainWindow : Window
 
     private void OnBeginPlacePole(object sender, RoutedEventArgs e)
     {
-        _placement.BeginPole();
+        CancelProfessionalPicking();
+        _drawingTools.BeginPole();
     }
 
     private void OnBeginPlaceRingCabinet(object sender, RoutedEventArgs e)
     {
-        _placement.BeginRingCabinet();
+        CancelProfessionalPicking();
+        _drawingTools.BeginRingCabinet();
+    }
+
+    private void OnBeginOverheadLine(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            CancelProfessionalPicking();
+            _drawingTools.BeginOverheadLine();
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("无法绘制架空线", exception.Message);
+        }
     }
 
     private void OnCancelPlacement(object sender, RoutedEventArgs e)
     {
-        _placement.Cancel();
+        _drawingTools.Cancel();
     }
 
     private void OnRemoveSelectedDevice(object sender, RoutedEventArgs e)
     {
         try
         {
-            _placement.RemoveSelected();
+            _drawingTools.RemoveSelected();
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            ShowCommandError("删除设备失败", exception.Message);
+            ShowCommandError("删除对象失败", exception.Message);
         }
     }
 
@@ -97,12 +120,12 @@ public partial class MainWindow : Window
     {
         if (e.Key == System.Windows.Input.Key.Escape)
         {
-            _placement.Cancel();
+            _drawingTools.Cancel();
             e.Handled = true;
         }
     }
 
-    private void OnPlacementSceneChanged(object? sender, EventArgs e)
+    private void OnDrawingToolVisualChanged(object? sender, EventArgs e)
     {
         if (_workspace.CurrentSession is not { } session)
         {
@@ -134,6 +157,22 @@ public partial class MainWindow : Window
 
     private bool EnsureTransientEditsCommitted()
     {
+        if (_overheadLineConnection.IsActive)
+        {
+            MessageBoxResult connectionResult = MessageBox.Show(
+                this,
+                "当前正在绘制架空线。取消本次绘制并继续吗？",
+                "未完成的架空线",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (connectionResult != MessageBoxResult.OK)
+            {
+                return false;
+            }
+
+            _overheadLineConnection.Cancel();
+        }
+
         if (!_poleLayoutEditor.IsActive)
         {
             return true;
@@ -177,7 +216,7 @@ public partial class MainWindow : Window
 
     private void OnWorkspaceSessionChanged(object? sender, EventArgs e)
     {
-        _placement.Cancel();
+        _drawingTools.Cancel();
         if (_workspace.CurrentSession is not { } session)
         {
             OnClearDrawing(this, new RoutedEventArgs());
@@ -200,6 +239,7 @@ public partial class MainWindow : Window
 
     private void OnDrawTestContent(object sender, RoutedEventArgs e)
     {
+        _drawingTools.Cancel();
         var firstPole = new Pole(Guid.NewGuid(), "P-01");
         var secondPole = new Pole(Guid.NewGuid(), "P-02");
         var firstAnchor = firstPole.CreateOverheadAnchorTerminal(Guid.NewGuid());
@@ -261,6 +301,7 @@ public partial class MainWindow : Window
 
     private void OnClearDrawing(object sender, RoutedEventArgs e)
     {
+        _drawingTools.Cancel();
         _poleLayoutEditor.Cancel();
         DrawingSurface.ReleaseMouseCapture();
         _currentScene = null;
@@ -326,6 +367,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        _drawingTools.Cancel();
         ResetWorkScopePick();
         _groundingPointPickMode = true;
         _pendingGroundingPointTerminalId = null;
@@ -347,6 +389,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        _drawingTools.Cancel();
         _groundingPointPickMode = false;
         _pendingGroundingPointTerminalId = null;
         ResetWorkScopePick();
@@ -361,6 +404,7 @@ public partial class MainWindow : Window
 
     private void OnDrawRingCabinetComposition(object sender, RoutedEventArgs e)
     {
+        _drawingTools.Cancel();
         RingCabinet cabinet = CreateMixedRingCabinet();
         RingCabinetLayout layout = CreateMixedRingCabinetLayout(cabinet);
         DrawingScene scene = _sceneBuilder.Build(cabinet, layout);
@@ -552,15 +596,17 @@ public partial class MainWindow : Window
             _coordinates.DipToMillimeters(point.X),
             _coordinates.DipToMillimeters(point.Y));
 
-        if (_placement.Mode != PlacementMode.Idle)
+        if (_drawingTools.IsActive)
         {
             try
             {
-                _placement.Place(documentPoint);
+                _drawingTools.HandleClick(
+                    documentPoint,
+                    _coordinates.DipToMillimeters(8));
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
-                ShowCommandError("放置设备失败", exception.Message);
+                ShowCommandError("绘图操作失败", exception.Message);
             }
 
             e.Handled = true;
@@ -641,10 +687,27 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void CancelProfessionalPicking()
+    {
+        _groundingPointPickMode = false;
+        _pendingGroundingPointTerminalId = null;
+        ResetWorkScopePick();
+    }
+
     private void OnDrawingSurfaceMouseMove(
         object sender,
         System.Windows.Input.MouseEventArgs e)
     {
+        if (_overheadLineConnection.IsActive)
+        {
+            System.Windows.Point previewPoint = e.GetPosition(DrawingSurface);
+            _drawingTools.UpdatePointer(new DocumentPoint(
+                _coordinates.DipToMillimeters(previewPoint.X),
+                _coordinates.DipToMillimeters(previewPoint.Y)));
+            e.Handled = true;
+            return;
+        }
+
         if (!_poleLayoutEditor.IsActive ||
             e.LeftButton != System.Windows.Input.MouseButtonState.Pressed ||
             _activeSource?.DrawingLayout is not { } layout)
@@ -1090,6 +1153,7 @@ public partial class MainWindow : Window
         }
 
         var elements = _currentScene.Elements.ToList();
+        elements.AddRange(_drawingTools.CreateTransientElements());
         elements.AddRange(
             SelectionOverlayBuilder.CreateElements(
                 _currentScene.HitTestIndex,
