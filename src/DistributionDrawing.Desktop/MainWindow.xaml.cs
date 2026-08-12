@@ -28,7 +28,7 @@ public partial class MainWindow : Window
     private CommandStack _commandStack = new();
     private PropertyEditor _propertyEditor;
     private readonly ProfessionalCommandFactory _professionalCommandFactory = new();
-    private readonly PoleLayoutEditor _poleLayoutEditor = new();
+    private readonly DeviceDragController _deviceDrag = new();
     private SelectionObjectResolver _selectionResolver = new();
     private PropertyProjector _propertyProjector = new();
     private PropertyInspectorViewModel _propertyInspector = new();
@@ -79,12 +79,14 @@ public partial class MainWindow : Window
 
     private void OnBeginPlacePole(object sender, RoutedEventArgs e)
     {
+        CancelDeviceDrag();
         CancelProfessionalPicking();
         _drawingTools.BeginPole();
     }
 
     private void OnBeginPlaceRingCabinet(object sender, RoutedEventArgs e)
     {
+        CancelDeviceDrag();
         CancelProfessionalPicking();
         _drawingTools.BeginRingCabinet();
     }
@@ -93,6 +95,7 @@ public partial class MainWindow : Window
     {
         try
         {
+            CancelDeviceDrag();
             CancelProfessionalPicking();
             _drawingTools.BeginOverheadLine();
         }
@@ -111,6 +114,7 @@ public partial class MainWindow : Window
     {
         try
         {
+            CancelDeviceDrag();
             _drawingTools.RemoveSelected();
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
@@ -123,6 +127,13 @@ public partial class MainWindow : Window
     {
         if (e.Key == System.Windows.Input.Key.Escape)
         {
+            if (_deviceDrag.IsActive)
+            {
+                CancelDeviceDrag();
+                e.Handled = true;
+                return;
+            }
+
             if (_viewport.IsPanning)
             {
                 EndCanvasPan();
@@ -185,7 +196,7 @@ public partial class MainWindow : Window
             _overheadLineConnection.Cancel();
         }
 
-        if (!_poleLayoutEditor.IsActive)
+        if (!_deviceDrag.IsActive)
         {
             return true;
         }
@@ -203,19 +214,19 @@ public partial class MainWindow : Window
 
         if (result == MessageBoxResult.No)
         {
-            _poleLayoutEditor.Cancel();
-            DrawingSurface.ReleaseMouseCapture();
+            CancelDeviceDrag();
             return true;
-        }
-
-        if (_poleLayoutEditor.Commit() is not { } command)
-        {
-            return false;
         }
 
         try
         {
-            _commandStack.ExecuteCommand(command);
+            ICommand? command = _deviceDrag.Commit();
+            DrawingSurface.ReleaseMouseCapture();
+            if (command is not null)
+            {
+                _commandStack.ExecuteCommand(command);
+            }
+
             RefreshDrawingScene();
             return true;
         }
@@ -228,6 +239,8 @@ public partial class MainWindow : Window
 
     private void OnWorkspaceSessionChanged(object? sender, EventArgs e)
     {
+        _deviceDrag.Cancel();
+        DrawingSurface.ReleaseMouseCapture();
         EndCanvasPan();
         _drawingTools.Cancel();
         _viewport.SetViewportSize(
@@ -317,9 +330,9 @@ public partial class MainWindow : Window
 
     private void OnClearDrawing(object sender, RoutedEventArgs e)
     {
+        _deviceDrag.Cancel();
         EndCanvasPan();
         _drawingTools.Cancel();
-        _poleLayoutEditor.Cancel();
         DrawingSurface.ReleaseMouseCapture();
         _currentScene = null;
         _activeSource = null;
@@ -339,7 +352,7 @@ public partial class MainWindow : Window
 
     private void OnZoomIn(object sender, RoutedEventArgs e)
     {
-        if (!_poleLayoutEditor.IsActive)
+        if (!_deviceDrag.IsActive)
         {
             _viewport.ZoomIn();
             UpdateConnectionPointerFromCurrentMouse();
@@ -348,7 +361,7 @@ public partial class MainWindow : Window
 
     private void OnZoomOut(object sender, RoutedEventArgs e)
     {
-        if (!_poleLayoutEditor.IsActive)
+        if (!_deviceDrag.IsActive)
         {
             _viewport.ZoomOut();
             UpdateConnectionPointerFromCurrentMouse();
@@ -357,7 +370,7 @@ public partial class MainWindow : Window
 
     private void OnFitDrawing(object sender, RoutedEventArgs e)
     {
-        if (!_poleLayoutEditor.IsActive)
+        if (!_deviceDrag.IsActive)
         {
             _viewport.Fit(_currentScene);
             UpdateConnectionPointerFromCurrentMouse();
@@ -380,7 +393,7 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseWheelEventArgs e)
     {
-        if (_poleLayoutEditor.IsActive)
+        if (_deviceDrag.IsActive)
         {
             return;
         }
@@ -395,7 +408,7 @@ public partial class MainWindow : Window
         System.Windows.Input.MouseButtonEventArgs e)
     {
         if (e.ChangedButton != System.Windows.Input.MouseButton.Middle ||
-            _poleLayoutEditor.IsActive)
+            _deviceDrag.IsActive)
         {
             return;
         }
@@ -435,10 +448,30 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseEventArgs e)
     {
+        if (_deviceDrag.Cancel())
+        {
+            RefreshDrawingScene();
+        }
+
         if (_viewport.IsPanning)
         {
             _viewport.CancelPan();
         }
+    }
+
+    private void CancelDeviceDrag()
+    {
+        if (!_deviceDrag.Cancel())
+        {
+            return;
+        }
+
+        if (DrawingSurface.IsMouseCaptured)
+        {
+            DrawingSurface.ReleaseMouseCapture();
+        }
+
+        RefreshDrawingScene();
     }
 
     private void EndCanvasPan()
@@ -471,6 +504,7 @@ public partial class MainWindow : Window
     {
         try
         {
+            CancelDeviceDrag();
             if (_commandStack.Undo())
             {
                 RefreshDrawingScene();
@@ -490,6 +524,7 @@ public partial class MainWindow : Window
     {
         try
         {
+            CancelDeviceDrag();
             if (_commandStack.Redo())
             {
                 RefreshDrawingScene();
@@ -515,6 +550,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        CancelDeviceDrag();
         _drawingTools.Cancel();
         ResetWorkScopePick();
         _groundingPointPickMode = true;
@@ -537,6 +573,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        CancelDeviceDrag();
         _drawingTools.Cancel();
         _groundingPointPickMode = false;
         _pendingGroundingPointTerminalId = null;
@@ -828,12 +865,13 @@ public partial class MainWindow : Window
         _selectionManager.Select(target);
 
         if (target is not null &&
-            target.Kind == SelectionTargetKind.Device &&
-            _activeSource?.DrawingLayout is { } layout &&
-            layout.Poles.TryGetValue(target.ObjectId, out PoleLayout poleLayout))
+            _workspace.CurrentSession is { } session &&
+            _deviceDrag.TryBeginDrag(target, documentPoint, session.Layout))
         {
-            _poleLayoutEditor.BeginDrag(target, documentPoint, poleLayout, layout);
-            DrawingSurface.CaptureMouse();
+            if (!DrawingSurface.CaptureMouse())
+            {
+                _deviceDrag.Cancel();
+            }
         }
 
         e.Handled = true;
@@ -872,17 +910,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_poleLayoutEditor.IsActive ||
-            e.LeftButton != System.Windows.Input.MouseButtonState.Pressed ||
-            _activeSource?.DrawingLayout is not { } layout)
+        if (!_deviceDrag.IsActive ||
+            e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
         {
             return;
         }
 
         DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
-        PoleLayout preview = _poleLayoutEditor.UpdatePreview(documentPoint);
-        layout.Replace(preview);
-        RefreshDrawingScene();
+        if (_deviceDrag.UpdatePreview(documentPoint))
+        {
+            RefreshDrawingScene();
+        }
+
         e.Handled = true;
     }
 
@@ -890,13 +929,12 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (!_poleLayoutEditor.IsActive ||
-            _activeSource?.DrawingLayout is not { } layout)
+        if (!_deviceDrag.IsActive)
         {
             return;
         }
 
-        MoveCommand? command = _poleLayoutEditor.Commit();
+        ICommand? command = _deviceDrag.Commit();
         DrawingSurface.ReleaseMouseCapture();
         if (command is not null)
         {

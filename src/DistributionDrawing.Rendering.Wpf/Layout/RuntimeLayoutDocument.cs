@@ -44,4 +44,16 @@ public sealed class RuntimeLayoutDocument
 
         return layout;
     }
+
+    public void ReplaceRingCabinet(RingCabinetLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        if (!_ringCabinetLayouts.ContainsKey(layout.CabinetId))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for ring cabinet '{layout.CabinetId}'.");
+        }
+
+        _ringCabinetLayouts[layout.CabinetId] = layout;
+    }
 }

@@ -74,4 +74,16 @@ public sealed class RingCabinetLayout
                 $"An interval layout for '{layout.IntervalId}' already exists.");
         }
     }
+
+    public RingCabinetLayout MoveTo(DocumentPoint position)
+    {
+        return new RingCabinetLayout(
+            CabinetId,
+            position,
+            WidthMillimeters,
+            HeightMillimeters,
+            MainBusYMillimeters,
+            IntervalLayouts.Values,
+            LabelOffset);
+    }
 }
