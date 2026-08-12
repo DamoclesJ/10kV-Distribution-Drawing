@@ -32,6 +32,11 @@ public sealed class PropertyProjector
             return ProjectWorkScope(selection);
         }
 
+        if (selection.Terminal is not null)
+        {
+            return ProjectTerminal(selection);
+        }
+
         if (selection.RingCabinet is not null && selection.RingCabinetInterval is null)
         {
             return ProjectRingCabinet(selection);
@@ -125,6 +130,25 @@ public sealed class PropertyProjector
             "工作范围",
             workScope.Description,
             [new PropertySectionViewModel("专业属性", rows)]);
+    }
+
+    private static PropertyInspectorSnapshot ProjectTerminal(ResolvedSelection selection)
+    {
+        Terminal terminal = selection.Terminal!;
+        return Snapshot(
+            selection,
+            "端子",
+            terminal.Role,
+            [
+                Section(
+                    "端子信息",
+                    DomainRow("TerminalId", "标识", terminal.Id),
+                    DomainRow("OwnerType", "所有者类型", terminal.OwnerType),
+                    DomainRow("OwnerId", "所有者", terminal.OwnerId),
+                    DomainRow("Role", "角色", terminal.Role),
+                    DomainRow("VoltageLevel", "电压等级", terminal.VoltageLevel),
+                    DomainRow("IsExternal", "外部端子", terminal.IsExternal))
+            ]);
     }
 
     private static PropertyInspectorSnapshot ProjectInterval(ResolvedSelection selection)

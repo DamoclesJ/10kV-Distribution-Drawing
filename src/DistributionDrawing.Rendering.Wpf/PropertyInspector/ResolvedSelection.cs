@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -10,6 +11,8 @@ namespace DistributionDrawing.Rendering.Wpf.PropertyInspector;
 public sealed class ResolvedSelection
 {
     public required SelectionReference Reference { get; init; }
+
+    public DrawingDocument? Document { get; init; }
 
     public RingCabinet? RingCabinet { get; init; }
 
@@ -28,6 +31,8 @@ public sealed class ResolvedSelection
     public WorkScope? WorkScope { get; init; }
 
     public GroundingPoint? GroundingPoint { get; init; }
+
+    public Terminal? Terminal { get; init; }
 
     public RingCabinetLayout? RingCabinetLayout { get; init; }
 

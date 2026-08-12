@@ -63,6 +63,50 @@ public sealed class PropertyEditor
             return PropertyEditResult.Failure("DomainRuleViolation", exception.Message);
         }
     }
+
+    public PropertyEditResult TryEditGroundingPoint(
+        SelectionReference target,
+        string location,
+        string? number,
+        string? note)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        ResolvedSelection? selection = _resolver.Resolve(target);
+        if (selection is null)
+        {
+            return PropertyEditResult.Failure(
+                "TargetNotFound",
+                "The selected object no longer exists.");
+        }
+
+        if (!_commandFactory.TryCreateGroundingPoint(
+                selection,
+                location,
+                number,
+                note,
+                out ICommand? command,
+                out PropertyEditError? error))
+        {
+            PropertyEditError failure = error ??
+                new PropertyEditError("PropertyInvalid", "The property edit was rejected.");
+            return PropertyEditResult.Failure(failure.Code, failure.Message);
+        }
+
+        try
+        {
+            _commandStack.ExecuteCommand(command!);
+            return PropertyEditResult.Success();
+        }
+        catch (ArgumentException exception)
+        {
+            return PropertyEditResult.Failure("DomainRuleViolation", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return PropertyEditResult.Failure("DomainRuleViolation", exception.Message);
+        }
+    }
 }
 
 public sealed record PropertyEditResult(

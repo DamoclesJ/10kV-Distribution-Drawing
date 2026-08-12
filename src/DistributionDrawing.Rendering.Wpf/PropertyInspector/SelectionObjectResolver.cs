@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Professional;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 
 namespace DistributionDrawing.Rendering.Wpf.PropertyInspector;
@@ -29,6 +30,7 @@ public sealed class SelectionObjectResolver
             SelectionTargetKind.Connection => ResolveConnection(reference),
             SelectionTargetKind.GroundingPoint => ResolveGroundingPoint(reference),
             SelectionTargetKind.WorkScope => ResolveWorkScope(reference),
+            SelectionTargetKind.Terminal => ResolveTerminal(reference),
             _ => null
         };
 
@@ -40,6 +42,7 @@ public sealed class SelectionObjectResolver
         return new ResolvedSelection
         {
             Reference = resolved.Reference,
+            Document = _source.Document,
             RingCabinet = resolved.RingCabinet,
             RingCabinetInterval = resolved.RingCabinetInterval,
             SwitchDevice = resolved.SwitchDevice,
@@ -49,6 +52,7 @@ public sealed class SelectionObjectResolver
             OverheadLine = resolved.OverheadLine,
             WorkScope = resolved.WorkScope,
             GroundingPoint = resolved.GroundingPoint,
+            Terminal = resolved.Terminal,
             RingCabinetLayout = resolved.RingCabinetLayout,
             RingCabinetIntervalLayout = resolved.RingCabinetIntervalLayout,
             PoleLayout = resolved.PoleLayout,
@@ -244,6 +248,22 @@ public sealed class SelectionObjectResolver
             {
                 Reference = reference,
                 WorkScope = workScope
+            };
+    }
+
+    private ResolvedSelection? ResolveTerminal(SelectionReference reference)
+    {
+        IReadOnlyList<Terminal> terminals = _source.Terminals.Count > 0
+            ? _source.Terminals
+            : _source.Document?.Terminals ?? [];
+        Terminal? terminal = terminals
+            .SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
+        return terminal is null
+            ? null
+            : new ResolvedSelection
+            {
+                Reference = reference,
+                Terminal = terminal
             };
     }
 }

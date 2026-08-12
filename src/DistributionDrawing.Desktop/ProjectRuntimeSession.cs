@@ -102,6 +102,7 @@ public sealed class ProjectRuntimeSession
             Document = session.Domain,
             RingCabinet = cabinet,
             RingCabinetLayout = cabinetLayout,
+            RingCabinetLayouts = layout.RingCabinetLayouts,
             DrawingLayout = layout.DrawingLayout,
             Poles = session.Domain.Devices.OfType<Pole>().ToArray(),
             Devices = session.Domain.Devices,

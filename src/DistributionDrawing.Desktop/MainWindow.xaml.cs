@@ -1,10 +1,13 @@
 using System.Windows;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -18,12 +21,15 @@ public partial class MainWindow : Window
     private readonly SelectionManager _selectionManager = new();
     private readonly CommandStack _commandStack = new();
     private readonly PropertyEditor _propertyEditor;
+    private readonly ProfessionalCommandFactory _professionalCommandFactory = new();
     private readonly PoleLayoutEditor _poleLayoutEditor = new();
     private readonly SelectionObjectResolver _selectionResolver = new();
     private readonly PropertyProjector _propertyProjector = new();
     private readonly PropertyInspectorViewModel _propertyInspector = new();
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
+    private bool _groundingPointPickMode;
+    private Guid? _pendingGroundingPointTerminalId;
 
     public MainWindow()
     {
@@ -100,27 +106,72 @@ public partial class MainWindow : Window
         DrawingSurface.ReleaseMouseCapture();
         _currentScene = null;
         _activeSource = null;
+        _groundingPointPickMode = false;
+        _pendingGroundingPointTerminalId = null;
         _selectionResolver.SetSource(null);
         _selectionManager.Clear();
         _propertyInspector.Clear();
         PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
+        GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
         DrawingSurface.Clear();
     }
 
     private void OnUndo(object sender, RoutedEventArgs e)
     {
-        if (_commandStack.Undo())
+        try
         {
-            RefreshDrawingScene();
+            if (_commandStack.Undo())
+            {
+                RefreshDrawingScene();
+            }
+        }
+        catch (ArgumentException exception)
+        {
+            ShowCommandError("撤销失败", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("撤销失败", exception.Message);
         }
     }
 
     private void OnRedo(object sender, RoutedEventArgs e)
     {
-        if (_commandStack.Redo())
+        try
         {
-            RefreshDrawingScene();
+            if (_commandStack.Redo())
+            {
+                RefreshDrawingScene();
+            }
         }
+        catch (ArgumentException exception)
+        {
+            ShowCommandError("重做失败", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("重做失败", exception.Message);
+        }
+    }
+
+    private void OnBeginAddGroundingPoint(object sender, RoutedEventArgs e)
+    {
+        if (_activeSource?.Document is null || _activeSource.DrawingLayout is null)
+        {
+            ShowCommandError(
+                "无法添加工作地线",
+                "当前场景没有可编辑的 DrawingDocument 工程。");
+            return;
+        }
+
+        _groundingPointPickMode = true;
+        _pendingGroundingPointTerminalId = null;
+        _selectionManager.Clear();
+        GroundingPointEditorPanel.Visibility = Visibility.Visible;
+        GroundingPointTerminalText.Text = "请在图面中点击一个有效端子";
+        GroundingPointLocationInput.Text = string.Empty;
+        GroundingPointNumberInput.Text = string.Empty;
+        GroundingPointNoteInput.Text = string.Empty;
     }
 
     private void OnDrawRingCabinetComposition(object sender, RoutedEventArgs e)
@@ -152,6 +203,25 @@ public partial class MainWindow : Window
         var documentPoint = new DocumentPoint(
             _coordinates.DipToMillimeters(point.X),
             _coordinates.DipToMillimeters(point.Y));
+
+        if (_groundingPointPickMode)
+        {
+            Guid? terminalId = HitTestTerminal(documentPoint);
+            if (terminalId is null)
+            {
+                ShowCommandError("端子选择失败", "点击位置没有可解析的端子。");
+                e.Handled = true;
+                return;
+            }
+
+            _pendingGroundingPointTerminalId = terminalId;
+            _selectionManager.Select(
+                new SelectionReference(SelectionTargetKind.Terminal, terminalId.Value));
+            GroundingPointTerminalText.Text = $"已选择端子：{terminalId.Value}";
+            e.Handled = true;
+            return;
+        }
+
         SelectionReference? target = _currentScene.HitTestIndex.HitTest(documentPoint);
         _selectionManager.Select(target);
 
@@ -215,6 +285,7 @@ public partial class MainWindow : Window
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
+        UpdateGroundingPointEditor();
         RenderCurrentScene();
     }
 
@@ -242,6 +313,89 @@ public partial class MainWindow : Window
         RefreshDrawingScene();
     }
 
+    private void OnApplyGroundingPoint(object sender, RoutedEventArgs e)
+    {
+        if (_selectionManager.Selected is { Kind: SelectionTargetKind.GroundingPoint } target)
+        {
+            PropertyEditResult result = _propertyEditor.TryEditGroundingPoint(
+                target,
+                GroundingPointLocationInput.Text,
+                GroundingPointNumberInput.Text,
+                GroundingPointNoteInput.Text);
+            if (!result.IsSuccess)
+            {
+                ShowCommandError("工作地线修改失败", result.ErrorMessage ?? "输入无效。");
+                return;
+            }
+
+            RefreshDrawingScene();
+            return;
+        }
+
+        if (_activeSource?.Document is null ||
+            _pendingGroundingPointTerminalId is not Guid terminalId)
+        {
+            ShowCommandError("无法创建工作地线", "请先点击一个有效端子。");
+            return;
+        }
+
+        try
+        {
+            ICommand command = _professionalCommandFactory.CreateAddGroundingPoint(
+                _activeSource.Document,
+                terminalId,
+                GroundingPointLocationInput.Text,
+                GroundingPointNumberInput.Text,
+                GroundingPointNoteInput.Text);
+            AddGroundingPointCommand addCommand = (AddGroundingPointCommand)command;
+            _commandStack.ExecuteCommand(addCommand);
+            _groundingPointPickMode = false;
+            _pendingGroundingPointTerminalId = null;
+            RefreshDrawingScene();
+            _selectionManager.Select(
+                new SelectionReference(
+                    SelectionTargetKind.GroundingPoint,
+                    addCommand.After.GroundingPointId));
+        }
+        catch (ArgumentException exception)
+        {
+            ShowCommandError("工作地线创建失败", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("工作地线创建失败", exception.Message);
+        }
+    }
+
+    private void OnRemoveGroundingPoint(object sender, RoutedEventArgs e)
+    {
+        if (_activeSource?.Document is null ||
+            _selectionManager.Selected is not
+            { Kind: SelectionTargetKind.GroundingPoint, ObjectId: var groundingPointId })
+        {
+            ShowCommandError("无法删除工作地线", "请先选择一个工作地线。");
+            return;
+        }
+
+        try
+        {
+            ICommand command = _professionalCommandFactory.CreateRemoveGroundingPoint(
+                _activeSource.Document,
+                groundingPointId);
+            _commandStack.ExecuteCommand(command);
+            _selectionManager.Clear();
+            RefreshDrawingScene();
+        }
+        catch (ArgumentException exception)
+        {
+            ShowCommandError("工作地线删除失败", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("工作地线删除失败", exception.Message);
+        }
+    }
+
     private void UpdatePoleNumberEditor()
     {
         ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
@@ -253,6 +407,28 @@ public partial class MainWindow : Window
 
         PoleNumberEditorPanel.Visibility = Visibility.Visible;
         PoleNumberInput.Text = pole.PoleNumber;
+    }
+
+    private void UpdateGroundingPointEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.GroundingPoint is { } groundingPoint)
+        {
+            GroundingPointEditorPanel.Visibility = Visibility.Visible;
+            GroundingPointTerminalText.Text = $"端子：{groundingPoint.TerminalId}";
+            GroundingPointLocationInput.Text = groundingPoint.Location;
+            GroundingPointNumberInput.Text = groundingPoint.Number ?? string.Empty;
+            GroundingPointNoteInput.Text = groundingPoint.Note ?? string.Empty;
+            return;
+        }
+
+        if (_groundingPointPickMode)
+        {
+            GroundingPointEditorPanel.Visibility = Visibility.Visible;
+            return;
+        }
+
+        GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
     }
 
     private void ShowScene(DrawingScene scene, PropertyInspectionSource source)
@@ -274,18 +450,23 @@ public partial class MainWindow : Window
         }
 
         PropertyInspectionSource source = _activeSource;
-        DrawingScene scene = _sceneBuilder.Build(
-            layout,
-            source.Poles,
-            source.PoleAttachments,
-            source.Devices,
-            source.Connections,
-            source.OverheadLines);
+        DrawingScene scene = source.Document is not null
+            ? _sceneBuilder.Build(
+                source.Document,
+                new RuntimeLayoutDocument(layout, source.RingCabinetLayouts))
+            : _sceneBuilder.Build(
+                layout,
+                source.Poles,
+                source.PoleAttachments,
+                source.Devices,
+                source.Connections,
+                source.OverheadLines);
         _currentScene = scene;
         _activeSource = new PropertyInspectionSource
         {
             Document = source.Document,
             DrawingLayout = layout,
+            RingCabinetLayouts = source.RingCabinetLayouts,
             Poles = source.Poles,
             Devices = source.Devices,
             PoleAttachments = source.PoleAttachments,
@@ -297,11 +478,46 @@ public partial class MainWindow : Window
             HitTestIndex = scene.HitTestIndex
         };
         _selectionResolver.SetSource(_activeSource);
+        if (_selectionManager.Selected is { } selected &&
+            _selectionResolver.Resolve(selected) is null)
+        {
+            _selectionManager.Clear();
+        }
         _propertyInspector.Apply(
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
+        UpdateGroundingPointEditor();
         RenderCurrentScene();
+    }
+
+    private Guid? HitTestTerminal(DocumentPoint point)
+    {
+        if (_activeSource?.Document is not { } document ||
+            _activeSource.DrawingLayout is not { } layout)
+        {
+            return null;
+        }
+
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            layout,
+            _activeSource.RingCabinetLayouts);
+        const double hitSize = 8;
+        return anchors.Anchors
+            .Where(anchor =>
+                Math.Abs(anchor.Position.XMillimeters - point.XMillimeters) <= hitSize / 2 &&
+                Math.Abs(anchor.Position.YMillimeters - point.YMillimeters) <= hitSize / 2)
+            .OrderBy(anchor =>
+                Math.Pow(anchor.Position.XMillimeters - point.XMillimeters, 2) +
+                Math.Pow(anchor.Position.YMillimeters - point.YMillimeters, 2))
+            .Select(anchor => (Guid?)anchor.TerminalId)
+            .FirstOrDefault();
+    }
+
+    private static void ShowCommandError(string title, string message)
+    {
+        MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     private void RenderCurrentScene()

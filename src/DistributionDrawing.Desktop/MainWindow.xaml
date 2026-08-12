@@ -16,6 +16,8 @@
                   Click="OnUndo" />
         <MenuItem Header="重做"
                   Click="OnRedo" />
+        <MenuItem Header="添加工作地线"
+                  Click="OnBeginAddGroundingPoint" />
       </MenuItem>
       <MenuItem Header="视图">
         <MenuItem Header="绘制测试内容"
@@ -71,6 +73,37 @@
                      Margin="0,4,0,4" />
             <Button Content="应用杆号"
                     Click="OnApplyPoleNumber" />
+          </StackPanel>
+          <StackPanel x:Name="GroundingPointEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="工作地线编辑" />
+            <TextBlock x:Name="GroundingPointTerminalText"
+                       Margin="0,4,0,0"
+                       Foreground="#666"
+                       TextWrapping="Wrap" />
+            <TextBlock Margin="0,4,0,0"
+                       Foreground="#555"
+                       Text="位置说明" />
+            <TextBox x:Name="GroundingPointLocationInput"
+                     Margin="0,2,0,2" />
+            <TextBlock Foreground="#555"
+                       Text="编号" />
+            <TextBox x:Name="GroundingPointNumberInput"
+                     Margin="0,2,0,2" />
+            <TextBlock Foreground="#555"
+                       Text="备注" />
+            <TextBox x:Name="GroundingPointNoteInput"
+                     Margin="0,2,0,4" />
+            <WrapPanel>
+              <Button Content="应用工作地线"
+                      Margin="0,0,4,0"
+                      Click="OnApplyGroundingPoint" />
+              <Button Content="删除工作地线"
+                      Click="OnRemoveGroundingPoint" />
+            </WrapPanel>
           </StackPanel>
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Sections}">

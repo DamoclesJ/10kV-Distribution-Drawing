@@ -8,7 +8,8 @@ public enum SelectionTargetKind
     PoleAttachment,
     Connection,
     GroundingPoint,
-    WorkScope
+    WorkScope,
+    Terminal
 }
 
 public sealed record SelectionReference(
