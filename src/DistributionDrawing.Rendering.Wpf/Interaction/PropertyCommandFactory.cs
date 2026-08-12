@@ -1,4 +1,5 @@
 using System.Globalization;
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
@@ -21,6 +22,8 @@ public sealed class PropertyCommandFactory
     public const string GroundingPointLocationPropertyKey = "GroundingPoint.Location";
     public const string GroundingPointNotePropertyKey = "GroundingPoint.Note";
     public const string WorkScopeDescriptionPropertyKey = "WorkScope.Description";
+    public const string CableTerminationDisplayNamePropertyKey =
+        "CableTermination.DisplayName";
 
     public bool TryCreate(
         ResolvedSelection selection,
@@ -209,6 +212,40 @@ public sealed class PropertyCommandFactory
         command = _deviceCommandFactory.CreateMoveAttachment(
             runtimeLayout,
             attachmentId,
+            after);
+        return true;
+    }
+
+    public bool TryCreateCableTerminationDisplayName(
+        ResolvedSelection selection,
+        string input,
+        out ICommand? command,
+        out PropertyEditError? error)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+
+        command = null;
+        error = null;
+        if (selection.Reference.Kind != SelectionTargetKind.PoleAttachment ||
+            selection.AttachedDevice is not CableTermination cableTermination)
+        {
+            error = new PropertyEditError(
+                "TargetNotSupported",
+                "Cable termination name editing requires a selected cable termination attachment.");
+            return false;
+        }
+
+        string? after = NormalizeOptional(input);
+        if (after == cableTermination.DisplayName)
+        {
+            error = new PropertyEditError(
+                "NoChange",
+                "Cable termination name has not changed.");
+            return false;
+        }
+
+        command = _deviceCommandFactory.CreateRenameCableTermination(
+            cableTermination,
             after);
         return true;
     }

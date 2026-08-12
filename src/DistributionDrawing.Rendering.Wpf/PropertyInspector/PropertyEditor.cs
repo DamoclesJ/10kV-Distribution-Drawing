@@ -157,6 +157,49 @@ public sealed class PropertyEditor
         }
     }
 
+    public PropertyEditResult TryEditCableTerminationDisplayName(
+        SelectionReference target,
+        string input,
+        out ICommand? executedCommand)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        executedCommand = null;
+
+        ResolvedSelection? selection = _resolver.Resolve(target);
+        if (selection is null)
+        {
+            return PropertyEditResult.Failure(
+                "TargetNotFound",
+                "The selected object no longer exists.");
+        }
+
+        if (!_commandFactory.TryCreateCableTerminationDisplayName(
+                selection,
+                input,
+                out ICommand? command,
+                out PropertyEditError? error))
+        {
+            PropertyEditError failure = error ??
+                new PropertyEditError("PropertyInvalid", "The property edit was rejected.");
+            return PropertyEditResult.Failure(failure.Code, failure.Message);
+        }
+
+        try
+        {
+            _commandStack.ExecuteCommand(command!);
+            executedCommand = command;
+            return PropertyEditResult.Success();
+        }
+        catch (ArgumentException exception)
+        {
+            return PropertyEditResult.Failure("DomainRuleViolation", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return PropertyEditResult.Failure("DomainRuleViolation", exception.Message);
+        }
+    }
+
     public PropertyEditResult TryEditWorkScope(
         SelectionReference target,
         string description,

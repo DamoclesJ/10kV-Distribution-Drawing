@@ -202,6 +202,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
         UpdateAttachmentOffsetEditor();
+        UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
         RenderCurrentScene();
@@ -1052,6 +1053,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
         UpdateAttachmentOffsetEditor();
+        UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
         RenderCurrentScene();
@@ -1102,6 +1104,40 @@ public partial class MainWindow : Window
         {
             ShowCommandError(
                 "附属设备位置修改失败",
+                result.ErrorMessage ?? "输入无效。");
+            return;
+        }
+
+        if (executedCommand is not null)
+        {
+            session.SelectionTransitions.RecordExecuted(
+                executedCommand,
+                SelectionTransition.Preserve(beforeSelection));
+            session.SelectionTransitions.Prune(session.CommandStack.History);
+        }
+
+        RefreshDrawingScene();
+    }
+
+    private void OnApplyCableTerminationDisplayName(object sender, RoutedEventArgs e)
+    {
+        if (_workspace.CurrentSession is not { } session ||
+            _selectionManager.Selected is not
+                { Kind: SelectionTargetKind.PoleAttachment } target)
+        {
+            ShowCommandError("电缆终端名称修改失败", "请先选择一个电缆终端附属设备。");
+            return;
+        }
+
+        SelectionReference? beforeSelection = target;
+        PropertyEditResult result = _propertyEditor.TryEditCableTerminationDisplayName(
+            target,
+            CableTerminationDisplayNameInput.Text,
+            out ICommand? executedCommand);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError(
+                "电缆终端名称修改失败",
                 result.ErrorMessage ?? "输入无效。");
             return;
         }
@@ -1230,6 +1266,20 @@ public partial class MainWindow : Window
         AttachmentOffsetYInput.Text = layout.Offset.YMillimeters.ToString(
             "R",
             CultureInfo.InvariantCulture);
+    }
+
+    private void UpdateCableTerminationDisplayNameEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.Reference.Kind != SelectionTargetKind.PoleAttachment ||
+            selection.AttachedDevice is not CableTermination cableTermination)
+        {
+            CableTerminationDisplayNameEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        CableTerminationDisplayNameEditorPanel.Visibility = Visibility.Visible;
+        CableTerminationDisplayNameInput.Text = cableTermination.DisplayName ?? string.Empty;
     }
 
     private void UpdateGroundingPointEditor()
@@ -1417,6 +1467,7 @@ public partial class MainWindow : Window
                     _selectionResolver.Resolve(_selectionManager.Selected)));
             UpdatePoleNumberEditor();
             UpdateAttachmentOffsetEditor();
+            UpdateCableTerminationDisplayNameEditor();
             UpdateGroundingPointEditor();
             UpdateWorkScopeEditor();
             RenderCurrentScene();
@@ -1468,6 +1519,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
         UpdateAttachmentOffsetEditor();
+        UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
         RenderCurrentScene();

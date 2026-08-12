@@ -145,6 +145,18 @@ public sealed class DeviceCommandFactory
             offset);
     }
 
+    public RenameCableTerminationCommand CreateRenameCableTermination(
+        CableTermination cableTermination,
+        string? displayName)
+    {
+        ArgumentNullException.ThrowIfNull(cableTermination);
+
+        return new RenameCableTerminationCommand(
+            cableTermination,
+            cableTermination.DisplayName,
+            displayName);
+    }
+
     public ICommand CreateRemove(
         DrawingDocument document,
         RuntimeLayoutDocument runtimeLayout,
