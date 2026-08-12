@@ -1,10 +1,21 @@
+using System.Globalization;
+using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
+using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
 
 public sealed class PropertyCommandFactory
 {
+    private readonly DeviceCommandFactory _deviceCommandFactory;
+
+    public PropertyCommandFactory(DeviceCommandFactory? deviceCommandFactory = null)
+    {
+        _deviceCommandFactory = deviceCommandFactory ?? new DeviceCommandFactory();
+    }
+
     public const string PoleNumberPropertyKey = "Pole.PoleNumber";
     public const string GroundingPointNumberPropertyKey = "GroundingPoint.Number";
     public const string GroundingPointLocationPropertyKey = "GroundingPoint.Location";
@@ -143,6 +154,65 @@ public sealed class PropertyCommandFactory
         return true;
     }
 
+    public bool TryCreateAttachmentOffset(
+        ResolvedSelection selection,
+        RuntimeLayoutDocument runtimeLayout,
+        string offsetX,
+        string offsetY,
+        out ICommand? command,
+        out PropertyEditError? error)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+
+        command = null;
+        error = null;
+        if (selection.Reference.Kind != SelectionTargetKind.PoleAttachment ||
+            selection.PoleAttachment is null ||
+            selection.AttachmentLayout is null)
+        {
+            error = new PropertyEditError(
+                "TargetNotSupported",
+                "Attachment offset editing requires a selected pole attachment with layout.");
+            return false;
+        }
+
+        if (!TryParseFiniteCoordinate(offsetX, out double x) ||
+            !TryParseFiniteCoordinate(offsetY, out double y))
+        {
+            error = new PropertyEditError(
+                "InputInvalid",
+                "Attachment offset coordinates must be finite numbers.");
+            return false;
+        }
+
+        Guid attachmentId = selection.PoleAttachment.AttachmentId;
+        if (!runtimeLayout.DrawingLayout.Attachments.TryGetValue(
+                attachmentId,
+                out AttachmentLayout? current))
+        {
+            error = new PropertyEditError(
+                "TargetNotFound",
+                "The selected attachment layout no longer exists.");
+            return false;
+        }
+
+        var after = new DocumentPoint(x, y);
+        if (after == current.Offset)
+        {
+            error = new PropertyEditError(
+                "NoChange",
+                "Attachment offset has not changed.");
+            return false;
+        }
+
+        command = _deviceCommandFactory.CreateMoveAttachment(
+            runtimeLayout,
+            attachmentId,
+            after);
+        return true;
+    }
+
     public bool TryCreateWorkScope(
         ResolvedSelection selection,
         string description,
@@ -277,6 +347,16 @@ public sealed class PropertyCommandFactory
     private static string? NormalizeOptional(string value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static bool TryParseFiniteCoordinate(string input, out double value)
+    {
+        return double.TryParse(
+                input,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out value) &&
+            double.IsFinite(value);
     }
 }
 

@@ -1,4 +1,5 @@
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Layout;
 
 namespace DistributionDrawing.Rendering.Wpf.PropertyInspector;
 
@@ -105,6 +106,51 @@ public sealed class PropertyEditor
         catch (InvalidOperationException exception)
         {
             return PropertyEditResult.Failure("DomainRuleViolation", exception.Message);
+        }
+    }
+
+    public PropertyEditResult TryEditAttachmentOffset(
+        RuntimeLayoutDocument runtimeLayout,
+        SelectionReference target,
+        string offsetX,
+        string offsetY)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+        ArgumentNullException.ThrowIfNull(target);
+
+        ResolvedSelection? selection = _resolver.Resolve(target);
+        if (selection is null)
+        {
+            return PropertyEditResult.Failure(
+                "TargetNotFound",
+                "The selected object no longer exists.");
+        }
+
+        if (!_commandFactory.TryCreateAttachmentOffset(
+                selection,
+                runtimeLayout,
+                offsetX,
+                offsetY,
+                out ICommand? command,
+                out PropertyEditError? error))
+        {
+            PropertyEditError failure = error ??
+                new PropertyEditError("PropertyInvalid", "The attachment offset edit was rejected.");
+            return PropertyEditResult.Failure(failure.Code, failure.Message);
+        }
+
+        try
+        {
+            _commandStack.ExecuteCommand(command!);
+            return PropertyEditResult.Success();
+        }
+        catch (ArgumentException exception)
+        {
+            return PropertyEditResult.Failure("LayoutRuleViolation", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return PropertyEditResult.Failure("LayoutRuleViolation", exception.Message);
         }
     }
 

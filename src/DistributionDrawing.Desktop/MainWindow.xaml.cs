@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using System.ComponentModel;
+using System.Globalization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
@@ -199,6 +200,7 @@ public partial class MainWindow : Window
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
+        UpdateAttachmentOffsetEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
         RenderCurrentScene();
@@ -990,6 +992,7 @@ public partial class MainWindow : Window
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
+        UpdateAttachmentOffsetEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
         RenderCurrentScene();
@@ -1013,6 +1016,32 @@ public partial class MainWindow : Window
                 "属性修改失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+            return;
+        }
+
+        RefreshDrawingScene();
+    }
+
+    private void OnApplyAttachmentOffset(object sender, RoutedEventArgs e)
+    {
+        if (_workspace.CurrentSession is not { } session ||
+            _selectionManager.Selected is not
+                { Kind: SelectionTargetKind.PoleAttachment } target)
+        {
+            ShowCommandError("附属设备位置修改失败", "请先选择一个杆塔附属设备。");
+            return;
+        }
+
+        PropertyEditResult result = _propertyEditor.TryEditAttachmentOffset(
+            session.Layout,
+            target,
+            AttachmentOffsetXInput.Text,
+            AttachmentOffsetYInput.Text);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError(
+                "附属设备位置修改失败",
+                result.ErrorMessage ?? "输入无效。");
             return;
         }
 
@@ -1113,6 +1142,25 @@ public partial class MainWindow : Window
 
         PoleNumberEditorPanel.Visibility = Visibility.Visible;
         PoleNumberInput.Text = pole.PoleNumber;
+    }
+
+    private void UpdateAttachmentOffsetEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.Reference.Kind != SelectionTargetKind.PoleAttachment ||
+            selection.AttachmentLayout is not { } layout)
+        {
+            AttachmentOffsetEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        AttachmentOffsetEditorPanel.Visibility = Visibility.Visible;
+        AttachmentOffsetXInput.Text = layout.Offset.XMillimeters.ToString(
+            "R",
+            CultureInfo.InvariantCulture);
+        AttachmentOffsetYInput.Text = layout.Offset.YMillimeters.ToString(
+            "R",
+            CultureInfo.InvariantCulture);
     }
 
     private void UpdateGroundingPointEditor()
@@ -1299,6 +1347,7 @@ public partial class MainWindow : Window
                 _propertyProjector.Project(
                     _selectionResolver.Resolve(_selectionManager.Selected)));
             UpdatePoleNumberEditor();
+            UpdateAttachmentOffsetEditor();
             UpdateGroundingPointEditor();
             UpdateWorkScopeEditor();
             RenderCurrentScene();
@@ -1349,6 +1398,7 @@ public partial class MainWindow : Window
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
+        UpdateAttachmentOffsetEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
         RenderCurrentScene();

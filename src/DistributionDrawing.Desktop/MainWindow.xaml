@@ -105,6 +105,24 @@
             <Button Content="应用杆号"
                     Click="OnApplyPoleNumber" />
           </StackPanel>
+          <StackPanel x:Name="AttachmentOffsetEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="附属设备相对位置（mm）" />
+            <TextBlock Margin="0,4,0,0"
+                       Foreground="#555"
+                       Text="Offset X" />
+            <TextBox x:Name="AttachmentOffsetXInput"
+                     Margin="0,2,0,2" />
+            <TextBlock Foreground="#555"
+                       Text="Offset Y" />
+            <TextBox x:Name="AttachmentOffsetYInput"
+                     Margin="0,2,0,4" />
+            <Button Content="应用位置"
+                    Click="OnApplyAttachmentOffset" />
+          </StackPanel>
           <StackPanel x:Name="GroundingPointEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
