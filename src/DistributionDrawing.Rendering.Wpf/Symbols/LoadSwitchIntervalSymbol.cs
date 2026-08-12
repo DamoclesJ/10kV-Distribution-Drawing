@@ -100,19 +100,21 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             intervalOrigin.YMillimeters + switchLayout.RelativePosition.YMillimeters);
         SymbolKind symbolKind = SymbolLibrary.ResolveSwitchKind(switchDevice);
 
-        elements.AddRange(
-            symbolLibrary.Create(
-                symbolKind,
-                new SymbolRenderContext(
-                    switchOrigin,
-                    switchLayout.WidthMillimeters,
-                    switchLayout.HeightMillimeters,
-                    labelOrigin: new DocumentPoint(
-                        switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
-                        switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
-                    label: switchDevice.DisplayName,
-                    state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
-                    fill: Colors.White)));
+        foreach (SceneElement element in symbolLibrary.Create(
+                     symbolKind,
+                     new SymbolRenderContext(
+                         switchOrigin,
+                         switchLayout.WidthMillimeters,
+                         switchLayout.HeightMillimeters,
+                         labelOrigin: new DocumentPoint(
+                             switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
+                             switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
+                         label: switchDevice.DisplayName,
+                         state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
+                         fill: Colors.White)))
+        {
+            elements.Add(element);
+        }
     }
 
     private static SwitchDevice GetSingleSwitch(

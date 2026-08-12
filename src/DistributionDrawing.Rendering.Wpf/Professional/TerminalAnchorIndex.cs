@@ -22,7 +22,7 @@ public sealed class TerminalAnchorIndex
         _anchors = anchors;
     }
 
-    public IReadOnlyCollection<TerminalAnchor> Anchors => _anchors.Values;
+    public IReadOnlyCollection<TerminalAnchor> Anchors => _anchors.Values.ToArray();
 
     public bool TryGet(Guid terminalId, out TerminalAnchor anchor)
     {

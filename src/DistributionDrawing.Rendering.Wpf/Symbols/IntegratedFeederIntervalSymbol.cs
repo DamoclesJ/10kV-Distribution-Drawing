@@ -146,19 +146,21 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
         DocumentPoint switchOrigin = new(
             intervalOrigin.XMillimeters + switchLayout.RelativePosition.XMillimeters,
             intervalOrigin.YMillimeters + switchLayout.RelativePosition.YMillimeters);
-        elements.AddRange(
-            symbolLibrary.Create(
-                SymbolLibrary.ResolveSwitchKind(switchDevice),
-                new SymbolRenderContext(
-                    switchOrigin,
-                    switchLayout.WidthMillimeters,
-                    switchLayout.HeightMillimeters,
-                    labelOrigin: new DocumentPoint(
-                        switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
-                        switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
-                    label: switchDevice.DisplayName,
-                    state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
-                    fill: Colors.White)));
+        foreach (SceneElement element in symbolLibrary.Create(
+                     SymbolLibrary.ResolveSwitchKind(switchDevice),
+                     new SymbolRenderContext(
+                         switchOrigin,
+                         switchLayout.WidthMillimeters,
+                         switchLayout.HeightMillimeters,
+                         labelOrigin: new DocumentPoint(
+                             switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
+                             switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
+                         label: switchDevice.DisplayName,
+                         state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
+                         fill: Colors.White)))
+        {
+            elements.Add(element);
+        }
     }
 
     private static DocumentPoint GetSwitchCenter(
@@ -204,15 +206,17 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
         DocumentPoint earth = new(
             groundSwitchCenter.XMillimeters + 18,
             groundSwitchCenter.YMillimeters);
-        elements.AddRange(
-            symbolLibrary.Create(
-                SymbolKind.GroundingLine,
-                new SymbolRenderContext(
-                    groundSwitchCenter,
-                    1,
-                    1,
-                    end: earth,
-                    thicknessMillimeters: ConductorThickness)));
+        foreach (SceneElement element in symbolLibrary.Create(
+                     SymbolKind.GroundingLine,
+                     new SymbolRenderContext(
+                         groundSwitchCenter,
+                         1,
+                         1,
+                         end: earth,
+                         thicknessMillimeters: ConductorThickness)))
+        {
+            elements.Add(element);
+        }
     }
 
     private static void AddExternalTerminal(
@@ -229,16 +233,18 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
             terminalOrigin.XMillimeters + TerminalWidth / 2,
             terminalOrigin.YMillimeters);
         elements.Add(new SceneLine(lowerNode, terminalCenter, Colors.Black, ConductorThickness));
-        elements.AddRange(
-            symbolLibrary.Create(
-                SymbolKind.CableTermination,
-                new SymbolRenderContext(
-                    terminalOrigin,
-                    TerminalWidth,
-                    TerminalHeight,
-                    label: "外部端子",
-                    fill: Colors.White,
-                    thicknessMillimeters: ConductorThickness)));
+        foreach (SceneElement element in symbolLibrary.Create(
+                     SymbolKind.CableTermination,
+                     new SymbolRenderContext(
+                         terminalOrigin,
+                         TerminalWidth,
+                         TerminalHeight,
+                         label: "外部端子",
+                         fill: Colors.White,
+                         thicknessMillimeters: ConductorThickness)))
+        {
+            elements.Add(element);
+        }
     }
 
     private static DocumentPoint Midpoint(DocumentPoint first, DocumentPoint second) =>
