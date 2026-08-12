@@ -546,10 +546,27 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (!_commandStack.CanUndo)
+            {
+                return;
+            }
+
             CancelDeviceDrag();
+
+            bool hasTransition = false;
+            SelectionReference? selection = null;
+            if (_workspace.CurrentSession is { } session)
+            {
+                ICommand command = _commandStack.History[_commandStack.CurrentIndex - 1];
+                hasTransition = session.SelectionTransitions.TryGetUndoSelection(
+                    command,
+                    out selection);
+            }
+
             if (_commandStack.Undo())
             {
                 RefreshDrawingScene();
+                ApplySelectionTransition(hasTransition, selection);
             }
         }
         catch (ArgumentException exception)
@@ -566,10 +583,27 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (!_commandStack.CanRedo)
+            {
+                return;
+            }
+
             CancelDeviceDrag();
+
+            bool hasTransition = false;
+            SelectionReference? selection = null;
+            if (_workspace.CurrentSession is { } session)
+            {
+                ICommand command = _commandStack.History[_commandStack.CurrentIndex];
+                hasTransition = session.SelectionTransitions.TryGetRedoSelection(
+                    command,
+                    out selection);
+            }
+
             if (_commandStack.Redo())
             {
                 RefreshDrawingScene();
+                ApplySelectionTransition(hasTransition, selection);
             }
         }
         catch (ArgumentException exception)
@@ -580,6 +614,30 @@ public partial class MainWindow : Window
         {
             ShowCommandError("重做失败", exception.Message);
         }
+    }
+
+    private void ApplySelectionTransition(
+        bool hasTransition,
+        SelectionReference? selection)
+    {
+        if (!hasTransition)
+        {
+            return;
+        }
+
+        if (selection is null)
+        {
+            _selectionManager.Clear();
+            return;
+        }
+
+        if (_selectionResolver.Resolve(selection) is not null)
+        {
+            _selectionManager.Select(selection);
+            return;
+        }
+
+        _selectionManager.Clear();
     }
 
     private void OnBeginAddGroundingPoint(object sender, RoutedEventArgs e)
