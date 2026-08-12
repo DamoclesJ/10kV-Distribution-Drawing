@@ -18,11 +18,20 @@ public sealed record AttachmentLayout
                 nameof(attachmentId));
         }
 
-        if (widthMillimeters <= 0 || heightMillimeters <= 0)
+        if (!double.IsFinite(widthMillimeters) || widthMillimeters <= 0 ||
+            !double.IsFinite(heightMillimeters) || heightMillimeters <= 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(heightMillimeters),
                 "Attachment layout dimensions must be greater than zero.");
+        }
+
+        if (!double.IsFinite(labelOffset?.XMillimeters ?? 0) ||
+            !double.IsFinite(labelOffset?.YMillimeters ?? -4))
+        {
+            throw new ArgumentException(
+                "Attachment label offset coordinates must be finite.",
+                nameof(labelOffset));
         }
 
         AttachmentId = attachmentId;
@@ -50,5 +59,27 @@ public sealed record AttachmentLayout
             WidthMillimeters,
             HeightMillimeters,
             LabelOffset);
+    }
+
+    public AttachmentLayout Resize(
+        double widthMillimeters,
+        double heightMillimeters)
+    {
+        return new AttachmentLayout(
+            AttachmentId,
+            Offset,
+            widthMillimeters,
+            heightMillimeters,
+            LabelOffset);
+    }
+
+    public AttachmentLayout WithLabelOffset(DocumentPoint labelOffset)
+    {
+        return new AttachmentLayout(
+            AttachmentId,
+            Offset,
+            WidthMillimeters,
+            HeightMillimeters,
+            labelOffset);
     }
 }

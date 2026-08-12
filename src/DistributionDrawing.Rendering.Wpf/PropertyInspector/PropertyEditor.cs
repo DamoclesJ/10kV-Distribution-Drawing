@@ -200,6 +200,58 @@ public sealed class PropertyEditor
         }
     }
 
+    public PropertyEditResult TryEditAttachmentLayout(
+        RuntimeLayoutDocument runtimeLayout,
+        SelectionReference target,
+        string width,
+        string height,
+        string labelOffsetX,
+        string labelOffsetY,
+        out ICommand? executedCommand)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+        ArgumentNullException.ThrowIfNull(target);
+        executedCommand = null;
+
+        ResolvedSelection? selection = _resolver.Resolve(target);
+        if (selection is null)
+        {
+            return PropertyEditResult.Failure(
+                "TargetNotFound",
+                "The selected object no longer exists.");
+        }
+
+        if (!_commandFactory.TryCreateAttachmentLayout(
+                selection,
+                runtimeLayout,
+                width,
+                height,
+                labelOffsetX,
+                labelOffsetY,
+                out ICommand? command,
+                out PropertyEditError? error))
+        {
+            PropertyEditError failure = error ??
+                new PropertyEditError("PropertyInvalid", "The property edit was rejected.");
+            return PropertyEditResult.Failure(failure.Code, failure.Message);
+        }
+
+        try
+        {
+            _commandStack.ExecuteCommand(command!);
+            executedCommand = command;
+            return PropertyEditResult.Success();
+        }
+        catch (ArgumentException exception)
+        {
+            return PropertyEditResult.Failure("LayoutRuleViolation", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return PropertyEditResult.Failure("LayoutRuleViolation", exception.Message);
+        }
+    }
+
     public PropertyEditResult TryEditWorkScope(
         SelectionReference target,
         string description,

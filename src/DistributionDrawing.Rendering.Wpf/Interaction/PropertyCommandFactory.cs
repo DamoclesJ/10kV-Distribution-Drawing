@@ -250,6 +250,80 @@ public sealed class PropertyCommandFactory
         return true;
     }
 
+    public bool TryCreateAttachmentLayout(
+        ResolvedSelection selection,
+        RuntimeLayoutDocument runtimeLayout,
+        string width,
+        string height,
+        string labelOffsetX,
+        string labelOffsetY,
+        out ICommand? command,
+        out PropertyEditError? error)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+
+        command = null;
+        error = null;
+        if (selection.Reference.Kind != SelectionTargetKind.PoleAttachment ||
+            selection.PoleAttachment is null)
+        {
+            error = new PropertyEditError(
+                "TargetNotSupported",
+                "Attachment layout editing requires a selected pole attachment.");
+            return false;
+        }
+
+        if (!TryParseFiniteCoordinate(width, out double widthValue) ||
+            !TryParseFiniteCoordinate(height, out double heightValue) ||
+            !TryParseFiniteCoordinate(labelOffsetX, out double labelX) ||
+            !TryParseFiniteCoordinate(labelOffsetY, out double labelY))
+        {
+            error = new PropertyEditError(
+                "InputInvalid",
+                "Attachment layout values must be finite numbers.");
+            return false;
+        }
+
+        if (widthValue <= 0 || heightValue <= 0)
+        {
+            error = new PropertyEditError(
+                "InputInvalid",
+                "Attachment width and height must be greater than zero.");
+            return false;
+        }
+
+        Guid attachmentId = selection.PoleAttachment.AttachmentId;
+        if (!runtimeLayout.DrawingLayout.Attachments.TryGetValue(
+                attachmentId,
+                out AttachmentLayout? current))
+        {
+            error = new PropertyEditError(
+                "TargetNotFound",
+                "The selected attachment layout no longer exists.");
+            return false;
+        }
+
+        AttachmentLayout after = current
+            .Resize(widthValue, heightValue)
+            .WithLabelOffset(new DocumentPoint(labelX, labelY));
+        if (after == current)
+        {
+            error = new PropertyEditError(
+                "NoChange",
+                "Attachment layout has not changed.");
+            return false;
+        }
+
+        command = _deviceCommandFactory.CreateChangeAttachmentLayout(
+            runtimeLayout,
+            attachmentId,
+            widthValue,
+            heightValue,
+            new DocumentPoint(labelX, labelY));
+        return true;
+    }
+
     public bool TryCreateWorkScope(
         ResolvedSelection selection,
         string description,

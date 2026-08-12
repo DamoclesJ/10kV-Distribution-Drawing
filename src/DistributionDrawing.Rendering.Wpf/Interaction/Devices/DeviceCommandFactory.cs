@@ -157,6 +157,28 @@ public sealed class DeviceCommandFactory
             displayName);
     }
 
+    public ChangeAttachmentLayoutCommand CreateChangeAttachmentLayout(
+        RuntimeLayoutDocument runtimeLayout,
+        Guid attachmentId,
+        double widthMillimeters,
+        double heightMillimeters,
+        DocumentPoint labelOffset)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+
+        AttachmentLayout before = runtimeLayout.DrawingLayout.Attachments
+            .GetValueOrDefault(attachmentId)
+            ?? throw new InvalidOperationException(
+                $"No layout exists for attachment '{attachmentId}'.");
+        AttachmentLayout after = before
+            .Resize(widthMillimeters, heightMillimeters)
+            .WithLabelOffset(labelOffset);
+        return new ChangeAttachmentLayoutCommand(
+            runtimeLayout.DrawingLayout,
+            before,
+            after);
+    }
+
     public ICommand CreateRemove(
         DrawingDocument document,
         RuntimeLayoutDocument runtimeLayout,

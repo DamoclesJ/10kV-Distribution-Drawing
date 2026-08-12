@@ -202,6 +202,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
         UpdateAttachmentOffsetEditor();
+        UpdateAttachmentLayoutEditor();
         UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
@@ -1053,6 +1054,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
         UpdateAttachmentOffsetEditor();
+        UpdateAttachmentLayoutEditor();
         UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
@@ -1138,6 +1140,44 @@ public partial class MainWindow : Window
         {
             ShowCommandError(
                 "电缆终端名称修改失败",
+                result.ErrorMessage ?? "输入无效。");
+            return;
+        }
+
+        if (executedCommand is not null)
+        {
+            session.SelectionTransitions.RecordExecuted(
+                executedCommand,
+                SelectionTransition.Preserve(beforeSelection));
+            session.SelectionTransitions.Prune(session.CommandStack.History);
+        }
+
+        RefreshDrawingScene();
+    }
+
+    private void OnApplyAttachmentLayout(object sender, RoutedEventArgs e)
+    {
+        if (_workspace.CurrentSession is not { } session ||
+            _selectionManager.Selected is not
+                { Kind: SelectionTargetKind.PoleAttachment } target)
+        {
+            ShowCommandError("附属设备布局修改失败", "请先选择一个杆塔附属设备。");
+            return;
+        }
+
+        SelectionReference? beforeSelection = target;
+        PropertyEditResult result = _propertyEditor.TryEditAttachmentLayout(
+            session.Layout,
+            target,
+            AttachmentWidthInput.Text,
+            AttachmentHeightInput.Text,
+            AttachmentLabelOffsetXInput.Text,
+            AttachmentLabelOffsetYInput.Text,
+            out ICommand? executedCommand);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError(
+                "附属设备布局修改失败",
                 result.ErrorMessage ?? "输入无效。");
             return;
         }
@@ -1264,6 +1304,31 @@ public partial class MainWindow : Window
             "R",
             CultureInfo.InvariantCulture);
         AttachmentOffsetYInput.Text = layout.Offset.YMillimeters.ToString(
+            "R",
+            CultureInfo.InvariantCulture);
+    }
+
+    private void UpdateAttachmentLayoutEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.Reference.Kind != SelectionTargetKind.PoleAttachment ||
+            selection.AttachmentLayout is not { } layout)
+        {
+            AttachmentLayoutEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        AttachmentLayoutEditorPanel.Visibility = Visibility.Visible;
+        AttachmentWidthInput.Text = layout.WidthMillimeters.ToString(
+            "R",
+            CultureInfo.InvariantCulture);
+        AttachmentHeightInput.Text = layout.HeightMillimeters.ToString(
+            "R",
+            CultureInfo.InvariantCulture);
+        AttachmentLabelOffsetXInput.Text = layout.LabelOffset.XMillimeters.ToString(
+            "R",
+            CultureInfo.InvariantCulture);
+        AttachmentLabelOffsetYInput.Text = layout.LabelOffset.YMillimeters.ToString(
             "R",
             CultureInfo.InvariantCulture);
     }
@@ -1467,6 +1532,7 @@ public partial class MainWindow : Window
                     _selectionResolver.Resolve(_selectionManager.Selected)));
             UpdatePoleNumberEditor();
             UpdateAttachmentOffsetEditor();
+            UpdateAttachmentLayoutEditor();
             UpdateCableTerminationDisplayNameEditor();
             UpdateGroundingPointEditor();
             UpdateWorkScopeEditor();
@@ -1519,6 +1585,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
         UpdateAttachmentOffsetEditor();
+        UpdateAttachmentLayoutEditor();
         UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();

@@ -123,6 +123,32 @@
             <Button Content="应用位置"
                     Click="OnApplyAttachmentOffset" />
           </StackPanel>
+          <StackPanel x:Name="AttachmentLayoutEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="附属设备布局" />
+            <TextBlock Margin="0,4,0,0"
+                       Foreground="#555"
+                       Text="Width (mm)" />
+            <TextBox x:Name="AttachmentWidthInput"
+                     Margin="0,2,0,2" />
+            <TextBlock Foreground="#555"
+                       Text="Height (mm)" />
+            <TextBox x:Name="AttachmentHeightInput"
+                     Margin="0,2,0,2" />
+            <TextBlock Foreground="#555"
+                       Text="LabelOffset X (mm)" />
+            <TextBox x:Name="AttachmentLabelOffsetXInput"
+                     Margin="0,2,0,2" />
+            <TextBlock Foreground="#555"
+                       Text="LabelOffset Y (mm)" />
+            <TextBox x:Name="AttachmentLabelOffsetYInput"
+                     Margin="0,2,0,4" />
+            <Button Content="应用布局"
+                    Click="OnApplyAttachmentLayout" />
+          </StackPanel>
           <StackPanel x:Name="CableTerminationDisplayNameEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
