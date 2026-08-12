@@ -1,4 +1,5 @@
 using DistributionDrawing.Desktop.ConnectionEditing;
+using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -9,13 +10,17 @@ public sealed class DrawingToolCoordinator
 {
     private readonly PlacementController _placement;
     private readonly OverheadLineConnectionController _overheadLine;
+    private readonly CableTerminationAttachmentController _cableTerminationAttachment;
 
     public DrawingToolCoordinator(
         PlacementController placement,
-        OverheadLineConnectionController overheadLine)
+        OverheadLineConnectionController overheadLine,
+        CableTerminationAttachmentController cableTerminationAttachment)
     {
         _placement = placement ?? throw new ArgumentNullException(nameof(placement));
         _overheadLine = overheadLine ?? throw new ArgumentNullException(nameof(overheadLine));
+        _cableTerminationAttachment = cableTerminationAttachment ??
+            throw new ArgumentNullException(nameof(cableTerminationAttachment));
     }
 
     public bool IsActive =>
@@ -66,6 +71,12 @@ public sealed class DrawingToolCoordinator
         if (_overheadLine.IsOverheadLineSelected)
         {
             _overheadLine.RemoveSelected();
+            return;
+        }
+
+        if (_cableTerminationAttachment.IsCableTerminationAttachmentSelected)
+        {
+            _cableTerminationAttachment.RemoveSelected();
             return;
         }
 

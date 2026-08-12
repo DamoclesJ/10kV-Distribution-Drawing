@@ -66,7 +66,10 @@ public partial class MainWindow : Window
             () => _workspace.CurrentSession);
         _cableTerminationAttachment = new CableTerminationAttachmentController(
             () => _workspace.CurrentSession);
-        _drawingTools = new DrawingToolCoordinator(_placement, _overheadLineConnection);
+        _drawingTools = new DrawingToolCoordinator(
+            _placement,
+            _overheadLineConnection,
+            _cableTerminationAttachment);
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
         _cableTerminationAttachment.SceneChanged += OnDrawingToolVisualChanged;

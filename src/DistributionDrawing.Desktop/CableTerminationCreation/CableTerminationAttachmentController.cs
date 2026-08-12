@@ -21,6 +21,10 @@ public sealed class CableTerminationAttachmentController
 
     public event EventHandler? SceneChanged;
 
+    public bool IsCableTerminationAttachmentSelected =>
+        _getSession()?.SelectionManager.Selected?.Kind ==
+        SelectionTargetKind.PoleAttachment;
+
     public void AddToSelectedPole(string? displayName)
     {
         ProjectRuntimeSession session = RequireSession();
@@ -51,6 +55,40 @@ public sealed class CableTerminationAttachmentController
                 SelectionTargetKind.PoleAttachment,
                 command.Creation.Attachment.AttachmentId,
                 pole.Id));
+        SceneChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void RemoveSelected()
+    {
+        ProjectRuntimeSession session = RequireSession();
+        SelectionReference selected = session.SelectionManager.Selected
+            ?? throw new InvalidOperationException("No pole attachment is selected.");
+        if (selected.Kind != SelectionTargetKind.PoleAttachment)
+        {
+            throw new InvalidOperationException(
+                "The selected object is not a pole attachment.");
+        }
+
+        PoleAttachment attachment = session.PersistenceSession.Domain.PoleAttachments
+            .SingleOrDefault(candidate => candidate.AttachmentId == selected.ObjectId)
+            ?? throw new InvalidOperationException(
+                $"Pole attachment '{selected.ObjectId}' does not exist.");
+        if (session.PersistenceSession.Domain.Devices.SingleOrDefault(candidate =>
+                candidate.Id == attachment.AttachedDeviceId) is not CableTermination)
+        {
+            throw new InvalidOperationException(
+                $"Attachment '{attachment.AttachmentId}' does not reference a cable termination.");
+        }
+
+        RemoveCableTerminationAttachmentCommand command =
+            _commandFactory.CreateRemoveCableTerminationAttachment(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                attachment.AttachmentId);
+
+        session.CommandStack.ExecuteCommand(command);
+        session.SelectionManager.Clear();
+        session.RebuildScene();
         SceneChanged?.Invoke(this, EventArgs.Empty);
     }
 
