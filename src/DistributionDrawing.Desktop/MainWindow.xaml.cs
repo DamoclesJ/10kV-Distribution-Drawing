@@ -12,6 +12,7 @@ using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Desktop.Workspace;
+using DistributionDrawing.Desktop.Placement;
 
 namespace DistributionDrawing.Desktop;
 
@@ -29,6 +30,7 @@ public partial class MainWindow : Window
     private PropertyProjector _propertyProjector = new();
     private PropertyInspectorViewModel _propertyInspector = new();
     private readonly ProjectWorkspaceController _workspace;
+    private readonly PlacementController _placement;
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
@@ -50,6 +52,8 @@ public partial class MainWindow : Window
             _sceneBuilder,
             EnsureTransientEditsCommitted);
         _workspace.SessionChanged += OnWorkspaceSessionChanged;
+        _placement = new PlacementController(() => _workspace.CurrentSession);
+        _placement.SceneChanged += OnPlacementSceneChanged;
     }
 
     private void OnNewProject(object sender, RoutedEventArgs e) => _workspace.NewProject();
@@ -61,6 +65,61 @@ public partial class MainWindow : Window
     private void OnSaveProjectAs(object sender, RoutedEventArgs e) => _workspace.SaveProjectAs();
 
     private void OnCloseProject(object sender, RoutedEventArgs e) => _workspace.CloseCurrentProject();
+
+    private void OnBeginPlacePole(object sender, RoutedEventArgs e)
+    {
+        _placement.BeginPole();
+    }
+
+    private void OnBeginPlaceRingCabinet(object sender, RoutedEventArgs e)
+    {
+        _placement.BeginRingCabinet();
+    }
+
+    private void OnCancelPlacement(object sender, RoutedEventArgs e)
+    {
+        _placement.Cancel();
+    }
+
+    private void OnRemoveSelectedDevice(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _placement.RemoveSelected();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ShowCommandError("删除设备失败", exception.Message);
+        }
+    }
+
+    private void OnWindowKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Escape)
+        {
+            _placement.Cancel();
+            e.Handled = true;
+        }
+    }
+
+    private void OnPlacementSceneChanged(object? sender, EventArgs e)
+    {
+        if (_workspace.CurrentSession is not { } session)
+        {
+            return;
+        }
+
+        _currentScene = session.Scene;
+        _activeSource = session.InspectionSource;
+        _selectionResolver.SetSource(_activeSource);
+        _propertyInspector.Apply(
+            _propertyProjector.Project(
+                _selectionResolver.Resolve(_selectionManager.Selected)));
+        UpdatePoleNumberEditor();
+        UpdateGroundingPointEditor();
+        UpdateWorkScopeEditor();
+        RenderCurrentScene();
+    }
 
     protected override void OnClosing(CancelEventArgs e)
     {
@@ -118,6 +177,7 @@ public partial class MainWindow : Window
 
     private void OnWorkspaceSessionChanged(object? sender, EventArgs e)
     {
+        _placement.Cancel();
         if (_workspace.CurrentSession is not { } session)
         {
             OnClearDrawing(this, new RoutedEventArgs());
@@ -491,6 +551,21 @@ public partial class MainWindow : Window
         var documentPoint = new DocumentPoint(
             _coordinates.DipToMillimeters(point.X),
             _coordinates.DipToMillimeters(point.Y));
+
+        if (_placement.Mode != PlacementMode.Idle)
+        {
+            try
+            {
+                _placement.Place(documentPoint);
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+            {
+                ShowCommandError("放置设备失败", exception.Message);
+            }
+
+            e.Handled = true;
+            return;
+        }
 
         if (_groundingPointPickMode)
         {

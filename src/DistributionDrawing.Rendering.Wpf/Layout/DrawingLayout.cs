@@ -57,4 +57,14 @@ public sealed class DrawingLayout
 
         _poles[layout.PoleId] = layout;
     }
+
+    public PoleLayout RemovePole(Guid poleId)
+    {
+        if (!_poles.Remove(poleId, out PoleLayout? layout))
+        {
+            throw new InvalidOperationException($"No layout exists for pole '{poleId}'.");
+        }
+
+        return layout;
+    }
 }

@@ -64,7 +64,10 @@ public sealed class SelectionObjectResolver
 
     private ResolvedSelection? ResolveRingCabinet(SelectionReference reference)
     {
-        if (_source.RingCabinet is not { } cabinet || cabinet.Id != reference.ObjectId)
+        RingCabinet? cabinet = GetRingCabinets()
+            .SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
+        if (cabinet is null ||
+            !_source.RingCabinetLayouts.TryGetValue(cabinet.Id, out RingCabinetLayout? layout))
         {
             return null;
         }
@@ -73,21 +76,25 @@ public sealed class SelectionObjectResolver
         {
             Reference = reference,
             RingCabinet = cabinet,
-            RingCabinetLayout = _source.RingCabinetLayout
+            RingCabinetLayout = layout
         };
     }
 
     private ResolvedSelection? ResolveInterval(SelectionReference reference)
     {
-        if (_source.RingCabinet is not { } cabinet ||
-            (reference.ParentId is Guid parentId && parentId != cabinet.Id))
+        RingCabinet? cabinet = reference.ParentId is Guid parentId
+            ? GetRingCabinets().SingleOrDefault(candidate => candidate.Id == parentId)
+            : GetRingCabinets().SingleOrDefault(candidate =>
+                candidate.Intervals.Any(interval => interval.IntervalId == reference.ObjectId));
+        if (cabinet is null)
         {
             return null;
         }
 
         RingCabinetInterval? interval = cabinet.Intervals
             .SingleOrDefault(candidate => candidate.IntervalId == reference.ObjectId);
-        if (interval is null || _source.RingCabinetLayout is not { } cabinetLayout ||
+        if (interval is null ||
+            !_source.RingCabinetLayouts.TryGetValue(cabinet.Id, out RingCabinetLayout? cabinetLayout) ||
             !cabinetLayout.IntervalLayouts.TryGetValue(
                 interval.IntervalId,
                 out RingCabinetIntervalLayout intervalLayout))
@@ -100,7 +107,7 @@ public sealed class SelectionObjectResolver
             Reference = reference,
             RingCabinet = cabinet,
             RingCabinetInterval = interval,
-            RingCabinetLayout = _source.RingCabinetLayout,
+            RingCabinetLayout = cabinetLayout,
             RingCabinetIntervalLayout = intervalLayout
         };
     }
@@ -125,18 +132,17 @@ public sealed class SelectionObjectResolver
             };
         }
 
-        if (_source.RingCabinet is not { } cabinet)
-        {
-            return null;
-        }
-
-        RingCabinetInterval? interval = cabinet.Intervals
+        RingCabinet? cabinet = GetRingCabinets().SingleOrDefault(candidate =>
+            candidate.Intervals.Any(interval => interval.IntervalId == reference.ParentId));
+        RingCabinetInterval? interval = cabinet?.Intervals
             .SingleOrDefault(candidate => candidate.IntervalId == reference.ParentId);
         SwitchDevice? switchDevice = interval?.SwitchDevices
             .SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
+        RingCabinetLayout? resolvedCabinetLayout = null;
         RingCabinetIntervalLayout? intervalLayout = null;
-        if (interval is not null && _source.RingCabinetLayout is { } cabinetLayout &&
-            cabinetLayout.IntervalLayouts.TryGetValue(interval.IntervalId, out RingCabinetIntervalLayout foundIntervalLayout))
+        if (cabinet is not null && interval is not null &&
+            _source.RingCabinetLayouts.TryGetValue(cabinet.Id, out resolvedCabinetLayout) &&
+            resolvedCabinetLayout.IntervalLayouts.TryGetValue(interval.IntervalId, out RingCabinetIntervalLayout foundIntervalLayout))
         {
             intervalLayout = foundIntervalLayout;
         }
@@ -148,10 +154,18 @@ public sealed class SelectionObjectResolver
                 Reference = reference,
                 RingCabinet = cabinet,
                 RingCabinetInterval = interval,
-                RingCabinetLayout = _source.RingCabinetLayout,
+                RingCabinetLayout = resolvedCabinetLayout,
                 RingCabinetIntervalLayout = intervalLayout,
                 SwitchDevice = switchDevice
             };
+    }
+
+    private IEnumerable<RingCabinet> GetRingCabinets()
+    {
+        RingCabinet[] cabinets = _source.Devices.OfType<RingCabinet>().ToArray();
+        return cabinets.Length > 0
+            ? cabinets
+            : _source.RingCabinet is null ? [] : [_source.RingCabinet];
     }
 
     private ResolvedSelection? ResolveAttachment(SelectionReference reference)

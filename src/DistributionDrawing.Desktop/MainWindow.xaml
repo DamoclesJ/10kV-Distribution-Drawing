@@ -7,6 +7,7 @@
         Height="800"
         MinWidth="800"
         MinHeight="600"
+        KeyDown="OnWindowKeyDown"
         WindowStartupLocation="CenterScreen">
   <DockPanel>
     <Menu DockPanel.Dock="Top">
@@ -17,6 +18,13 @@
         <MenuItem Header="另存为" Click="OnSaveProjectAs" />
         <Separator />
         <MenuItem Header="关闭工程" Click="OnCloseProject" />
+      </MenuItem>
+      <MenuItem Header="设备">
+        <MenuItem Header="添加杆塔" Click="OnBeginPlacePole" />
+        <MenuItem Header="添加环网柜" Click="OnBeginPlaceRingCabinet" />
+        <MenuItem Header="取消放置" Click="OnCancelPlacement" />
+        <Separator />
+        <MenuItem Header="删除所选设备" Click="OnRemoveSelectedDevice" />
       </MenuItem>
       <MenuItem Header="编辑">
         <MenuItem Header="撤销"

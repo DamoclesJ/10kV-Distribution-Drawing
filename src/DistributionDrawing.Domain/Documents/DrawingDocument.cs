@@ -113,6 +113,85 @@ public sealed class DrawingDocument
         _devices.Add(device);
     }
 
+    public void RemoveDevice(Guid deviceId)
+    {
+        Device device = _devices.SingleOrDefault(candidate => candidate.Id == deviceId)
+            ?? throw new InvalidOperationException($"Device '{deviceId}' does not exist.");
+        if (device is not Pole and not RingCabinet)
+        {
+            throw new InvalidOperationException(
+                "Only Pole and RingCabinet removal is supported in this phase.");
+        }
+
+        HashSet<Guid> aggregateDeviceIds = [deviceId];
+        HashSet<Guid> aggregateOwnerIds = [deviceId];
+        if (device is RingCabinet cabinet)
+        {
+            aggregateDeviceIds.UnionWith(cabinet.InternalSwitchDevices.Select(item => item.Id));
+            aggregateOwnerIds.UnionWith(cabinet.Intervals.Select(item => item.IntervalId));
+        }
+
+        HashSet<Guid> terminalIds = _terminals
+            .Where(terminal => aggregateOwnerIds.Contains(terminal.OwnerId) ||
+                aggregateDeviceIds.Contains(terminal.OwnerId))
+            .Select(terminal => terminal.Id)
+            .ToHashSet();
+
+        if (_connections.Any(connection =>
+                terminalIds.Contains(connection.StartTerminalId) ||
+                terminalIds.Contains(connection.EndTerminalId)))
+        {
+            throw new InvalidOperationException(
+                $"Device '{deviceId}' is still referenced by a connection.");
+        }
+
+        if (_poleAttachments.Any(attachment =>
+                attachment.PoleId == deviceId ||
+                aggregateDeviceIds.Contains(attachment.AttachedDeviceId)))
+        {
+            throw new InvalidOperationException(
+                $"Device '{deviceId}' is still referenced by a pole attachment.");
+        }
+
+        if (device is Pole && _overheadLines.Any(line => line.SupportPoleIds.Contains(deviceId)))
+        {
+            throw new InvalidOperationException(
+                $"Pole '{deviceId}' is still referenced by an overhead line.");
+        }
+
+        if (_groundingPoints.Any(point => terminalIds.Contains(point.TerminalId)) ||
+            _workScopes.Any(scope =>
+                aggregateDeviceIds.Contains(scope.StartBoundary.DeviceId) ||
+                aggregateDeviceIds.Contains(scope.EndBoundary.DeviceId) ||
+                terminalIds.Contains(scope.StartBoundary.TerminalId) ||
+                terminalIds.Contains(scope.EndBoundary.TerminalId)))
+        {
+            throw new InvalidOperationException(
+                $"Device '{deviceId}' is still referenced by Professional data.");
+        }
+
+        if (device is RingCabinet ringCabinet)
+        {
+            _terminals.RemoveAll(terminal => terminalIds.Contains(terminal.Id));
+            _electricalNodes.RemoveAll(node =>
+                aggregateOwnerIds.Contains(node.OwnerId) ||
+                aggregateDeviceIds.Contains(node.OwnerId));
+            _switchAssemblies.RemoveAll(assembly =>
+                ringCabinet.InternalSwitchAssemblies.Any(item => item.AssemblyId == assembly.AssemblyId));
+            _devices.RemoveAll(item => aggregateDeviceIds.Contains(item.Id));
+            foreach (RingCabinetInterval interval in ringCabinet.Intervals)
+            {
+                _internalAggregateOwnerIds.Remove(interval.IntervalId);
+            }
+
+            return;
+        }
+
+        _terminals.RemoveAll(terminal => terminalIds.Contains(terminal.Id));
+        _electricalNodes.RemoveAll(node => node.OwnerId == deviceId);
+        _devices.Remove(device);
+    }
+
     public void AddElectricalNode(ElectricalNode electricalNode)
     {
         ArgumentNullException.ThrowIfNull(electricalNode);
