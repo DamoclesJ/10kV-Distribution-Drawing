@@ -8,6 +8,7 @@ public sealed class PlacementController
 {
     private readonly Func<ProjectRuntimeSession?> _getSession;
     private readonly DeviceCommandFactory _commandFactory;
+    private RingCabinetCreationConfiguration? _pendingRingCabinetConfiguration;
 
     public PlacementController(
         Func<ProjectRuntimeSession?> getSession,
@@ -21,11 +22,24 @@ public sealed class PlacementController
 
     public event EventHandler? SceneChanged;
 
-    public void BeginPole() => Mode = PlacementMode.PlacingPole;
+    public void BeginPole()
+    {
+        _pendingRingCabinetConfiguration = null;
+        Mode = PlacementMode.PlacingPole;
+    }
 
-    public void BeginRingCabinet() => Mode = PlacementMode.PlacingRingCabinet;
+    public void BeginRingCabinet(RingCabinetCreationConfiguration configuration)
+    {
+        _pendingRingCabinetConfiguration = configuration
+            ?? throw new ArgumentNullException(nameof(configuration));
+        Mode = PlacementMode.PlacingRingCabinet;
+    }
 
-    public void Cancel() => Mode = PlacementMode.Idle;
+    public void Cancel()
+    {
+        _pendingRingCabinetConfiguration = null;
+        Mode = PlacementMode.Idle;
+    }
 
     public bool Place(DocumentPoint position)
     {
@@ -43,9 +57,14 @@ public sealed class PlacementController
                 selection = new SelectionReference(SelectionTargetKind.Device, pole.Pole.Id);
                 break;
             case PlacementMode.PlacingRingCabinet:
+                RingCabinetCreationConfiguration configuration =
+                    _pendingRingCabinetConfiguration
+                    ?? throw new InvalidOperationException(
+                        "Ring cabinet placement has no creation configuration.");
                 AddRingCabinetCommand cabinet = _commandFactory.CreateAddRingCabinet(
                     session.PersistenceSession.Domain,
                     session.Layout,
+                    configuration,
                     position);
                 command = cabinet;
                 selection = new SelectionReference(
@@ -57,6 +76,7 @@ public sealed class PlacementController
         }
 
         session.CommandStack.ExecuteCommand(command);
+        _pendingRingCabinetConfiguration = null;
         Mode = PlacementMode.Idle;
         session.RebuildScene();
         session.SelectionManager.Select(selection);

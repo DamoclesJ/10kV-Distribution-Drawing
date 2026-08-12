@@ -1,5 +1,6 @@
 using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.Placement;
+using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Desktop.DrawingTools;
@@ -26,10 +27,10 @@ public sealed class DrawingToolCoordinator
         _placement.BeginPole();
     }
 
-    public void BeginRingCabinet()
+    public void BeginRingCabinet(RingCabinetCreationConfiguration configuration)
     {
         _overheadLine.Cancel();
-        _placement.BeginRingCabinet();
+        _placement.BeginRingCabinet(configuration);
     }
 
     public void BeginOverheadLine()

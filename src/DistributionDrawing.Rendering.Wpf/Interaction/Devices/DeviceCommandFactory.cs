@@ -9,6 +9,17 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 
 public sealed class DeviceCommandFactory
 {
+    private readonly RingCabinetCreationFactory _ringCabinetCreationFactory;
+    private readonly RingCabinetLayoutFactory _ringCabinetLayoutFactory;
+
+    public DeviceCommandFactory(
+        RingCabinetCreationFactory? ringCabinetCreationFactory = null,
+        RingCabinetLayoutFactory? ringCabinetLayoutFactory = null)
+    {
+        _ringCabinetCreationFactory = ringCabinetCreationFactory ?? new RingCabinetCreationFactory();
+        _ringCabinetLayoutFactory = ringCabinetLayoutFactory ?? new RingCabinetLayoutFactory();
+    }
+
     public AddPoleCommand CreateAddPole(
         DrawingDocument document,
         RuntimeLayoutDocument runtimeLayout,
@@ -31,23 +42,19 @@ public sealed class DeviceCommandFactory
     public AddRingCabinetCommand CreateAddRingCabinet(
         DrawingDocument document,
         RuntimeLayoutDocument runtimeLayout,
+        RingCabinetCreationConfiguration configuration,
         DocumentPoint position)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(runtimeLayout);
+        ArgumentNullException.ThrowIfNull(configuration);
 
-        Guid cabinetId = Guid.NewGuid();
-        RingCabinet cabinet = RingCabinet.CreateNormalLoadSwitchCabinet(
-            cabinetId,
-            $"环网柜-{document.Devices.OfType<RingCabinet>().Count() + 1}",
-            intervalCount: 3,
-            initialLoadSwitchState: SwitchState.Open,
-            initialGroundSwitchState: SwitchState.Open);
+        RingCabinet cabinet = _ringCabinetCreationFactory.Create(configuration);
         return new AddRingCabinetCommand(
             document,
             runtimeLayout,
             cabinet,
-            CreateRingCabinetLayout(cabinet, position));
+            _ringCabinetLayoutFactory.Create(cabinet, position));
     }
 
     public ICommand CreateRemove(
@@ -89,45 +96,5 @@ public sealed class DeviceCommandFactory
         while (document.Devices.OfType<Pole>().Any(pole => pole.PoleNumber == candidate));
 
         return candidate;
-    }
-
-    private static RingCabinetLayout CreateRingCabinetLayout(
-        RingCabinet cabinet,
-        DocumentPoint position)
-    {
-        const double intervalWidth = 42;
-        const double intervalHeight = 90;
-        var intervals = new List<RingCabinetIntervalLayout>();
-        foreach (RingCabinetInterval interval in cabinet.Intervals)
-        {
-            var switches = new[]
-            {
-                CreateSwitchLayout(interval, SwitchKind.LoadSwitch, new DocumentPoint(14, 30)),
-                CreateSwitchLayout(interval, SwitchKind.GroundSwitch, new DocumentPoint(14, 58))
-            };
-            intervals.Add(new RingCabinetIntervalLayout(
-                interval.IntervalId,
-                new DocumentPoint((interval.Sequence - 1) * intervalWidth, 10),
-                intervalWidth,
-                intervalHeight,
-                switchLayouts: switches));
-        }
-
-        return new RingCabinetLayout(
-            cabinet.Id,
-            position,
-            intervalWidth * cabinet.Intervals.Count,
-            110,
-            20,
-            intervals);
-    }
-
-    private static RingCabinetSwitchLayout CreateSwitchLayout(
-        RingCabinetInterval interval,
-        SwitchKind kind,
-        DocumentPoint position)
-    {
-        SwitchDevice switchDevice = interval.SwitchDevices.Single(item => item.SwitchKind == kind);
-        return new RingCabinetSwitchLayout(switchDevice.Id, position);
     }
 }
