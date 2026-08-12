@@ -37,9 +37,8 @@ public sealed class CableTerminationTests
         Assert.Equal(termination.InternalNodeId, node.Id);
         Assert.Equal(TopologyOwnerType.Device, node.OwnerType);
         Assert.Equal(termination.Id, node.OwnerId);
-        Assert.Equal(
-            new[] { termination.CableSideTerminalId, termination.OverheadSideTerminalId },
-            node.TerminalIds.OrderBy(id => id));
+        Assert.True(node.TerminalIds.SetEquals(
+            [termination.CableSideTerminalId, termination.OverheadSideTerminalId]));
         Assert.Empty(document.Connections);
     }
 
