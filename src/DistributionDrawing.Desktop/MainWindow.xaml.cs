@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Media;
 using System.ComponentModel;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
@@ -736,7 +737,7 @@ public partial class MainWindow : Window
 
         if (!TryParseGroundingPointIds(
                 WorkScopeGroundingPointIdsInput.Text,
-                out Guid[] groundingPointIds,
+                out Guid[] creationGroundingPointIds,
                 out string error))
         {
             ShowCommandError("工作范围创建失败", error);
@@ -750,7 +751,7 @@ public partial class MainWindow : Window
                 startBoundary,
                 endBoundary,
                 WorkScopeDescriptionInput.Text,
-                groundingPointIds);
+                creationGroundingPointIds);
             AddWorkScopeCommand addCommand = (AddWorkScopeCommand)command;
             _commandStack.ExecuteCommand(addCommand);
             ResetWorkScopePick();
