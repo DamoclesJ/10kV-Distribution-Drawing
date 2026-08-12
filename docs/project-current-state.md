@@ -1,8 +1,8 @@
 # Project Current State
 
-> 当前基线：`da75bc420c1cbb4d470d411390fcaa785ba68056`
+> 本文创建于 checkpoint commit `3c20457`（`Add project current state checkpoint`）。实际当前 HEAD 以 `git rev-parse HEAD` 为准。
 >
-> 本文是新会话交接用的当前状态摘要。仓库代码和最新设计文档是事实源，聊天历史不是事实源。
+> 本文是新会话交接用的当前状态摘要。仓库代码和最新设计文档始终是实现事实源，聊天历史不是事实源。
 
 ## 1. Project Identity
 

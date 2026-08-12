@@ -75,33 +75,20 @@ PT 不是独立柜体，而是一二次融合环网柜内部的特殊间隔。DT
 
 ## 当前开发阶段
 
-当前阶段：**M1.2-D 环网柜 Domain 第一阶段已完成。**
+当前主线：**Drawing Core Production Readiness**。
 
 已完成：
 
-- WPF 五项目工程骨架。
-- `DrawingVisual` 基础渲染。
-- 毫米文档坐标体系。
-- Windows 环境启动验证。
-- 普通负荷开关型环网柜。
-- 一二次融合间隔。
-- 混合环网柜。
-- 上刀上接地、上刀下接地、下刀下接地三种接地结构。
-- 一二次融合间隔状态评估。
-- 隔离刀闸与接地刀闸互斥联锁校验。
-- 环网柜 Domain 测试。
+- 工程会话基础能力。
+- Pole/RingCabinet 基础放置与移动。
+- 基于 Terminal 的 OverheadLine 连线。
+- Zoom/Pan/Fit 画布视图能力。
+- Persistence Core。
+- Professional Core。
 
-当前未实现：
+当前下一目标：**P0-6-B Minimal Configurable RingCabinet**。
 
-- `PTInterval`。
-- `DTUCabinet`。
-- 图元渲染。
-- 架空线路。
-- 杆塔附属设备。
-- 工作范围。
-- 工作地线。
-
-下一阶段：**M1 后续领域模型实现。**
+详细当前状态请阅读 [`docs/project-current-state.md`](docs/project-current-state.md)。
 
 ## 文档目录
 
