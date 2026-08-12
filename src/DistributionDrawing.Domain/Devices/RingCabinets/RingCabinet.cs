@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.SwitchAssemblies;
 using DistributionDrawing.Domain.Topology;
+using SwitchStateValue = DistributionDrawing.Domain.Devices.SwitchState;
 
 namespace DistributionDrawing.Domain.Devices.RingCabinets;
 
@@ -1242,33 +1243,33 @@ public sealed class RingCabinet : Device
             GroundingStructureKind.UpperIsolationGrounding =>
                 (isolationSwitchState, circuitBreakerState, groundSwitchState) switch
                 {
-                    (SwitchState.Open, SwitchState.Open, SwitchState.Open) =>
+                    (SwitchStateValue.Open, SwitchStateValue.Open, SwitchStateValue.Open) =>
                         OperationalState.ColdStandby,
-                    (SwitchState.Open, SwitchState.Closed, SwitchState.Closed) =>
+                    (SwitchStateValue.Open, SwitchStateValue.Closed, SwitchStateValue.Closed) =>
                         OperationalState.Maintenance,
-                    (SwitchState.Closed, SwitchState.Open, SwitchState.Open) =>
+                    (SwitchStateValue.Closed, SwitchStateValue.Open, SwitchStateValue.Open) =>
                         OperationalState.HotStandby,
-                    (SwitchState.Closed, SwitchState.Closed, SwitchState.Open) =>
+                    (SwitchStateValue.Closed, SwitchStateValue.Closed, SwitchStateValue.Open) =>
                         OperationalState.Running,
                     _ => OperationalState.Unclassified
                 },
             GroundingStructureKind.UpperLowerGrounding =>
                 (isolationSwitchState, circuitBreakerState, groundSwitchState) switch
                 {
-                    (SwitchState.Open, SwitchState.Open, SwitchState.Open) =>
+                    (SwitchStateValue.Open, SwitchStateValue.Open, SwitchStateValue.Open) =>
                         OperationalState.ColdStandby,
-                    (SwitchState.Open, SwitchState.Open, SwitchState.Closed) =>
+                    (SwitchStateValue.Open, SwitchStateValue.Open, SwitchStateValue.Closed) =>
                         OperationalState.Grounded,
-                    (SwitchState.Closed, SwitchState.Open, SwitchState.Open) =>
+                    (SwitchStateValue.Closed, SwitchStateValue.Open, SwitchStateValue.Open) =>
                         OperationalState.HotStandby,
-                    (SwitchState.Closed, SwitchState.Closed, SwitchState.Open) =>
+                    (SwitchStateValue.Closed, SwitchStateValue.Closed, SwitchStateValue.Open) =>
                         OperationalState.Running,
                     _ => OperationalState.Unclassified
                 },
             GroundingStructureKind.LowerLowerGrounding =>
                 (isolationSwitchState, circuitBreakerState, groundSwitchState) switch
                 {
-                    (SwitchState.Open, SwitchState.Open, SwitchState.Closed) =>
+                    (SwitchStateValue.Open, SwitchStateValue.Open, SwitchStateValue.Closed) =>
                         OperationalState.Grounded,
                     _ => OperationalState.Unclassified
                 },
@@ -1298,7 +1299,7 @@ public sealed class RingCabinet : Device
 
         foreach (SwitchDevice switchDevice in interval.SwitchDevices)
         {
-            if (GetRequiredSwitchState(switchDevice) != SwitchState.Closed)
+            if (GetRequiredSwitchState(switchDevice) != SwitchStateValue.Closed)
             {
                 continue;
             }

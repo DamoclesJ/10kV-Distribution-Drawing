@@ -255,8 +255,8 @@ public sealed class DrawingDocument
                     $"Cable termination terminal '{terminal.Id}' must reference its internal node.");
             }
 
-            if (owner is CableTermination cableTermination &&
-                terminal.Id == cableTermination.CableSideTerminalId)
+            if (owner is CableTermination cableSideTermination &&
+                terminal.Id == cableSideTermination.CableSideTerminalId)
             {
                 EnsureTerminalPolicy(
                     terminal,
