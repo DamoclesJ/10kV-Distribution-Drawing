@@ -174,12 +174,14 @@ Professional 对象可以通过已有编辑入口加入工程并显示；其数�
 
 ## 6. Current Technical Debt / Validation Gap
 
-当前开发环境没有可用的 `dotnet` 命令，因此最近阶段只能做静态检查和代码路径审查，不能把设计或代码存在描述为编译通过。
+当前已在 MacBook 环境使用 .NET SDK `10.0.400` 完成解决方案编译和 Domain 测试验证。
 
-仍需在 Windows/.NET 环境验证：
+仍需在 Windows/WPF 实机环境验证：
 
-- WPF 解决方案编译；
-- Domain 和已有测试执行；
+- WPF 应用实际启动和运行；
+- Desktop 创建、删除、Undo/Redo、Dirty、Save/Reload 端到端行为；
+- Windows 实机显示和交互。
+
 - 新建/打开/保存/另存为；
 - P0-2 设备放置、移动、删除和恢复；
 - P0-3 OverheadLine 连线、设备移动跟线和恢复；
@@ -204,17 +206,27 @@ P0-6-C 的 CableTermination + PoleAttachment 闭环代码已经完成，包含�
 - RuntimeLayout AttachmentLayout 的加入、删除和恢复；
 - Dirty、Save/Reload 的代码路径和静态验证。
 
-当前 P0-6-C 的 Git 实现基线为：
+当前 P0-6-C 的 Git 实现和验证基线为：
 
 - `94d676e`：CableTermination + PoleAttachment Domain/Command 基础；
 - `04f86d8`：Anchor / Selection / Inspector；
 - `b1e4f25`：Desktop CableTermination 创建闭环；
 - `2d211bf`：Desktop PoleAttachment 删除闭环。
+- `55f6586`：修复 Domain 编译错误；
+- `42f0dcb`：修复 Rendering.Wpf 编译错误；
+- `9b23a16`：修复 Desktop 编译错误；
+- `c1e5f03`：修正 CableTermination terminal set 测试断言。
+
+当前验证结果：
+
+- 验证环境：MacBook；
+- .NET SDK：`10.0.400`；
+- `dotnet build src/DistributionDrawing.sln`：成功；
+- Domain Tests：`55/55` 成功。
 
 当前限制：
 
-- 尚未完成 Windows/.NET 环境下的实际运行和端到端验收；
-- 当前开发环境没有可用的 `dotnet` 命令。
+- Windows/WPF 实机运行验收仍待完成。
 
 ## 7. Confirmed P0-6 Professional Decisions
 
@@ -273,7 +285,7 @@ Add RingCabinet
 
 ### P0-6-C：CableTermination + PoleAttachment 完整闭环
 
-代码实现已完成。Windows/.NET 实际运行验收待执行。
+已完成代码实现并通过 MacBook 编译/测试验证。Windows/WPF 实机运行验收仍待完成。
 
 ### P0-6-D
 
