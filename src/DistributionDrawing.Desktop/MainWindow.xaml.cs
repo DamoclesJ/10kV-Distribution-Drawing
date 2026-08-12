@@ -30,6 +30,11 @@ public partial class MainWindow : Window
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
     private Guid? _pendingGroundingPointTerminalId;
+    private WorkScopePickState _workScopePickState;
+    private BoundaryPointCommandValue? _pendingWorkScopeStartBoundary;
+    private BoundaryPointCommandValue? _pendingWorkScopeEndBoundary;
+    private Guid? _pendingWorkScopeTerminalId;
+    private Guid? _pendingWorkScopeDeviceId;
 
     public MainWindow()
     {
@@ -108,11 +113,14 @@ public partial class MainWindow : Window
         _activeSource = null;
         _groundingPointPickMode = false;
         _pendingGroundingPointTerminalId = null;
+        ResetWorkScopePick();
         _selectionResolver.SetSource(null);
         _selectionManager.Clear();
         _propertyInspector.Clear();
         PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
         GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
+        WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
+        WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
         DrawingSurface.Clear();
     }
 
@@ -164,6 +172,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        ResetWorkScopePick();
         _groundingPointPickMode = true;
         _pendingGroundingPointTerminalId = null;
         _selectionManager.Clear();
@@ -172,6 +181,28 @@ public partial class MainWindow : Window
         GroundingPointLocationInput.Text = string.Empty;
         GroundingPointNumberInput.Text = string.Empty;
         GroundingPointNoteInput.Text = string.Empty;
+    }
+
+    private void OnBeginAddWorkScope(object sender, RoutedEventArgs e)
+    {
+        if (_activeSource?.Document is null || _activeSource.DrawingLayout is null)
+        {
+            ShowCommandError(
+                "无法添加工作范围",
+                "当前场景没有可编辑的 DrawingDocument 工程。");
+            return;
+        }
+
+        _groundingPointPickMode = false;
+        _pendingGroundingPointTerminalId = null;
+        ResetWorkScopePick();
+        _workScopePickState = WorkScopePickState.PickingBoundaryA;
+        WorkScopeBoundaryASideInput.Text = string.Empty;
+        WorkScopeBoundaryBSideInput.Text = string.Empty;
+        WorkScopeDescriptionInput.Text = string.Empty;
+        WorkScopeGroundingPointIdsInput.Text = string.Empty;
+        _selectionManager.Clear();
+        UpdateWorkScopeEditor();
     }
 
     private void OnDrawRingCabinetComposition(object sender, RoutedEventArgs e)
@@ -187,7 +218,170 @@ public partial class MainWindow : Window
                 RingCabinet = cabinet,
                 RingCabinetLayout = layout,
                 HitTestIndex = scene.HitTestIndex
-            });
+        });
+    }
+
+    private void OnConfirmWorkScopeBoundaryA(object sender, RoutedEventArgs e)
+    {
+        if (_workScopePickState != WorkScopePickState.BoundaryAReady ||
+            _pendingWorkScopeTerminalId is not Guid terminalId ||
+            _pendingWorkScopeDeviceId is not Guid deviceId)
+        {
+            ShowCommandError("边界 A 未就绪", "请先在图面中选择边界 A 端子。");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(WorkScopeBoundaryASideInput.Text))
+        {
+            ShowCommandError("边界 A 无效", "Side 必须由用户明确输入。");
+            return;
+        }
+
+        _pendingWorkScopeStartBoundary = new BoundaryPointCommandValue(
+            deviceId,
+            terminalId,
+            WorkScopeBoundaryASideInput.Text.Trim());
+        _pendingWorkScopeTerminalId = null;
+        _pendingWorkScopeDeviceId = null;
+        _workScopePickState = WorkScopePickState.PickingBoundaryB;
+        UpdateWorkScopeEditor();
+    }
+
+    private void OnConfirmWorkScopeBoundaryB(object sender, RoutedEventArgs e)
+    {
+        if (_workScopePickState != WorkScopePickState.BoundaryBReady ||
+            _pendingWorkScopeTerminalId is not Guid terminalId ||
+            _pendingWorkScopeDeviceId is not Guid deviceId)
+        {
+            ShowCommandError("边界 B 未就绪", "请先在图面中选择边界 B 端子。");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(WorkScopeBoundaryBSideInput.Text))
+        {
+            ShowCommandError("边界 B 无效", "Side 必须由用户明确输入。");
+            return;
+        }
+
+        _pendingWorkScopeEndBoundary = new BoundaryPointCommandValue(
+            deviceId,
+            terminalId,
+            WorkScopeBoundaryBSideInput.Text.Trim());
+        _pendingWorkScopeTerminalId = null;
+        _pendingWorkScopeDeviceId = null;
+        _workScopePickState = WorkScopePickState.ReadyToCommit;
+        UpdateWorkScopeEditor();
+    }
+
+    private void OnApplyWorkScope(object sender, RoutedEventArgs e)
+    {
+        if (_selectionManager.Selected is { Kind: SelectionTargetKind.WorkScope } target)
+        {
+            if (!TryParseGroundingPointIds(
+                    WorkScopeEditorGroundingPointIdsInput.Text,
+                    out Guid[] groundingPointIds,
+                    out string parseError))
+            {
+                ShowCommandError("工作范围修改失败", parseError);
+                return;
+            }
+
+            PropertyEditResult result = _propertyEditor.TryEditWorkScope(
+                target,
+                WorkScopeEditorDescriptionInput.Text,
+                groundingPointIds);
+            if (!result.IsSuccess)
+            {
+                ShowCommandError(
+                    "工作范围修改失败",
+                    result.ErrorMessage ?? "输入无效。");
+                return;
+            }
+
+            RefreshDrawingScene();
+            return;
+        }
+
+        if (_workScopePickState != WorkScopePickState.ReadyToCommit ||
+            _activeSource?.Document is null ||
+            _pendingWorkScopeStartBoundary is not { } startBoundary ||
+            _pendingWorkScopeEndBoundary is not { } endBoundary)
+        {
+            ShowCommandError(
+                "无法创建工作范围",
+                "请先分别选择并确认两个边界端子。");
+            return;
+        }
+
+        if (!TryParseGroundingPointIds(
+                WorkScopeGroundingPointIdsInput.Text,
+                out Guid[] groundingPointIds,
+                out string error))
+        {
+            ShowCommandError("工作范围创建失败", error);
+            return;
+        }
+
+        try
+        {
+            ICommand command = _professionalCommandFactory.CreateAddWorkScope(
+                _activeSource.Document,
+                startBoundary,
+                endBoundary,
+                WorkScopeDescriptionInput.Text,
+                groundingPointIds);
+            AddWorkScopeCommand addCommand = (AddWorkScopeCommand)command;
+            _commandStack.ExecuteCommand(addCommand);
+            ResetWorkScopePick();
+            RefreshDrawingScene();
+            _selectionManager.Select(
+                new SelectionReference(
+                    SelectionTargetKind.WorkScope,
+                    addCommand.After.WorkScopeId));
+        }
+        catch (ArgumentException exception)
+        {
+            ShowCommandError("工作范围创建失败", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("工作范围创建失败", exception.Message);
+        }
+    }
+
+    private void OnRemoveWorkScope(object sender, RoutedEventArgs e)
+    {
+        if (_activeSource?.Document is null ||
+            _selectionManager.Selected is not
+            { Kind: SelectionTargetKind.WorkScope, ObjectId: var workScopeId })
+        {
+            ShowCommandError("无法删除工作范围", "请先选择一个工作范围。");
+            return;
+        }
+
+        try
+        {
+            ICommand command = _professionalCommandFactory.CreateRemoveWorkScope(
+                _activeSource.Document,
+                workScopeId);
+            _commandStack.ExecuteCommand(command);
+            _selectionManager.Clear();
+            RefreshDrawingScene();
+        }
+        catch (ArgumentException exception)
+        {
+            ShowCommandError("工作范围删除失败", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("工作范围删除失败", exception.Message);
+        }
+    }
+
+    private void OnCancelWorkScope(object sender, RoutedEventArgs e)
+    {
+        ResetWorkScopePick();
+        UpdateWorkScopeEditor();
     }
 
     private void OnDrawingSurfaceMouseLeftButtonDown(
@@ -218,6 +412,47 @@ public partial class MainWindow : Window
             _selectionManager.Select(
                 new SelectionReference(SelectionTargetKind.Terminal, terminalId.Value));
             GroundingPointTerminalText.Text = $"已选择端子：{terminalId.Value}";
+            e.Handled = true;
+            return;
+        }
+
+        if (_workScopePickState is WorkScopePickState.PickingBoundaryA or
+            WorkScopePickState.PickingBoundaryB)
+        {
+            Guid? terminalId = HitTestTerminal(documentPoint);
+            if (terminalId is null)
+            {
+                ShowCommandError("端子选择失败", "点击位置没有可解析的端子。");
+                e.Handled = true;
+                return;
+            }
+
+            Guid? deviceId = ResolveBoundaryDeviceId(terminalId.Value);
+            if (deviceId is null)
+            {
+                ShowCommandError(
+                    "边界选择失败",
+                    "无法根据当前工程聚合关系解析端子所属设备。");
+                e.Handled = true;
+                return;
+            }
+
+            if (_workScopePickState == WorkScopePickState.PickingBoundaryB &&
+                _pendingWorkScopeStartBoundary?.TerminalId == terminalId.Value)
+            {
+                ShowCommandError("边界选择失败", "两个边界不能引用同一个端子。");
+                e.Handled = true;
+                return;
+            }
+
+            _pendingWorkScopeTerminalId = terminalId;
+            _pendingWorkScopeDeviceId = deviceId;
+            _workScopePickState = _workScopePickState == WorkScopePickState.PickingBoundaryA
+                ? WorkScopePickState.BoundaryAReady
+                : WorkScopePickState.BoundaryBReady;
+            _selectionManager.Select(
+                new SelectionReference(SelectionTargetKind.Terminal, terminalId.Value));
+            UpdateWorkScopeEditor();
             e.Handled = true;
             return;
         }
@@ -286,6 +521,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
         UpdateGroundingPointEditor();
+        UpdateWorkScopeEditor();
         RenderCurrentScene();
     }
 
@@ -431,8 +667,141 @@ public partial class MainWindow : Window
         GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
     }
 
+    private void UpdateWorkScopeEditor()
+    {
+        if (_selectionResolver.Resolve(_selectionManager.Selected) is
+            { WorkScope: { } workScope })
+        {
+            WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
+            WorkScopeEditorPanel.Visibility = Visibility.Visible;
+            WorkScopeEditorBoundaryText.Text =
+                $"A: {workScope.StartBoundary.DeviceId} / {workScope.StartBoundary.TerminalId} / {workScope.StartBoundary.Side}\n" +
+                $"B: {workScope.EndBoundary.DeviceId} / {workScope.EndBoundary.TerminalId} / {workScope.EndBoundary.Side}";
+            WorkScopeEditorDescriptionInput.Text = workScope.Description;
+            WorkScopeEditorGroundingPointIdsInput.Text =
+                string.Join(", ", workScope.GroundingPointIds);
+            return;
+        }
+
+        WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
+        if (_workScopePickState == WorkScopePickState.Idle)
+        {
+            WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        WorkScopeCreationPanel.Visibility = Visibility.Visible;
+        WorkScopePickStateText.Text = _workScopePickState.ToString();
+        WorkScopeBoundaryAText.Text = _pendingWorkScopeStartBoundary is { } start
+            ? FormatBoundary(start)
+            : _workScopePickState is WorkScopePickState.BoundaryAReady
+                ? FormatPendingBoundary()
+                : "未选择";
+        WorkScopeBoundaryBText.Text = _pendingWorkScopeEndBoundary is { } end
+            ? FormatBoundary(end)
+            : _workScopePickState is WorkScopePickState.BoundaryBReady
+                ? FormatPendingBoundary()
+                : "未选择";
+    }
+
+    private string FormatPendingBoundary()
+    {
+        if (_pendingWorkScopeTerminalId is not Guid terminalId ||
+            _pendingWorkScopeDeviceId is not Guid deviceId)
+        {
+            return "未选择";
+        }
+
+        return $"设备：{deviceId}\n端子：{terminalId}";
+    }
+
+    private static string FormatBoundary(BoundaryPointCommandValue boundary)
+    {
+        return $"设备：{boundary.DeviceId}\n端子：{boundary.TerminalId}\n侧别：{boundary.Side}";
+    }
+
+    private Guid? ResolveBoundaryDeviceId(Guid terminalId)
+    {
+        if (_activeSource?.Document is not { } document)
+        {
+            return null;
+        }
+
+        Terminal? terminal = document.Terminals
+            .SingleOrDefault(candidate => candidate.Id == terminalId);
+        if (terminal is null)
+        {
+            return null;
+        }
+
+        if (terminal.OwnerType == TopologyOwnerType.Device &&
+            document.Devices.Any(device => device.Id == terminal.OwnerId))
+        {
+            return terminal.OwnerId;
+        }
+
+        if (terminal.OwnerType == TopologyOwnerType.InternalAggregate)
+        {
+            Guid parentCabinetId = document.Devices
+                .OfType<RingCabinet>()
+                .SelectMany(cabinet => cabinet.Intervals
+                    .Where(interval => interval.IntervalId == terminal.OwnerId)
+                    .Select(interval => cabinet.Id))
+                .SingleOrDefault();
+            return parentCabinetId == Guid.Empty ? null : parentCabinetId;
+        }
+
+        return null;
+    }
+
+    private static bool TryParseGroundingPointIds(
+        string input,
+        out Guid[] ids,
+        out string error)
+    {
+        string[] tokens = input.Split(
+            [',', ';', ' ', '\r', '\n', '\t'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parsed = new List<Guid>(tokens.Length);
+        foreach (string token in tokens)
+        {
+            if (!Guid.TryParse(token, out Guid id) || id == Guid.Empty)
+            {
+                ids = [];
+                error = $"GroundingPointId '{token}' 不是有效的稳定 ID。";
+                return false;
+            }
+
+            parsed.Add(id);
+        }
+
+        if (parsed.Distinct().Count() != parsed.Count)
+        {
+            ids = [];
+            error = "GroundingPointId 不能重复。";
+            return false;
+        }
+
+        ids = parsed.ToArray();
+        error = string.Empty;
+        return true;
+    }
+
+    private void ResetWorkScopePick()
+    {
+        _workScopePickState = WorkScopePickState.Idle;
+        _pendingWorkScopeStartBoundary = null;
+        _pendingWorkScopeEndBoundary = null;
+        _pendingWorkScopeTerminalId = null;
+        _pendingWorkScopeDeviceId = null;
+        WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
+    }
+
     private void ShowScene(DrawingScene scene, PropertyInspectionSource source)
     {
+        _groundingPointPickMode = false;
+        _pendingGroundingPointTerminalId = null;
+        ResetWorkScopePick();
         _currentScene = scene;
         _activeSource = source;
         _selectionResolver.SetSource(source);
@@ -488,6 +857,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
         UpdateGroundingPointEditor();
+        UpdateWorkScopeEditor();
         RenderCurrentScene();
     }
 

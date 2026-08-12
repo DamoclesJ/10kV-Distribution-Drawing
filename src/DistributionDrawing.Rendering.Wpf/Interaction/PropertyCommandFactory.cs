@@ -9,6 +9,7 @@ public sealed class PropertyCommandFactory
     public const string GroundingPointNumberPropertyKey = "GroundingPoint.Number";
     public const string GroundingPointLocationPropertyKey = "GroundingPoint.Location";
     public const string GroundingPointNotePropertyKey = "GroundingPoint.Note";
+    public const string WorkScopeDescriptionPropertyKey = "WorkScope.Description";
 
     public bool TryCreate(
         ResolvedSelection selection,
@@ -28,6 +29,24 @@ public sealed class PropertyCommandFactory
                 selection,
                 propertyKey,
                 input,
+                out command,
+                out error);
+        }
+
+        if (selection.WorkScope is not null)
+        {
+            if (propertyKey != WorkScopeDescriptionPropertyKey)
+            {
+                error = new PropertyEditError(
+                    "PropertyReadOnly",
+                    $"Property '{propertyKey}' is not editable in this MVP.");
+                return false;
+            }
+
+            return TryCreateWorkScope(
+                selection,
+                input,
+                selection.WorkScope.GroundingPointIds,
                 out command,
                 out error);
         }
@@ -118,6 +137,67 @@ public sealed class PropertyCommandFactory
         }
 
         command = new ChangeGroundingPointCommand(
+            selection.Document,
+            before,
+            after);
+        return true;
+    }
+
+    public bool TryCreateWorkScope(
+        ResolvedSelection selection,
+        string description,
+        IEnumerable<Guid>? groundingPointIds,
+        out ICommand? command,
+        out PropertyEditError? error)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+
+        command = null;
+        error = null;
+        if (selection.WorkScope is null ||
+            selection.Reference.Kind != SelectionTargetKind.WorkScope ||
+            selection.Document is null)
+        {
+            error = new PropertyEditError(
+                "TargetNotSupported",
+                "WorkScope editing requires a document-backed selection.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            error = new PropertyEditError(
+                "InputInvalid",
+                "Work scope description cannot be empty.");
+            return false;
+        }
+
+        Guid[] ids = (groundingPointIds ?? Array.Empty<Guid>()).ToArray();
+        if (ids.Distinct().Count() != ids.Length)
+        {
+            error = new PropertyEditError(
+                "InputInvalid",
+                "A WorkScope cannot reference the same grounding point twice.");
+            return false;
+        }
+
+        WorkScopeCommandSnapshot before =
+            WorkScopeCommandSnapshot.From(selection.WorkScope);
+        WorkScopeCommandSnapshot after = before with
+        {
+            Description = description.Trim(),
+            GroundingPointIds = ids
+        };
+        if (before.Description == after.Description &&
+            before.GroundingPointIds.SequenceEqual(after.GroundingPointIds))
+        {
+            error = new PropertyEditError(
+                "NoChange",
+                "No WorkScope property has changed.");
+            return false;
+        }
+
+        command = new ChangeWorkScopeCommand(
             selection.Document,
             before,
             after);

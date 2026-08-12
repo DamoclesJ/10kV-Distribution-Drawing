@@ -18,6 +18,8 @@
                   Click="OnRedo" />
         <MenuItem Header="添加工作地线"
                   Click="OnBeginAddGroundingPoint" />
+        <MenuItem Header="添加工作范围"
+                  Click="OnBeginAddWorkScope" />
       </MenuItem>
       <MenuItem Header="视图">
         <MenuItem Header="绘制测试内容"
@@ -103,6 +105,87 @@
                       Click="OnApplyGroundingPoint" />
               <Button Content="删除工作地线"
                       Click="OnRemoveGroundingPoint" />
+            </WrapPanel>
+          </StackPanel>
+          <StackPanel x:Name="WorkScopeCreationPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="添加工作范围" />
+            <TextBlock x:Name="WorkScopePickStateText"
+                       Margin="0,4,0,4"
+                       Foreground="#666" />
+            <TextBlock Foreground="#555"
+                       Text="边界 A" />
+            <TextBlock x:Name="WorkScopeBoundaryAText"
+                       Margin="0,2,0,2"
+                       Foreground="#666"
+                       TextWrapping="Wrap" />
+            <TextBlock Foreground="#555"
+                       Text="Side A（人工输入）" />
+            <TextBox x:Name="WorkScopeBoundaryASideInput"
+                     Margin="0,2,0,2"
+                     ToolTip="请输入边界 A 的 Side" />
+            <Button Content="确认边界 A"
+                    Margin="0,0,0,4"
+                    Click="OnConfirmWorkScopeBoundaryA" />
+            <TextBlock Foreground="#555"
+                       Text="边界 B" />
+            <TextBlock x:Name="WorkScopeBoundaryBText"
+                       Margin="0,2,0,2"
+                       Foreground="#666"
+                       TextWrapping="Wrap" />
+            <TextBlock Foreground="#555"
+                       Text="Side B（人工输入）" />
+            <TextBox x:Name="WorkScopeBoundaryBSideInput"
+                     Margin="0,2,0,2"
+                     ToolTip="请输入边界 B 的 Side" />
+            <Button Content="确认边界 B"
+                    Margin="0,0,0,4"
+                    Click="OnConfirmWorkScopeBoundaryB" />
+            <TextBlock Foreground="#555"
+                       Text="说明" />
+            <TextBox x:Name="WorkScopeDescriptionInput"
+                     Margin="0,2,0,2" />
+            <TextBlock Foreground="#555"
+                       Text="GroundingPointId（可选，逗号分隔）" />
+            <TextBox x:Name="WorkScopeGroundingPointIdsInput"
+                     Margin="0,2,0,4"
+                     TextWrapping="Wrap" />
+            <WrapPanel>
+              <Button Content="创建工作范围"
+                      Margin="0,0,4,0"
+                      Click="OnApplyWorkScope" />
+              <Button Content="取消"
+                      Click="OnCancelWorkScope" />
+            </WrapPanel>
+          </StackPanel>
+          <StackPanel x:Name="WorkScopeEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="工作范围编辑" />
+            <TextBlock x:Name="WorkScopeEditorBoundaryText"
+                       Margin="0,4,0,4"
+                       Foreground="#666"
+                       TextWrapping="Wrap" />
+            <TextBlock Foreground="#555"
+                       Text="说明" />
+            <TextBox x:Name="WorkScopeEditorDescriptionInput"
+                     Margin="0,2,0,2" />
+            <TextBlock Foreground="#555"
+                       Text="GroundingPointId（可选，逗号分隔）" />
+            <TextBox x:Name="WorkScopeEditorGroundingPointIdsInput"
+                     Margin="0,2,0,4"
+                     TextWrapping="Wrap" />
+            <WrapPanel>
+              <Button Content="应用工作范围"
+                      Margin="0,0,4,0"
+                      Click="OnApplyWorkScope" />
+              <Button Content="删除工作范围"
+                      Click="OnRemoveWorkScope" />
             </WrapPanel>
           </StackPanel>
           <ScrollViewer VerticalScrollBarVisibility="Auto">
