@@ -1,7 +1,7 @@
 # 10kV 配电工作票附图软件技术实现方案
 
-> 文档状态：M3-C-1 编辑器基础能力里程碑总结<br>
-> 编制日期：2026-08-11<br>
+> 文档状态：M5-D-1 Professional Core 里程碑总结<br>
+> 编制日期：2026-08-12<br>
 > 目标平台：Windows 桌面<br>
 > 输入依据：`README.md`、`docs/requirements.md`、`docs/architecture.md`、`docs/equipment-model.md`、`docs/ring-cabinet-design.md`、`docs/drawing-rule.md`
 
@@ -11,13 +11,13 @@
 
 当前文档状态如下：
 
-- `README.md` 为空。
+- `README.md` 已记录项目目标、技术路线、MVP 范围和架构原则；其中“当前开发阶段”的早期里程碑文字尚待后续单独同步，本次不修改 README。
 - `docs/requirements.md` 已形成第一阶段 MVP 正式范围基线。
 - `docs/equipment-model.md` 已形成设备、架空系统、工作范围和工作地线的模型基线。
 - `docs/architecture.md` 已定义模块化单体、设备—端子—连接模型、状态与表现分离、规则校验和本地工程文件方向。
 - `docs/ring-cabinet-design.md` 已定义普通负荷开关型、一二次融合型、PT、DTU、间隔、端子及设备独立状态。
 - `docs/drawing-rule.md` 已整理配电工作票和现场勘察附图的颜色、标注、接地、工作范围和图元规则。
-- 当前已完成 M2-B 架空线路与杆塔基础 Domain 模型及测试、M2-C Layout 与 Rendering 设计、M2-D-3 环网柜基础组合渲染，以及 M3 编辑器单选、属性查看、杆塔移动、CommandStack 和杆号属性编辑基础闭环；后续继续完善多对象编辑、对象增删、工程保存和专业工作票能力。
+- 当前已完成 M2-B 架空线路与杆塔基础 Domain 模型及测试、M2-C Layout 与 Rendering 设计、M2-D-3 环网柜基础组合渲染、M3 编辑器基础闭环、M4 持久化核心，以及 M5 Professional Core 的 Domain、Persistence、Rendering、Selection、PropertyInspector、GroundingPoint 编辑和 WorkScope 编辑闭环；后续进入工作票业务模型设计与未完成 MVP 能力实施。
 
 本文以 `docs/requirements.md` 已确认的 MVP 范围及现有配电专业模型、规则为边界。未被需求基线明确列为 MVP 必须实现的能力，均作为后续候选或待确认项，不作为第一阶段交付承诺。操作系统版本、安装方式、纸张、导出分辨率等技术建议，仍应在 MVP 开始前通过目标单位的实际电脑、打印机和真实脱敏图纸验证。
 
@@ -661,97 +661,138 @@ Windows 自带“Microsoft Print to PDF”可作为一种打印机参与测试�
 
 ### 当前里程碑状态
 
-当前阶段：**M3-C-1 编辑器基础能力里程碑已完成。**
+当前阶段：**M5 Professional Core 第一阶段已完成。**
 
-已完成：
+这里的 Professional Core 仅指 `BoundaryPoint`、`WorkScope`、`GroundingPoint` 的工程事实、持久化、显示、选择和人工编辑闭环。它不表示 WorkTicketData、自动工作范围、自动停电分析、安全措施或完整工作票业务已经完成。
 
-- WPF 五项目工程骨架。
-- `DrawingVisual` 基础渲染。
-- 毫米文档坐标体系。
-- Windows 环境启动验证。
-- 普通负荷开关型环网柜。
-- 一二次融合间隔。
-- 混合环网柜。
-- 上刀上接地、上刀下接地、下刀下接地三种接地结构。
-- 一二次融合间隔状态评估。
-- 隔离刀闸与接地刀闸互斥联锁校验。
-- 环网柜 Domain 测试。
-- M2-B-1 架空线路与杆塔基础 Domain 模型。
-- M2-B-2 架空线路与杆塔 Domain 测试代码。
-- `RingCabinetSymbol` 柜体外框、主母线及间隔组合渲染。
-- `LoadSwitchIntervalSymbol` 普通负荷开关间隔渲染。
-- `IntegratedFeederIntervalSymbol` 一二次融合间隔渲染，并支持三种接地结构的图形布局。
-- 普通负荷开关间隔与一二次融合间隔在同一混合环网柜中的组合显示。
-- 环网柜图元对现有 `SymbolLibrary`、`SymbolRenderContext` 和基础 `SwitchSymbol` 的复用。
-- Desktop 环网柜组合演示场景。
-- 基于 `SelectionReference`、HitTestIndex 和 `SelectionManager` 的画布单选。
-- 不修改专业 Symbol 的独立选择高亮 Overlay。
-- 只读 PropertyInspector，以及 SelectionObjectResolver 和 PropertyProjector 属性投影链路。
-- `PoleLayout` 的 Armed、Dragging、Preview、MouseUp Commit 最小拖动闭环。
-- `ICommand` 与基础 `CommandStack`，支持 Execute、Undo、Redo、History、CurrentIndex 和保存点 Dirty 判断。
-- `MoveCommand` 接入 CommandStack，支持杆塔移动后的撤销与重做。
-- `Pole.PoleNumber` 最小 Domain 属性编辑，包括 PropertyEditor、PropertyCommandFactory 和 ChangePropertyCommand。
-- 杆号修改、撤销和重做后的 PropertyInspector、场景及杆号标签刷新。
+#### Professional Domain
 
-当前编辑器支持对象：
+已实现：
 
-| 能力 | 当前支持对象 | 当前边界 |
-| --- | --- | --- |
-| 选择与高亮 | RingCabinet、RingCabinetInterval、柜内 SwitchDevice、Pole、PoleAttachment、OverheadLine / Connection | 仅单选，基于稳定 SelectionReference |
-| 属性查看 | RingCabinet、RingCabinetInterval、SwitchDevice、Pole、PoleAttachment、OverheadLine / Connection | 只读投影 Domain、Layout 和 Rendering 信息 |
-| 布局移动 | PoleLayout | 只修改杆塔位置；不修改 PoleAttachment、Terminal 或 Connection |
-| Domain 属性编辑 | Pole.PoleNumber | 通过 Domain 行为和 ChangePropertyCommand 修改 |
-| Undo / Redo | PoleLayout 移动、Pole 杆号修改 | 进程内历史，尚未实现完整命令管理 UI 和持久化 |
+- `BoundaryPoint`：WorkScope 内部不可变值对象，保存 `DeviceId + TerminalId + Side`，不分配独立 ID，也不保存坐标。
+- `WorkScope`：具有稳定 WorkScopeId，固定包含两个 BoundaryPoint、人工 Description 和 GroundingPointId 引用集合。
+- `GroundingPoint`：具有稳定 GroundingPointId，以 TerminalId 作为唯一拓扑引用，保存人工填写的 Location、Number 和 Note；不重复保存 DeviceId 或图形位置。
+- `DrawingDocument`：继续作为唯一工程聚合根，持有 WorkScope 和 GroundingPoint 集合，并提供 Create、Add、Update、Remove、Get 入口。
+- 工程级校验：Professional ID 全工程唯一、Terminal 存在、BoundaryPoint 的 Device/Terminal 所有权一致、支持 RingCabinet Interval 外部端子的父柜聚合归属、两个边界 Terminal 不重复、GroundingPoint 引用存在且不重复、被 WorkScope 引用的 GroundingPoint 不得删除。
 
-已验证操作链路：
+对象关系保持：
 
 ```text
-点击图元
-  → HitTest
-  → SelectionManager
-  → 选择高亮
-  → PropertyInspector
-
-拖动 Pole
-  → PoleLayout 预览
-  → MoveCommand
-  → CommandStack
-  → DrawingScene 重建
-  → Undo / Redo 恢复位置
-
-选择 Pole 并输入杆号
-  → PropertyEditor
-  → PropertyCommandFactory
-  → ChangePropertyCommand
-  → CommandStack
-  → Pole Domain 行为
-  → Scene 与 PropertyInspector 刷新
-  → Undo / Redo 恢复杆号
+DrawingDocument
+├── WorkScopes
+│   └── WorkScope
+│       ├── StartBoundary → DeviceId + TerminalId + Side
+│       ├── EndBoundary   → DeviceId + TerminalId + Side
+│       └── GroundingPointIds → 已有 GroundingPoint
+└── GroundingPoints
+    └── GroundingPoint → TerminalId
 ```
 
-当前尚未实现：
+WorkScope 和 GroundingPoint 是用户确认的 Professional 事实，不是由 Topology、SwitchState、Rendering 或坐标推导的计算结果。
 
-- `PTInterval` 图元及组合渲染。
-- `DTU` 柜体布局与渲染。
-- 多对象选择、框选、批量移动和批量属性编辑。
-- RingCabinet、PoleAttachment、OverheadLine 等对象的布局移动。
-- 除 Pole 杆号外的设备名称、线路参数、电气属性和开关状态编辑。
-- 从设备库新增对象、删除对象、复制对象和 Domain + Layout 原子结构命令。
-- 端子吸附、连接创建、折点编辑、缩放、平移、自动吸附和自动布局。
-- 完整 CompositeCommand、命令合并、历史容量配置和编辑会话管理。
-- 工程保存与重新打开。
-- JPG 导出。
-- 打印及打印预览。
-- `WorkScope`、`BoundaryPoint`、`GroundingPoint` 等专业工作票功能。
+#### Professional Persistence
 
-下一阶段方向：
+已实现：
 
-- 多对象编辑：扩展多选、批量移动及共同属性编辑，并保持单次操作一个原子 Command。
-- 新增/删除对象：建立设备创建、删除、布局初始化和引用校验的 Domain + Layout 事务。
-- 保存工程：实现版本化 DTO、Domain + Layout 往返、原子保存、重新打开和 Dirty 保存点闭环。
-- 专业工作票功能：实现 WorkScope、BoundaryPoint、GroundingPoint 及其基于 TerminalId 的人工定义和图面表达。
+- `.kvdrawing` 当前 `FormatVersion = 2`，Professional 数据位于 `document.json` 的独立 `professional` 区域。
+- `ProjectProfessionalDto` 保存 DocumentId、WorkScope 集合和 GroundingPoint 集合。
+- `ProjectWorkScopeDto` 保存 WorkScopeId、两个内联 `ProjectBoundaryPointDto`、Description 和 GroundingPointIds。
+- `ProjectGroundingPointDto` 保存 GroundingPointId、TerminalId、Location、Number 和 Note，不复制 Device、Terminal、Topology 或 Layout。
+- v1 工程打开时初始化空 Professional 集合，不根据 Topology、Rendering、SwitchState 或其他数据推断 WorkScope/GroundingPoint；内存中的有效格式版本提升为 v2，后续保存写为 v2。
+- 保存快照包含 Domain/Topology、Professional 和 Layout；保存使用同目录临时 ZIP 文件写入并移动替换目标文件，写入后重新打开并校验完整往返。
+- 加载时先恢复并校验 Domain/Topology，再恢复 GroundingPoint、WorkScope 和 Layout；完整候选 Session 构建成功后才替换当前有效 Session，失败时不接管当前工程状态。
 
-具体实施顺序按后续里程碑任务确定；当前基础编辑器里程碑不代表完整 M3 或 MVP 已完成。
+#### Professional Rendering
+
+已实现：
+
+- `TerminalAnchorIndex`：根据稳定 TerminalId 和当前 Runtime Layout 建立毫米文档坐标锚点，不保存屏幕/DIP 坐标或 Domain 对象引用。
+- `ProfessionalSceneBuilder`：将 DrawingDocument 中已存在的 Professional 事实映射为 SceneElement 和 HitTest 条目。
+- GroundingPoint 显示：根据 TerminalId 锚点显示工作地线标记和必要标签；不根据接地刀、开关状态或有效接地计算自动生成或隐藏。
+- WorkScope 显示：只显示两个用户明确保存的 BoundaryPoint 标记，并区分起止与 Side。
+
+当前明确不计算两个边界之间的路径、范围内设备、停电区域或覆盖面，也不通过 Rendering 反向生成 Professional 对象。
+
+#### Selection 与 PropertyInspector
+
+已实现：
+
+- GroundingPoint 使用稳定 GroundingPointId 进入 Selection、HitTest 和独立 Overlay 高亮。
+- WorkScope 使用稳定 WorkScopeId 进入 Selection；点击任一 BoundaryPoint 均选择同一个 WorkScope。
+- WorkScope 被选中时，两个 BoundaryPoint 同时高亮；BoundaryPoint 不提升为独立 Selection 对象。
+- `SelectionObjectResolver` 按当前 DrawingDocument 和稳定 ID 重新解析对象，不让 Selection 持有 Domain 对象引用。
+- GroundingPoint 只读投影 GroundingPointId、TerminalId、Location、Number、Note。
+- WorkScope 只读投影 WorkScopeId、两个 BoundaryPoint、GroundingPointId 引用和 Description。
+
+#### GroundingPoint 编辑闭环
+
+已实现：
+
+- 用户通过 `TerminalAnchorIndex` 显式 Pick 有效 Terminal；不根据开关、接地刀或 Topology 自动选择。
+- `AddGroundingPointCommand`、`RemoveGroundingPointCommand`、`ChangeGroundingPointCommand` 使用稳定 Before/After 数据，并且全部通过 DrawingDocument API 执行校验。
+- 支持创建、删除及 Number、Location、Note 人工编辑；TerminalId 保持只读。
+- 创建、删除、编辑均进入现有 CommandStack，支持 Undo/Redo；失败 Command 不写入历史。
+- 成功命令通过 CommandStack 保存点语义更新 Dirty；Undo 回保存点时恢复 clean，Domain 不保存 Dirty。
+- 创建成功后选择新 GroundingPoint；删除后清除失效选择；编辑后保持选择。
+- Execute、Undo、Redo 后统一重建 Scene、HitTestIndex、Selection Overlay 和 PropertyInspector 快照，并清除悬空 SelectionReference。
+
+#### WorkScope 编辑闭环
+
+已实现：
+
+- 显式创建状态机：`Idle → PickingBoundaryA → BoundaryAReady → PickingBoundaryB → BoundaryBReady → ReadyToCommit`。
+- 两个 Terminal 分别由用户点击选择；普通设备端子解析到所属 Device，RingCabinet Interval 外部端子按现有聚合规则解析到父 RingCabinet。
+- Side 按当前 Domain 的必填字符串语义由用户分别人工输入，不根据坐标、左右方向、Topology、Connection、电流方向或设备类型推断。
+- `AddWorkScopeCommand`、`RemoveWorkScopeCommand`、`ChangeWorkScopeCommand` 保存完整稳定快照，并全部调用 DrawingDocument API。
+- 支持创建、删除、Description 编辑和对当前工程已有 GroundingPointId 的显式引用编辑。
+- 删除 WorkScope 只删除 WorkScope 本身，不删除 GroundingPoint，也不修改 Device、Terminal 或 Topology。
+- 创建、删除、编辑全部进入现有 CommandStack，支持 Undo/Redo、Dirty 和保存点语义；失败命令不污染历史。
+- 创建后选择新 WorkScope 并高亮两个边界；删除后清除目标选择；编辑后保持 WorkScope 选择。
+- Scene、HitTestIndex、Selection、Overlay 和 PropertyInspector 继续使用同一工程级刷新链路，没有建立第二套 Professional 刷新系统。
+
+#### 架构职责边界
+
+| 层/区域 | 当前职责 | 明确不负责 |
+| --- | --- | --- |
+| Domain | Device、Terminal 所有权、设备状态及工程不变量等电气/设备事实 | WPF 坐标、显示和编辑器临时状态 |
+| Topology | Terminal、ElectricalNode、Connection 等电气连接关系 | 自动生成 WorkScope、GroundingPoint 或停电结论 |
+| Professional | WorkScope、BoundaryPoint、GroundingPoint 等用户确认的专业事实 | 图面坐标、自动安全分析和工作票审批流程 |
+| Layout | 毫米工程坐标、尺寸、相对偏移和人工路径 | 保存电气/专业业务事实 |
+| Rendering | Domain + Professional + Layout 到 Scene/WPF 的显示映射 | 修改 Domain、反推 Professional 事实 |
+| Editor | Command、Selection、PropertyEditor、Undo/Redo、Dirty 和派生状态刷新 | 绕过 DrawingDocument 业务校验 |
+| WorkTicketData | 后续票面信息、SafetyMeasure、OperationStep 及对 Professional 对象的稳定引用 | 当前尚未实现，不得用 Professional 或 Rendering 临时代替 |
+
+#### 当前明确未实现
+
+- 已有 WorkScope 的 BoundaryPoint A/B 重绑。
+- GroundingPoint TerminalId 修改或显式改绑流程。
+- GroundingPoint/WorkScope 的独立 Professional Layout 偏移、标签避让和人工范围显示路径。
+- 自动工作范围计算、自动路径扩展和范围内设备推导。
+- 停电范围分析、潮流计算或电气仿真。
+- 自动创建或自动选择 GroundingPoint。
+- 自动安全措施或自动操作步骤生成。
+- `WorkTicketData`。
+- `SafetyMeasure`。
+- `OperationStep`。
+- Professional 专项 JPG/打印规则、输出选项和完整导出验收。
+- Professional Command、Persistence、Rendering 和 UI 的专项自动化测试。
+- Professional 编辑、保存恢复、显示、打印/导出的完整 Windows 实机验收。
+
+以上限制不得在状态报告中描述为已完成，也不得通过坐标、显示文字或 Topology 推断进行隐式补全。
+
+#### 下一阶段建议：M6 专业工作票业务模型
+
+下一阶段建议优先进入设计核对，而不是直接实现业务规则：
+
+1. 明确 `WorkTicketData` 是否作为 `.kvdrawing` 中独立、可选、版本化业务区，以及它与 DrawingDocument/Professional 的稳定 ID 引用关系。
+2. 与配电专业人员确认 `SafetyMeasure` 的必填字段、类型、人工确认流程和允许引用的目标对象。
+3. 确认 `OperationStep` 的顺序、人工录入内容、对象引用和与 SafetyMeasure 的关系，并明确它不是 Editor Command 或自动执行指令。
+4. 明确票号、工作地点、工作内容、负责人、审批等 WorkTicketData 字段及隐私/保存边界。
+5. 在规则确认前只做对象、DTO、恢复顺序和架构边界设计，不自行定义安全措施枚举、操作状态机、审批流程或自动生成逻辑。
+
+M6 仍应保持 WorkTicketData 与 Device/Topology/Professional 分区隔离，只通过稳定 ID 引用 WorkScope、GroundingPoint、Device 或 Terminal，不复制这些对象。
+
+具体实施顺序按后续里程碑任务确定；M5 Professional Core 完成不代表完整 MVP、工作票业务、JPG 或打印验收已经完成。
 
 以下顺序保留为第一阶段实施基线。
 
