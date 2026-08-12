@@ -14,6 +14,7 @@ using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Desktop.Workspace;
+using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.CableTerminationCreation;
@@ -1032,17 +1033,27 @@ public partial class MainWindow : Window
             return;
         }
 
+        SelectionReference? beforeSelection = target;
         PropertyEditResult result = _propertyEditor.TryEditAttachmentOffset(
             session.Layout,
             target,
             AttachmentOffsetXInput.Text,
-            AttachmentOffsetYInput.Text);
+            AttachmentOffsetYInput.Text,
+            out ICommand? executedCommand);
         if (!result.IsSuccess)
         {
             ShowCommandError(
                 "附属设备位置修改失败",
                 result.ErrorMessage ?? "输入无效。");
             return;
+        }
+
+        if (executedCommand is not null)
+        {
+            session.SelectionTransitions.RecordExecuted(
+                executedCommand,
+                SelectionTransition.Preserve(beforeSelection));
+            session.SelectionTransitions.Prune(session.CommandStack.History);
         }
 
         RefreshDrawingScene();

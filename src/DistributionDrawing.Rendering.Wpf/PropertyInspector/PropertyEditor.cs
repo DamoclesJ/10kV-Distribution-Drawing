@@ -113,10 +113,12 @@ public sealed class PropertyEditor
         RuntimeLayoutDocument runtimeLayout,
         SelectionReference target,
         string offsetX,
-        string offsetY)
+        string offsetY,
+        out ICommand? executedCommand)
     {
         ArgumentNullException.ThrowIfNull(runtimeLayout);
         ArgumentNullException.ThrowIfNull(target);
+        executedCommand = null;
 
         ResolvedSelection? selection = _resolver.Resolve(target);
         if (selection is null)
@@ -142,6 +144,7 @@ public sealed class PropertyEditor
         try
         {
             _commandStack.ExecuteCommand(command!);
+            executedCommand = command;
             return PropertyEditResult.Success();
         }
         catch (ArgumentException exception)
