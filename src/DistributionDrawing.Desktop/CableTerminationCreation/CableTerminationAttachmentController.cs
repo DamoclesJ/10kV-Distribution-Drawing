@@ -69,6 +69,7 @@ public sealed class CableTerminationAttachmentController
         ProjectRuntimeSession session = RequireSession();
         SelectionReference selected = session.SelectionManager.Selected
             ?? throw new InvalidOperationException("No pole attachment is selected.");
+        SelectionReference beforeSelection = selected;
         if (selected.Kind != SelectionTargetKind.PoleAttachment)
         {
             throw new InvalidOperationException(
@@ -93,6 +94,10 @@ public sealed class CableTerminationAttachmentController
                 attachment.AttachmentId);
 
         session.CommandStack.ExecuteCommand(command);
+        session.SelectionTransitions.RecordExecuted(
+            command,
+            SelectionTransition.ForRemove(beforeSelection));
+        session.SelectionTransitions.Prune(session.CommandStack.History);
         session.SelectionManager.Clear();
         session.RebuildScene();
         SceneChanged?.Invoke(this, EventArgs.Empty);
