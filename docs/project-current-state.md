@@ -166,7 +166,6 @@ Professional 对象可以通过已有编辑入口加入工程并显示；其数�
 
 这仍不能称为完整可交付 Drawing Core MVP，原因是：
 
-- RingCabinet 不能由用户配置间隔数量和类型；
 - Switch 图形操作和完整现场联锁尚未实现；
 - Cable 只有 ConnectionType，没有完整 Cable Domain/Layout/Rendering/Editor；
 - JPG 导出、打印和打印预览尚未完成真实验收；
@@ -227,6 +226,26 @@ P0-6-C 的 CableTermination + PoleAttachment 闭环代码已经完成，包含�
 当前限制：
 
 - Windows/WPF 实机运行验收仍待完成。
+
+### Drawing Core P0-6-D-2
+
+P0-6-D-2 已完成，包含：
+
+- SelectionTransition Infrastructure；
+- Move Selection Preserve；
+- Undo/Redo Selection Restore；
+- Add Attachment Selection Restore；
+- Remove Attachment Selection Restore。
+
+当前架构已将 Command 状态变化与 Selection UI 状态解耦：
+
+- Command 负责 Domain/Layout 状态变化；
+- SelectionTransition 负责编辑器 Selection 历史。
+
+当前验证状态：
+
+- Add/Move/Remove Selection 行为已接入；
+- Undo/Redo Selection 恢复已接入。
 
 ## 7. Confirmed P0-6 Professional Decisions
 
@@ -289,7 +308,7 @@ Add RingCabinet
 
 ### P0-6-D
 
-待规划。下一阶段暂不提前实现，具体范围需在后续审查和专业决策确认后确定。
+P0-6-D-2 已完成。当前已完成 SelectionTransition 基础设施、Attachment Move 的 Selection Preserve，以及 Add/Remove Attachment 的 Selection Restore。
 
 ### P0-7：Cable Editor
 
