@@ -15,6 +15,7 @@ using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.DrawingTools;
+using DistributionDrawing.Desktop.Viewport;
 
 namespace DistributionDrawing.Desktop;
 
@@ -22,7 +23,7 @@ public partial class MainWindow : Window
 {
     private readonly DrawingSceneRenderer _renderer = new();
     private readonly DrawingSceneBuilder _sceneBuilder = new();
-    private readonly DocumentCoordinateSystem _coordinates = new();
+    private readonly CanvasViewportController _viewport = new();
     private SelectionManager _selectionManager = new();
     private CommandStack _commandStack = new();
     private PropertyEditor _propertyEditor;
@@ -62,6 +63,8 @@ public partial class MainWindow : Window
         _drawingTools = new DrawingToolCoordinator(_placement, _overheadLineConnection);
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
+        _viewport.ViewChanged += OnViewportChanged;
+        DrawingSurface.SetViewTransform(_viewport.Transform);
     }
 
     private void OnNewProject(object sender, RoutedEventArgs e) => _workspace.NewProject();
@@ -120,6 +123,13 @@ public partial class MainWindow : Window
     {
         if (e.Key == System.Windows.Input.Key.Escape)
         {
+            if (_viewport.IsPanning)
+            {
+                EndCanvasPan();
+                e.Handled = true;
+                return;
+            }
+
             _drawingTools.Cancel();
             e.Handled = true;
         }
@@ -157,6 +167,8 @@ public partial class MainWindow : Window
 
     private bool EnsureTransientEditsCommitted()
     {
+        EndCanvasPan();
+
         if (_overheadLineConnection.IsActive)
         {
             MessageBoxResult connectionResult = MessageBox.Show(
@@ -216,7 +228,11 @@ public partial class MainWindow : Window
 
     private void OnWorkspaceSessionChanged(object? sender, EventArgs e)
     {
+        EndCanvasPan();
         _drawingTools.Cancel();
+        _viewport.SetViewportSize(
+            new Size(DrawingSurface.ActualWidth, DrawingSurface.ActualHeight));
+        _viewport.Reset();
         if (_workspace.CurrentSession is not { } session)
         {
             OnClearDrawing(this, new RoutedEventArgs());
@@ -301,6 +317,7 @@ public partial class MainWindow : Window
 
     private void OnClearDrawing(object sender, RoutedEventArgs e)
     {
+        EndCanvasPan();
         _drawingTools.Cancel();
         _poleLayoutEditor.Cancel();
         DrawingSurface.ReleaseMouseCapture();
@@ -317,6 +334,137 @@ public partial class MainWindow : Window
         WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
         WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
         DrawingSurface.Clear();
+        _viewport.Reset();
+    }
+
+    private void OnZoomIn(object sender, RoutedEventArgs e)
+    {
+        if (!_poleLayoutEditor.IsActive)
+        {
+            _viewport.ZoomIn();
+            UpdateConnectionPointerFromCurrentMouse();
+        }
+    }
+
+    private void OnZoomOut(object sender, RoutedEventArgs e)
+    {
+        if (!_poleLayoutEditor.IsActive)
+        {
+            _viewport.ZoomOut();
+            UpdateConnectionPointerFromCurrentMouse();
+        }
+    }
+
+    private void OnFitDrawing(object sender, RoutedEventArgs e)
+    {
+        if (!_poleLayoutEditor.IsActive)
+        {
+            _viewport.Fit(_currentScene);
+            UpdateConnectionPointerFromCurrentMouse();
+        }
+    }
+
+    private void OnViewportChanged(object? sender, EventArgs e)
+    {
+        DrawingSurface.SetViewTransform(_viewport.Transform);
+    }
+
+    private void OnDrawingSurfaceSizeChanged(
+        object sender,
+        SizeChangedEventArgs e)
+    {
+        _viewport.SetViewportSize(e.NewSize);
+    }
+
+    private void OnDrawingSurfaceMouseWheel(
+        object sender,
+        System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (_poleLayoutEditor.IsActive)
+        {
+            return;
+        }
+
+        _viewport.ZoomFromWheel(e.GetPosition(DrawingSurface), e.Delta);
+        UpdateConnectionPointerFromCurrentMouse();
+        e.Handled = true;
+    }
+
+    private void OnDrawingSurfaceMouseDown(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Middle ||
+            _poleLayoutEditor.IsActive)
+        {
+            return;
+        }
+
+        _viewport.BeginPan(e.GetPosition(DrawingSurface));
+        if (!DrawingSurface.CaptureMouse())
+        {
+            _viewport.CancelPan();
+            return;
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnDrawingSurfaceMouseUp(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Middle ||
+            !_viewport.IsPanning)
+        {
+            return;
+        }
+
+        EndCanvasPan();
+        if (_overheadLineConnection.IsActive)
+        {
+            _drawingTools.UpdatePointer(
+                _viewport.Transform.ViewToDocument(
+                    e.GetPosition(DrawingSurface)));
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnDrawingSurfaceLostMouseCapture(
+        object sender,
+        System.Windows.Input.MouseEventArgs e)
+    {
+        if (_viewport.IsPanning)
+        {
+            _viewport.CancelPan();
+        }
+    }
+
+    private void EndCanvasPan()
+    {
+        if (!_viewport.IsPanning)
+        {
+            return;
+        }
+
+        _viewport.EndPan();
+        if (DrawingSurface.IsMouseCaptured)
+        {
+            DrawingSurface.ReleaseMouseCapture();
+        }
+    }
+
+    private void UpdateConnectionPointerFromCurrentMouse()
+    {
+        if (!_overheadLineConnection.IsActive)
+        {
+            return;
+        }
+
+        _drawingTools.UpdatePointer(
+            _viewport.Transform.ViewToDocument(
+                System.Windows.Input.Mouse.GetPosition(DrawingSurface)));
     }
 
     private void OnUndo(object sender, RoutedEventArgs e)
@@ -592,9 +740,7 @@ public partial class MainWindow : Window
         }
 
         System.Windows.Point point = e.GetPosition(DrawingSurface);
-        var documentPoint = new DocumentPoint(
-            _coordinates.DipToMillimeters(point.X),
-            _coordinates.DipToMillimeters(point.Y));
+        DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
 
         if (_drawingTools.IsActive)
         {
@@ -602,7 +748,7 @@ public partial class MainWindow : Window
             {
                 _drawingTools.HandleClick(
                     documentPoint,
-                    _coordinates.DipToMillimeters(8));
+                    _viewport.Transform.ViewDistanceToDocument(8));
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
@@ -615,7 +761,9 @@ public partial class MainWindow : Window
 
         if (_groundingPointPickMode)
         {
-            Guid? terminalId = HitTestTerminal(documentPoint);
+            Guid? terminalId = HitTestTerminal(
+                documentPoint,
+                _viewport.Transform.ViewDistanceToDocument(8));
             if (terminalId is null)
             {
                 ShowCommandError("端子选择失败", "点击位置没有可解析的端子。");
@@ -634,7 +782,9 @@ public partial class MainWindow : Window
         if (_workScopePickState is WorkScopePickState.PickingBoundaryA or
             WorkScopePickState.PickingBoundaryB)
         {
-            Guid? terminalId = HitTestTerminal(documentPoint);
+            Guid? terminalId = HitTestTerminal(
+                documentPoint,
+                _viewport.Transform.ViewDistanceToDocument(8));
             if (terminalId is null)
             {
                 ShowCommandError("端子选择失败", "点击位置没有可解析的端子。");
@@ -672,7 +822,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        SelectionReference? target = _currentScene.HitTestIndex.HitTest(documentPoint);
+        SelectionReference? target = _currentScene.HitTestIndex.HitTest(
+            documentPoint,
+            _viewport.Transform.ViewDistanceToDocument(4));
         _selectionManager.Select(target);
 
         if (target is not null &&
@@ -698,12 +850,24 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseEventArgs e)
     {
+        System.Windows.Point point = e.GetPosition(DrawingSurface);
+        if (_viewport.IsPanning)
+        {
+            _viewport.UpdatePan(point);
+            if (_overheadLineConnection.IsActive)
+            {
+                _drawingTools.UpdatePointer(
+                    _viewport.Transform.ViewToDocument(point));
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         if (_overheadLineConnection.IsActive)
         {
-            System.Windows.Point previewPoint = e.GetPosition(DrawingSurface);
-            _drawingTools.UpdatePointer(new DocumentPoint(
-                _coordinates.DipToMillimeters(previewPoint.X),
-                _coordinates.DipToMillimeters(previewPoint.Y)));
+            _drawingTools.UpdatePointer(
+                _viewport.Transform.ViewToDocument(point));
             e.Handled = true;
             return;
         }
@@ -715,10 +879,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        System.Windows.Point point = e.GetPosition(DrawingSurface);
-        DocumentPoint documentPoint = new(
-            _coordinates.DipToMillimeters(point.X),
-            _coordinates.DipToMillimeters(point.Y));
+        DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
         PoleLayout preview = _poleLayoutEditor.UpdatePreview(documentPoint);
         layout.Replace(preview);
         RefreshDrawingScene();
@@ -1116,7 +1277,9 @@ public partial class MainWindow : Window
         RenderCurrentScene();
     }
 
-    private Guid? HitTestTerminal(DocumentPoint point)
+    private Guid? HitTestTerminal(
+        DocumentPoint point,
+        double toleranceMillimeters)
     {
         if (_activeSource?.Document is not { } document ||
             _activeSource.DrawingLayout is not { } layout)
@@ -1128,11 +1291,11 @@ public partial class MainWindow : Window
             document,
             layout,
             _activeSource.RingCabinetLayouts);
-        const double hitSize = 8;
         return anchors.Anchors
             .Where(anchor =>
-                Math.Abs(anchor.Position.XMillimeters - point.XMillimeters) <= hitSize / 2 &&
-                Math.Abs(anchor.Position.YMillimeters - point.YMillimeters) <= hitSize / 2)
+                Math.Pow(anchor.Position.XMillimeters - point.XMillimeters, 2) +
+                Math.Pow(anchor.Position.YMillimeters - point.YMillimeters, 2) <=
+                toleranceMillimeters * toleranceMillimeters)
             .OrderBy(anchor =>
                 Math.Pow(anchor.Position.XMillimeters - point.XMillimeters, 2) +
                 Math.Pow(anchor.Position.YMillimeters - point.YMillimeters, 2))
@@ -1160,6 +1323,7 @@ public partial class MainWindow : Window
                 _selectionManager.Selected));
         double pixelsPerDip = VisualTreeHelper.GetDpi(DrawingSurface).PixelsPerDip;
         DrawingSurface.Show(_renderer.Render(new DrawingScene(elements), pixelsPerDip));
+        DrawingSurface.SetViewTransform(_viewport.Transform);
     }
 
     private static RingCabinet CreateMixedRingCabinet()

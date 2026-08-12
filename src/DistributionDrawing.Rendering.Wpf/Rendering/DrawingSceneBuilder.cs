@@ -251,7 +251,9 @@ public sealed class DrawingSceneBuilder
                         SelectionTargetKind.Connection,
                         overheadLine.ConnectionId),
                     CreateBounds(effectiveLayout.Start, effectiveLayout.End, 3),
-                    10));
+                    10,
+                    effectiveLayout.Start,
+                    effectiveLayout.End));
         }
 
         foreach (Pole pole in poleById.Values)

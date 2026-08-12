@@ -38,6 +38,13 @@
                   Click="OnBeginAddWorkScope" />
       </MenuItem>
       <MenuItem Header="视图">
+        <MenuItem Header="放大"
+                  Click="OnZoomIn" />
+        <MenuItem Header="缩小"
+                  Click="OnZoomOut" />
+        <MenuItem Header="适合图形"
+                  Click="OnFitDrawing" />
+        <Separator />
         <MenuItem Header="绘制测试内容"
                   Click="OnDrawTestContent" />
         <MenuItem Header="绘制环网柜组合场景"
@@ -59,9 +66,14 @@
               BorderBrush="#D0D0D0"
               BorderThickness="1">
         <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
+                                           MouseDown="OnDrawingSurfaceMouseDown"
                                            MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown"
                                            MouseMove="OnDrawingSurfaceMouseMove"
-                                           MouseLeftButtonUp="OnDrawingSurfaceMouseLeftButtonUp" />
+                                           MouseLeftButtonUp="OnDrawingSurfaceMouseLeftButtonUp"
+                                           MouseUp="OnDrawingSurfaceMouseUp"
+                                           PreviewMouseWheel="OnDrawingSurfaceMouseWheel"
+                                           LostMouseCapture="OnDrawingSurfaceLostMouseCapture"
+                                           SizeChanged="OnDrawingSurfaceSizeChanged" />
       </Border>
 
       <Border x:Name="PropertyInspectorPanel"

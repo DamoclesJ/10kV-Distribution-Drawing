@@ -5,7 +5,9 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction;
 public sealed record SelectionHitTestEntry(
     SelectionReference Target,
     DocumentRect Bounds,
-    int Priority);
+    int Priority,
+    DocumentPoint? SegmentStart = null,
+    DocumentPoint? SegmentEnd = null);
 
 public sealed class SelectionHitTestIndex
 {
@@ -27,10 +29,19 @@ public sealed class SelectionHitTestIndex
 
     public IReadOnlyList<SelectionHitTestEntry> Entries => _entries;
 
-    public SelectionReference? HitTest(DocumentPoint point)
+    public SelectionReference? HitTest(
+        DocumentPoint point,
+        double toleranceMillimeters = 0)
     {
+        if (toleranceMillimeters < 0 ||
+            double.IsNaN(toleranceMillimeters) ||
+            double.IsInfinity(toleranceMillimeters))
+        {
+            throw new ArgumentOutOfRangeException(nameof(toleranceMillimeters));
+        }
+
         return _entries
-            .Where(entry => Contains(entry.Bounds, point))
+            .Where(entry => IsHit(entry, point, toleranceMillimeters))
             .OrderByDescending(entry => entry.Priority)
             .Select(entry => entry.Target)
             .FirstOrDefault();
@@ -52,11 +63,55 @@ public sealed class SelectionHitTestIndex
             .ToArray();
     }
 
-    private static bool Contains(DocumentRect bounds, DocumentPoint point)
+    private static bool IsHit(
+        SelectionHitTestEntry entry,
+        DocumentPoint point,
+        double toleranceMillimeters)
     {
-        return point.XMillimeters >= bounds.XMillimeters &&
-               point.XMillimeters <= bounds.XMillimeters + bounds.WidthMillimeters &&
-               point.YMillimeters >= bounds.YMillimeters &&
-               point.YMillimeters <= bounds.YMillimeters + bounds.HeightMillimeters;
+        if (entry.SegmentStart is DocumentPoint start &&
+            entry.SegmentEnd is DocumentPoint end)
+        {
+            return DistanceToSegment(point, start, end) <= toleranceMillimeters;
+        }
+
+        return Contains(entry.Bounds, point, toleranceMillimeters);
+    }
+
+    private static bool Contains(
+        DocumentRect bounds,
+        DocumentPoint point,
+        double toleranceMillimeters)
+    {
+        return point.XMillimeters >= bounds.XMillimeters - toleranceMillimeters &&
+               point.XMillimeters <= bounds.XMillimeters + bounds.WidthMillimeters + toleranceMillimeters &&
+               point.YMillimeters >= bounds.YMillimeters - toleranceMillimeters &&
+               point.YMillimeters <= bounds.YMillimeters + bounds.HeightMillimeters + toleranceMillimeters;
+    }
+
+    private static double DistanceToSegment(
+        DocumentPoint point,
+        DocumentPoint start,
+        DocumentPoint end)
+    {
+        double deltaX = end.XMillimeters - start.XMillimeters;
+        double deltaY = end.YMillimeters - start.YMillimeters;
+        double lengthSquared = deltaX * deltaX + deltaY * deltaY;
+        if (lengthSquared == 0)
+        {
+            return Math.Sqrt(
+                Math.Pow(point.XMillimeters - start.XMillimeters, 2) +
+                Math.Pow(point.YMillimeters - start.YMillimeters, 2));
+        }
+
+        double projection =
+            ((point.XMillimeters - start.XMillimeters) * deltaX +
+             (point.YMillimeters - start.YMillimeters) * deltaY) /
+            lengthSquared;
+        double ratio = Math.Clamp(projection, 0, 1);
+        double nearestX = start.XMillimeters + ratio * deltaX;
+        double nearestY = start.YMillimeters + ratio * deltaY;
+        return Math.Sqrt(
+            Math.Pow(point.XMillimeters - nearestX, 2) +
+            Math.Pow(point.YMillimeters - nearestY, 2));
     }
 }
