@@ -127,6 +127,24 @@ public sealed class DeviceCommandFactory
                 layout));
     }
 
+    public MoveAttachmentCommand CreateMoveAttachment(
+        RuntimeLayoutDocument runtimeLayout,
+        Guid attachmentId,
+        DocumentPoint offset)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+
+        AttachmentLayout current = runtimeLayout.DrawingLayout.Attachments
+            .GetValueOrDefault(attachmentId)
+            ?? throw new InvalidOperationException(
+                $"No layout exists for attachment '{attachmentId}'.");
+        return new MoveAttachmentCommand(
+            runtimeLayout.DrawingLayout,
+            attachmentId,
+            current.Offset,
+            offset);
+    }
+
     public ICommand CreateRemove(
         DrawingDocument document,
         RuntimeLayoutDocument runtimeLayout,

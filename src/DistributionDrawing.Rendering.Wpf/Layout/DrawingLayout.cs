@@ -58,6 +58,19 @@ public sealed class DrawingLayout
         _poles[layout.PoleId] = layout;
     }
 
+    public void Replace(AttachmentLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+
+        if (!_attachments.ContainsKey(layout.AttachmentId))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for attachment '{layout.AttachmentId}'.");
+        }
+
+        _attachments[layout.AttachmentId] = layout;
+    }
+
     public PoleLayout RemovePole(Guid poleId)
     {
         if (!_poles.Remove(poleId, out PoleLayout? layout))

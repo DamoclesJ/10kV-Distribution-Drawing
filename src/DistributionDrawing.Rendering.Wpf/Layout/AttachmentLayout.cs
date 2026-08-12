@@ -41,4 +41,14 @@ public sealed record AttachmentLayout
     public double HeightMillimeters { get; }
 
     public DocumentPoint LabelOffset { get; }
+
+    public AttachmentLayout MoveTo(DocumentPoint offset)
+    {
+        return new AttachmentLayout(
+            AttachmentId,
+            offset,
+            WidthMillimeters,
+            HeightMillimeters,
+            LabelOffset);
+    }
 }
