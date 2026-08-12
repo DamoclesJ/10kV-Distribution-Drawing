@@ -9,6 +9,7 @@ using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Desktop.Selection;
 
 namespace DistributionDrawing.Desktop;
 
@@ -39,6 +40,7 @@ public sealed class ProjectRuntimeSession
         PropertyInspector = new PropertyInspectorViewModel();
         PropertyProjector = new PropertyProjector();
         CommandStack = new CommandStack();
+        SelectionTransitions = new SelectionTransitionCoordinator();
         CommandStack.MarkSaved();
     }
 
@@ -59,6 +61,8 @@ public sealed class ProjectRuntimeSession
     public PropertyProjector PropertyProjector { get; }
 
     public CommandStack CommandStack { get; }
+
+    public ISelectionTransitionCoordinator SelectionTransitions { get; }
 
     public bool IsDirty => PersistenceSession.IsDirty || CommandStack.IsDirty;
 
