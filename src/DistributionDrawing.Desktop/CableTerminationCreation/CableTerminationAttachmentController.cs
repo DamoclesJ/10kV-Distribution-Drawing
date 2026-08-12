@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -30,6 +31,7 @@ public sealed class CableTerminationAttachmentController
         ProjectRuntimeSession session = RequireSession();
         SelectionReference selected = session.SelectionManager.Selected
             ?? throw new InvalidOperationException("No pole is selected.");
+        SelectionReference? beforeSelection = selected;
         if (selected.Kind != SelectionTargetKind.Device)
         {
             throw new InvalidOperationException("The selected object is not a pole.");
@@ -49,12 +51,16 @@ public sealed class CableTerminationAttachmentController
                 InitialAttachmentOffset);
 
         session.CommandStack.ExecuteCommand(command);
+        SelectionReference afterSelection = new(
+            SelectionTargetKind.PoleAttachment,
+            command.Creation.Attachment.AttachmentId,
+            pole.Id);
+        session.SelectionTransitions.RecordExecuted(
+            command,
+            SelectionTransition.ForAdd(beforeSelection, afterSelection));
+        session.SelectionTransitions.Prune(session.CommandStack.History);
         session.RebuildScene();
-        session.SelectionManager.Select(
-            new SelectionReference(
-                SelectionTargetKind.PoleAttachment,
-                command.Creation.Attachment.AttachmentId,
-                pole.Id));
+        session.SelectionManager.Select(afterSelection);
         SceneChanged?.Invoke(this, EventArgs.Empty);
     }
 
