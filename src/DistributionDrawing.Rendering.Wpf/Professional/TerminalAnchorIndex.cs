@@ -80,9 +80,27 @@ public sealed class TerminalAnchorIndex
                 attachmentOrigin.XMillimeters + attachmentLayout.WidthMillimeters / 2,
                 attachmentOrigin.YMillimeters + attachmentLayout.HeightMillimeters / 2);
 
-            foreach (Guid terminalId in GetTerminalIds(attachedDevice))
+            if (attachedDevice is CableTermination cableTermination)
             {
-                Set(anchors, terminalId, attachmentAnchor);
+                Set(
+                    anchors,
+                    cableTermination.CableSideTerminalId,
+                    new DocumentPoint(
+                        attachmentOrigin.XMillimeters,
+                        attachmentAnchor.YMillimeters));
+                Set(
+                    anchors,
+                    cableTermination.OverheadSideTerminalId,
+                    new DocumentPoint(
+                        attachmentOrigin.XMillimeters + attachmentLayout.WidthMillimeters,
+                        attachmentAnchor.YMillimeters));
+            }
+            else
+            {
+                foreach (Guid terminalId in GetTerminalIds(attachedDevice))
+                {
+                    Set(anchors, terminalId, attachmentAnchor);
+                }
             }
         }
 

@@ -24,6 +24,10 @@ public sealed class ResolvedSelection
 
     public PoleAttachment? PoleAttachment { get; init; }
 
+    public Device? AttachedDevice { get; init; }
+
+    public CableTermination? CableTermination { get; init; }
+
     public Connection? Connection { get; init; }
 
     public OverheadLine? OverheadLine { get; init; }

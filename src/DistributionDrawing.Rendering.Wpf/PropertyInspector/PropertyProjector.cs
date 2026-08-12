@@ -245,17 +245,38 @@ public sealed class PropertyProjector
     private static PropertyInspectorSnapshot ProjectAttachment(ResolvedSelection selection)
     {
         PoleAttachment attachment = selection.PoleAttachment!;
+        Device? attachedDevice = selection.AttachedDevice;
+        var domainRows = new List<PropertyRowViewModel>
+        {
+            DomainRow("AttachmentId", "标识", attachment.AttachmentId),
+            DomainRow("PoleId", "所属杆塔", attachment.PoleId),
+            DomainRow("AttachedDeviceId", "附属设备", attachment.AttachedDeviceId)
+        };
+
+        if (attachedDevice is CableTermination cableTermination)
+        {
+            domainRows.AddRange(
+            [
+                DomainRow("DisplayName", "名称", cableTermination.DisplayName),
+                DomainRow("CableTerminationId", "电缆终端标识", cableTermination.Id),
+                DomainRow("CableSideTerminalId", "电缆侧端子", cableTermination.CableSideTerminalId),
+                DomainRow("OverheadSideTerminalId", "架空侧端子", cableTermination.OverheadSideTerminalId),
+                DomainRow("InternalNodeId", "内部节点", cableTermination.InternalNodeId)
+            ]);
+        }
+
+        SymbolKind symbolKind = attachedDevice is not null
+            ? SymbolLibrary.ResolveAttachmentKind(attachedDevice)
+            : SymbolKind.Pole;
         var sections = new List<PropertySectionViewModel>
         {
-            Section(
-                "基本信息",
-                DomainRow("AttachmentId", "标识", attachment.AttachmentId),
-                DomainRow("PoleId", "所属杆塔", attachment.PoleId),
-                DomainRow("AttachedDeviceId", "附属设备", attachment.AttachedDeviceId)),
+            new("基本信息", domainRows),
             LayoutSection(selection.AttachmentLayout),
-            RenderingSection(selection, SymbolKind.Pole)
+            RenderingSection(selection, symbolKind)
         };
-        return Snapshot(selection, "杆塔附属关系", attachment.AttachmentId.ToString(), sections);
+        string title = attachedDevice?.DisplayName ??
+            (attachedDevice is CableTermination ? "电缆终端" : "杆塔附属关系");
+        return Snapshot(selection, "杆塔附属关系", title, sections);
     }
 
     private static PropertyInspectorSnapshot Snapshot(

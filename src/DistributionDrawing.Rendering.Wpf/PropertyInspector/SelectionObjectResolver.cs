@@ -1,3 +1,4 @@
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
@@ -48,6 +49,8 @@ public sealed class SelectionObjectResolver
             SwitchDevice = resolved.SwitchDevice,
             Pole = resolved.Pole,
             PoleAttachment = resolved.PoleAttachment,
+            AttachedDevice = resolved.AttachedDevice,
+            CableTermination = resolved.CableTermination,
             Connection = resolved.Connection,
             OverheadLine = resolved.OverheadLine,
             WorkScope = resolved.WorkScope,
@@ -180,6 +183,14 @@ public sealed class SelectionObjectResolver
 
         PoleLayout? poleLayout = null;
         AttachmentLayout? attachmentLayout = null;
+        Device? attachedDevice = _source.Devices
+            .SingleOrDefault(candidate => candidate.Id == attachment.AttachedDeviceId);
+        if (attachedDevice is null && _source.Document is not null)
+        {
+            attachedDevice = _source.Document.Devices
+                .SingleOrDefault(candidate => candidate.Id == attachment.AttachedDeviceId);
+        }
+
         if (_source.DrawingLayout is { } drawingLayout)
         {
             if (drawingLayout.Poles.TryGetValue(attachment.PoleId, out PoleLayout foundPoleLayout))
@@ -199,6 +210,8 @@ public sealed class SelectionObjectResolver
         {
             Reference = reference,
             PoleAttachment = attachment,
+            AttachedDevice = attachedDevice,
+            CableTermination = attachedDevice as CableTermination,
             PoleLayout = poleLayout,
             AttachmentLayout = attachmentLayout
         };
