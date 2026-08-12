@@ -50,6 +50,25 @@ public sealed class ProjectService
     public ProjectSession SaveProject()
     {
         ProjectSession current = RequireCurrent();
+        return SaveProject(current.FilePath, current.Layout);
+    }
+
+    public ProjectSession SaveProject(ProjectLayoutSnapshot layout)
+    {
+        ProjectSession current = RequireCurrent();
+        return SaveProject(current.FilePath, layout);
+    }
+
+    public ProjectSession SaveProjectAs(string filePath, ProjectLayoutSnapshot layout)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        return SaveProject(Path.GetFullPath(filePath), layout);
+    }
+
+    private ProjectSession SaveProject(string filePath, ProjectLayoutSnapshot layout)
+    {
+        ProjectSession current = RequireCurrent();
+        ArgumentNullException.ThrowIfNull(layout);
 
         ProjectFileDocument snapshot = current.Document with
         {
@@ -57,25 +76,23 @@ public sealed class ProjectService
                 current.Domain.Title,
                 current.Metadata.Description),
             Domain = ProjectDomainMapper.ToDto(current.Domain),
-            Layout = ProjectLayoutMapper.ToDto(current.Domain, current.Layout),
+            Layout = ProjectLayoutMapper.ToDto(current.Domain, layout),
             Professional = ProjectProfessionalMapper.ToDto(current.Domain)
         };
-        _container.Save(current.FilePath, snapshot);
+        _container.Save(filePath, snapshot);
 
         // Reopen the written archive so the session observes the persisted
         // manifest timestamps and validates the complete container round trip.
-        ProjectFileDocument persistedDocument = _container.Open(current.FilePath);
-        DrawingDocument domain = RestoreDomain(persistedDocument);
-        ProjectProfessionalSnapshot professional = RestoreProfessional(
-            persistedDocument,
-            domain);
-        ProjectLayoutSnapshot layout = RestoreLayout(persistedDocument, domain);
+        ProjectFileDocument persistedDocument = _container.Open(filePath);
+        DrawingDocument validationDomain = RestoreDomain(persistedDocument);
+        _ = RestoreProfessional(persistedDocument, validationDomain);
+        _ = RestoreLayout(persistedDocument, validationDomain);
         ProjectSession candidate = new(
-            current.FilePath,
+            filePath,
             persistedDocument,
-            domain,
+            current.Domain,
             layout,
-            professional,
+            new ProjectProfessionalSnapshot(ProjectProfessionalMapper.ToDto(current.Domain)),
             isDirty: false);
 
         Current = candidate;

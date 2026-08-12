@@ -1,4 +1,5 @@
 using System.Windows;
+using System.ComponentModel;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
@@ -10,6 +11,7 @@ using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Desktop.Workspace;
 
 namespace DistributionDrawing.Desktop;
 
@@ -18,14 +20,15 @@ public partial class MainWindow : Window
     private readonly DrawingSceneRenderer _renderer = new();
     private readonly DrawingSceneBuilder _sceneBuilder = new();
     private readonly DocumentCoordinateSystem _coordinates = new();
-    private readonly SelectionManager _selectionManager = new();
-    private readonly CommandStack _commandStack = new();
-    private readonly PropertyEditor _propertyEditor;
+    private SelectionManager _selectionManager = new();
+    private CommandStack _commandStack = new();
+    private PropertyEditor _propertyEditor;
     private readonly ProfessionalCommandFactory _professionalCommandFactory = new();
     private readonly PoleLayoutEditor _poleLayoutEditor = new();
-    private readonly SelectionObjectResolver _selectionResolver = new();
-    private readonly PropertyProjector _propertyProjector = new();
-    private readonly PropertyInspectorViewModel _propertyInspector = new();
+    private SelectionObjectResolver _selectionResolver = new();
+    private PropertyProjector _propertyProjector = new();
+    private PropertyInspectorViewModel _propertyInspector = new();
+    private readonly ProjectWorkspaceController _workspace;
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
@@ -42,6 +45,97 @@ public partial class MainWindow : Window
         _propertyEditor = new(_selectionResolver, _commandStack);
         PropertyInspectorPanel.DataContext = _propertyInspector;
         _selectionManager.SelectionChanged += OnSelectionChanged;
+        _workspace = new ProjectWorkspaceController(
+            new WpfProjectWorkspaceDialogs(this),
+            _sceneBuilder,
+            EnsureTransientEditsCommitted);
+        _workspace.SessionChanged += OnWorkspaceSessionChanged;
+    }
+
+    private void OnNewProject(object sender, RoutedEventArgs e) => _workspace.NewProject();
+
+    private void OnOpenProject(object sender, RoutedEventArgs e) => _workspace.OpenProject();
+
+    private void OnSaveProject(object sender, RoutedEventArgs e) => _workspace.SaveProject();
+
+    private void OnSaveProjectAs(object sender, RoutedEventArgs e) => _workspace.SaveProjectAs();
+
+    private void OnCloseProject(object sender, RoutedEventArgs e) => _workspace.CloseCurrentProject();
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_workspace.CanCloseApplication())
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    private bool EnsureTransientEditsCommitted()
+    {
+        if (!_poleLayoutEditor.IsActive)
+        {
+            return true;
+        }
+
+        MessageBoxResult result = MessageBox.Show(
+            this,
+            "当前有未提交的拖动预览，是否提交后继续？选择“否”将取消预览。",
+            "未提交的布局预览",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Warning);
+        if (result == MessageBoxResult.Cancel)
+        {
+            return false;
+        }
+
+        if (result == MessageBoxResult.No)
+        {
+            _poleLayoutEditor.Cancel();
+            DrawingSurface.ReleaseMouseCapture();
+            return true;
+        }
+
+        if (_poleLayoutEditor.Commit() is not { } command)
+        {
+            return false;
+        }
+
+        try
+        {
+            _commandStack.ExecuteCommand(command);
+            RefreshDrawingScene();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            ShowCommandError("提交拖动失败", exception.Message);
+            return false;
+        }
+    }
+
+    private void OnWorkspaceSessionChanged(object? sender, EventArgs e)
+    {
+        if (_workspace.CurrentSession is not { } session)
+        {
+            OnClearDrawing(this, new RoutedEventArgs());
+            return;
+        }
+
+        _selectionManager.SelectionChanged -= OnSelectionChanged;
+        _selectionManager = session.SelectionManager;
+        _commandStack = session.CommandStack;
+        _selectionResolver = session.SelectionResolver;
+        _propertyProjector = session.PropertyProjector;
+        _propertyInspector = session.PropertyInspector;
+        _propertyEditor = new(_selectionResolver, _commandStack);
+        _currentScene = session.Scene;
+        _activeSource = session.InspectionSource;
+        _selectionManager.SelectionChanged += OnSelectionChanged;
+        PropertyInspectorPanel.DataContext = _propertyInspector;
+        RenderCurrentScene();
     }
 
     private void OnDrawTestContent(object sender, RoutedEventArgs e)
@@ -812,6 +906,29 @@ public partial class MainWindow : Window
 
     private void RefreshDrawingScene()
     {
+        if (_workspace.CurrentSession is { } runtimeSession &&
+            ReferenceEquals(runtimeSession.PersistenceSession.Domain, _activeSource?.Document))
+        {
+            runtimeSession.RebuildScene();
+            _currentScene = runtimeSession.Scene;
+            _activeSource = runtimeSession.InspectionSource;
+            _selectionResolver.SetSource(_activeSource);
+            if (_selectionManager.Selected is { } runtimeSelected &&
+                _selectionResolver.Resolve(runtimeSelected) is null)
+            {
+                _selectionManager.Clear();
+            }
+
+            _propertyInspector.Apply(
+                _propertyProjector.Project(
+                    _selectionResolver.Resolve(_selectionManager.Selected)));
+            UpdatePoleNumberEditor();
+            UpdateGroundingPointEditor();
+            UpdateWorkScopeEditor();
+            RenderCurrentScene();
+            return;
+        }
+
         if (_activeSource?.DrawingLayout is not { } layout)
         {
             RenderCurrentScene();

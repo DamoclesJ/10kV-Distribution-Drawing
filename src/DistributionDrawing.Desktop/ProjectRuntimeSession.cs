@@ -16,12 +16,15 @@ namespace DistributionDrawing.Desktop;
 /// </summary>
 public sealed class ProjectRuntimeSession
 {
+    private readonly DrawingSceneBuilder _sceneBuilder;
     private ProjectRuntimeSession(
         ProjectSession persistenceSession,
         RuntimeLayoutDocument layout,
         DrawingScene scene,
-        PropertyInspectionSource inspectionSource)
+        PropertyInspectionSource inspectionSource,
+        DrawingSceneBuilder sceneBuilder)
     {
+        _sceneBuilder = sceneBuilder;
         PersistenceSession = persistenceSession;
         Layout = layout;
         Scene = scene;
@@ -36,13 +39,13 @@ public sealed class ProjectRuntimeSession
         CommandStack.MarkSaved();
     }
 
-    public ProjectSession PersistenceSession { get; }
+    public ProjectSession PersistenceSession { get; private set; }
 
-    public RuntimeLayoutDocument Layout { get; }
+    public RuntimeLayoutDocument Layout { get; private set; }
 
-    public DrawingScene Scene { get; }
+    public DrawingScene Scene { get; private set; }
 
-    public PropertyInspectionSource InspectionSource { get; }
+    public PropertyInspectionSource InspectionSource { get; private set; }
 
     public SelectionManager SelectionManager { get; }
 
@@ -58,19 +61,16 @@ public sealed class ProjectRuntimeSession
 
     public long SavePoint => CommandStack.SavedStateId;
 
-    public static ProjectRuntimeSession Load(
-        ProjectService projectService,
-        string filePath,
+    public static ProjectRuntimeSession Create(
+        ProjectSession persistenceSession,
         DrawingSceneBuilder? sceneBuilder = null)
     {
-        ArgumentNullException.ThrowIfNull(projectService);
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        ArgumentNullException.ThrowIfNull(persistenceSession);
 
-        ProjectSession persistenceSession = projectService.LoadProject(filePath);
+        DrawingSceneBuilder builder = sceneBuilder ?? new DrawingSceneBuilder();
         RuntimeLayoutDocument layout = ProjectLayoutRuntimeMapper.ToRuntime(
             persistenceSession.Domain,
             persistenceSession.Layout);
-        DrawingSceneBuilder builder = sceneBuilder ?? new DrawingSceneBuilder();
         DrawingScene scene = builder.Build(persistenceSession.Domain, layout);
         PropertyInspectionSource source = CreateInspectionSource(
             persistenceSession,
@@ -81,7 +81,47 @@ public sealed class ProjectRuntimeSession
             persistenceSession,
             layout,
             scene,
-            source);
+            source,
+            builder);
+    }
+
+    public static ProjectRuntimeSession CreateEmpty(
+        ProjectSession persistenceSession,
+        DrawingSceneBuilder? sceneBuilder = null)
+    {
+        return Create(persistenceSession, sceneBuilder);
+    }
+
+    public static ProjectRuntimeSession Load(
+        ProjectService projectService,
+        string filePath,
+        DrawingSceneBuilder? sceneBuilder = null)
+    {
+        ArgumentNullException.ThrowIfNull(projectService);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        return Create(projectService.LoadProject(filePath), sceneBuilder);
+    }
+
+    public void RebuildScene()
+    {
+        Scene = _sceneBuilder.Build(PersistenceSession.Domain, Layout);
+        InspectionSource = CreateInspectionSource(PersistenceSession, Layout, Scene);
+        SelectionResolver.SetSource(InspectionSource);
+    }
+
+    public void AcceptSavedSession(ProjectSession persistenceSession)
+    {
+        ArgumentNullException.ThrowIfNull(persistenceSession);
+        if (!ReferenceEquals(persistenceSession.Domain, PersistenceSession.Domain))
+        {
+            throw new InvalidOperationException(
+                "A saved session must preserve the runtime Domain object graph.");
+        }
+
+        PersistenceSession = persistenceSession;
+        RebuildScene();
+        CommandStack.MarkSaved();
     }
 
     private static PropertyInspectionSource CreateInspectionSource(
@@ -119,6 +159,66 @@ public sealed class ProjectRuntimeSession
 
 internal static class ProjectLayoutRuntimeMapper
 {
+    public static ProjectLayoutSnapshot ToSnapshot(
+        DistributionDrawing.Domain.Documents.DrawingDocument domain,
+        RuntimeLayoutDocument runtime)
+    {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(runtime);
+
+        var cabinets = runtime.RingCabinetLayouts.Values.Select(layout =>
+            new ProjectRingCabinetLayoutDto(
+                layout.CabinetId,
+                Point(layout.Position),
+                layout.WidthMillimeters,
+                layout.HeightMillimeters,
+                layout.MainBusYMillimeters,
+                Point(layout.LabelOffset),
+                layout.IntervalLayouts.Values.Select(interval =>
+                    new ProjectRingCabinetIntervalLayoutDto(
+                        interval.IntervalId,
+                        Point(interval.RelativePosition),
+                        interval.WidthMillimeters,
+                        interval.HeightMillimeters,
+                        Point(interval.SequenceLabelOffset),
+                        Point(interval.NameLabelOffset),
+                        interval.SwitchLayouts.Values.Select(switchLayout =>
+                            new ProjectRingCabinetSwitchLayoutDto(
+                                switchLayout.SwitchDeviceId,
+                                Point(switchLayout.RelativePosition),
+                                switchLayout.WidthMillimeters,
+                                switchLayout.HeightMillimeters,
+                                Point(switchLayout.LabelOffset))).ToArray())).ToArray())).ToArray();
+        var poles = runtime.DrawingLayout.Poles.Values.Select(layout =>
+            new ProjectPoleLayoutDto(
+                layout.PoleId,
+                Point(layout.Position),
+                layout.WidthMillimeters,
+                layout.HeightMillimeters,
+                Point(layout.LabelOffset))).ToArray();
+        var attachments = runtime.DrawingLayout.Attachments.Values.Select(layout =>
+            new ProjectAttachmentLayoutDto(
+                layout.AttachmentId,
+                Point(layout.Offset),
+                layout.WidthMillimeters,
+                layout.HeightMillimeters,
+                Point(layout.LabelOffset))).ToArray();
+        var overheadLines = runtime.DrawingLayout.OverheadLines.Values.Select(layout =>
+            new ProjectOverheadLineLayoutDto(
+                layout.ConnectionId,
+                Point(layout.Start),
+                Point(layout.End),
+                Point(layout.ContinuationOffset))).ToArray();
+
+        return new ProjectLayoutSnapshot(new ProjectLayoutDto(
+            domain.Id,
+            "mm",
+            cabinets,
+            poles,
+            attachments,
+            overheadLines));
+    }
+
     public static RuntimeLayoutDocument ToRuntime(
         DistributionDrawing.Domain.Documents.DrawingDocument domain,
         ProjectLayoutSnapshot snapshot)
@@ -202,6 +302,11 @@ internal static class ProjectLayoutRuntimeMapper
         }
 
         return new RuntimeLayoutDocument(drawingLayout, cabinetLayouts);
+    }
+
+    private static ProjectPointDto Point(DocumentPoint point)
+    {
+        return new ProjectPointDto(point.XMillimeters, point.YMillimeters);
     }
 
     private static DocumentPoint Point(ProjectPointDto point)
