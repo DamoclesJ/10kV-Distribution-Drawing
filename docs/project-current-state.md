@@ -126,7 +126,7 @@ WorkTicketData 是未来独立业务区，引用现有稳定 ID，不复制 Devi
 
 已完成 Pole 与最小 RingCabinet 的放置、选择、移动、删除、Undo/Redo、RuntimeLayout 同步和保存恢复基础。
 
-当前 RingCabinet Desktop 创建仍是固定三间隔普通负荷开关柜，不是可配置柜。
+RingCabinet Desktop 创建已支持当前 Domain 范围内的可配置和混合间隔组合。
 
 ### Drawing Core P0-3
 
@@ -168,7 +168,6 @@ Professional 对象可以通过已有编辑入口加入工程并显示；其数�
 
 - RingCabinet 不能由用户配置间隔数量和类型；
 - Switch 图形操作和完整现场联锁尚未实现；
-- PoleAttachment/CableTermination 没有真实创建/删除闭环；
 - Cable 只有 ConnectionType，没有完整 Cable Domain/Layout/Rendering/Editor；
 - JPG 导出、打印和打印预览尚未完成真实验收；
 - Windows 编译、运行和端到端保存验收尚未在当前环境完成。
@@ -189,6 +188,33 @@ Professional 对象可以通过已有编辑入口加入工程并显示；其数�
 - 后续 JPG、打印预览和实际打印机输出。
 
 静态 `git diff --check` 不等于 Windows 实机验收。
+
+### Drawing Core P0-6-C
+
+P0-6-C 的 CableTermination + PoleAttachment 闭环代码已经完成，包含：
+
+- CableTermination 创建及完整 Domain aggregate 注册；
+- PoleAttachment 注册；
+- CableTermination 的 CableSide/OverheadSide TerminalAnchor；
+- PoleAttachment → AttachedDevice → CableTermination 的 Selection 解析；
+- CableTermination Attachment 的只读 PropertyInspector 投影；
+- Desktop CableTermination 创建入口；
+- 通过统一“删除所选对象”入口删除 PoleAttachment；
+- Add/Remove Command 的 Undo/Redo 基础支持及 Stable ID 保持；
+- RuntimeLayout AttachmentLayout 的加入、删除和恢复；
+- Dirty、Save/Reload 的代码路径和静态验证。
+
+当前 P0-6-C 的 Git 实现基线为：
+
+- `94d676e`：CableTermination + PoleAttachment Domain/Command 基础；
+- `04f86d8`：Anchor / Selection / Inspector；
+- `b1e4f25`：Desktop CableTermination 创建闭环；
+- `2d211bf`：Desktop PoleAttachment 删除闭环。
+
+当前限制：
+
+- 尚未完成 Windows/.NET 环境下的实际运行和端到端验收；
+- 当前开发环境没有可用的 `dotnet` 命令。
 
 ## 7. Confirmed P0-6 Professional Decisions
 
@@ -229,7 +255,7 @@ PT/DTU 的术语不再是待确认项；待确认的是具体软件表达。
 
 ### P0-6-B：Minimal Configurable RingCabinet
 
-当前下一开发任务：
+已完成。详细实现状态以代码和本节 P0-6-C 状态为准。
 
 ```text
 Add RingCabinet
@@ -245,9 +271,13 @@ Add RingCabinet
 
 不包含 Switch Interlock、PT/DTU 新模型、Interval Usage、自动命名、Cable 或模板系统。创建时 Domain 工厂要求的开关初始值只能作为合法技术初始化值，不代表用户最终运行状态。
 
-### P0-6-C / P0-6-D
+### P0-6-C：CableTermination + PoleAttachment 完整闭环
 
-随后实现 CableTermination + PoleAttachment 闭环，再实现经专业确认的柱上设备附属关系和状态入口。
+代码实现已完成。Windows/.NET 实际运行验收待执行。
+
+### P0-6-D
+
+待规划。下一阶段暂不提前实现，具体范围需在后续审查和专业决策确认后确定。
 
 ### P0-7：Cable Editor
 
