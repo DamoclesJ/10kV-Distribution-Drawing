@@ -77,6 +77,35 @@ public sealed class SwitchDevice : Device
 
     public string? DispatchNumber { get; private set; }
 
+    public static SwitchDevice CreateForPole(
+        Guid id,
+        SwitchKind switchKind,
+        Guid firstTerminalId,
+        Guid secondTerminalId,
+        SwitchState switchState = global::DistributionDrawing.Domain.Devices.SwitchState.Open,
+        string displayName = "Pole switch",
+        string voltageLevel = "10kV",
+        string? dispatchNumber = null)
+    {
+        if (switchKind is SwitchKind.GroundSwitch)
+        {
+            throw new ArgumentException(
+                "Ground switches are not supported by pole attachment creation.",
+                nameof(switchKind));
+        }
+
+        return new SwitchDevice(
+            id,
+            switchKind,
+            SwitchInstallationType.Pole,
+            firstTerminalId,
+            secondTerminalId,
+            switchState,
+            displayName,
+            voltageLevel,
+            dispatchNumber: dispatchNumber);
+    }
+
     public bool OwnsTerminal(Guid terminalId)
     {
         return _terminalIds.Contains(terminalId);

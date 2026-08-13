@@ -405,6 +405,108 @@ public sealed class DrawingDocument
         _poleAttachments.Add(attachment);
     }
 
+    public void AddPoleSwitchAttachment(
+        SwitchDevice switchDevice,
+        Terminal firstTerminal,
+        Terminal secondTerminal,
+        PoleAttachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(switchDevice);
+        ArgumentNullException.ThrowIfNull(firstTerminal);
+        ArgumentNullException.ThrowIfNull(secondTerminal);
+        ArgumentNullException.ThrowIfNull(attachment);
+
+        if (switchDevice.InstallationType != SwitchInstallationType.Pole)
+        {
+            throw new InvalidOperationException(
+                $"Switch '{switchDevice.Id}' is not a pole-installed switch.");
+        }
+
+        if (firstTerminal.OwnerId != switchDevice.Id ||
+            secondTerminal.OwnerId != switchDevice.Id ||
+            !switchDevice.OwnsTerminal(firstTerminal.Id) ||
+            !switchDevice.OwnsTerminal(secondTerminal.Id) ||
+            firstTerminal.Id == secondTerminal.Id)
+        {
+            throw new InvalidOperationException(
+                $"Switch '{switchDevice.Id}' terminal aggregate is inconsistent.");
+        }
+
+        if (attachment.PoleId == attachment.AttachedDeviceId ||
+            attachment.AttachedDeviceId != switchDevice.Id)
+        {
+            throw new InvalidOperationException(
+                $"Attachment '{attachment.AttachmentId}' does not reference the switch.");
+        }
+
+        if (_devices.FirstOrDefault(device => device.Id == attachment.PoleId) is not Pole)
+        {
+            throw new InvalidOperationException(
+                $"Pole '{attachment.PoleId}' does not exist.");
+        }
+
+        if (_poleAttachments.Any(existing =>
+                existing.AttachedDeviceId == switchDevice.Id))
+        {
+            throw new InvalidOperationException(
+                $"Device '{switchDevice.Id}' is already attached to a pole.");
+        }
+
+        EnsureObjectIdIsAvailable(switchDevice.Id, nameof(SwitchDevice));
+        EnsureObjectIdIsAvailable(firstTerminal.Id, nameof(Terminal));
+        EnsureObjectIdIsAvailable(secondTerminal.Id, nameof(Terminal));
+        EnsureObjectIdIsAvailable(attachment.AttachmentId, nameof(PoleAttachment));
+
+        _devices.Add(switchDevice);
+        try
+        {
+            AddTerminal(firstTerminal);
+            AddTerminal(secondTerminal);
+            AddPoleAttachment(attachment);
+        }
+        catch
+        {
+            _poleAttachments.Remove(attachment);
+            _terminals.Remove(firstTerminal);
+            _terminals.Remove(secondTerminal);
+            _devices.Remove(switchDevice);
+            throw;
+        }
+    }
+
+    public void RemovePoleSwitchAttachment(Guid attachmentId)
+    {
+        PoleAttachment attachment = _poleAttachments.SingleOrDefault(existing =>
+                existing.AttachmentId == attachmentId)
+            ?? throw new InvalidOperationException(
+                $"Pole attachment '{attachmentId}' does not exist.");
+        SwitchDevice switchDevice = _devices.SingleOrDefault(device =>
+                device.Id == attachment.AttachedDeviceId) as SwitchDevice
+            ?? throw new InvalidOperationException(
+                $"Attachment '{attachmentId}' does not reference a switch.");
+
+        Guid[] terminalIds = [.. switchDevice.TerminalIds];
+        if (_connections.Any(connection =>
+                terminalIds.Contains(connection.StartTerminalId) ||
+                terminalIds.Contains(connection.EndTerminalId)))
+        {
+            throw new InvalidOperationException(
+                $"Switch '{switchDevice.Id}' is still referenced by a connection.");
+        }
+
+        if (_groundingPoints.Any(point => terminalIds.Contains(point.TerminalId)) ||
+            _workScopes.Any(scope => terminalIds.Contains(scope.StartBoundary.TerminalId) ||
+                terminalIds.Contains(scope.EndBoundary.TerminalId)))
+        {
+            throw new InvalidOperationException(
+                $"Switch '{switchDevice.Id}' is still referenced by professional data.");
+        }
+
+        _poleAttachments.Remove(attachment);
+        _terminals.RemoveAll(terminal => terminalIds.Contains(terminal.Id));
+        _devices.Remove(switchDevice);
+    }
+
     public void AddCableTerminationAttachment(
         CableTermination cableTermination,
         ElectricalNode internalNode,

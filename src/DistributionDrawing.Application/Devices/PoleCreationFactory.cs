@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Topology;
 
 namespace DistributionDrawing.Application.Devices;
 
@@ -9,12 +10,148 @@ public sealed class PoleCreationFactory
         PoleType poleType = PoleType.Cement,
         string? displayName = null)
     {
+        return CreateWithAttachments(
+            poleNumber,
+            poleType,
+            displayName,
+            switchKinds: null,
+            includeCableTerminal: false);
+    }
+
+    public PoleCreationResult CreateWithAttachments(
+        string poleNumber,
+        PoleType poleType,
+        string? displayName,
+        IEnumerable<SwitchKind>? switchKinds,
+        bool includeCableTerminal,
+        string? cableTerminalDisplayName = null)
+    {
         var pole = new Pole(
             Guid.NewGuid(),
             poleNumber,
             displayName,
             poleType);
 
-        return new PoleCreationResult(pole);
+        var attachments = new List<PoleAttachment>();
+        var devices = new List<Device>();
+        var terminals = new List<Terminal>();
+        var electricalNodes = new List<ElectricalNode>();
+
+        foreach (SwitchKind switchKind in switchKinds ?? [])
+        {
+            Guid switchId = Guid.NewGuid();
+            Guid firstTerminalId = Guid.NewGuid();
+            Guid secondTerminalId = Guid.NewGuid();
+            var switchDevice = SwitchDevice.CreateForPole(
+                switchId,
+                switchKind,
+                firstTerminalId,
+                secondTerminalId);
+            var firstTerminal = CreateSwitchTerminal(
+                firstTerminalId,
+                switchId,
+                "SwitchTerminal1");
+            var secondTerminal = CreateSwitchTerminal(
+                secondTerminalId,
+                switchId,
+                "SwitchTerminal2");
+
+            devices.Add(switchDevice);
+            terminals.Add(firstTerminal);
+            terminals.Add(secondTerminal);
+            attachments.Add(new PoleAttachment(
+                Guid.NewGuid(),
+                pole.Id,
+                switchId));
+        }
+
+        if (includeCableTerminal)
+        {
+            AddCableTerminal(
+                pole,
+                cableTerminalDisplayName,
+                devices,
+                terminals,
+                electricalNodes,
+                attachments);
+        }
+
+        return new PoleCreationResult(
+            pole,
+            attachments,
+            devices,
+            terminals,
+            electricalNodes);
+    }
+
+    private static Terminal CreateSwitchTerminal(
+        Guid terminalId,
+        Guid switchId,
+        string role)
+    {
+        return new Terminal(
+            terminalId,
+            TopologyOwnerType.Device,
+            switchId,
+            role,
+            "10kV",
+            isExternal: true,
+            allowsMultipleConnections: false,
+            allowedConnectionTypes: [ConnectionType.OverheadLine]);
+    }
+
+    private static void AddCableTerminal(
+        Pole pole,
+        string? displayName,
+        List<Device> devices,
+        List<Terminal> terminals,
+        List<ElectricalNode> electricalNodes,
+        List<PoleAttachment> attachments)
+    {
+        Guid cableTerminationId = Guid.NewGuid();
+        Guid cableSideTerminalId = Guid.NewGuid();
+        Guid overheadSideTerminalId = Guid.NewGuid();
+        Guid internalNodeId = Guid.NewGuid();
+
+        var cableTermination = new CableTermination(
+            cableTerminationId,
+            cableSideTerminalId,
+            overheadSideTerminalId,
+            internalNodeId,
+            displayName);
+        var internalNode = new ElectricalNode(
+            internalNodeId,
+            ElectricalNodeType.Intermediate,
+            TopologyOwnerType.Device,
+            cableTerminationId);
+        var cableSideTerminal = new Terminal(
+            cableSideTerminalId,
+            TopologyOwnerType.Device,
+            cableTerminationId,
+            CableTermination.CableSideRole,
+            cableTermination.VoltageLevel,
+            isExternal: true,
+            allowsMultipleConnections: false,
+            electricalNodeId: internalNodeId,
+            allowedConnectionTypes: [ConnectionType.Cable]);
+        var overheadSideTerminal = new Terminal(
+            overheadSideTerminalId,
+            TopologyOwnerType.Device,
+            cableTerminationId,
+            CableTermination.OverheadSideRole,
+            cableTermination.VoltageLevel,
+            isExternal: true,
+            allowsMultipleConnections: false,
+            electricalNodeId: internalNodeId,
+            allowedConnectionTypes: [ConnectionType.OverheadLine]);
+
+        devices.Add(cableTermination);
+        terminals.Add(cableSideTerminal);
+        terminals.Add(overheadSideTerminal);
+        electricalNodes.Add(internalNode);
+        attachments.Add(new PoleAttachment(
+            Guid.NewGuid(),
+            pole.Id,
+            cableTerminationId));
     }
 }
