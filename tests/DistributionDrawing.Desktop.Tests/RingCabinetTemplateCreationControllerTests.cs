@@ -6,6 +6,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Templates.RingCabinets.Building;
 using Xunit;
@@ -270,6 +271,127 @@ public sealed class RingCabinetTemplateCreationControllerTests
             out _));
     }
 
+    [Fact]
+    public void CreateUndoRedo_WithNullBeforeSelection_KeepsSceneResolverAndInspectorConsistent()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        var controller = new RingCabinetTemplateCreationController(() => session);
+
+        RingCabinetTemplateBuildResult result = AssertSuccessful(
+            controller.Create(CreateRequest(
+                RingCabinetLayoutRule.Default,
+                "空选择模板柜",
+                new DocumentPoint(25, 40))));
+        AddRingCabinetCommand command = Assert.IsType<AddRingCabinetCommand>(
+            Assert.Single(session.CommandStack.History));
+        var afterSelection = new SelectionReference(
+            SelectionTargetKind.RingCabinet,
+            result.Cabinet.Id);
+        StableIds ids = CaptureStableIds(result);
+
+        Assert.True(session.SelectionTransitions.TryGetUndoSelection(
+            command,
+            out SelectionReference? undoSelection));
+        Assert.Null(undoSelection);
+        Assert.True(session.SelectionTransitions.TryGetRedoSelection(
+            command,
+            out SelectionReference? redoSelection));
+        Assert.Equal(afterSelection, redoSelection);
+        AssertSelectionIsResolvableAndProjected(session, afterSelection, "空选择模板柜");
+        Assert.NotNull(session.Scene.HitTestIndex.Find(afterSelection));
+        Assert.True(session.CommandStack.IsDirty);
+
+        Assert.True(session.CommandStack.Undo());
+        session.RebuildScene();
+        session.SelectionManager.Clear();
+
+        Assert.Null(session.SelectionManager.Selected);
+        Assert.Null(session.SelectionResolver.Resolve(afterSelection));
+        Assert.Null(session.Scene.HitTestIndex.Find(afterSelection));
+        PropertyInspectorSnapshot emptySnapshot = session.PropertyProjector.Project(
+            session.SelectionResolver.Resolve(session.SelectionManager.Selected));
+        Assert.Null(emptySnapshot.Selection);
+        Assert.Equal("未选择对象", emptySnapshot.ObjectType);
+        Assert.False(session.CommandStack.IsDirty);
+
+        Assert.True(session.CommandStack.Redo());
+        session.RebuildScene();
+        session.SelectionManager.Select(redoSelection);
+
+        Assert.Equal(afterSelection, session.SelectionManager.Selected);
+        AssertSelectionIsResolvableAndProjected(session, afterSelection, "空选择模板柜");
+        Assert.NotNull(session.Scene.HitTestIndex.Find(afterSelection));
+        AssertStableIds(ids, result);
+        Assert.True(session.CommandStack.IsDirty);
+    }
+
+    [Fact]
+    public void CreateUndoRedo_WithResolvableBeforeSelection_RestoresBothSelections()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        var controller = new RingCabinetTemplateCreationController(() => session);
+        RingCabinetTemplateBuildResult existing = AssertSuccessful(
+            controller.Create(CreateRequest(
+                RingCabinetLayoutRule.Default,
+                "已有环网柜",
+                new DocumentPoint(0, 0))));
+        var beforeSelection = new SelectionReference(
+            SelectionTargetKind.RingCabinet,
+            existing.Cabinet.Id);
+        Assert.Equal(beforeSelection, session.SelectionManager.Selected);
+        AssertSelectionIsResolvableAndProjected(session, beforeSelection, "已有环网柜");
+
+        RingCabinetTemplateBuildResult created = AssertSuccessful(
+            controller.Create(CreateRequest(
+                RingCabinetLayoutRule.Default,
+                "新增模板柜",
+                new DocumentPoint(150, 0))));
+        AddRingCabinetCommand command = Assert.IsType<AddRingCabinetCommand>(
+            session.CommandStack.History[^1]);
+        var afterSelection = new SelectionReference(
+            SelectionTargetKind.RingCabinet,
+            created.Cabinet.Id);
+        StableIds ids = CaptureStableIds(created);
+
+        Assert.True(session.SelectionTransitions.TryGetUndoSelection(
+            command,
+            out SelectionReference? undoSelection));
+        Assert.Equal(beforeSelection, undoSelection);
+        Assert.True(session.SelectionTransitions.TryGetRedoSelection(
+            command,
+            out SelectionReference? redoSelection));
+        Assert.Equal(afterSelection, redoSelection);
+        Assert.Equal(afterSelection, session.SelectionManager.Selected);
+        AssertSelectionIsResolvableAndProjected(session, afterSelection, "新增模板柜");
+        Assert.NotNull(session.Scene.HitTestIndex.Find(beforeSelection));
+        Assert.NotNull(session.Scene.HitTestIndex.Find(afterSelection));
+
+        Assert.True(session.CommandStack.Undo());
+        session.RebuildScene();
+        Assert.NotNull(session.SelectionResolver.Resolve(undoSelection));
+        session.SelectionManager.Select(undoSelection);
+
+        Assert.Equal(beforeSelection, session.SelectionManager.Selected);
+        AssertSelectionIsResolvableAndProjected(session, beforeSelection, "已有环网柜");
+        Assert.NotNull(session.Scene.HitTestIndex.Find(beforeSelection));
+        Assert.Null(session.Scene.HitTestIndex.Find(afterSelection));
+        Assert.Null(session.SelectionResolver.Resolve(afterSelection));
+
+        Assert.True(session.CommandStack.Redo());
+        session.RebuildScene();
+        Assert.NotNull(session.SelectionResolver.Resolve(redoSelection));
+        session.SelectionManager.Select(redoSelection);
+
+        Assert.Equal(afterSelection, session.SelectionManager.Selected);
+        AssertSelectionIsResolvableAndProjected(session, afterSelection, "新增模板柜");
+        Assert.NotNull(session.Scene.HitTestIndex.Find(beforeSelection));
+        Assert.NotNull(session.Scene.HitTestIndex.Find(afterSelection));
+        AssertStableIds(ids, created);
+        Assert.Equal(2, session.PersistenceSession.Domain.Devices
+            .OfType<RingCabinet>()
+            .Count());
+    }
+
     private static RingCabinetTemplateBuildResult AssertSuccessful(
         RingCabinetTemplateBuildOutcome outcome)
     {
@@ -288,6 +410,17 @@ public sealed class RingCabinetTemplateCreationControllerTests
     private static RingCabinetTemplateBuildRequest CreateRequest(
         RingCabinetLayoutRule layoutRule)
     {
+        return CreateRequest(
+            layoutRule,
+            "模板创建测试柜",
+            new DocumentPoint(25, 40));
+    }
+
+    private static RingCabinetTemplateBuildRequest CreateRequest(
+        RingCabinetLayoutRule layoutRule,
+        string displayName,
+        DocumentPoint position)
+    {
         return new RingCabinetTemplateBuildRequest(
             CreateTemplate(
                 layoutRule,
@@ -295,8 +428,8 @@ public sealed class RingCabinetTemplateCreationControllerTests
                 new BayTemplate(10, BayFunction.Incoming, new LoadSwitchConfiguration()),
                 new BayTemplate(3, BayFunction.Outgoing, new LoadSwitchConfiguration()),
                 new BayTemplate(8, BayFunction.Tie, new LoadSwitchConfiguration())),
-            "模板创建测试柜",
-            new DocumentPoint(25, 40));
+            displayName,
+            position);
     }
 
     private static RingCabinetTemplateBuildRequest CreateUnsupportedRequest(
@@ -357,6 +490,70 @@ public sealed class RingCabinetTemplateCreationControllerTests
             isDirty: false);
         return ProjectRuntimeSession.CreateEmpty(persistenceSession);
     }
+
+    private static void AssertSelectionIsResolvableAndProjected(
+        ProjectRuntimeSession session,
+        SelectionReference selection,
+        string expectedTitle)
+    {
+        ResolvedSelection resolved = Assert.IsType<ResolvedSelection>(
+            session.SelectionResolver.Resolve(selection));
+        Assert.Equal(selection, resolved.Reference);
+        Assert.NotNull(resolved.RingCabinet);
+        Assert.NotNull(resolved.RingCabinetLayout);
+        PropertyInspectorSnapshot snapshot = session.PropertyProjector.Project(resolved);
+        Assert.Equal(selection, snapshot.Selection);
+        Assert.Equal("环网柜", snapshot.ObjectType);
+        Assert.Equal(expectedTitle, snapshot.ObjectTitle);
+    }
+
+    private static StableIds CaptureStableIds(
+        RingCabinetTemplateBuildResult result)
+    {
+        return new StableIds(
+            result.Cabinet.Id,
+            result.Cabinet.Intervals.Select(x => x.IntervalId).ToArray(),
+            result.Cabinet.Intervals
+                .SelectMany(x => x.SwitchDevices)
+                .Select(x => x.Id)
+                .ToArray(),
+            result.Cabinet.Terminals.Select(x => x.Id).ToArray(),
+            result.Cabinet.ElectricalNodes.Select(x => x.Id).ToArray(),
+            result.Cabinet.Intervals
+                .Select(x => x.SwitchAssembly.AssemblyId)
+                .ToArray());
+    }
+
+    private static void AssertStableIds(
+        StableIds expected,
+        RingCabinetTemplateBuildResult result)
+    {
+        Assert.Equal(expected.CabinetId, result.Cabinet.Id);
+        Assert.Equal(
+            expected.IntervalIds,
+            result.Cabinet.Intervals.Select(x => x.IntervalId));
+        Assert.Equal(
+            expected.SwitchIds,
+            result.Cabinet.Intervals
+                .SelectMany(x => x.SwitchDevices)
+                .Select(x => x.Id));
+        Assert.Equal(expected.TerminalIds, result.Cabinet.Terminals.Select(x => x.Id));
+        Assert.Equal(
+            expected.ElectricalNodeIds,
+            result.Cabinet.ElectricalNodes.Select(x => x.Id));
+        Assert.Equal(
+            expected.SwitchAssemblyIds,
+            result.Cabinet.Intervals.Select(x => x.SwitchAssembly.AssemblyId));
+        Assert.Equal(expected.CabinetId, result.Layout.CabinetId);
+    }
+
+    private sealed record StableIds(
+        Guid CabinetId,
+        Guid[] IntervalIds,
+        Guid[] SwitchIds,
+        Guid[] TerminalIds,
+        Guid[] ElectricalNodeIds,
+        Guid[] SwitchAssemblyIds);
 
     public enum UnsupportedTemplate
     {
