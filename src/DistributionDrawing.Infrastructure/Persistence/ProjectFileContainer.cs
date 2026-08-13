@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
@@ -120,9 +121,14 @@ public sealed class ProjectFileContainer
             ProjectFileFormat.ManifestEntryName);
         ValidateManifest(manifest);
 
-        ProjectFilePayload payload = ReadJsonEntry<ProjectFilePayload>(
-            archive,
-            manifest.MainEntry);
+        JsonObject rawPayload = ReadJsonObjectEntry(archive, manifest.MainEntry);
+        JsonObject migratedPayload = ProjectFormatMigration.Migrate(
+            rawPayload,
+            manifest.FormatVersion,
+            manifest.ProjectId);
+        ProjectFilePayload payload = migratedPayload.Deserialize<ProjectFilePayload>(JsonOptions)
+            ?? throw new InvalidDataException(
+                $"Entry '{manifest.MainEntry}' is empty or invalid.");
         if (payload.ProjectId != manifest.ProjectId)
         {
             throw new InvalidDataException(
@@ -149,27 +155,23 @@ public sealed class ProjectFileContainer
                 "Layout document ID does not match the project manifest.");
         }
 
-        if (manifest.FormatVersion == ProjectFileFormat.CurrentVersion &&
-            payload.Professional is null)
+        if (payload.Professional is null)
         {
             throw new InvalidDataException(
                 "The current project format requires a Professional section.");
         }
 
-        ProjectProfessionalDto professional = manifest.FormatVersion ==
-            ProjectFileFormat.PreviousVersion
-            ? ProjectProfessionalDto.Empty(manifest.ProjectId)
-            : payload.Professional!;
+        ProjectProfessionalDto professional = payload.Professional;
         if (professional.DocumentId != manifest.ProjectId)
         {
             throw new InvalidDataException(
                 "Professional document ID does not match the project manifest.");
         }
 
-        ProjectFileManifest effectiveManifest = manifest.FormatVersion ==
-            ProjectFileFormat.PreviousVersion
-            ? manifest with { FormatVersion = ProjectFileFormat.CurrentVersion }
-            : manifest;
+        ProjectFileManifest effectiveManifest = manifest with
+        {
+            FormatVersion = ProjectFileFormat.CurrentVersion
+        };
 
         return new ProjectFileDocument(
             effectiveManifest,
@@ -192,6 +194,15 @@ public sealed class ProjectFileContainer
             ?? throw new InvalidDataException($"Required entry '{entryName}' is missing.");
         using Stream stream = entry.Open();
         return JsonSerializer.Deserialize<T>(stream, JsonOptions)
+            ?? throw new InvalidDataException($"Entry '{entryName}' is empty or invalid.");
+    }
+
+    private static JsonObject ReadJsonObjectEntry(ZipArchive archive, string entryName)
+    {
+        ZipArchiveEntry entry = archive.GetEntry(entryName)
+            ?? throw new InvalidDataException($"Required entry '{entryName}' is missing.");
+        using Stream stream = entry.Open();
+        return JsonNode.Parse(stream) as JsonObject
             ?? throw new InvalidDataException($"Entry '{entryName}' is empty or invalid.");
     }
 
@@ -233,8 +244,7 @@ public sealed class ProjectFileContainer
             throw new InvalidDataException($"Unsupported project format '{manifest.FormatId}'.");
         }
 
-        if (manifest.FormatVersion != ProjectFileFormat.PreviousVersion &&
-            manifest.FormatVersion != ProjectFileFormat.CurrentVersion)
+        if (!ProjectFileFormat.IsSupportedVersion(manifest.FormatVersion))
         {
             throw new InvalidDataException(
                 $"Unsupported project format version '{manifest.FormatVersion}'.");

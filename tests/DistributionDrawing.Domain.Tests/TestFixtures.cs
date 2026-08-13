@@ -1,5 +1,6 @@
 using System.Reflection;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 
@@ -26,6 +27,25 @@ internal static class TestFixtures
             overheadSideTerminalId ?? Guid.NewGuid(),
             internalNodeId ?? Guid.NewGuid(),
             "电缆终端");
+    }
+
+    public static RingCabinet CreateLoadSwitchRingCabinet(
+        IReadOnlyList<int> bayIndexes,
+        BayFunction function)
+    {
+        RingCabinetIntervalDefinition[] intervals = bayIndexes
+            .Select(bayIndex => RingCabinetIntervalDefinition.CreateLoadSwitch(
+                bayIndex,
+                function,
+                SwitchState.Open,
+                SwitchState.Open,
+                $"负{bayIndex}间隔"))
+            .ToArray();
+
+        return RingCabinet.Create(RingCabinetDefinition.Create(
+            Guid.NewGuid(),
+            "测试环网柜",
+            intervals));
     }
 
     public static ElectricalNode CreateCableTerminationNode(CableTermination termination)

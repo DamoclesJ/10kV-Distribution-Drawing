@@ -12,20 +12,28 @@ internal static class RingCabinetCompositionDemoFactory
         RingCabinetIntervalDefinition[] definitions =
         [
             RingCabinetIntervalDefinition.CreateLoadSwitch(
+                1,
+                BayFunction.Incoming,
                 SwitchState.Closed,
                 SwitchState.Open,
                 "进线负荷开关"),
             RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                2,
+                BayFunction.Outgoing,
                 GroundingStructureKind.UpperIsolationGrounding,
                 SwitchState.Closed,
                 SwitchState.Open,
                 SwitchState.Open,
                 "一二次融合馈线"),
             RingCabinetIntervalDefinition.CreateLoadSwitch(
+                3,
+                BayFunction.Outgoing,
                 SwitchState.Open,
                 SwitchState.Open,
                 "出线负荷开关"),
             RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                4,
+                BayFunction.Tie,
                 GroundingStructureKind.LowerLowerGrounding,
                 SwitchState.Closed,
                 SwitchState.Closed,

@@ -52,6 +52,8 @@ public sealed record ProjectRingCabinetIntervalDto(
     Guid IntervalId,
     Guid ParentCabinetId,
     int Sequence,
+    int BayIndex,
+    string Function,
     string DisplayName,
     string IntervalKind,
     string? GroundingStructureKind,
@@ -363,6 +365,8 @@ internal static class ProjectDomainMapper
             interval.IntervalId,
             interval.ParentCabinetId,
             interval.Sequence,
+            interval.BayIndex,
+            Encode(interval.Function),
             interval.DisplayName,
             Encode(interval.IntervalKind),
             interval.GroundingStructureKind is GroundingStructureKind grounding
@@ -692,39 +696,7 @@ internal static class ProjectDomainMapper
     {
         var intervals = (dto.Intervals ?? throw new InvalidDataException(
                 $"Ring cabinet '{dto.CabinetId}' is missing intervals."))
-            .Select(interval => new RingCabinetIntervalRestoreDefinition(
-                interval.IntervalId,
-                interval.ParentCabinetId,
-                interval.Sequence,
-                interval.DisplayName,
-                Parse<IntervalKind>(interval.IntervalKind, interval.IntervalId, "intervalKind"),
-                interval.GroundingStructureKind is null
-                    ? null
-                    : Parse<GroundingStructureKind>(
-                        interval.GroundingStructureKind,
-                        interval.IntervalId,
-                        "groundingStructureKind"),
-                interval.IntermediateNodeId,
-                interval.CircuitNodeId,
-                interval.EarthNodeId,
-                interval.ExternalTerminalId,
-                interval.SwitchAssemblyId,
-                (interval.Switches ?? throw new InvalidDataException(
-                        $"Interval '{interval.IntervalId}' is missing switches."))
-                    .Select(switchDto => new SwitchDeviceRestoreDefinition(
-                        switchDto.DeviceId,
-                        Parse<SwitchKind>(switchDto.SwitchKind, switchDto.DeviceId, "switchKind"),
-                        Parse<SwitchInstallationType>(
-                            switchDto.InstallationType,
-                            switchDto.DeviceId,
-                            "installationType"),
-                        switchDto.FirstTerminalId,
-                        switchDto.SecondTerminalId,
-                        Parse<SwitchState>(switchDto.SwitchState, switchDto.DeviceId, "switchState"),
-                        switchDto.DisplayName ?? string.Empty,
-                        switchDto.VoltageLevel,
-                        switchDto.DispatchNumber))
-                    .ToArray()))
+            .Select(RestoreRingCabinetInterval)
             .ToArray();
 
         RingCabinet cabinet = RingCabinet.Restore(
@@ -736,6 +708,52 @@ internal static class ProjectDomainMapper
 
         ValidateRestoredAggregate(cabinet, dto);
         return cabinet;
+    }
+
+    private static RingCabinetIntervalRestoreDefinition RestoreRingCabinetInterval(
+        ProjectRingCabinetIntervalDto interval)
+    {
+        if (interval.BayIndex < 1)
+        {
+            throw new InvalidDataException(
+                $"Interval '{interval.IntervalId}' has an invalid bayIndex '{interval.BayIndex}'.");
+        }
+
+        return new RingCabinetIntervalRestoreDefinition(
+            interval.IntervalId,
+            interval.ParentCabinetId,
+            interval.Sequence,
+            interval.BayIndex,
+            Parse<BayFunction>(interval.Function, interval.IntervalId, "function"),
+            interval.DisplayName,
+            Parse<IntervalKind>(interval.IntervalKind, interval.IntervalId, "intervalKind"),
+            interval.GroundingStructureKind is null
+                ? null
+                : Parse<GroundingStructureKind>(
+                    interval.GroundingStructureKind,
+                    interval.IntervalId,
+                    "groundingStructureKind"),
+            interval.IntermediateNodeId,
+            interval.CircuitNodeId,
+            interval.EarthNodeId,
+            interval.ExternalTerminalId,
+            interval.SwitchAssemblyId,
+            (interval.Switches ?? throw new InvalidDataException(
+                    $"Interval '{interval.IntervalId}' is missing switches."))
+                .Select(switchDto => new SwitchDeviceRestoreDefinition(
+                    switchDto.DeviceId,
+                    Parse<SwitchKind>(switchDto.SwitchKind, switchDto.DeviceId, "switchKind"),
+                    Parse<SwitchInstallationType>(
+                        switchDto.InstallationType,
+                        switchDto.DeviceId,
+                        "installationType"),
+                    switchDto.FirstTerminalId,
+                    switchDto.SecondTerminalId,
+                    Parse<SwitchState>(switchDto.SwitchState, switchDto.DeviceId, "switchState"),
+                    switchDto.DisplayName ?? string.Empty,
+                    switchDto.VoltageLevel,
+                    switchDto.DispatchNumber))
+                .ToArray());
     }
 
     private static void ValidateRestoredAggregate(
@@ -831,6 +849,18 @@ internal static class ProjectDomainMapper
     {
         IntervalKind.LoadSwitchInterval => "load-switch-interval",
         IntervalKind.IntegratedFeederInterval => "integrated-feeder-interval",
+        _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+
+    private static string Encode(BayFunction value) => value switch
+    {
+        BayFunction.Unknown => "unknown",
+        BayFunction.Incoming => "incoming",
+        BayFunction.Outgoing => "outgoing",
+        BayFunction.Tie => "tie",
+        BayFunction.PT => "pt",
+        BayFunction.Metering => "metering",
+        BayFunction.Reserve => "reserve",
         _ => throw new ArgumentOutOfRangeException(nameof(value))
     };
 

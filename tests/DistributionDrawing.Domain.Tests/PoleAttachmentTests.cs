@@ -68,12 +68,9 @@ public sealed class PoleAttachmentTests
     {
         var document = TestFixtures.CreateDocument();
         var pole = new Pole(Guid.NewGuid(), "P-13");
-        var cabinet = RingCabinet.CreateNormalLoadSwitchCabinet(
-            Guid.NewGuid(),
-            "环网柜",
-            3,
-            SwitchState.Open,
-            SwitchState.Open);
+        RingCabinet cabinet = TestFixtures.CreateLoadSwitchRingCabinet(
+            [2, 4, 6],
+            BayFunction.Outgoing);
 
         document.AddDevice(pole);
         document.AddDevice(cabinet);

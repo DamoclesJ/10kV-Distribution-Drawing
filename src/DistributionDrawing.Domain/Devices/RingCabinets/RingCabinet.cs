@@ -139,6 +139,7 @@ public sealed class RingCabinet : Device
         var electricalNodes = new List<ElectricalNode> { mainBusNode };
         var terminals = new List<Terminal>();
         var intervals = new List<RingCabinetInterval>(intervalDefinitions.Length);
+        var bayIndexes = new HashSet<int>();
 
         for (int index = 0; index < intervalDefinitions.Length; index++)
         {
@@ -150,6 +151,20 @@ public sealed class RingCabinet : Device
             {
                 throw new InvalidOperationException(
                     $"Interval '{intervalDefinition.IntervalId}' has an invalid owner or sequence.");
+            }
+
+            int bayIndex = intervalDefinition.BayIndex;
+            if (bayIndex < 1 || !bayIndexes.Add(bayIndex))
+            {
+                throw new InvalidOperationException(
+                    $"Interval '{intervalDefinition.IntervalId}' has an invalid or duplicate bay index.");
+            }
+
+            if (!Enum.IsDefined(intervalDefinition.Function) ||
+                intervalDefinition.Function == BayFunction.PT)
+            {
+                throw new InvalidOperationException(
+                    $"Interval '{intervalDefinition.IntervalId}' has an invalid bay function.");
             }
 
             RingCabinetInterval interval = intervalDefinition.IntervalKind switch
@@ -183,60 +198,6 @@ public sealed class RingCabinet : Device
 
         cabinet.ValidateStructure();
         return cabinet;
-    }
-
-    public static RingCabinet CreateNormalLoadSwitchCabinet(
-        Guid id,
-        string displayName,
-        int intervalCount,
-        SwitchState initialLoadSwitchState,
-        SwitchState initialGroundSwitchState)
-    {
-        if (intervalCount is < 3 or > 6)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(intervalCount),
-                "A normal load-switch cabinet supports 3, 4, 5, or 6 intervals.");
-        }
-
-        RingCabinetIntervalDefinition[] intervals = Enumerable
-            .Range(1, intervalCount)
-            .Select(sequence => RingCabinetIntervalDefinition.CreateLoadSwitch(
-                initialLoadSwitchState,
-                initialGroundSwitchState,
-                $"{sequence}号间隔"))
-            .ToArray();
-
-        return Create(RingCabinetDefinition.Create(id, displayName, intervals));
-    }
-
-    public static RingCabinet CreatePrimarySecondaryIntegratedCabinetBase(
-        Guid id,
-        string displayName,
-        int intervalCount,
-        GroundingStructureKind groundingStructureKind,
-        SwitchState initialIsolationSwitchState,
-        SwitchState initialCircuitBreakerState,
-        SwitchState initialGroundSwitchState)
-    {
-        if (intervalCount is not (4 or 6))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(intervalCount),
-                "A primary-secondary integrated cabinet supports 4 or 6 intervals.");
-        }
-
-        RingCabinetIntervalDefinition[] intervals = Enumerable
-            .Range(1, intervalCount)
-            .Select(sequence => RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                groundingStructureKind,
-                initialIsolationSwitchState,
-                initialCircuitBreakerState,
-                initialGroundSwitchState,
-                $"{sequence}号间隔"))
-            .ToArray();
-
-        return Create(RingCabinetDefinition.Create(id, displayName, intervals));
     }
 
     private static RingCabinetInterval CreateRestoredLoadSwitchInterval(
@@ -341,6 +302,8 @@ public sealed class RingCabinet : Device
             definition.IntervalId,
             cabinetId,
             definition.Sequence,
+            definition.BayIndex,
+            definition.Function,
             definition.DisplayName,
             IntervalKind.LoadSwitchInterval,
             [loadSwitch, groundSwitch],
@@ -482,6 +445,8 @@ public sealed class RingCabinet : Device
             definition.IntervalId,
             cabinetId,
             definition.Sequence,
+            definition.BayIndex,
+            definition.Function,
             definition.DisplayName,
             IntervalKind.IntegratedFeederInterval,
             [isolationSwitch, circuitBreaker, groundSwitch],
@@ -609,6 +574,19 @@ public sealed class RingCabinet : Device
 
         ValidatePureTemplateIntervalCount();
         EnsureAggregateObjectIdsAreUnique();
+
+        if (_intervals.Select(interval => interval.BayIndex).Distinct().Count() != _intervals.Count)
+        {
+            throw new InvalidOperationException(
+                "Bay indexes must be unique within a ring cabinet.");
+        }
+
+        if (_intervals.Any(interval =>
+                !Enum.IsDefined(interval.Function) || interval.Function == BayFunction.PT))
+        {
+            throw new InvalidOperationException(
+                "The cabinet contains an unsupported bay function.");
+        }
 
         Dictionary<Guid, ElectricalNode> nodes = _electricalNodes.ToDictionary(node => node.Id);
         Dictionary<Guid, Terminal> terminals = _terminals.ToDictionary(terminal => terminal.Id);
@@ -772,6 +750,8 @@ public sealed class RingCabinet : Device
             intervalId,
             cabinetId,
             sequence,
+            definition.BayIndex,
+            definition.Function,
             intervalName,
             IntervalKind.LoadSwitchInterval,
             [loadSwitch, groundSwitch],
@@ -945,6 +925,8 @@ public sealed class RingCabinet : Device
             intervalId,
             cabinetId,
             sequence,
+            definition.BayIndex,
+            definition.Function,
             intervalName,
             IntervalKind.IntegratedFeederInterval,
             [isolationSwitch, circuitBreaker, groundSwitch],

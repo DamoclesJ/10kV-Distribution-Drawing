@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
@@ -78,8 +79,34 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
             return false;
         }
 
+        var bayIndexes = new HashSet<int>();
         foreach (RingCabinetIntervalCreationRowViewModel row in Intervals)
         {
+            if (!int.TryParse(
+                    row.BayIndexText,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out int bayIndex) ||
+                bayIndex < 1)
+            {
+                errorMessage = $"请输入第 {row.Sequence} 个间隔的正整数业务编号。";
+                return false;
+            }
+
+            if (!bayIndexes.Add(bayIndex))
+            {
+                errorMessage = $"间隔业务编号 {bayIndex} 重复。";
+                return false;
+            }
+
+            if (row.Function is not BayFunction function ||
+                !Enum.IsDefined(function) ||
+                function is BayFunction.Unknown or BayFunction.PT)
+            {
+                errorMessage = $"请选择第 {row.Sequence} 个间隔的电气功能。";
+                return false;
+            }
+
             if (string.IsNullOrWhiteSpace(row.DisplayName))
             {
                 errorMessage = $"请输入第 {row.Sequence} 个间隔的名称。";
@@ -127,6 +154,8 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
         configuration = new RingCabinetCreationConfiguration(
             DisplayName.Trim(),
             Intervals.Select(row => new RingCabinetIntervalCreationConfiguration(
+                int.Parse(row.BayIndexText, NumberStyles.Integer, CultureInfo.InvariantCulture),
+                row.Function!.Value,
                 row.DisplayName.Trim(),
                 row.IntervalKind,
                 row.IntervalKind == IntervalKind.IntegratedFeederInterval
@@ -170,8 +199,14 @@ public sealed class RingCabinetIntervalCreationRowViewModel : INotifyPropertyCha
         Array.AsReadOnly(Enum.GetValues<IntervalKind>());
     private static readonly IReadOnlyList<GroundingStructureKind> SupportedGroundingStructures =
         Array.AsReadOnly(Enum.GetValues<GroundingStructureKind>());
+    private static readonly IReadOnlyList<BayFunction> SupportedFunctions = Array.AsReadOnly(
+        Enum.GetValues<BayFunction>()
+            .Where(function => function is not BayFunction.Unknown and not BayFunction.PT)
+            .ToArray());
 
     private int _sequence;
+    private string _bayIndexText = string.Empty;
+    private BayFunction? _function;
     private string _displayName = string.Empty;
     private IntervalKind _intervalKind = IntervalKind.LoadSwitchInterval;
     private GroundingStructureKind? _groundingStructureKind;
@@ -189,6 +224,36 @@ public sealed class RingCabinetIntervalCreationRowViewModel : INotifyPropertyCha
             }
 
             _sequence = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string BayIndexText
+    {
+        get => _bayIndexText;
+        set
+        {
+            if (_bayIndexText == value)
+            {
+                return;
+            }
+
+            _bayIndexText = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public BayFunction? Function
+    {
+        get => _function;
+        set
+        {
+            if (_function == value)
+            {
+                return;
+            }
+
+            _function = value;
             OnPropertyChanged();
         }
     }
@@ -250,6 +315,8 @@ public sealed class RingCabinetIntervalCreationRowViewModel : INotifyPropertyCha
 
     public IReadOnlyList<GroundingStructureKind> GroundingStructureKinds =>
         SupportedGroundingStructures;
+
+    public IReadOnlyList<BayFunction> Functions => SupportedFunctions;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {

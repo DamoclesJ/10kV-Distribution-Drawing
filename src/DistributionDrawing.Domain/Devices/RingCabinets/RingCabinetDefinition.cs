@@ -36,6 +36,25 @@ public sealed class RingCabinetDefinition
                 nameof(intervalDefinitions));
         }
 
+        if (definitions.Any(definition =>
+                definition.BayIndex < 1 ||
+                !Enum.IsDefined(definition.Function) ||
+                definition.Function is BayFunction.Unknown or BayFunction.PT))
+        {
+            throw new ArgumentException(
+                "Every interval requires valid bay metadata for creation.",
+                nameof(intervalDefinitions));
+        }
+
+        int[] bayIndexes = definitions.Select(definition => definition.BayIndex).ToArray();
+
+        if (bayIndexes.Distinct().Count() != bayIndexes.Length)
+        {
+            throw new ArgumentException(
+                "Bay indexes must be unique within a ring cabinet.",
+                nameof(intervalDefinitions));
+        }
+
         CabinetId = cabinetId;
         DisplayName = displayName.Trim();
         _intervalDefinitions = Array.AsReadOnly(definitions);

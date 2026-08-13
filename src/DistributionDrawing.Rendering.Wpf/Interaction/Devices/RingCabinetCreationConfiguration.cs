@@ -22,6 +22,8 @@ public sealed class RingCabinetCreationConfiguration
 }
 
 public sealed record RingCabinetIntervalCreationConfiguration(
+    int BayIndex,
+    BayFunction Function,
     string DisplayName,
     IntervalKind IntervalKind,
     GroundingStructureKind? GroundingStructureKind);

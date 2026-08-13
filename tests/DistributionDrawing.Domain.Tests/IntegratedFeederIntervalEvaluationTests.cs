@@ -234,14 +234,22 @@ public sealed class IntegratedFeederIntervalEvaluationTests
         SwitchState circuitBreakerState,
         SwitchState groundSwitchState)
     {
-        return RingCabinet.CreatePrimarySecondaryIntegratedCabinetBase(
+        int[] bayIndexes = [1, 2, 5, 7];
+        RingCabinetIntervalDefinition[] intervals = bayIndexes
+            .Select(bayIndex => RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                bayIndex,
+                BayFunction.Outgoing,
+                groundingStructureKind,
+                isolationSwitchState,
+                circuitBreakerState,
+                groundSwitchState,
+                $"负{bayIndex}间隔"))
+            .ToArray();
+
+        return RingCabinet.Create(RingCabinetDefinition.Create(
             Guid.NewGuid(),
             "测试一二次融合环网柜",
-            4,
-            groundingStructureKind,
-            isolationSwitchState,
-            circuitBreakerState,
-            groundSwitchState);
+            intervals));
     }
 
     private static SwitchDevice GetSwitch(

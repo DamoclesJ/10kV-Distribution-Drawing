@@ -52,12 +52,9 @@ public sealed class TopologyBoundaryTests
         var termination = TestFixtures.CreateCableTermination();
         TestFixtures.AddCableTerminationTopology(document, termination);
 
-        var cabinet = RingCabinet.CreateNormalLoadSwitchCabinet(
-            Guid.NewGuid(),
-            "环网柜",
-            3,
-            SwitchState.Open,
-            SwitchState.Open);
+        RingCabinet cabinet = TestFixtures.CreateLoadSwitchRingCabinet(
+            [1, 3, 5],
+            BayFunction.Outgoing);
         document.AddDevice(cabinet);
         Terminal cabinetTerminal = document.Terminals.Single(
             terminal => terminal.Id == cabinet.Intervals[0].ExternalTerminalId);
