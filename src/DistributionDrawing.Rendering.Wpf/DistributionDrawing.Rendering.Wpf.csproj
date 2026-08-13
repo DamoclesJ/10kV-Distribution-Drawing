@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DistributionDrawing.Application\DistributionDrawing.Application.csproj" />
     <ProjectReference Include="..\DistributionDrawing.Domain\DistributionDrawing.Domain.csproj" />
   </ItemGroup>
 
