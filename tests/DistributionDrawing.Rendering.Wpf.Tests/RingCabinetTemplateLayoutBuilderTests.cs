@@ -74,7 +74,6 @@ public sealed class RingCabinetTemplateLayoutBuilderTests
             Enumerable.Range(1, 4)
                 .Select(index => new BayTemplate(
                     index,
-                    index == 1 ? BayFunction.Incoming : BayFunction.Outgoing,
                     new IntegratedFeederConfiguration(
                         GroundingStructureKind.UpperLowerGrounding)))
                 .ToArray());
@@ -93,10 +92,9 @@ public sealed class RingCabinetTemplateLayoutBuilderTests
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Mixed,
-            new BayTemplate(2, BayFunction.Incoming, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()),
             new BayTemplate(
                 7,
-                BayFunction.Outgoing,
                 new IntegratedFeederConfiguration(
                     GroundingStructureKind.LowerLowerGrounding)));
         RingCabinetDomainBuildResult domainResult = BuildDomain(template);
@@ -157,42 +155,13 @@ public sealed class RingCabinetTemplateLayoutBuilderTests
             outcome.Failure.MissingCapability);
     }
 
-    [Theory]
-    [InlineData(TemplateCapability.PTBay)]
-    [InlineData(TemplateCapability.DtuSecondary)]
-    public void Build_RejectsUnsupportedDomainBuildCapability(
-        TemplateCapability unsupportedCapability)
-    {
-        RingCabinetDomainBuildResult complete = BuildDomain(
-            CreateLoadSwitchTemplate(1, 2, 3));
-        RingCabinetDomainBuildResult inconsistent = WithAdditionalCapabilities(
-            complete,
-            unsupportedCapability);
-
-        RingCabinetLayoutBuildOutcome outcome = _layoutBuilder.Build(
-            inconsistent,
-            RingCabinetLayoutRule.Default,
-            new DocumentPoint(0, 0));
-
-        Assert.False(outcome.IsSuccess);
-        Assert.Null(outcome.Result);
-        Assert.Equal(
-            RingCabinetLayoutBuildFailureKind.UnsupportedCapability,
-            outcome.Failure!.Kind);
-        Assert.Contains(
-            unsupportedCapability,
-            outcome.Failure.UnsupportedCapabilities);
-        Assert.Null(outcome.Failure.Cause);
-    }
-
     [Fact]
-    public void Build_RejectsCombinedPtAndDtuCapabilities()
+    public void Build_RejectsUnsupportedDomainBuildCapability()
     {
         RingCabinetDomainBuildResult complete = BuildDomain(
             CreateLoadSwitchTemplate(1, 2, 3));
         RingCabinetDomainBuildResult inconsistent = WithAdditionalCapabilities(
             complete,
-            TemplateCapability.PTBay,
             TemplateCapability.DtuSecondary);
 
         RingCabinetLayoutBuildOutcome outcome = _layoutBuilder.Build(
@@ -205,9 +174,10 @@ public sealed class RingCabinetTemplateLayoutBuilderTests
         Assert.Equal(
             RingCabinetLayoutBuildFailureKind.UnsupportedCapability,
             outcome.Failure!.Kind);
-        Assert.Equal(
-            new[] { TemplateCapability.PTBay, TemplateCapability.DtuSecondary },
-            outcome.Failure.UnsupportedCapabilities.Order());
+        Assert.Contains(
+            TemplateCapability.DtuSecondary,
+            outcome.Failure.UnsupportedCapabilities);
+        Assert.Null(outcome.Failure.Cause);
     }
 
     [Theory]
@@ -315,9 +285,8 @@ public sealed class RingCabinetTemplateLayoutBuilderTests
     {
         return CreateTemplate(
             RingCabinetTemplateType.Conventional,
-            indexes.Select((index, sequence) => new BayTemplate(
+            indexes.Select(index => new BayTemplate(
                 index,
-                sequence == 0 ? BayFunction.Incoming : BayFunction.Outgoing,
                 new LoadSwitchConfiguration())).ToArray());
     }
 

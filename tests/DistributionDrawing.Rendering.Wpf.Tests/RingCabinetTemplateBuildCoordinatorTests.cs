@@ -61,7 +61,6 @@ public sealed class RingCabinetTemplateBuildCoordinatorTests
             NoSecondaryConfiguration.Instance,
             structures.Select((structure, index) => new BayTemplate(
                 index + 1,
-                index == 0 ? BayFunction.Incoming : BayFunction.Outgoing,
                 new IntegratedFeederConfiguration(structure))).ToArray());
 
         RingCabinetTemplateBuildResult result = BuildSuccessfully(
@@ -89,10 +88,9 @@ public sealed class RingCabinetTemplateBuildCoordinatorTests
             RingCabinetTemplateType.Mixed,
             RingCabinetLayoutRule.Default,
             NoSecondaryConfiguration.Instance,
-            new BayTemplate(2, BayFunction.Incoming, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()),
             new BayTemplate(
                 7,
-                BayFunction.Outgoing,
                 new IntegratedFeederConfiguration(
                     GroundingStructureKind.LowerLowerGrounding)));
 
@@ -141,41 +139,15 @@ public sealed class RingCabinetTemplateBuildCoordinatorTests
     }
 
     [Fact]
-    public void Build_MapsPtFailureFromDomainStage()
-    {
-        RingCabinetTemplate template = CreateTemplate(
-            RingCabinetTemplateType.Conventional,
-            RingCabinetLayoutRule.Default,
-            NoSecondaryConfiguration.Instance,
-            new BayTemplate(1, BayFunction.PT, new LoadSwitchConfiguration()),
-            new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-            new BayTemplate(3, BayFunction.Tie, new LoadSwitchConfiguration()));
-
-        RingCabinetTemplateBuildOutcome outcome = _coordinator.Build(
-            new RingCabinetTemplateBuildRequest(
-                template,
-                "PT模板柜",
-                new DocumentPoint(0, 0)));
-
-        AssertFailure(
-            outcome,
-            RingCabinetTemplateBuildFailureStage.Domain,
-            RingCabinetTemplateBuildFailureKind.UnsupportedCapability);
-        Assert.Contains(
-            TemplateCapability.PTBay,
-            outcome.Failure!.UnsupportedCapabilities);
-    }
-
-    [Fact]
     public void Build_MapsDtuFailureFromDomainStage()
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Conventional,
             RingCabinetLayoutRule.Default,
             new DtuSecondaryConfiguration(),
-            new BayTemplate(1, BayFunction.Incoming, new LoadSwitchConfiguration()),
-            new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-            new BayTemplate(3, BayFunction.Tie, new LoadSwitchConfiguration()));
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()));
 
         RingCabinetTemplateBuildOutcome outcome = _coordinator.Build(
             new RingCabinetTemplateBuildRequest(
@@ -376,7 +348,7 @@ public sealed class RingCabinetTemplateBuildCoordinatorTests
         RingCabinetTemplateBuildFailure unsupportedCapability =
             RingCabinetTemplateBuildFailure.FromLayoutFailure(
                 RingCabinetLayoutBuildFailure.UnsupportedCapability(
-                    [TemplateCapability.PTBay, TemplateCapability.DtuSecondary]));
+                    [TemplateCapability.DtuSecondary]));
 
         Assert.Equal(
             RingCabinetTemplateBuildFailureStage.Layout,
@@ -391,8 +363,8 @@ public sealed class RingCabinetTemplateBuildCoordinatorTests
             RingCabinetTemplateBuildFailureKind.UnsupportedCapability,
             unsupportedCapability.Kind);
         Assert.Equal(
-            new[] { TemplateCapability.PTBay, TemplateCapability.DtuSecondary },
-            unsupportedCapability.UnsupportedCapabilities.Order());
+            new[] { TemplateCapability.DtuSecondary },
+            unsupportedCapability.UnsupportedCapabilities);
     }
 
     private RingCabinetTemplateBuildResult BuildSuccessfully(
@@ -426,9 +398,8 @@ public sealed class RingCabinetTemplateBuildCoordinatorTests
             RingCabinetTemplateType.Conventional,
             layoutRule,
             NoSecondaryConfiguration.Instance,
-            indexes.Select((index, sequence) => new BayTemplate(
+            indexes.Select(index => new BayTemplate(
                 index,
-                sequence == 0 ? BayFunction.Incoming : BayFunction.Outgoing,
                 new LoadSwitchConfiguration())).ToArray());
     }
 

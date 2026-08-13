@@ -29,7 +29,13 @@ internal static class ProjectFormatMigration
         if (version == ProjectFileFormat.Version2)
         {
             MigrateVersion2ToVersion3(migrated);
-            version = ProjectFileFormat.CurrentVersion;
+            version = ProjectFileFormat.Version3;
+        }
+
+        if (version == ProjectFileFormat.Version3)
+        {
+            MigrateVersion3ToVersion4(migrated);
+            version = ProjectFileFormat.Version4;
         }
 
         if (version != ProjectFileFormat.CurrentVersion)
@@ -79,6 +85,35 @@ internal static class ProjectFormatMigration
 
                 interval["bayIndex"] = sequence;
                 interval["function"] = "unknown";
+            }
+        }
+    }
+
+    private static void MigrateVersion3ToVersion4(JsonObject payload)
+    {
+        if (payload["domain"] is null)
+        {
+            return;
+        }
+
+        JsonObject domain = RequireObject(payload["domain"], "domain");
+        JsonArray cabinets = RequireArray(domain["ringCabinets"], "domain.ringCabinets");
+
+        for (int cabinetIndex = 0; cabinetIndex < cabinets.Count; cabinetIndex++)
+        {
+            JsonObject cabinet = RequireObject(
+                cabinets[cabinetIndex],
+                $"domain.ringCabinets[{cabinetIndex}]");
+            JsonArray intervals = RequireArray(
+                cabinet["intervals"],
+                $"domain.ringCabinets[{cabinetIndex}].intervals");
+
+            for (int intervalIndex = 0; intervalIndex < intervals.Count; intervalIndex++)
+            {
+                string path =
+                    $"domain.ringCabinets[{cabinetIndex}].intervals[{intervalIndex}]";
+                JsonObject interval = RequireObject(intervals[intervalIndex], path);
+                interval.Remove("function");
             }
         }
     }

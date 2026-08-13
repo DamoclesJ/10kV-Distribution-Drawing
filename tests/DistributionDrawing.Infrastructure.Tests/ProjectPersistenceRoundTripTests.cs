@@ -17,144 +17,202 @@ public sealed class ProjectPersistenceRoundTripTests
     };
 
     [Fact]
-    public void Version3RoundTrip_PreservesBayMetadataAndStableIds()
+    public void Version4RoundTrip_OmitsFunctionAndPreservesStructureAndStableIds()
     {
         DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
-        RingCabinet original = Assert.Single(originalDocument.Devices.OfType<RingCabinet>());
-        string filePath = Path.Combine(
-            Path.GetTempPath(),
-            $"distribution-drawing-{Guid.NewGuid():N}.kvdrawing");
+        RingCabinet original = GetCabinet(originalDocument);
+        string filePath = CreateTemporaryPath("v4-round-trip");
 
         try
         {
             var container = new ProjectFileContainer();
-            var metadata = new ProjectFileMetadata(originalDocument.Title);
-            var fileDocument = new ProjectFileDocument(
-                ProjectFileManifest.Create(
-                    originalDocument.Id,
-                    DateTimeOffset.UtcNow,
-                    DateTimeOffset.UtcNow),
-                metadata,
-                ProjectDomainMapper.ToDto(originalDocument),
-                ProjectLayoutDto.Empty(originalDocument.Id),
-                ProjectProfessionalDto.Empty(originalDocument.Id));
+            container.Save(filePath, CreateFileDocument(originalDocument));
 
-            container.Save(filePath, fileDocument);
+            JsonObject savedPayload = ReadArchiveJsonObject(
+                filePath,
+                ProjectFileFormat.DocumentEntryName);
+            Assert.All(GetIntervals(savedPayload), interval =>
+                Assert.False(interval.ContainsKey("function")));
+
             ProjectFileDocument opened = container.Open(filePath);
             DrawingDocument restoredDocument = ProjectDomainMapper.ToDomain(opened.Domain!);
-            RingCabinet restored = Assert.Single(restoredDocument.Devices.OfType<RingCabinet>());
+            RingCabinet restored = GetCabinet(restoredDocument);
 
-            Assert.Equal(ProjectFileFormat.CurrentVersion, opened.Manifest.FormatVersion);
-            Assert.Equal(original.Id, restored.Id);
-            Assert.Equal(original.MainBusNodeId, restored.MainBusNodeId);
+            Assert.Equal(ProjectFileFormat.Version4, opened.Manifest.FormatVersion);
             Assert.Equal(
-                original.Intervals.Select(interval => interval.Sequence),
-                restored.Intervals.Select(interval => interval.Sequence));
+                original.Intervals.Select(x => x.Sequence),
+                restored.Intervals.Select(x => x.Sequence));
             Assert.Equal(
-                original.Intervals.Select(interval => interval.BayIndex),
-                restored.Intervals.Select(interval => interval.BayIndex));
-            Assert.Equal(
-                original.Intervals.Select(interval => interval.Function),
-                restored.Intervals.Select(interval => interval.Function));
-            Assert.Equal(
-                original.Intervals.Select(interval => interval.IntervalId),
-                restored.Intervals.Select(interval => interval.IntervalId));
-            Assert.Equal(
-                original.ElectricalNodes.Select(node => node.Id).OrderBy(id => id),
-                restored.ElectricalNodes.Select(node => node.Id).OrderBy(id => id));
-            Assert.Equal(
-                original.Terminals.Select(terminal => terminal.Id).OrderBy(id => id),
-                restored.Terminals.Select(terminal => terminal.Id).OrderBy(id => id));
-            Assert.Equal(
-                original.Intervals.SelectMany(interval => interval.SwitchDevices)
-                    .Select(device => device.Id).OrderBy(id => id),
-                restored.Intervals.SelectMany(interval => interval.SwitchDevices)
-                    .Select(device => device.Id).OrderBy(id => id));
-            Assert.Equal(
-                original.Intervals.Select(interval => interval.SwitchAssembly.AssemblyId),
-                restored.Intervals.Select(interval => interval.SwitchAssembly.AssemblyId));
+                original.Intervals.Select(x => x.BayIndex),
+                restored.Intervals.Select(x => x.BayIndex));
+            AssertStableIds(original, restored);
         }
         finally
         {
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-            }
+            DeleteIfExists(filePath);
         }
     }
 
     [Theory]
     [InlineData(ProjectFileFormat.Version1)]
     [InlineData(ProjectFileFormat.Version2)]
-    public void LegacyArchive_MigratesToVersion3WithoutChangingStableIds(int sourceVersion)
+    [InlineData(ProjectFileFormat.Version3)]
+    public void LegacyArchive_MigratesToVersion4WithoutChangingStableIds(int sourceVersion)
     {
         DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
-        RingCabinet original = Assert.Single(originalDocument.Devices.OfType<RingCabinet>());
-        string filePath = Path.Combine(
-            Path.GetTempPath(),
-            $"distribution-drawing-legacy-{Guid.NewGuid():N}.kvdrawing");
+        RingCabinet original = GetCabinet(originalDocument);
+        string filePath = CreateTemporaryPath($"legacy-v{sourceVersion}");
 
         try
         {
             var container = new ProjectFileContainer();
             container.Save(filePath, CreateFileDocument(originalDocument));
-            DowngradeArchive(filePath, sourceVersion);
+            SetArchiveVersion(filePath, sourceVersion);
 
             ProjectFileDocument opened = container.Open(filePath);
-            DrawingDocument restoredDocument = ProjectDomainMapper.ToDomain(opened.Domain!);
-            RingCabinet restored = Assert.Single(restoredDocument.Devices.OfType<RingCabinet>());
+            RingCabinet restored = GetCabinet(
+                ProjectDomainMapper.ToDomain(opened.Domain!));
 
-            Assert.Equal(ProjectFileFormat.CurrentVersion, opened.Manifest.FormatVersion);
-            Assert.Equal(original.Id, restored.Id);
-            Assert.Equal(
-                original.Intervals.Select(interval => interval.IntervalId),
-                restored.Intervals.Select(interval => interval.IntervalId));
-            Assert.Equal(
-                original.Intervals.Select(interval => interval.Sequence),
-                restored.Intervals.Select(interval => interval.BayIndex));
-            Assert.All(
-                restored.Intervals,
-                interval => Assert.Equal(BayFunction.Unknown, interval.Function));
-            Assert.Equal(
-                original.ElectricalNodes.Select(node => node.Id).OrderBy(id => id),
-                restored.ElectricalNodes.Select(node => node.Id).OrderBy(id => id));
-            Assert.Equal(
-                original.Terminals.Select(terminal => terminal.Id).OrderBy(id => id),
-                restored.Terminals.Select(terminal => terminal.Id).OrderBy(id => id));
-            Assert.Equal(
-                original.Intervals.SelectMany(interval => interval.SwitchDevices)
-                    .Select(device => device.Id).OrderBy(id => id),
-                restored.Intervals.SelectMany(interval => interval.SwitchDevices)
-                    .Select(device => device.Id).OrderBy(id => id));
-            Assert.Equal(
-                original.Intervals.Select(interval => interval.SwitchAssembly.AssemblyId),
-                restored.Intervals.Select(interval => interval.SwitchAssembly.AssemblyId));
+            Assert.Equal(ProjectFileFormat.Version4, opened.Manifest.FormatVersion);
+            if (sourceVersion <= ProjectFileFormat.Version2)
+            {
+                Assert.Equal(
+                    original.Intervals.Select(x => x.Sequence),
+                    restored.Intervals.Select(x => x.BayIndex));
+            }
+            else
+            {
+                Assert.Equal(
+                    original.Intervals.Select(x => x.BayIndex),
+                    restored.Intervals.Select(x => x.BayIndex));
+            }
+            AssertStableIds(original, restored);
         }
         finally
         {
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-            }
+            DeleteIfExists(filePath);
         }
     }
 
     [Theory]
-    [InlineData(false, "outgoing")]
-    [InlineData(true, null)]
-    [InlineData(true, "unsupported-function")]
-    public void CurrentDto_RejectsMissingOrInvalidBayMetadata(
-        bool validBayIndex,
-        string? function)
+    [InlineData("\"unknown\"")]
+    [InlineData("\"incoming\"")]
+    [InlineData("\"outgoing\"")]
+    [InlineData("\"tie\"")]
+    [InlineData("\"pt\"")]
+    [InlineData("\"metering\"")]
+    [InlineData("\"reserve\"")]
+    [InlineData("\"arbitrary-legacy-value\"")]
+    [InlineData("123")]
+    [InlineData("null")]
+    public void Version3Archive_DiscardsAnyLegacyFunctionAndPreservesStableIds(
+        string legacyJson)
+    {
+        DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
+        RingCabinet original = GetCabinet(originalDocument);
+        string filePath = CreateTemporaryPath("v3-legacy-function");
+
+        try
+        {
+            var container = new ProjectFileContainer();
+            container.Save(filePath, CreateFileDocument(originalDocument));
+            MutateArchive(filePath, (manifest, payload) =>
+            {
+                manifest["formatVersion"] = ProjectFileFormat.Version3;
+                foreach (JsonObject interval in GetIntervals(payload))
+                {
+                    interval["function"] = JsonNode.Parse(legacyJson);
+                }
+            });
+
+            ProjectFileDocument opened = container.Open(filePath);
+            RingCabinet restored = GetCabinet(
+                ProjectDomainMapper.ToDomain(opened.Domain!));
+
+            AssertStableIds(original, restored);
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
+    public void Version3Archive_AllowsMissingFunction()
+    {
+        DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
+        RingCabinet original = GetCabinet(originalDocument);
+        string filePath = CreateTemporaryPath("v3-missing-function");
+
+        try
+        {
+            var container = new ProjectFileContainer();
+            container.Save(filePath, CreateFileDocument(originalDocument));
+            MutateArchive(filePath, (manifest, payload) =>
+            {
+                manifest["formatVersion"] = ProjectFileFormat.Version3;
+                foreach (JsonObject interval in GetIntervals(payload))
+                {
+                    interval.Remove("function");
+                }
+            });
+
+            ProjectFileDocument opened = container.Open(filePath);
+            RingCabinet restored = GetCabinet(
+                ProjectDomainMapper.ToDomain(opened.Domain!));
+
+            AssertStableIds(original, restored);
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
+    public void Version4Archive_IgnoresExtraLegacyFunctionAndDoesNotWriteItBack()
+    {
+        DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
+        RingCabinet original = GetCabinet(originalDocument);
+        string filePath = CreateTemporaryPath("v4-extra-function");
+
+        try
+        {
+            var container = new ProjectFileContainer();
+            container.Save(filePath, CreateFileDocument(originalDocument));
+            MutateArchive(filePath, (_, payload) =>
+            {
+                foreach (JsonObject interval in GetIntervals(payload))
+                {
+                    interval["function"] = "legacy-extra";
+                }
+            });
+
+            ProjectFileDocument opened = container.Open(filePath);
+            RingCabinet restored = GetCabinet(
+                ProjectDomainMapper.ToDomain(opened.Domain!));
+            AssertStableIds(original, restored);
+
+            container.Save(filePath, opened);
+            JsonObject resavedPayload = ReadArchiveJsonObject(
+                filePath,
+                ProjectFileFormat.DocumentEntryName);
+            Assert.All(GetIntervals(resavedPayload), interval =>
+                Assert.False(interval.ContainsKey("function")));
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
+    public void CurrentDto_RejectsNonPositiveBayIndex()
     {
         ProjectDomainDto dto = ProjectDomainMapper.ToDto(CreateDocumentWithRingCabinet());
         ProjectRingCabinetDto cabinet = Assert.Single(dto.RingCabinets);
         ProjectRingCabinetIntervalDto[] intervals = cabinet.Intervals.ToArray();
-        intervals[0] = intervals[0] with
-        {
-            BayIndex = validBayIndex ? intervals[0].BayIndex : 0,
-            Function = function!
-        };
+        intervals[0] = intervals[0] with { BayIndex = 0 };
         ProjectDomainDto invalid = dto with
         {
             RingCabinets = [cabinet with { Intervals = intervals }]
@@ -163,36 +221,26 @@ public sealed class ProjectPersistenceRoundTripTests
         Assert.Throws<InvalidDataException>(() => ProjectDomainMapper.ToDomain(invalid));
     }
 
-    [Theory]
-    [InlineData("missing-bay-index")]
-    [InlineData("missing-function")]
-    [InlineData("invalid-function")]
-    public void CorruptedVersion3Archive_FailsDuringDomainRestore(string corruption)
+    [Fact]
+    public void Version4Archive_StillRejectsMissingBayIndex()
     {
         DrawingDocument document = CreateDocumentWithRingCabinet();
-        string filePath = Path.Combine(
-            Path.GetTempPath(),
-            $"distribution-drawing-corrupt-{Guid.NewGuid():N}.kvdrawing");
+        string filePath = CreateTemporaryPath("v4-missing-bay-index");
 
         try
         {
             var container = new ProjectFileContainer();
             container.Save(filePath, CreateFileDocument(document));
-            CorruptBayMetadata(filePath, corruption);
+            MutateArchive(filePath, (_, payload) =>
+                GetIntervals(payload)[0].Remove("bayIndex"));
 
-            Exception exception = Assert.ThrowsAny<Exception>(() =>
-            {
-                ProjectFileDocument opened = container.Open(filePath);
-                _ = ProjectDomainMapper.ToDomain(opened.Domain!);
-            });
-            Assert.True(exception is InvalidDataException or JsonException);
+            ProjectFileDocument opened = container.Open(filePath);
+            Assert.Throws<InvalidDataException>(() =>
+                ProjectDomainMapper.ToDomain(opened.Domain!));
         }
         finally
         {
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-            }
+            DeleteIfExists(filePath);
         }
     }
 
@@ -201,24 +249,9 @@ public sealed class ProjectPersistenceRoundTripTests
         var document = new DrawingDocument(Guid.NewGuid(), "Persistence test project");
         RingCabinetIntervalDefinition[] intervals =
         [
-            RingCabinetIntervalDefinition.CreateLoadSwitch(
-                1,
-                BayFunction.Incoming,
-                SwitchState.Open,
-                SwitchState.Open,
-                "负1间隔"),
-            RingCabinetIntervalDefinition.CreateLoadSwitch(
-                3,
-                BayFunction.Outgoing,
-                SwitchState.Open,
-                SwitchState.Open,
-                "负3间隔"),
-            RingCabinetIntervalDefinition.CreateLoadSwitch(
-                7,
-                BayFunction.Reserve,
-                SwitchState.Open,
-                SwitchState.Open,
-                "负7间隔")
+            CreateLoadSwitchDefinition(1),
+            CreateLoadSwitchDefinition(3),
+            CreateLoadSwitchDefinition(7)
         ];
         RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(
             Guid.NewGuid(),
@@ -226,6 +259,15 @@ public sealed class ProjectPersistenceRoundTripTests
             intervals));
         document.AddDevice(cabinet);
         return document;
+    }
+
+    private static RingCabinetIntervalDefinition CreateLoadSwitchDefinition(int bayIndex)
+    {
+        return RingCabinetIntervalDefinition.CreateLoadSwitch(
+            bayIndex,
+            SwitchState.Open,
+            SwitchState.Open,
+            $"负{bayIndex}间隔");
     }
 
     private static ProjectFileDocument CreateFileDocument(DrawingDocument document)
@@ -241,7 +283,37 @@ public sealed class ProjectPersistenceRoundTripTests
             ProjectProfessionalDto.Empty(document.Id));
     }
 
-    private static void DowngradeArchive(string filePath, int sourceVersion)
+    private static void SetArchiveVersion(string filePath, int sourceVersion)
+    {
+        MutateArchive(filePath, (manifest, payload) =>
+        {
+            manifest["formatVersion"] = sourceVersion;
+            if (sourceVersion <= ProjectFileFormat.Version2)
+            {
+                foreach (JsonObject interval in GetIntervals(payload))
+                {
+                    interval.Remove("bayIndex");
+                    interval.Remove("function");
+                }
+            }
+            else
+            {
+                foreach (JsonObject interval in GetIntervals(payload))
+                {
+                    interval["function"] = "incoming";
+                }
+            }
+
+            if (sourceVersion == ProjectFileFormat.Version1)
+            {
+                payload.Remove("professional");
+            }
+        });
+    }
+
+    private static void MutateArchive(
+        string filePath,
+        Action<JsonObject, JsonObject> mutation)
     {
         using var stream = new FileStream(
             filePath,
@@ -249,65 +321,24 @@ public sealed class ProjectPersistenceRoundTripTests
             FileAccess.ReadWrite,
             FileShare.None);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: false);
-
         JsonObject manifest = ReadJsonObject(archive, ProjectFileFormat.ManifestEntryName);
-        manifest["formatVersion"] = sourceVersion;
-        ReplaceJsonEntry(archive, ProjectFileFormat.ManifestEntryName, manifest);
-
         JsonObject payload = ReadJsonObject(archive, ProjectFileFormat.DocumentEntryName);
-        JsonObject domain = Assert.IsType<JsonObject>(payload["domain"]);
-        JsonArray cabinets = Assert.IsType<JsonArray>(domain["ringCabinets"]);
-        foreach (JsonNode? cabinetNode in cabinets)
-        {
-            JsonObject cabinet = Assert.IsType<JsonObject>(cabinetNode);
-            JsonArray intervals = Assert.IsType<JsonArray>(cabinet["intervals"]);
-            foreach (JsonNode? intervalNode in intervals)
-            {
-                JsonObject interval = Assert.IsType<JsonObject>(intervalNode);
-                interval.Remove("bayIndex");
-                interval.Remove("function");
-            }
-        }
 
-        if (sourceVersion == ProjectFileFormat.Version1)
-        {
-            payload.Remove("professional");
-        }
+        mutation(manifest, payload);
 
+        ReplaceJsonEntry(archive, ProjectFileFormat.ManifestEntryName, manifest);
         ReplaceJsonEntry(archive, ProjectFileFormat.DocumentEntryName, payload);
     }
 
-    private static void CorruptBayMetadata(string filePath, string corruption)
+    private static JsonObject ReadArchiveJsonObject(string filePath, string entryName)
     {
         using var stream = new FileStream(
             filePath,
             FileMode.Open,
-            FileAccess.ReadWrite,
-            FileShare.None);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: false);
-        JsonObject payload = ReadJsonObject(archive, ProjectFileFormat.DocumentEntryName);
-        JsonObject domain = Assert.IsType<JsonObject>(payload["domain"]);
-        JsonArray cabinets = Assert.IsType<JsonArray>(domain["ringCabinets"]);
-        JsonObject cabinet = Assert.IsType<JsonObject>(Assert.Single(cabinets));
-        JsonArray intervals = Assert.IsType<JsonArray>(cabinet["intervals"]);
-        JsonObject interval = Assert.IsType<JsonObject>(intervals[0]);
-
-        switch (corruption)
-        {
-            case "missing-bay-index":
-                interval.Remove("bayIndex");
-                break;
-            case "missing-function":
-                interval.Remove("function");
-                break;
-            case "invalid-function":
-                interval["function"] = "unsupported-function";
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(corruption));
-        }
-
-        ReplaceJsonEntry(archive, ProjectFileFormat.DocumentEntryName, payload);
+            FileAccess.Read,
+            FileShare.Read);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+        return ReadJsonObject(archive, entryName);
     }
 
     private static JsonObject ReadJsonObject(ZipArchive archive, string entryName)
@@ -319,6 +350,15 @@ public sealed class ProjectPersistenceRoundTripTests
             ?? throw new InvalidOperationException($"Archive entry '{entryName}' is invalid.");
     }
 
+    private static IReadOnlyList<JsonObject> GetIntervals(JsonObject payload)
+    {
+        var domain = Assert.IsType<JsonObject>(payload["domain"]);
+        var cabinets = Assert.IsType<JsonArray>(domain["ringCabinets"]);
+        var cabinet = Assert.IsType<JsonObject>(Assert.Single(cabinets));
+        var intervals = Assert.IsType<JsonArray>(cabinet["intervals"]);
+        return intervals.Select(node => Assert.IsType<JsonObject>(node)).ToArray();
+    }
+
     private static void ReplaceJsonEntry(
         ZipArchive archive,
         string entryName,
@@ -328,5 +368,48 @@ public sealed class ProjectPersistenceRoundTripTests
         ZipArchiveEntry entry = archive.CreateEntry(entryName, CompressionLevel.Optimal);
         using Stream stream = entry.Open();
         JsonSerializer.Serialize(stream, value, ArchiveJsonOptions);
+    }
+
+    private static RingCabinet GetCabinet(DrawingDocument document)
+    {
+        return Assert.Single(document.Devices.OfType<RingCabinet>());
+    }
+
+    private static void AssertStableIds(RingCabinet expected, RingCabinet actual)
+    {
+        Assert.Equal(expected.Id, actual.Id);
+        Assert.Equal(expected.MainBusNodeId, actual.MainBusNodeId);
+        Assert.Equal(
+            expected.Intervals.Select(x => x.IntervalId),
+            actual.Intervals.Select(x => x.IntervalId));
+        Assert.Equal(
+            expected.ElectricalNodes.Select(x => x.Id).OrderBy(x => x),
+            actual.ElectricalNodes.Select(x => x.Id).OrderBy(x => x));
+        Assert.Equal(
+            expected.Terminals.Select(x => x.Id).OrderBy(x => x),
+            actual.Terminals.Select(x => x.Id).OrderBy(x => x));
+        Assert.Equal(
+            expected.Intervals.SelectMany(x => x.SwitchDevices)
+                .Select(x => x.Id).OrderBy(x => x),
+            actual.Intervals.SelectMany(x => x.SwitchDevices)
+                .Select(x => x.Id).OrderBy(x => x));
+        Assert.Equal(
+            expected.Intervals.Select(x => x.SwitchAssembly.AssemblyId).OrderBy(x => x),
+            actual.Intervals.Select(x => x.SwitchAssembly.AssemblyId).OrderBy(x => x));
+    }
+
+    private static string CreateTemporaryPath(string scenario)
+    {
+        return Path.Combine(
+            Path.GetTempPath(),
+            $"distribution-drawing-{scenario}-{Guid.NewGuid():N}.kvdrawing");
+    }
+
+    private static void DeleteIfExists(string filePath)
+    {
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
     }
 }

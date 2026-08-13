@@ -1,3 +1,4 @@
+using System.IO;
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Desktop;
 using DistributionDrawing.Desktop.RingCabinetTemplateCreation;
@@ -60,7 +61,6 @@ public sealed class RingCabinetTemplateCreationControllerTests
     }
 
     [Theory]
-    [InlineData(UnsupportedTemplate.Pt)]
     [InlineData(UnsupportedTemplate.Dtu)]
     [InlineData(UnsupportedTemplate.UnknownLayoutRule)]
     public void Create_BuildFailureLeavesEditorStateUnchanged(
@@ -425,9 +425,9 @@ public sealed class RingCabinetTemplateCreationControllerTests
             CreateTemplate(
                 layoutRule,
                 NoSecondaryConfiguration.Instance,
-                new BayTemplate(10, BayFunction.Incoming, new LoadSwitchConfiguration()),
-                new BayTemplate(3, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-                new BayTemplate(8, BayFunction.Tie, new LoadSwitchConfiguration())),
+                new BayTemplate(10, new LoadSwitchConfiguration()),
+                new BayTemplate(3, new LoadSwitchConfiguration()),
+                new BayTemplate(8, new LoadSwitchConfiguration())),
             displayName,
             position);
     }
@@ -437,22 +437,13 @@ public sealed class RingCabinetTemplateCreationControllerTests
     {
         return unsupportedTemplate switch
         {
-            UnsupportedTemplate.Pt => new RingCabinetTemplateBuildRequest(
-                CreateTemplate(
-                    RingCabinetLayoutRule.Default,
-                    NoSecondaryConfiguration.Instance,
-                    new BayTemplate(1, BayFunction.PT, new LoadSwitchConfiguration()),
-                    new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-                    new BayTemplate(3, BayFunction.Tie, new LoadSwitchConfiguration())),
-                "PT模板",
-                new DocumentPoint(0, 0)),
             UnsupportedTemplate.Dtu => new RingCabinetTemplateBuildRequest(
                 CreateTemplate(
                     RingCabinetLayoutRule.Default,
                     new DtuSecondaryConfiguration(),
-                    new BayTemplate(1, BayFunction.Incoming, new LoadSwitchConfiguration()),
-                    new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-                    new BayTemplate(3, BayFunction.Tie, new LoadSwitchConfiguration())),
+                    new BayTemplate(1, new LoadSwitchConfiguration()),
+                    new BayTemplate(2, new LoadSwitchConfiguration()),
+                    new BayTemplate(3, new LoadSwitchConfiguration())),
                 "DTU模板",
                 new DocumentPoint(0, 0)),
             UnsupportedTemplate.UnknownLayoutRule => CreateRequest(
@@ -557,7 +548,6 @@ public sealed class RingCabinetTemplateCreationControllerTests
 
     public enum UnsupportedTemplate
     {
-        Pt,
         Dtu,
         UnknownLayoutRule
     }

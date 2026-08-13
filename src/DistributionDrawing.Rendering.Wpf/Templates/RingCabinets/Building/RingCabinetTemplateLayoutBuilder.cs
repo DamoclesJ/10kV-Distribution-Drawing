@@ -10,7 +10,6 @@ public sealed class RingCabinetTemplateLayoutBuilder
     private static readonly IReadOnlySet<TemplateCapability> UnsupportedCapabilities =
         new HashSet<TemplateCapability>
         {
-            TemplateCapability.PTBay,
             TemplateCapability.DtuSecondary
         };
 

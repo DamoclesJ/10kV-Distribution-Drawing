@@ -17,7 +17,6 @@ public sealed record RingCabinetIntervalRestoreDefinition(
     Guid ParentCabinetId,
     int Sequence,
     int BayIndex,
-    BayFunction Function,
     string DisplayName,
     IntervalKind IntervalKind,
     GroundingStructureKind? GroundingStructureKind,

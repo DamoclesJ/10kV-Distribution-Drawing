@@ -36,13 +36,10 @@ public sealed class RingCabinetDefinition
                 nameof(intervalDefinitions));
         }
 
-        if (definitions.Any(definition =>
-                definition.BayIndex < 1 ||
-                !Enum.IsDefined(definition.Function) ||
-                definition.Function is BayFunction.Unknown or BayFunction.PT))
+        if (definitions.Any(definition => definition.BayIndex < 1))
         {
             throw new ArgumentException(
-                "Every interval requires valid bay metadata for creation.",
+                "Every interval requires a positive bay index for creation.",
                 nameof(intervalDefinitions));
         }
 

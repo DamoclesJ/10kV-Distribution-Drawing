@@ -30,13 +30,11 @@ internal static class TestFixtures
     }
 
     public static RingCabinet CreateLoadSwitchRingCabinet(
-        IReadOnlyList<int> bayIndexes,
-        BayFunction function)
+        IReadOnlyList<int> bayIndexes)
     {
         RingCabinetIntervalDefinition[] intervals = bayIndexes
             .Select(bayIndex => RingCabinetIntervalDefinition.CreateLoadSwitch(
                 bayIndex,
-                function,
                 SwitchState.Open,
                 SwitchState.Open,
                 $"负{bayIndex}间隔"))

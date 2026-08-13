@@ -53,7 +53,6 @@ public sealed record ProjectRingCabinetIntervalDto(
     Guid ParentCabinetId,
     int Sequence,
     int BayIndex,
-    string Function,
     string DisplayName,
     string IntervalKind,
     string? GroundingStructureKind,
@@ -366,7 +365,6 @@ internal static class ProjectDomainMapper
             interval.ParentCabinetId,
             interval.Sequence,
             interval.BayIndex,
-            Encode(interval.Function),
             interval.DisplayName,
             Encode(interval.IntervalKind),
             interval.GroundingStructureKind is GroundingStructureKind grounding
@@ -724,7 +722,6 @@ internal static class ProjectDomainMapper
             interval.ParentCabinetId,
             interval.Sequence,
             interval.BayIndex,
-            Parse<BayFunction>(interval.Function, interval.IntervalId, "function"),
             interval.DisplayName,
             Parse<IntervalKind>(interval.IntervalKind, interval.IntervalId, "intervalKind"),
             interval.GroundingStructureKind is null
@@ -795,7 +792,7 @@ internal static class ProjectDomainMapper
                 terminalDto.IsExternal != terminal.IsExternal ||
                 terminalDto.AllowsMultipleConnections != terminal.AllowsMultipleConnections ||
                 terminalDto.ElectricalNodeId != terminal.ElectricalNodeId ||
-                (terminalDto.AllowedConnectionTypes ?? [])
+                !(terminalDto.AllowedConnectionTypes ?? [])
                     .ToHashSet(StringComparer.Ordinal)
                     .SetEquals(terminal.AllowedConnectionTypes.Select(Encode)))
             {
@@ -849,18 +846,6 @@ internal static class ProjectDomainMapper
     {
         IntervalKind.LoadSwitchInterval => "load-switch-interval",
         IntervalKind.IntegratedFeederInterval => "integrated-feeder-interval",
-        _ => throw new ArgumentOutOfRangeException(nameof(value))
-    };
-
-    private static string Encode(BayFunction value) => value switch
-    {
-        BayFunction.Unknown => "unknown",
-        BayFunction.Incoming => "incoming",
-        BayFunction.Outgoing => "outgoing",
-        BayFunction.Tie => "tie",
-        BayFunction.PT => "pt",
-        BayFunction.Metering => "metering",
-        BayFunction.Reserve => "reserve",
         _ => throw new ArgumentOutOfRangeException(nameof(value))
     };
 

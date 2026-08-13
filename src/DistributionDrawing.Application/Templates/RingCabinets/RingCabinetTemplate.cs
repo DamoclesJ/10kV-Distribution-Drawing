@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using DistributionDrawing.Domain.Devices.RingCabinets;
 
 namespace DistributionDrawing.Application.Templates.RingCabinets;
 
@@ -90,11 +89,6 @@ public sealed class RingCabinetTemplate
 
         foreach (BayTemplate bay in bays)
         {
-            if (bay.Function == BayFunction.PT)
-            {
-                capabilities.Add(TemplateCapability.PTBay);
-            }
-
             capabilities.Add(bay.EquipmentConfiguration switch
             {
                 LoadSwitchConfiguration => TemplateCapability.LoadSwitchBay,

@@ -14,9 +14,9 @@ public sealed class RingCabinetTemplateDomainBuilderTests
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Conventional,
-            new BayTemplate(1, BayFunction.Incoming, new LoadSwitchConfiguration()),
-            new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-            new BayTemplate(3, BayFunction.Tie, new LoadSwitchConfiguration()));
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()));
 
         RingCabinetDomainBuildResult result = BuildSuccessfully(template);
 
@@ -29,9 +29,6 @@ public sealed class RingCabinetTemplateDomainBuilderTests
                 interval.IntervalKind));
         Assert.Equal(new[] { 1, 2, 3 }, result.Cabinet.Intervals.Select(x => x.Sequence));
         Assert.Equal(new[] { 1, 2, 3 }, result.Cabinet.Intervals.Select(x => x.BayIndex));
-        Assert.Equal(
-            new[] { BayFunction.Incoming, BayFunction.Outgoing, BayFunction.Tie },
-            result.Cabinet.Intervals.Select(x => x.Function));
         Assert.Equal(result.Definition.CabinetId, result.Cabinet.Id);
     }
 
@@ -40,17 +37,14 @@ public sealed class RingCabinetTemplateDomainBuilderTests
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Conventional,
-            new BayTemplate(10, BayFunction.Incoming, new LoadSwitchConfiguration()),
-            new BayTemplate(3, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-            new BayTemplate(8, BayFunction.Tie, new LoadSwitchConfiguration()));
+            new BayTemplate(10, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()),
+            new BayTemplate(8, new LoadSwitchConfiguration()));
 
         RingCabinetDomainBuildResult result = BuildSuccessfully(template);
 
         Assert.Equal(new[] { 1, 2, 3 }, result.Cabinet.Intervals.Select(x => x.Sequence));
         Assert.Equal(new[] { 10, 3, 8 }, result.Cabinet.Intervals.Select(x => x.BayIndex));
-        Assert.Equal(
-            new[] { BayFunction.Incoming, BayFunction.Outgoing, BayFunction.Tie },
-            result.Cabinet.Intervals.Select(x => x.Function));
     }
 
     [Fact]
@@ -67,7 +61,6 @@ public sealed class RingCabinetTemplateDomainBuilderTests
             RingCabinetTemplateType.PrimarySecondaryIntegrated,
             structures.Select((structure, index) => new BayTemplate(
                 index + 1,
-                index == 0 ? BayFunction.Incoming : BayFunction.Outgoing,
                 new IntegratedFeederConfiguration(structure))).ToArray());
 
         RingCabinetDomainBuildResult result = BuildSuccessfully(template);
@@ -80,15 +73,6 @@ public sealed class RingCabinetTemplateDomainBuilderTests
         Assert.Equal(
             structures,
             result.Cabinet.Intervals.Select(x => x.GroundingStructureKind!.Value));
-        Assert.Equal(
-            new[]
-            {
-                BayFunction.Incoming,
-                BayFunction.Outgoing,
-                BayFunction.Outgoing,
-                BayFunction.Outgoing
-            },
-            result.Cabinet.Intervals.Select(x => x.Function));
     }
 
     [Fact]
@@ -96,10 +80,9 @@ public sealed class RingCabinetTemplateDomainBuilderTests
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Mixed,
-            new BayTemplate(1, BayFunction.Incoming, new LoadSwitchConfiguration()),
+            new BayTemplate(1, new LoadSwitchConfiguration()),
             new BayTemplate(
                 4,
-                BayFunction.Outgoing,
                 new IntegratedFeederConfiguration(
                     GroundingStructureKind.LowerLowerGrounding)));
 
@@ -116,35 +99,14 @@ public sealed class RingCabinetTemplateDomainBuilderTests
     }
 
     [Fact]
-    public void Build_RejectsPtCapabilityBeforeDomainCreation()
-    {
-        RingCabinetTemplate template = CreateTemplate(
-            RingCabinetTemplateType.Conventional,
-            new BayTemplate(1, BayFunction.PT, new LoadSwitchConfiguration()));
-
-        RingCabinetDomainBuildOutcome outcome = _builder.Build(template, "PT模板柜");
-
-        Assert.False(outcome.IsSuccess);
-        Assert.Null(outcome.Result);
-        Assert.NotNull(outcome.Failure);
-        Assert.Equal(
-            RingCabinetDomainBuildFailureKind.UnsupportedCapability,
-            outcome.Failure.Kind);
-        Assert.Contains(
-            TemplateCapability.PTBay,
-            outcome.Failure.UnsupportedCapabilities);
-        Assert.Null(outcome.Failure.Cause);
-    }
-
-    [Fact]
     public void Build_RejectsDtuCapabilityBeforeDomainCreation()
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Conventional,
             new DtuSecondaryConfiguration(),
-            new BayTemplate(1, BayFunction.Incoming, new LoadSwitchConfiguration()),
-            new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-            new BayTemplate(3, BayFunction.Tie, new LoadSwitchConfiguration()));
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()));
 
         RingCabinetDomainBuildOutcome outcome = _builder.Build(template, "DTU模板柜");
 
@@ -163,8 +125,8 @@ public sealed class RingCabinetTemplateDomainBuilderTests
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Conventional,
-            new BayTemplate(1, BayFunction.Incoming, new LoadSwitchConfiguration()),
-            new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()));
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()));
 
         RingCabinetDomainBuildOutcome outcome = _builder.Build(template, "两间隔柜");
 
@@ -184,9 +146,9 @@ public sealed class RingCabinetTemplateDomainBuilderTests
             "稳定标识测试",
             RingCabinetTemplateType.Conventional,
             [
-                new BayTemplate(1, BayFunction.Incoming, new LoadSwitchConfiguration()),
-                new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-                new BayTemplate(3, BayFunction.Tie, new LoadSwitchConfiguration())
+                new BayTemplate(1, new LoadSwitchConfiguration()),
+                new BayTemplate(2, new LoadSwitchConfiguration()),
+                new BayTemplate(3, new LoadSwitchConfiguration())
             ],
             RingCabinetLayoutRule.Default,
             NoSecondaryConfiguration.Instance);
@@ -207,9 +169,9 @@ public sealed class RingCabinetTemplateDomainBuilderTests
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Conventional,
-            new BayTemplate(1, BayFunction.Incoming, new LoadSwitchConfiguration()),
-            new BayTemplate(2, BayFunction.Outgoing, new LoadSwitchConfiguration()),
-            new BayTemplate(3, BayFunction.Tie, new LoadSwitchConfiguration()));
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()));
 
         RingCabinetDomainBuildOutcome outcome = _builder.Build(template, " ");
 

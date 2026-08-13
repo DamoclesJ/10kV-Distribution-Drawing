@@ -160,13 +160,6 @@ public sealed class RingCabinet : Device
                     $"Interval '{intervalDefinition.IntervalId}' has an invalid or duplicate bay index.");
             }
 
-            if (!Enum.IsDefined(intervalDefinition.Function) ||
-                intervalDefinition.Function == BayFunction.PT)
-            {
-                throw new InvalidOperationException(
-                    $"Interval '{intervalDefinition.IntervalId}' has an invalid bay function.");
-            }
-
             RingCabinetInterval interval = intervalDefinition.IntervalKind switch
             {
                 IntervalKind.LoadSwitchInterval => CreateRestoredLoadSwitchInterval(
@@ -303,7 +296,6 @@ public sealed class RingCabinet : Device
             cabinetId,
             definition.Sequence,
             definition.BayIndex,
-            definition.Function,
             definition.DisplayName,
             IntervalKind.LoadSwitchInterval,
             [loadSwitch, groundSwitch],
@@ -446,7 +438,6 @@ public sealed class RingCabinet : Device
             cabinetId,
             definition.Sequence,
             definition.BayIndex,
-            definition.Function,
             definition.DisplayName,
             IntervalKind.IntegratedFeederInterval,
             [isolationSwitch, circuitBreaker, groundSwitch],
@@ -579,13 +570,6 @@ public sealed class RingCabinet : Device
         {
             throw new InvalidOperationException(
                 "Bay indexes must be unique within a ring cabinet.");
-        }
-
-        if (_intervals.Any(interval =>
-                !Enum.IsDefined(interval.Function) || interval.Function == BayFunction.PT))
-        {
-            throw new InvalidOperationException(
-                "The cabinet contains an unsupported bay function.");
         }
 
         Dictionary<Guid, ElectricalNode> nodes = _electricalNodes.ToDictionary(node => node.Id);
@@ -751,7 +735,6 @@ public sealed class RingCabinet : Device
             cabinetId,
             sequence,
             definition.BayIndex,
-            definition.Function,
             intervalName,
             IntervalKind.LoadSwitchInterval,
             [loadSwitch, groundSwitch],
@@ -926,7 +909,6 @@ public sealed class RingCabinet : Device
             cabinetId,
             sequence,
             definition.BayIndex,
-            definition.Function,
             intervalName,
             IntervalKind.IntegratedFeederInterval,
             [isolationSwitch, circuitBreaker, groundSwitch],

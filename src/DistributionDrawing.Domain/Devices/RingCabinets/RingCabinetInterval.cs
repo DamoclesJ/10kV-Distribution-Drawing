@@ -12,7 +12,6 @@ public sealed class RingCabinetInterval
         Guid parentCabinetId,
         int sequence,
         int bayIndex,
-        BayFunction function,
         string displayName,
         IntervalKind intervalKind,
         IEnumerable<SwitchDevice> switchDevices,
@@ -41,18 +40,6 @@ public sealed class RingCabinetInterval
         if (bayIndex < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(bayIndex), "Bay index must be positive.");
-        }
-
-        if (!Enum.IsDefined(function))
-        {
-            throw new ArgumentOutOfRangeException(nameof(function));
-        }
-
-        if (function == BayFunction.PT)
-        {
-            throw new ArgumentException(
-                "PT bays are not supported by the current interval domain.",
-                nameof(function));
         }
 
         if (string.IsNullOrWhiteSpace(displayName))
@@ -153,7 +140,6 @@ public sealed class RingCabinetInterval
         ParentCabinetId = parentCabinetId;
         Sequence = sequence;
         BayIndex = bayIndex;
-        Function = function;
         DisplayName = displayName.Trim();
         IntervalKind = intervalKind;
         _switchDevices = Array.AsReadOnly(devices);
@@ -172,8 +158,6 @@ public sealed class RingCabinetInterval
     public int Sequence { get; }
 
     public int BayIndex { get; }
-
-    public BayFunction Function { get; }
 
     public string DisplayName { get; }
 

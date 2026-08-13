@@ -1,6 +1,5 @@
 using System.Reflection;
 using DistributionDrawing.Application.Templates.RingCabinets;
-using DistributionDrawing.Domain.Devices.RingCabinets;
 using Xunit;
 
 namespace DistributionDrawing.Application.Tests;
@@ -8,14 +7,13 @@ namespace DistributionDrawing.Application.Tests;
 public sealed class BayTemplateTests
 {
     [Fact]
-    public void Constructor_PreservesExplicitIndexFunctionAndConfiguration()
+    public void Constructor_PreservesExplicitIndexAndConfiguration()
     {
         var configuration = new LoadSwitchConfiguration();
 
-        var bay = new BayTemplate(5, BayFunction.Outgoing, configuration);
+        var bay = new BayTemplate(5, configuration);
 
         Assert.Equal(5, bay.Index);
-        Assert.Equal(BayFunction.Outgoing, bay.Function);
         Assert.Same(configuration, bay.EquipmentConfiguration);
     }
 
@@ -26,25 +24,6 @@ public sealed class BayTemplateTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new BayTemplate(
             index,
-            BayFunction.Outgoing,
-            new LoadSwitchConfiguration()));
-    }
-
-    [Fact]
-    public void Constructor_RejectsUnknownFunction()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new BayTemplate(
-            1,
-            BayFunction.Unknown,
-            new LoadSwitchConfiguration()));
-    }
-
-    [Fact]
-    public void Constructor_RejectsUndefinedFunction()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new BayTemplate(
-            1,
-            (BayFunction)int.MaxValue,
             new LoadSwitchConfiguration()));
     }
 
@@ -54,5 +33,11 @@ public sealed class BayTemplateTests
         PropertyInfo? sequence = typeof(BayTemplate).GetProperty("Sequence");
 
         Assert.Null(sequence);
+    }
+
+    [Fact]
+    public void Model_DoesNotExposeFunction()
+    {
+        Assert.Null(typeof(BayTemplate).GetProperty("Function"));
     }
 }

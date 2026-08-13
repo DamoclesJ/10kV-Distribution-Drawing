@@ -88,13 +88,11 @@ public sealed class RingCabinetTemplateDomainBuilder
         {
             LoadSwitchConfiguration => RingCabinetIntervalDefinition.CreateLoadSwitch(
                 bay.Index,
-                bay.Function,
                 SwitchState.Open,
                 SwitchState.Open),
             IntegratedFeederConfiguration integratedFeeder =>
                 RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                     bay.Index,
-                    bay.Function,
                     integratedFeeder.GroundingStructureKind,
                     SwitchState.Open,
                     SwitchState.Open,

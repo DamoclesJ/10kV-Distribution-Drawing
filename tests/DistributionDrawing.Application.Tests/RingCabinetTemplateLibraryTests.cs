@@ -155,11 +155,9 @@ public sealed class RingCabinetTemplateLibraryTests
             [
                 new BayTemplate(
                     10,
-                    BayFunction.Incoming,
                     new LoadSwitchConfiguration()),
                 new BayTemplate(
                     3,
-                    BayFunction.Outgoing,
                     new IntegratedFeederConfiguration(
                         GroundingStructureKind.UpperLowerGrounding))
             ]);
@@ -199,7 +197,6 @@ public sealed class RingCabinetTemplateLibraryTests
             [
                 new BayTemplate(
                     1,
-                    BayFunction.Incoming,
                     new LoadSwitchConfiguration())
             ],
             RingCabinetLayoutRule.Default,

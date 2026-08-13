@@ -68,9 +68,7 @@ public sealed class PoleAttachmentTests
     {
         var document = TestFixtures.CreateDocument();
         var pole = new Pole(Guid.NewGuid(), "P-13");
-        RingCabinet cabinet = TestFixtures.CreateLoadSwitchRingCabinet(
-            [2, 4, 6],
-            BayFunction.Outgoing);
+        RingCabinet cabinet = TestFixtures.CreateLoadSwitchRingCabinet([2, 4, 6]);
 
         document.AddDevice(pole);
         document.AddDevice(cabinet);

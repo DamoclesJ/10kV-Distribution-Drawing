@@ -1,6 +1,5 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
-using System.Reflection;
 using Xunit;
 
 namespace DistributionDrawing.Domain.Tests;
@@ -8,18 +7,19 @@ namespace DistributionDrawing.Domain.Tests;
 public sealed class RingCabinetBayMetadataTests
 {
     [Fact]
-    public void Create_PreservesSequenceBayIndexAndFunction()
+    public void Create_PreservesSequenceAndNonSequentialBayIndexes()
     {
-        RingCabinet cabinet = CreateCabinet(
-            (1, BayFunction.Incoming),
-            (2, BayFunction.Outgoing),
-            (5, BayFunction.Reserve));
+        RingCabinet cabinet = CreateCabinet(10, 3, 8);
 
-        Assert.Equal(new[] { 1, 2, 3 }, cabinet.Intervals.Select(interval => interval.Sequence));
-        Assert.Equal(new[] { 1, 2, 5 }, cabinet.Intervals.Select(interval => interval.BayIndex));
-        Assert.Equal(
-            new[] { BayFunction.Incoming, BayFunction.Outgoing, BayFunction.Reserve },
-            cabinet.Intervals.Select(interval => interval.Function));
+        Assert.Equal(new[] { 1, 2, 3 }, cabinet.Intervals.Select(x => x.Sequence));
+        Assert.Equal(new[] { 10, 3, 8 }, cabinet.Intervals.Select(x => x.BayIndex));
+    }
+
+    [Fact]
+    public void IntervalModel_DoesNotExposeFunction()
+    {
+        Assert.Null(typeof(RingCabinetInterval).GetProperty("Function"));
+        Assert.Null(typeof(RingCabinetIntervalDefinition).GetProperty("Function"));
     }
 
     [Fact]
@@ -27,9 +27,9 @@ public sealed class RingCabinetBayMetadataTests
     {
         RingCabinetIntervalDefinition[] intervals =
         [
-            CreateInterval(1, BayFunction.Incoming),
-            CreateInterval(1, BayFunction.Outgoing),
-            CreateInterval(3, BayFunction.Reserve)
+            CreateLoadSwitchInterval(1),
+            CreateLoadSwitchInterval(1),
+            CreateLoadSwitchInterval(3)
         ];
 
         Assert.Throws<ArgumentException>(() => RingCabinetDefinition.Create(
@@ -43,120 +43,49 @@ public sealed class RingCabinetBayMetadataTests
     [InlineData(-1)]
     public void ExplicitCreation_RejectsNonPositiveBayIndex(int bayIndex)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => CreateInterval(
-            bayIndex,
-            BayFunction.Outgoing));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CreateLoadSwitchInterval(bayIndex));
     }
 
     [Fact]
-    public void ExplicitCreation_RejectsUnknownFunction()
+    public void Restore_PreservesStableIdsSequenceAndBayIndexes()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => CreateInterval(
-            1,
-            BayFunction.Unknown));
-    }
-
-    [Fact]
-    public void ExplicitCreation_RejectsUndefinedFunction()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => CreateInterval(
-            1,
-            (BayFunction)int.MaxValue));
-    }
-
-    [Fact]
-    public void Definition_RejectsUnknownFunction()
-    {
-        RingCabinetIntervalDefinition interval = CreateUncheckedDefinition(
-            1,
-            BayFunction.Unknown,
-            IntervalKind.LoadSwitchInterval);
-
-        Assert.Throws<ArgumentException>(() => RingCabinetDefinition.Create(
-            Guid.NewGuid(),
-            "未知功能环网柜",
-            [interval]));
-    }
-
-    [Fact]
-    public void RestoreDefinition_RequiresCompleteBayMetadata()
-    {
-        ConstructorInfo constructor = Assert.Single(
-            typeof(RingCabinetIntervalRestoreDefinition).GetConstructors());
-        string[] parameterNames = constructor.GetParameters()
-            .Select(parameter => parameter.Name!)
-            .ToArray();
-
-        Assert.True(parameterNames.Contains("BayIndex", StringComparer.OrdinalIgnoreCase));
-        Assert.True(parameterNames.Contains("Function", StringComparer.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public void Restore_PreservesStableIdsAndBayMetadata()
-    {
-        RingCabinet original = CreateCabinet(
-            (1, BayFunction.Incoming),
-            (3, BayFunction.Tie),
-            (7, BayFunction.Reserve));
+        RingCabinet original = CreateCabinet(1, 3, 7);
 
         RingCabinet restored = RingCabinet.Restore(CreateRestoreDefinition(original));
 
         Assert.Equal(original.Id, restored.Id);
         Assert.Equal(original.MainBusNodeId, restored.MainBusNodeId);
         Assert.Equal(
-            original.Intervals.Select(interval => interval.IntervalId),
-            restored.Intervals.Select(interval => interval.IntervalId));
+            original.Intervals.Select(x => x.Sequence),
+            restored.Intervals.Select(x => x.Sequence));
         Assert.Equal(
-            original.Intervals.Select(interval => interval.BayIndex),
-            restored.Intervals.Select(interval => interval.BayIndex));
+            original.Intervals.Select(x => x.BayIndex),
+            restored.Intervals.Select(x => x.BayIndex));
         Assert.Equal(
-            original.Intervals.Select(interval => interval.Function),
-            restored.Intervals.Select(interval => interval.Function));
+            original.Intervals.Select(x => x.IntervalId),
+            restored.Intervals.Select(x => x.IntervalId));
         Assert.Equal(
-            original.ElectricalNodes.Select(node => node.Id).OrderBy(id => id),
-            restored.ElectricalNodes.Select(node => node.Id).OrderBy(id => id));
+            original.ElectricalNodes.Select(x => x.Id).OrderBy(x => x),
+            restored.ElectricalNodes.Select(x => x.Id).OrderBy(x => x));
         Assert.Equal(
-            original.Terminals.Select(terminal => terminal.Id).OrderBy(id => id),
-            restored.Terminals.Select(terminal => terminal.Id).OrderBy(id => id));
+            original.Terminals.Select(x => x.Id).OrderBy(x => x),
+            restored.Terminals.Select(x => x.Id).OrderBy(x => x));
         Assert.Equal(
-            original.Intervals.SelectMany(interval => interval.SwitchDevices)
-                .Select(device => device.Id).OrderBy(id => id),
-            restored.Intervals.SelectMany(interval => interval.SwitchDevices)
-                .Select(device => device.Id).OrderBy(id => id));
+            original.Intervals.SelectMany(x => x.SwitchDevices)
+                .Select(x => x.Id).OrderBy(x => x),
+            restored.Intervals.SelectMany(x => x.SwitchDevices)
+                .Select(x => x.Id).OrderBy(x => x));
         Assert.Equal(
-            original.Intervals.Select(interval => interval.SwitchAssembly.AssemblyId).OrderBy(id => id),
-            restored.Intervals.Select(interval => interval.SwitchAssembly.AssemblyId).OrderBy(id => id));
-    }
-
-    [Fact]
-    public void Restore_AllowsUnknownFunctionForCompatibility()
-    {
-        RingCabinet original = CreateCabinet(
-            (1, BayFunction.Incoming),
-            (2, BayFunction.Outgoing),
-            (3, BayFunction.Reserve));
-        RingCabinetRestoreDefinition definition = CreateRestoreDefinition(original);
-        RingCabinetIntervalRestoreDefinition[] intervals = definition.Intervals.ToArray();
-        intervals[1] = intervals[1] with
-        {
-            BayIndex = 9,
-            Function = BayFunction.Unknown
-        };
-
-        RingCabinet restored = RingCabinet.Restore(definition with { Intervals = intervals });
-
-        Assert.Equal(9, restored.Intervals[1].BayIndex);
-        Assert.Equal(BayFunction.Unknown, restored.Intervals[1].Function);
+            original.Intervals.Select(x => x.SwitchAssembly.AssemblyId).OrderBy(x => x),
+            restored.Intervals.Select(x => x.SwitchAssembly.AssemblyId).OrderBy(x => x));
     }
 
     [Fact]
     public void Restore_RejectsDuplicateBayIndexes()
     {
-        RingCabinet original = CreateCabinet(
-            (1, BayFunction.Incoming),
-            (2, BayFunction.Outgoing),
-            (3, BayFunction.Reserve));
-        RingCabinetRestoreDefinition definition = CreateRestoreDefinition(original);
+        RingCabinetRestoreDefinition definition = CreateRestoreDefinition(
+            CreateCabinet(1, 2, 3));
         RingCabinetIntervalRestoreDefinition[] intervals = definition.Intervals.ToArray();
         intervals[1] = intervals[1] with { BayIndex = intervals[0].BayIndex };
 
@@ -167,10 +96,8 @@ public sealed class RingCabinetBayMetadataTests
     [Fact]
     public void Restore_RejectsNonPositiveBayIndex()
     {
-        RingCabinetRestoreDefinition definition = CreateRestoreDefinition(CreateCabinet(
-            (1, BayFunction.Incoming),
-            (2, BayFunction.Outgoing),
-            (3, BayFunction.Reserve)));
+        RingCabinetRestoreDefinition definition = CreateRestoreDefinition(
+            CreateCabinet(1, 2, 3));
         RingCabinetIntervalRestoreDefinition[] intervals = definition.Intervals.ToArray();
         intervals[0] = intervals[0] with { BayIndex = 0 };
 
@@ -179,91 +106,37 @@ public sealed class RingCabinetBayMetadataTests
     }
 
     [Fact]
-    public void Restore_RejectsUndefinedFunction()
+    public void IntegratedFeederCreation_PreservesStructuralFacts()
     {
-        RingCabinetRestoreDefinition definition = CreateRestoreDefinition(CreateCabinet(
-            (1, BayFunction.Incoming),
-            (2, BayFunction.Outgoing),
-            (3, BayFunction.Reserve)));
-        RingCabinetIntervalRestoreDefinition[] intervals = definition.Intervals.ToArray();
-        intervals[0] = intervals[0] with { Function = (BayFunction)int.MaxValue };
-
-        Assert.Throws<InvalidOperationException>(() => RingCabinet.Restore(
-            definition with { Intervals = intervals }));
-    }
-
-    [Fact]
-    public void LoadSwitchCreation_RejectsPtFunction()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            RingCabinetIntervalDefinition.CreateLoadSwitch(
-                1,
-                BayFunction.PT,
-                SwitchState.Open,
-                SwitchState.Open,
-                "PT间隔"));
-    }
-
-    [Fact]
-    public void IntegratedFeederCreation_RejectsPtFunction()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                1,
-                BayFunction.PT,
-                GroundingStructureKind.UpperLowerGrounding,
+        GroundingStructureKind structure = GroundingStructureKind.UpperLowerGrounding;
+        RingCabinetIntervalDefinition[] intervals = new[] { 5, 7, 8, 9 }
+            .Select(index => RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                index,
+                structure,
                 SwitchState.Open,
                 SwitchState.Open,
                 SwitchState.Open,
-                "PT间隔"));
-    }
-
-    [Fact]
-    public void IntegratedFeederCreation_PreservesKnownFunction()
-    {
-        RingCabinetIntervalDefinition interval =
-            RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                5,
-                BayFunction.Tie,
-                GroundingStructureKind.UpperLowerGrounding,
-                SwitchState.Open,
-                SwitchState.Open,
-                SwitchState.Open,
-                "负5间隔");
+                $"负{index}间隔"))
+            .ToArray();
 
         RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(
             Guid.NewGuid(),
             "一二次融合环网柜",
-            [
-                interval,
-                CreateIntegratedFeederInterval(7, BayFunction.Outgoing),
-                CreateIntegratedFeederInterval(8, BayFunction.Outgoing),
-                CreateIntegratedFeederInterval(9, BayFunction.Reserve)
-            ]));
+            intervals));
 
-        Assert.Equal(5, cabinet.Intervals[0].BayIndex);
-        Assert.Equal(BayFunction.Tie, cabinet.Intervals[0].Function);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, cabinet.Intervals.Select(x => x.Sequence));
+        Assert.Equal(new[] { 5, 7, 8, 9 }, cabinet.Intervals.Select(x => x.BayIndex));
+        Assert.All(cabinet.Intervals, interval =>
+        {
+            Assert.Equal(IntervalKind.IntegratedFeederInterval, interval.IntervalKind);
+            Assert.Equal(structure, interval.GroundingStructureKind);
+        });
     }
 
-    [Fact]
-    public void Restore_RejectsPtFunctionForExistingIntervalKinds()
+    private static RingCabinet CreateCabinet(params int[] bayIndexes)
     {
-        RingCabinetRestoreDefinition definition = CreateRestoreDefinition(CreateCabinet(
-            (1, BayFunction.Incoming),
-            (2, BayFunction.Outgoing),
-            (3, BayFunction.Reserve)));
-        RingCabinetIntervalRestoreDefinition[] intervals = definition.Intervals.ToArray();
-        intervals[0] = intervals[0] with { Function = BayFunction.PT };
-
-        Assert.Throws<InvalidOperationException>(() => RingCabinet.Restore(
-            definition with { Intervals = intervals }));
-    }
-
-    private static RingCabinet CreateCabinet(
-        params (int BayIndex, BayFunction Function)[] metadata)
-    {
-        RingCabinetIntervalDefinition[] intervals = metadata
-            .Select(item => CreateInterval(item.BayIndex, item.Function))
+        RingCabinetIntervalDefinition[] intervals = bayIndexes
+            .Select(CreateLoadSwitchInterval)
             .ToArray();
 
         return RingCabinet.Create(RingCabinetDefinition.Create(
@@ -272,68 +145,13 @@ public sealed class RingCabinetBayMetadataTests
             intervals));
     }
 
-    private static RingCabinetIntervalDefinition CreateInterval(
-        int bayIndex,
-        BayFunction function)
+    private static RingCabinetIntervalDefinition CreateLoadSwitchInterval(int bayIndex)
     {
         return RingCabinetIntervalDefinition.CreateLoadSwitch(
             bayIndex,
-            function,
             SwitchState.Open,
             SwitchState.Open,
             $"负{bayIndex}间隔");
-    }
-
-    private static RingCabinetIntervalDefinition CreateIntegratedFeederInterval(
-        int bayIndex,
-        BayFunction function)
-    {
-        return RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-            bayIndex,
-            function,
-            GroundingStructureKind.UpperLowerGrounding,
-            SwitchState.Open,
-            SwitchState.Open,
-            SwitchState.Open,
-            $"负{bayIndex}间隔");
-    }
-
-    private static RingCabinetIntervalDefinition CreateUncheckedDefinition(
-        int bayIndex,
-        BayFunction function,
-        IntervalKind intervalKind)
-    {
-        ConstructorInfo constructor = typeof(RingCabinetIntervalDefinition).GetConstructor(
-                BindingFlags.Instance | BindingFlags.NonPublic,
-                binder: null,
-                types:
-                [
-                    typeof(int),
-                    typeof(BayFunction),
-                    typeof(IntervalKind),
-                    typeof(string),
-                    typeof(SwitchState?),
-                    typeof(SwitchState?),
-                    typeof(SwitchState?),
-                    typeof(SwitchState),
-                    typeof(GroundingStructureKind?)
-                ],
-                modifiers: null)
-            ?? throw new InvalidOperationException(
-                "The RingCabinetIntervalDefinition constructor could not be found.");
-
-        return (RingCabinetIntervalDefinition)constructor.Invoke(
-        [
-            bayIndex,
-            function,
-            intervalKind,
-            "测试间隔",
-            SwitchState.Open,
-            null,
-            null,
-            SwitchState.Open,
-            null
-        ]);
     }
 
     private static RingCabinetRestoreDefinition CreateRestoreDefinition(RingCabinet cabinet)
@@ -344,7 +162,6 @@ public sealed class RingCabinetBayMetadataTests
                 interval.ParentCabinetId,
                 interval.Sequence,
                 interval.BayIndex,
-                interval.Function,
                 interval.DisplayName,
                 interval.IntervalKind,
                 interval.GroundingStructureKind,

@@ -5,7 +5,6 @@ public enum TemplateCapability
     BasicRingCabinet,
     LoadSwitchBay,
     IntegratedFeederBay,
-    PTBay,
     DtuSecondary,
     RingCabinetLayout
 }

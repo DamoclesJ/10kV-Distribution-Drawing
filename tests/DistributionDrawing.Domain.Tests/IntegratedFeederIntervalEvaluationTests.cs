@@ -238,7 +238,6 @@ public sealed class IntegratedFeederIntervalEvaluationTests
         RingCabinetIntervalDefinition[] intervals = bayIndexes
             .Select(bayIndex => RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                 bayIndex,
-                BayFunction.Outgoing,
                 groundingStructureKind,
                 isolationSwitchState,
                 circuitBreakerState,

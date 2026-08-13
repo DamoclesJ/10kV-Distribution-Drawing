@@ -48,7 +48,6 @@ public sealed class RingCabinetCreationFactory
             IntervalKind.LoadSwitchInterval when configuration.GroundingStructureKind is null =>
                 RingCabinetIntervalDefinition.CreateLoadSwitch(
                     configuration.BayIndex,
-                    configuration.Function,
                     SwitchState.Open,
                     SwitchState.Open,
                     displayName),
@@ -59,7 +58,6 @@ public sealed class RingCabinetCreationFactory
                 configuration.GroundingStructureKind is GroundingStructureKind structure =>
                 RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                     configuration.BayIndex,
-                    configuration.Function,
                     structure,
                     SwitchState.Open,
                     SwitchState.Open,

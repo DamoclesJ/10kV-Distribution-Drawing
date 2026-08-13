@@ -13,13 +13,11 @@ internal static class RingCabinetCompositionDemoFactory
         [
             RingCabinetIntervalDefinition.CreateLoadSwitch(
                 1,
-                BayFunction.Incoming,
                 SwitchState.Closed,
                 SwitchState.Open,
-                "进线负荷开关"),
+                "负荷开关间隔1"),
             RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                 2,
-                BayFunction.Outgoing,
                 GroundingStructureKind.UpperIsolationGrounding,
                 SwitchState.Closed,
                 SwitchState.Open,
@@ -27,18 +25,16 @@ internal static class RingCabinetCompositionDemoFactory
                 "一二次融合馈线"),
             RingCabinetIntervalDefinition.CreateLoadSwitch(
                 3,
-                BayFunction.Outgoing,
                 SwitchState.Open,
                 SwitchState.Open,
-                "出线负荷开关"),
+                "负荷开关间隔3"),
             RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                 4,
-                BayFunction.Tie,
                 GroundingStructureKind.LowerLowerGrounding,
                 SwitchState.Closed,
                 SwitchState.Closed,
                 SwitchState.Open,
-                "融合联络馈线")
+                "一二次融合间隔4")
         ];
 
         RingCabinet cabinet = RingCabinet.Create(
