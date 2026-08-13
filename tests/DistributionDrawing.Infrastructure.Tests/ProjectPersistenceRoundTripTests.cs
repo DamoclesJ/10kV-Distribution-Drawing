@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
@@ -17,7 +18,7 @@ public sealed class ProjectPersistenceRoundTripTests
     };
 
     [Fact]
-    public void Version4RoundTrip_OmitsFunctionAndPreservesStructureAndStableIds()
+    public void Version5RoundTrip_OmitsFunctionAndPreservesStructureAndStableIds()
     {
         DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
         RingCabinet original = GetCabinet(originalDocument);
@@ -38,7 +39,7 @@ public sealed class ProjectPersistenceRoundTripTests
             DrawingDocument restoredDocument = ProjectDomainMapper.ToDomain(opened.Domain!);
             RingCabinet restored = GetCabinet(restoredDocument);
 
-            Assert.Equal(ProjectFileFormat.Version4, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version5, opened.Manifest.FormatVersion);
             Assert.Equal(
                 original.Intervals.Select(x => x.Sequence),
                 restored.Intervals.Select(x => x.Sequence));
@@ -57,7 +58,8 @@ public sealed class ProjectPersistenceRoundTripTests
     [InlineData(ProjectFileFormat.Version1)]
     [InlineData(ProjectFileFormat.Version2)]
     [InlineData(ProjectFileFormat.Version3)]
-    public void LegacyArchive_MigratesToVersion4WithoutChangingStableIds(int sourceVersion)
+    [InlineData(ProjectFileFormat.Version4)]
+    public void LegacyArchive_MigratesToVersion5WithoutChangingStableIds(int sourceVersion)
     {
         DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
         RingCabinet original = GetCabinet(originalDocument);
@@ -73,7 +75,7 @@ public sealed class ProjectPersistenceRoundTripTests
             RingCabinet restored = GetCabinet(
                 ProjectDomainMapper.ToDomain(opened.Domain!));
 
-            Assert.Equal(ProjectFileFormat.Version4, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version5, opened.Manifest.FormatVersion);
             if (sourceVersion <= ProjectFileFormat.Version2)
             {
                 Assert.Equal(
@@ -244,6 +246,80 @@ public sealed class ProjectPersistenceRoundTripTests
         }
     }
 
+    [Fact]
+    public void Version5RoundTrip_PoleSwitchPreservesStableIdsAndStateData()
+    {
+        DrawingDocument originalDocument = CreateDocumentWithPoleSwitch();
+        Pole originalPole = Assert.Single(originalDocument.Devices.OfType<Pole>());
+        SwitchDevice originalSwitch = Assert.Single(
+            originalDocument.Devices.OfType<SwitchDevice>());
+        string filePath = CreateTemporaryPath("v5-pole-switch");
+
+        try
+        {
+            var container = new ProjectFileContainer();
+            container.Save(filePath, CreateFileDocument(originalDocument));
+
+            JsonObject savedPayload = ReadArchiveJsonObject(
+                filePath,
+                ProjectFileFormat.DocumentEntryName);
+            JsonObject domain = Assert.IsType<JsonObject>(savedPayload["domain"]);
+            Assert.Single(Assert.IsType<JsonArray>(domain["switchDevices"]));
+
+            ProjectFileDocument opened = container.Open(filePath);
+            DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Domain!);
+            Pole restoredPole = Assert.Single(restored.Devices.OfType<Pole>());
+            SwitchDevice restoredSwitch = Assert.Single(
+                restored.Devices.OfType<SwitchDevice>());
+
+            Assert.Equal(ProjectFileFormat.Version5, opened.Manifest.FormatVersion);
+            Assert.Equal(originalPole.Id, restoredPole.Id);
+            Assert.Equal(originalSwitch.Id, restoredSwitch.Id);
+            Assert.Equal(originalSwitch.SwitchKind, restoredSwitch.SwitchKind);
+            Assert.Equal(originalSwitch.InstallationType, restoredSwitch.InstallationType);
+            Assert.Equal(originalSwitch.SwitchState, restoredSwitch.SwitchState);
+            Assert.Equal(originalSwitch.TerminalIds, restoredSwitch.TerminalIds);
+            Assert.Single(restored.PoleAttachments);
+            Assert.Equal(
+                restoredSwitch.Id,
+                restored.PoleAttachments[0].AttachedDeviceId);
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
+    public void Version5RoundTrip_PoleSwitchAndCableTerminationPreserveAttachments()
+    {
+        DrawingDocument originalDocument = CreateDocumentWithPoleAttachments();
+        string filePath = CreateTemporaryPath("v5-mixed-pole-attachments");
+
+        try
+        {
+            var container = new ProjectFileContainer();
+            container.Save(filePath, CreateFileDocument(originalDocument));
+
+            ProjectFileDocument opened = container.Open(filePath);
+            DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Domain!);
+
+            Assert.Equal(2, restored.PoleAttachments.Count);
+            Assert.Single(restored.Devices.OfType<SwitchDevice>());
+            Assert.Single(restored.Devices.OfType<CableTermination>());
+            Assert.Equal(
+                originalDocument.PoleAttachments.Select(attachment => attachment.AttachmentId).Order(),
+                restored.PoleAttachments.Select(attachment => attachment.AttachmentId).Order());
+            Assert.Equal(
+                originalDocument.Terminals.Select(terminal => terminal.Id).Order(),
+                restored.Terminals.Select(terminal => terminal.Id).Order());
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
     private static DrawingDocument CreateDocumentWithRingCabinet()
     {
         var document = new DrawingDocument(Guid.NewGuid(), "Persistence test project");
@@ -258,6 +334,32 @@ public sealed class ProjectPersistenceRoundTripTests
             "测试环网柜",
             intervals));
         document.AddDevice(cabinet);
+        return document;
+    }
+
+    private static DrawingDocument CreateDocumentWithPoleSwitch()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "Pole switch persistence test");
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P-100",
+            PoleType.Cement,
+            "测试杆塔",
+            [SwitchKind.LoadSwitch],
+            includeCableTerminal: false);
+        new CreatePoleCommand(document, result).Execute();
+        return document;
+    }
+
+    private static DrawingDocument CreateDocumentWithPoleAttachments()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "Mixed pole attachment persistence test");
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P-101",
+            PoleType.Cement,
+            "测试组合杆塔",
+            [SwitchKind.CircuitBreaker],
+            includeCableTerminal: true);
+        new CreatePoleCommand(document, result).Execute();
         return document;
     }
 

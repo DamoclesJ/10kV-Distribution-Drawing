@@ -38,6 +38,12 @@ internal static class ProjectFormatMigration
             version = ProjectFileFormat.Version4;
         }
 
+        if (version == ProjectFileFormat.Version4)
+        {
+            MigrateVersion4ToVersion5(migrated);
+            version = ProjectFileFormat.Version5;
+        }
+
         if (version != ProjectFileFormat.CurrentVersion)
         {
             throw new InvalidDataException(
@@ -116,6 +122,16 @@ internal static class ProjectFormatMigration
                 interval.Remove("function");
             }
         }
+    }
+
+    private static void MigrateVersion4ToVersion5(JsonObject payload)
+    {
+        if (payload["domain"] is not JsonObject domain)
+        {
+            return;
+        }
+
+        domain["switchDevices"] ??= new JsonArray();
     }
 
     private static JsonObject RequireObject(JsonNode? node, string path)

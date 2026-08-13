@@ -7,16 +7,16 @@ namespace DistributionDrawing.Infrastructure.Tests;
 public sealed class ProjectFormatMigrationTests
 {
     [Fact]
-    public void CurrentVersion_IsVersion4()
+    public void CurrentVersion_IsVersion5()
     {
-        Assert.Equal(ProjectFileFormat.Version4, ProjectFileFormat.CurrentVersion);
-        Assert.Equal(4, ProjectFileFormat.CurrentVersion);
+        Assert.Equal(ProjectFileFormat.Version5, ProjectFileFormat.CurrentVersion);
+        Assert.Equal(5, ProjectFileFormat.CurrentVersion);
     }
 
     [Theory]
     [InlineData(ProjectFileFormat.Version1)]
     [InlineData(ProjectFileFormat.Version2)]
-    public void LegacyMigration_AppliesSequentialStepsAndProducesV4Shape(int sourceVersion)
+    public void LegacyMigration_AppliesSequentialStepsAndProducesV5Shape(int sourceVersion)
     {
         Guid projectId = Guid.NewGuid();
         JsonObject payload = CreatePayload(
@@ -32,6 +32,8 @@ public sealed class ProjectFormatMigrationTests
 
         Assert.Equal(3, interval["bayIndex"]!.GetValue<int>());
         Assert.False(interval.ContainsKey("function"));
+        JsonObject domain = Assert.IsType<JsonObject>(migrated["domain"]);
+        Assert.Empty(Assert.IsType<JsonArray>(domain["switchDevices"]));
         Assert.Equal("负荷开关间隔", interval["displayName"]!.GetValue<string>());
         Assert.Equal(
             "load-switch-interval",
@@ -101,6 +103,27 @@ public sealed class ProjectFormatMigrationTests
 
         Assert.Equal(1, GetInterval(migrated)["bayIndex"]!.GetValue<int>());
         Assert.False(GetInterval(migrated).ContainsKey("function"));
+        JsonObject domain = Assert.IsType<JsonObject>(migrated["domain"]);
+        Assert.Empty(Assert.IsType<JsonArray>(domain["switchDevices"]));
+    }
+
+    [Fact]
+    public void Version5Payload_DoesNotRunMigrationAgain()
+    {
+        JsonObject payload = CreatePayload("负1间隔", "load-switch-interval", 1);
+        JsonObject domain = Assert.IsType<JsonObject>(payload["domain"]);
+        domain["switchDevices"] = new JsonArray
+        {
+            new JsonObject { ["deviceId"] = Guid.NewGuid() }
+        };
+
+        JsonObject migrated = ProjectFormatMigration.Migrate(
+            payload,
+            ProjectFileFormat.Version5,
+            Guid.NewGuid());
+
+        Assert.Single(Assert.IsType<JsonArray>(
+            Assert.IsType<JsonObject>(migrated["domain"])["switchDevices"]));
     }
 
     [Fact]

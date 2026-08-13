@@ -14,11 +14,12 @@ public sealed record ProjectDomainDto(
     IReadOnlyList<ProjectTerminalDto>? Terminals = null,
     IReadOnlyList<ProjectConnectionDto>? Connections = null,
     IReadOnlyList<ProjectOverheadLineDto>? OverheadLines = null,
-    IReadOnlyList<ProjectPoleAttachmentDto>? PoleAttachments = null)
+    IReadOnlyList<ProjectPoleAttachmentDto>? PoleAttachments = null,
+    IReadOnlyList<ProjectSwitchDeviceDto>? SwitchDevices = null)
 {
     public static ProjectDomainDto Empty(Guid documentId, string title)
     {
-        return new ProjectDomainDto(documentId, title, [], [], [], [], [], [], []);
+        return new ProjectDomainDto(documentId, title, [], [], [], [], [], [], [], []);
     }
 }
 
@@ -184,8 +185,13 @@ internal static class ProjectDomainMapper
                         // their owning interval DTO.
                         break;
                     }
-                    throw new NotSupportedException(
-                        "Top-level SwitchDevice DTO persistence is not implemented in M4-B-6-A.");
+                    if (device is not SwitchDevice poleSwitch ||
+                        poleSwitch.InstallationType != SwitchInstallationType.Pole)
+                    {
+                        throw new NotSupportedException(
+                            $"Top-level SwitchDevice '{device.Id}' must be pole-installed.");
+                    }
+                    break;
                 default:
                     if (device.Type is DeviceType.PT or DeviceType.RingCabinet or
                         DeviceType.Pole or DeviceType.Switch or DeviceType.CableTermination)
@@ -228,7 +234,12 @@ internal static class ProjectDomainMapper
                 .ToArray(),
             document.Connections.Select(ToDto).ToArray(),
             document.OverheadLines.Select(line => ToDto(line, document)).ToArray(),
-            document.PoleAttachments.Select(ToDto).ToArray());
+            document.PoleAttachments.Select(ToDto).ToArray(),
+            document.Devices
+                .OfType<SwitchDevice>()
+                .Where(device => !ringCabinetSwitchIds.Contains(device.Id))
+                .Select(ToDto)
+                .ToArray());
 
         ValidateTopology(document, result);
         return result;
@@ -263,6 +274,11 @@ internal static class ProjectDomainMapper
             };
 
             document.AddDevice(device);
+        }
+
+        foreach (ProjectSwitchDeviceDto switchDto in dto.SwitchDevices ?? [])
+        {
+            document.AddDevice(RestoreTopLevelSwitch(switchDto));
         }
 
         foreach (ProjectRingCabinetDto cabinetDto in dto.RingCabinets ??
@@ -474,6 +490,36 @@ internal static class ProjectDomainMapper
             dto.DisplayName,
             dto.VoltageLevel,
             null);
+    }
+
+    private static SwitchDevice RestoreTopLevelSwitch(ProjectSwitchDeviceDto dto)
+    {
+        SwitchInstallationType installationType = Parse<SwitchInstallationType>(
+            dto.InstallationType,
+            dto.DeviceId,
+            "installationType");
+        if (installationType != SwitchInstallationType.Pole)
+        {
+            throw new InvalidDataException(
+                $"Top-level switch '{dto.DeviceId}' must be pole-installed.");
+        }
+
+        if (dto.FirstTerminalId == Guid.Empty || dto.SecondTerminalId == Guid.Empty ||
+            dto.FirstTerminalId == dto.SecondTerminalId)
+        {
+            throw new InvalidDataException(
+                $"Top-level switch '{dto.DeviceId}' has invalid terminal IDs.");
+        }
+
+        return SwitchDevice.CreateForPole(
+            dto.DeviceId,
+            Parse<SwitchKind>(dto.SwitchKind, dto.DeviceId, "switchKind"),
+            dto.FirstTerminalId,
+            dto.SecondTerminalId,
+            Parse<SwitchState>(dto.SwitchState, dto.DeviceId, "switchState"),
+            dto.DisplayName ?? string.Empty,
+            dto.VoltageLevel,
+            dto.DispatchNumber);
     }
 
     private static CableTermination RestoreCableTermination(ProjectDeviceDto dto)
