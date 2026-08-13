@@ -160,27 +160,28 @@ CreationResult 不加入 DrawingDocument、不刷新 Scene、不改变 Selection
 
 ## 6. PoleType and Pole Creation Recipe
 
-### 6.1 Do Not Overload PoleType
+### 6.1 PoleType Is Physical Pole Metadata Only
 
 当前 Domain `PoleType` 表达杆体物理类型，现有值为 `Cement`。
 
-“普通杆塔、设备杆塔、电缆终端杆塔、变压器杆塔”表达的是创建时需要附带什么能力，不是杆体材质或结构类型。因此不能直接增加为 `PoleType` enum 值。
+“普通杆塔、设备杆塔、电缆终端杆塔、变压器杆塔”表达的是创建时需要附带什么能力，不是杆体材质或结构类型。因此不能直接增加为 `PoleType` enum 值。一个 Pole 可以同时拥有多种附属能力；“设备杆”与“电缆终端杆”不是互斥的 Pole 类型。
 
 创建 UI 应区分两个概念：
 
 ```text
-Pole creation recipe
-  OrdinaryPole
-  SwitchPole
-  CableTerminalPole
-  Future TransformerPole
+Pole creation request
+  Physical PoleType = Cement
+  Selected attachments =
+    SwitchDevice Attachment (optional)
+    CableTerminal Attachment (optional)
+    Future Transformer Attachment (reserved)
 
 Physical PoleType
   Cement
   future confirmed physical types
 ```
 
-Creation recipe 属于 Application/Desktop orchestration，不要求持久化为 Pole Domain 属性。恢复工程依赖实际 Pole、Attachment、Device、Terminal 和 Node 事实。
+Creation request/recipe 属于 Application/Desktop orchestration，不要求持久化为 Pole Domain 属性。它的职责是根据用户选择生成一个或多个 `PoleAttachment`。恢复工程依赖实际 Pole、Attachment、Device、Terminal 和 Node 事实，而不依赖互斥的 Pole 类型标签。
 
 ### 6.2 Common Pole Inputs
 
@@ -192,15 +193,15 @@ Creation recipe 属于 Application/Desktop orchestration，不要求持久化为
 | DisplayName | Optional | 仅显示文本，不作为 identity |
 | PoleType | Yes | 当前为 `Cement` |
 | Position | Yes | RuntimeLayout 文档坐标 |
-| Creation recipe | Yes | 决定附属结构，不写成 PoleType |
+| Selected attachments/creation recipe | Yes | 决定生成哪些附属能力，不写成 PoleType |
 
 PoleId 由创建 builder 首次生成。调用方不提供 ID。
 
-## 7. Ordinary Pole Creation
+## 7. Pole Base Creation
 
 ### 7.1 Generated Objects
 
-普通杆塔创建：
+所有 Pole 创建先生成共同的主体：
 
 ```text
 Pole
@@ -208,7 +209,9 @@ Pole
   + PoleLayout
 ```
 
-第一版延续现有创建行为：生成一个允许 OverheadLine 的 external anchor terminal。若实际线路结构未来需要两个或多个独立 anchor，必须通过明确 recipe/schema 扩展，不能按视觉线段数量自动增加。
+第一版延续现有创建行为：生成一个允许 OverheadLine 的 external anchor terminal。若实际线路结构未来需要两个或多个独立 anchor，必须通过明确 attachment/schema 扩展，不能按视觉线段数量自动增加。
+
+在此基础上，用户可以选择零个、一个或多个经批准的 PoleAttachment。没有附属能力的 Pole 就是普通杆塔；带有多个附属能力的 Pole 仍是同一个 Pole，而不是多个互斥 Pole 类型。
 
 ### 7.2 Terminal Rule
 
@@ -223,11 +226,11 @@ Pole
 
 不得为了“看起来连通”自动创建 ElectricalNode 或把多个 Pole anchors 合并。
 
-## 8. Switch Pole Creation
+## 8. SwitchDevice Attachment Creation
 
 ### 8.1 User Inputs
 
-设备杆塔创建需要额外选择：
+用户为 Pole 选择 SwitchDevice Attachment 时需要额外提供：
 
 - SwitchKind；
 - initial SwitchState；
@@ -258,7 +261,7 @@ Pole
   + attachment/switch layout
 ```
 
-一次创建必须生成 Pole、SwitchDevice、两个 switch terminals、PoleAttachment 和所有 Layout。它们组成一个 Full CreationResult。
+一次新增 SwitchDevice Attachment 必须生成 SwitchDevice、两个 switch terminals、PoleAttachment 和对应 Layout。若该动作同时创建新的 Pole，则与 Pole 主体一并形成一个 Full CreationResult；若 Pole 已存在，则只把新的 Attachment composition 原子加入该 Pole。Pole 不因拥有 SwitchDevice 而获得新的 PoleType。
 
 ### 8.3 Terminal and Node Rule
 
@@ -285,7 +288,7 @@ SwitchDevice 的 Open/Closed 状态决定两端局部导通。若把两端放在
 
 当前 `SwitchDevice` 构造器为 internal，且柱上 SwitchDevice 缺少完整创建 Factory/Command/Rendering/Persistence 闭环。V4 mapper 明确不支持 top-level SwitchDevice。
 
-因此 SwitchPole recipe 在完成以下工作前只能作为设计：
+因此 Pole SwitchDevice Attachment 在完成以下工作前只能作为设计：
 
 - Domain-approved pole SwitchDevice factory；
 - atomic add/remove operation；
@@ -294,11 +297,11 @@ SwitchDevice 的 Open/Closed 状态决定两端局部导通。若把两端放在
 - new persistence format and V4 migration；
 - full Stable ID round-trip tests。
 
-## 9. Cable Terminal Pole Creation
+## 9. CableTerminal Attachment Creation
 
 ### 9.1 Target Generated Objects
 
-目标模型：
+用户为 Pole 选择 CableTerminal Attachment 时的目标模型：
 
 ```text
 Pole
@@ -333,11 +336,25 @@ overhead-side terminal：
 
 Internal ElectricalNode 表达电缆侧和架空侧固定导通。两侧之间不创建 `Connection`，也不创建虚拟 Cable。
 
-### 9.3 Current Compatibility Model
+### 9.3 Multiple Attachments on One Pole
+
+同一个 Pole 可以同时拥有多个不同能力：
+
+```text
+Pole
+  + PoleAttachment → SwitchDevice(IsolationSwitch)
+  + PoleAttachment → CableTerminal capability
+```
+
+这些 Attachment 各自拥有独立 identity、Terminal 和必要的 Layout。它们共享 Pole 的主体身份，但不共享 SwitchState，不把 CableTerminal 端子并入 SwitchDevice，也不把 Attachment 关系当作电气 Connection。
+
+用户选择的附属能力必须在一次创建请求中形成一个明确的 attachment set。若业务要求“同时插入柱上隔离开关和电缆终端”，Builder 应一次构造完整 set，随后由一个复合 Command 原子执行；不应先执行设备杆命令，再执行电缆终端杆命令。
+
+### 9.4 Current Compatibility Model
 
 当前代码通过 `CableTermination : Device`、两个 terminals、Intermediate node 和 PoleAttachment 创建相同的拓扑效果。这是 V4 历史兼容实现，不是最终目录分类。
 
-F-2-C-2 不授权直接用旧 Device model 实现新的目标 UI，也不授权静默修改 V4。正式 CableTerminalPole 创建应在独立迁移完成后接入。
+F-2-C-2 不授权直接用旧 Device model 实现新的目标 UI，也不授权静默修改 V4。正式 CableTerminal Attachment 创建应在独立迁移完成后接入。
 
 迁移必须保留：
 
@@ -349,9 +366,9 @@ F-2-C-2 不授权直接用旧 Device model 实现新的目标 UI，也不授权�
 - Layout/Selection identity；
 -旧 V4 文件可读性。
 
-## 10. Future Transformer Pole
+## 10. Future Transformer Attachment
 
-TransformerPole 只作为未来 creation recipe 名称保留，不进入当前选择列表，也不创建空对象。
+Transformer Attachment 只作为未来 attachment capability 保留，不进入当前选择列表，也不创建空对象。未来 Transformer 不应通过新的 `TransformerPole` 互斥类型表达。
 
 未来必须先完成独立设计：
 
@@ -368,20 +385,21 @@ TransformerPole 只作为未来 creation recipe 名称保留，不进入当前�
 - 新增 Transformer Domain placeholder；
 - 将 Transformer 放入 SwitchKind；
 - 创建没有 Domain owner 的 terminals；
-- 将 TransformerPole 保存为一个虚假的 PoleType。
+- 将 Transformer Attachment 保存为一个虚假的 PoleType。
 
 ## 11. Automatic Attached-Object Generation
 
-### 11.1 Approved Recipe Only
+### 11.1 Approved Attachment Set Only
 
-自动对象只能来自已批准创建方案。创建 builder 不根据 DisplayName、图标、位置或用户先后点击推断附属结构。
+自动对象只能来自已批准的 Attachment set。创建 builder 不根据 DisplayName、图标、位置或用户先后点击推断附属结构。用户可以在同一次请求中选择多个互不冲突的 Attachment；是否允许组合由明确的 capability/结构规则验证，而不是由 Pole 类型互斥规则决定。
 
-| Recipe | Automatically generated domain objects |
+| Creation selection | Automatically generated domain objects |
 | --- | --- |
-| OrdinaryPole | Pole + overhead anchor terminal |
-| SwitchPole | Pole + PoleAttachment + SwitchDevice + 2 switch terminals |
-| CableTerminalPole | Pole + PoleAttachment + CableTerminal capability + 2 terminals + internal node |
-| TransformerPole | Future only; no current generation |
+| No attachment | Pole + overhead anchor terminal |
+| SwitchDevice attachment | Pole + PoleAttachment + SwitchDevice + 2 switch terminals |
+| CableTerminal attachment | Pole + PoleAttachment + CableTerminal capability + 2 terminals + internal node |
+| SwitchDevice + CableTerminal | Pole + both independent PoleAttachments + both capability structures |
+| Transformer attachment | Future only; no current generation |
 
 ### 11.2 No External Connection Generation
 
@@ -400,8 +418,8 @@ Terminal 由拥有其固定结构知识的 builder/factory 创建：
 | Owner/structure | Terminal creator |
 | --- | --- |
 | RingCabinet | Existing RingCabinet Domain factory via Template/Manual definition |
-| Ordinary Pole | Pole creation builder using Pole terminal API |
-| Pole SwitchDevice | approved pole-switch Domain factory/builder |
+| Pole base | Pole creation builder using Pole terminal API |
+| Pole SwitchDevice Attachment | approved pole-switch Domain factory/builder |
 | CableTerminal capability | dedicated capability factory after migration |
 | Transformer | future dedicated factory |
 | Cable/OverheadLine | Do not create terminals; reference existing endpoints |
@@ -633,7 +651,7 @@ Pole 等有限结构使用 manual creation recipe。二者可以共享“Build b
 - 保留现有 Pole + anchor terminal + layout；
 - 验证 atomic Command、Selection 和 Stable ID。
 
-### F-2-C-2-B Pole Switch Domain Creation Design
+### F-2-C-2-B Pole Switch Attachment Domain Creation Design
 
 - 冻结 pole SwitchDevice factory；
 - terminal policies；
@@ -648,7 +666,7 @@ Pole 等有限结构使用 manual creation recipe。二者可以共享“Build b
 - CableTerminal migration；
 - V4 compatibility 和 Stable IDs。
 
-### F-2-C-2-D Pole Device Atomic Implementation
+### F-2-C-2-D Pole Attachment Composition Atomic Implementation
 
 - Full CreationResult；
 - one Add command；
@@ -656,7 +674,7 @@ Pole 等有限结构使用 manual creation recipe。二者可以共享“Build b
 - Scene/Selection/Inspector；
 - V5 round-trip。
 
-### F-2-C-2-E CableTerminal Capability Migration
+### F-2-C-2-E CableTerminal Attachment Capability Migration
 
 - 旧 CableTermination Device 兼容迁移；
 - target capability implementation；
@@ -666,7 +684,8 @@ Pole 等有限结构使用 manual creation recipe。二者可以共享“Build b
 
 ## 21. Risks and Guardrails
 
-- 把 creation recipe 写入 PoleType 会混淆物理类型与附属结构；
+- 把 attachment selection/creation recipe 写入 PoleType 会混淆物理类型与附属结构；
+- 把 SwitchDevice 与 CableTerminal 设计成互斥 Pole 类型会阻止真实的多能力杆塔；
 - 用多个 Command 实现一次复合插入会造成半状态和错误 Undo；
 - Redo 重新 Build 会改变 Stable IDs；
 - 为 Switch 两端创建同一 Node 会绕过 Open 状态；
@@ -689,8 +708,8 @@ validated source
   → CommandStack / SelectionTransition / Scene
 ```
 
-Pole 的 `PoleType` 只表达物理杆型；OrdinaryPole、SwitchPole、CableTerminalPole 和未来 TransformerPole 是创建方案，不是 Domain PoleType。
+Pole 的 `PoleType` 只表达物理杆塔属性；普通杆、SwitchDevice、CableTerminal 和未来 Transformer 是可独立选择的创建能力/Attachment，不是互斥的 Domain PoleType。一个 Pole 可以拥有一个或多个经批准的 PoleAttachment。
 
-普通杆自动生成 Pole、anchor Terminal 和 Layout。设备杆自动生成 Pole、PoleAttachment、保留明确 SwitchKind 的 SwitchDevice、两个 terminals 和 Layout。电缆终端杆目标上生成 Pole、PoleAttachment、CableTerminal capability、两个 terminals、一个固定内部 ElectricalNode 和 Layout，但必须等待目标能力及 Persistence migration 完成。TransformerPole 仅为未来边界，不进入当前实现。
+Pole 主体创建自动生成 Pole、anchor Terminal 和 Layout。用户选择 SwitchDevice Attachment 时生成独立 PoleAttachment、保留明确 SwitchKind 的 SwitchDevice、两个 terminals 和对应 Layout；选择 CableTerminal Attachment 时生成独立 PoleAttachment、CableTerminal capability、两个 terminals、一个固定内部 ElectricalNode 和对应 Layout。两类 Attachment 可以同时附属于同一个 Pole；Transformer Attachment 仅为未来边界，不进入当前实现。
 
 所有 Stable IDs 在首次 Build 时生成一次；Execute、Undo、Redo 使用同一对象和 ID。外部 Cable/OverheadLine 不随设备插入自动生成。设计继续复用现有 Device、Terminal、Connection 和 ElectricalNode，不引入 GIS、SCADA、继保、潮流或自由 CAD 拓扑。
