@@ -64,6 +64,24 @@ public sealed class DeviceCommandFactory
             _ringCabinetLayoutFactory.Create(cabinet, position));
     }
 
+    public AddRingCabinetCommand CreateAddRingCabinet(
+        DrawingDocument document,
+        RuntimeLayoutDocument runtimeLayout,
+        RingCabinet cabinet,
+        RingCabinetLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+        ArgumentNullException.ThrowIfNull(cabinet);
+        ArgumentNullException.ThrowIfNull(layout);
+
+        return new AddRingCabinetCommand(
+            document,
+            runtimeLayout,
+            cabinet,
+            layout);
+    }
+
     public AddCableTerminationAttachmentCommand CreateAddCableTerminationAttachment(
         DrawingDocument document,
         RuntimeLayoutDocument runtimeLayout,
