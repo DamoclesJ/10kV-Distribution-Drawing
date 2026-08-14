@@ -22,6 +22,8 @@ using DistributionDrawing.Desktop.Demo;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.RingCabinetCreation;
 using DistributionDrawing.Desktop.Viewport;
+using DistributionDrawing.Desktop.Services;
+using DistributionDrawing.Desktop.ViewModels;
 
 namespace DistributionDrawing.Desktop;
 
@@ -56,6 +58,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DataContext = new MainWindowViewModel(new DesktopShellService());
         _propertyEditor = new(_selectionResolver, _commandStack);
         PropertyInspectorPanel.DataContext = _propertyInspector;
         _selectionManager.SelectionChanged += OnSelectionChanged;

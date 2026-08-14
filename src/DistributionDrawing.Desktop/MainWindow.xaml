@@ -55,6 +55,10 @@
       </MenuItem>
     </Menu>
 
+    <StatusBar DockPanel.Dock="Bottom">
+      <StatusBarItem Content="{Binding StatusText}" />
+    </StatusBar>
+
     <Grid>
       <Grid.ColumnDefinitions>
         <ColumnDefinition />
