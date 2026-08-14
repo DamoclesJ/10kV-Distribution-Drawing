@@ -30,7 +30,8 @@ public sealed class IntervalSymbol
     public IReadOnlyList<SceneElement> CreateElements(
         RingCabinetInterval interval,
         RingCabinetIntervalLayout layout,
-        DocumentPoint cabinetPosition)
+        DocumentPoint cabinetPosition,
+        bool includeLabels = true)
     {
         ArgumentNullException.ThrowIfNull(interval);
         ArgumentNullException.ThrowIfNull(layout);
@@ -47,7 +48,7 @@ public sealed class IntervalSymbol
                 $"No interval symbol is registered for '{interval.IntervalKind}'.");
         }
 
-        return definition.Create(interval, layout, cabinetPosition, SymbolLibrary);
+        return definition.Create(interval, layout, cabinetPosition, SymbolLibrary, includeLabels);
     }
 }
 
@@ -59,5 +60,6 @@ public interface IIntervalSymbolDefinition
         RingCabinetInterval interval,
         RingCabinetIntervalLayout layout,
         DocumentPoint cabinetPosition,
-        SymbolLibrary symbolLibrary);
+        SymbolLibrary symbolLibrary,
+        bool includeLabels = true);
 }

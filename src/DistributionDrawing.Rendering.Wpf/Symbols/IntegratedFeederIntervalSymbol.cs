@@ -23,7 +23,8 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
         RingCabinetInterval interval,
         RingCabinetIntervalLayout layout,
         DocumentPoint cabinetPosition,
-        SymbolLibrary symbolLibrary)
+        SymbolLibrary symbolLibrary,
+        bool includeLabels = true)
     {
         ArgumentNullException.ThrowIfNull(interval);
         ArgumentNullException.ThrowIfNull(layout);
@@ -55,15 +56,18 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
                     layout.HeightMillimeters,
                     fill: Colors.White,
                     thicknessMillimeters: 0.6)));
-        AddLabels(elements, interval, layout, origin);
+        if (includeLabels)
+        {
+            AddLabels(elements, interval, layout, origin);
+        }
 
         SwitchDevice isolation = GetSingleSwitch(interval, SwitchKind.IsolationSwitch);
         SwitchDevice breaker = GetSingleSwitch(interval, SwitchKind.CircuitBreaker);
         SwitchDevice ground = GetSingleSwitch(interval, SwitchKind.GroundSwitch);
 
-        AddSwitch(elements, isolation, layout, origin, symbolLibrary);
-        AddSwitch(elements, breaker, layout, origin, symbolLibrary);
-        AddSwitch(elements, ground, layout, origin, symbolLibrary);
+        AddSwitch(elements, isolation, layout, origin, symbolLibrary, includeLabels);
+        AddSwitch(elements, breaker, layout, origin, symbolLibrary, includeLabels);
+        AddSwitch(elements, ground, layout, origin, symbolLibrary, includeLabels);
 
         DocumentPoint isolationCenter = GetSwitchCenter(isolation, layout, origin);
         DocumentPoint breakerCenter = GetSwitchCenter(breaker, layout, origin);
@@ -133,7 +137,8 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
         SwitchDevice switchDevice,
         RingCabinetIntervalLayout intervalLayout,
         DocumentPoint intervalOrigin,
-        SymbolLibrary symbolLibrary)
+        SymbolLibrary symbolLibrary,
+        bool includeLabels)
     {
         if (!intervalLayout.SwitchLayouts.TryGetValue(
                 switchDevice.Id,
@@ -155,7 +160,7 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
                          labelOrigin: new DocumentPoint(
                              switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
                              switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
-                         label: switchDevice.DisplayName,
+                         label: includeLabels ? switchDevice.DisplayName : null,
                          state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
                          fill: Colors.White)))
         {

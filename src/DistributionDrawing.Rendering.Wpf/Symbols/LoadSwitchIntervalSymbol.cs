@@ -15,7 +15,8 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
         RingCabinetInterval interval,
         RingCabinetIntervalLayout layout,
         DocumentPoint cabinetPosition,
-        SymbolLibrary symbolLibrary)
+        SymbolLibrary symbolLibrary,
+        bool includeLabels = true)
     {
         ArgumentNullException.ThrowIfNull(interval);
         ArgumentNullException.ThrowIfNull(layout);
@@ -36,22 +37,25 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
                     fill: Colors.White,
                     thicknessMillimeters: 0.6)));
 
-        elements.Add(
-            new SceneText(
-                new DocumentPoint(
-                    origin.XMillimeters + layout.SequenceLabelOffset.XMillimeters,
-                    origin.YMillimeters + layout.SequenceLabelOffset.YMillimeters),
-                $"{interval.Sequence}#",
-                Colors.Black,
-                3.5));
-        elements.Add(
-            new SceneText(
-                new DocumentPoint(
-                    origin.XMillimeters + layout.NameLabelOffset.XMillimeters,
-                    origin.YMillimeters + layout.NameLabelOffset.YMillimeters),
-                interval.DisplayName,
-                Colors.Black,
-                3.5));
+        if (includeLabels)
+        {
+            elements.Add(
+                new SceneText(
+                    new DocumentPoint(
+                        origin.XMillimeters + layout.SequenceLabelOffset.XMillimeters,
+                        origin.YMillimeters + layout.SequenceLabelOffset.YMillimeters),
+                    $"{interval.Sequence}#",
+                    Colors.Black,
+                    3.5));
+            elements.Add(
+                new SceneText(
+                    new DocumentPoint(
+                        origin.XMillimeters + layout.NameLabelOffset.XMillimeters,
+                        origin.YMillimeters + layout.NameLabelOffset.YMillimeters),
+                    interval.DisplayName,
+                    Colors.Black,
+                    3.5));
+        }
 
         double centerX = origin.XMillimeters + layout.WidthMillimeters / 2;
         elements.Add(
@@ -69,13 +73,15 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             loadSwitch,
             layout,
             origin,
-            symbolLibrary);
+            symbolLibrary,
+            includeLabels);
         AddSwitch(
             elements,
             groundSwitch,
             layout,
             origin,
-            symbolLibrary);
+            symbolLibrary,
+            includeLabels);
 
         return elements;
     }
@@ -85,7 +91,8 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
         SwitchDevice switchDevice,
         RingCabinetIntervalLayout intervalLayout,
         DocumentPoint intervalOrigin,
-        SymbolLibrary symbolLibrary)
+        SymbolLibrary symbolLibrary,
+        bool includeLabels)
     {
         if (!intervalLayout.SwitchLayouts.TryGetValue(
                 switchDevice.Id,
@@ -109,7 +116,7 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
                          labelOrigin: new DocumentPoint(
                              switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
                              switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
-                         label: switchDevice.DisplayName,
+                         label: includeLabels ? switchDevice.DisplayName : null,
                          state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
                          fill: Colors.White)))
         {

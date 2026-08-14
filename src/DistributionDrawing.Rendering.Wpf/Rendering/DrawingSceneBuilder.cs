@@ -16,7 +16,7 @@ public sealed class DrawingSceneBuilder
     private readonly SymbolLibrary _symbolLibrary;
     private readonly PoleSymbol _poleSymbol;
     private readonly AttachmentSymbol _attachmentSymbol;
-    private readonly RingCabinetSymbol _ringCabinetSymbol;
+    private readonly RingCabinetRenderer _ringCabinetRenderer;
     private readonly ProfessionalSceneBuilder _professionalSceneBuilder;
 
     public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
@@ -24,7 +24,7 @@ public sealed class DrawingSceneBuilder
         _symbolLibrary = symbolLibrary ?? new SymbolLibrary();
         _poleSymbol = new PoleSymbol(_symbolLibrary);
         _attachmentSymbol = new AttachmentSymbol(_symbolLibrary);
-        _ringCabinetSymbol = new RingCabinetSymbol(_symbolLibrary);
+        _ringCabinetRenderer = new RingCabinetRenderer(_symbolLibrary);
         _professionalSceneBuilder = new ProfessionalSceneBuilder(_symbolLibrary);
     }
 
@@ -91,7 +91,7 @@ public sealed class DrawingSceneBuilder
         }
 
         return new DrawingScene(
-            _ringCabinetSymbol.CreateElements(cabinet, layout),
+            _ringCabinetRenderer.Render(cabinet, layout),
             new SelectionHitTestIndex(hitTestEntries));
     }
 

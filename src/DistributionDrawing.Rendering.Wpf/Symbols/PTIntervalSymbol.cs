@@ -19,7 +19,8 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
         RingCabinetInterval interval,
         RingCabinetIntervalLayout layout,
         DocumentPoint cabinetPosition,
-        SymbolLibrary symbolLibrary)
+        SymbolLibrary symbolLibrary,
+        bool includeLabels = true)
     {
         ArgumentNullException.ThrowIfNull(interval);
         ArgumentNullException.ThrowIfNull(layout);
@@ -50,25 +51,28 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
                 layout.HeightMillimeters,
                 fill: Colors.White,
                 thicknessMillimeters: 0.6)));
-        elements.Add(new SceneText(
-            new DocumentPoint(
-                origin.XMillimeters + layout.SequenceLabelOffset.XMillimeters,
-                origin.YMillimeters + layout.SequenceLabelOffset.YMillimeters),
-            $"{interval.Sequence}#",
-            Colors.Black,
-            3.5));
-        elements.Add(new SceneText(
-            new DocumentPoint(
-                origin.XMillimeters + layout.NameLabelOffset.XMillimeters,
-                origin.YMillimeters + layout.NameLabelOffset.YMillimeters),
-            interval.DisplayName,
-            Colors.Black,
-            3.5));
+        if (includeLabels)
+        {
+            elements.Add(new SceneText(
+                new DocumentPoint(
+                    origin.XMillimeters + layout.SequenceLabelOffset.XMillimeters,
+                    origin.YMillimeters + layout.SequenceLabelOffset.YMillimeters),
+                $"{interval.Sequence}#",
+                Colors.Black,
+                3.5));
+            elements.Add(new SceneText(
+                new DocumentPoint(
+                    origin.XMillimeters + layout.NameLabelOffset.XMillimeters,
+                    origin.YMillimeters + layout.NameLabelOffset.YMillimeters),
+                interval.DisplayName,
+                Colors.Black,
+                3.5));
+        }
 
         SwitchDevice isolation = GetSingleSwitch(interval, SwitchKind.IsolationSwitch);
         SwitchDevice ground = GetSingleSwitch(interval, SwitchKind.GroundSwitch);
-        AddSwitch(elements, isolation, layout, origin, symbolLibrary);
-        AddSwitch(elements, ground, layout, origin, symbolLibrary);
+        AddSwitch(elements, isolation, layout, origin, symbolLibrary, includeLabels);
+        AddSwitch(elements, ground, layout, origin, symbolLibrary, includeLabels);
 
         elements.Add(new SceneRectangle(
             new DocumentRect(
@@ -102,7 +106,8 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
         SwitchDevice switchDevice,
         RingCabinetIntervalLayout layout,
         DocumentPoint origin,
-        SymbolLibrary symbolLibrary)
+        SymbolLibrary symbolLibrary,
+        bool includeLabels)
     {
         if (!layout.SwitchLayouts.TryGetValue(switchDevice.Id, out RingCabinetSwitchLayout switchLayout))
         {
@@ -122,7 +127,7 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
                          labelOrigin: new DocumentPoint(
                              switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
                              switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
-                         label: switchDevice.DisplayName,
+                         label: includeLabels ? switchDevice.DisplayName : null,
                          state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
                          fill: Colors.White)))
         {

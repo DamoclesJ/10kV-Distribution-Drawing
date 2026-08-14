@@ -65,7 +65,7 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
                     context.ThicknessMillimeters * 0.75));
         }
 
-        if (context.Label is not null)
+        if (context.IncludeLabel && context.Label is not null)
         {
             elements.Add(
                 new SceneText(

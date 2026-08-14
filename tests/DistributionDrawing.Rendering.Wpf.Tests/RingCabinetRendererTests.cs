@@ -195,6 +195,86 @@ public sealed class RingCabinetRendererTests
         Assert.Equal(0, grounded.OfType<SceneText>().Count(text => text.Text == "分"));
     }
 
+    [Fact]
+    public void Render_IncludesCabinetAndIntervalLabels()
+    {
+        RingCabinet cabinet = BuildCabinet(
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new IntegratedFeederConfiguration(
+                GroundingStructureKind.UpperLowerGrounding)));
+        RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
+            cabinet,
+            new DocumentPoint(0, 0));
+
+        IReadOnlyList<SceneText> labels = new RingCabinetRenderer()
+            .Render(cabinet, layout)
+            .OfType<SceneText>()
+            .ToArray();
+
+        Assert.Contains(labels, label => label.Text == "Rendering Test Cabinet");
+        Assert.Contains(labels, label => label.Text == "1#");
+        Assert.Contains(labels, label => label.Text == "2#");
+    }
+
+    [Fact]
+    public void Render_PTIntervalUsesExistingDisplayTextWithoutInventingPTNumberContract()
+    {
+        RingCabinet cabinet = RingCabinet.Create(
+            RingCabinetDefinition.Create(
+                Guid.NewGuid(),
+                "PT cabinet",
+                [RingCabinetIntervalDefinition.CreatePT(
+                    7,
+                    SwitchState.Closed,
+                    SwitchState.Open,
+                    "负7 PT间隔")]));
+        RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
+            cabinet,
+            new DocumentPoint(0, 0));
+
+        IReadOnlyList<SceneText> labels = new RingCabinetRenderer()
+            .Render(cabinet, layout)
+            .OfType<SceneText>()
+            .ToArray();
+
+        Assert.Contains(labels, label => label.Text == "负7 PT间隔");
+        Assert.DoesNotContain(labels, label => label.Text is "负7-2" or "负7-7");
+    }
+
+    [Fact]
+    public void Render_RingCabinetLabelsAreDeterministicAndDoNotChangeDomain()
+    {
+        RingCabinet cabinet = BuildCabinet(
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()));
+        Guid cabinetId = cabinet.Id;
+        Guid[] intervalIds = cabinet.Intervals.Select(interval => interval.IntervalId).ToArray();
+        SwitchState?[] switchStates = cabinet.Intervals
+            .SelectMany(interval => interval.SwitchDevices)
+            .Select(device => device.SwitchState)
+            .ToArray();
+        RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
+            cabinet,
+            new DocumentPoint(0, 0));
+        RingCabinetRenderer renderer = new();
+
+        DocumentPoint[] first = renderer.Render(cabinet, layout)
+            .OfType<SceneText>()
+            .Select(text => text.Origin)
+            .ToArray();
+        DocumentPoint[] second = renderer.Render(cabinet, layout)
+            .OfType<SceneText>()
+            .Select(text => text.Origin)
+            .ToArray();
+
+        Assert.Equal(first, second);
+        Assert.Equal(cabinetId, cabinet.Id);
+        Assert.Equal(intervalIds, cabinet.Intervals.Select(interval => interval.IntervalId));
+        Assert.Equal(switchStates, cabinet.Intervals
+            .SelectMany(interval => interval.SwitchDevices)
+            .Select(device => device.SwitchState));
+    }
+
     private static RingCabinet BuildCabinet(params BayTemplate[] bays)
     {
         var template = new RingCabinetTemplate(

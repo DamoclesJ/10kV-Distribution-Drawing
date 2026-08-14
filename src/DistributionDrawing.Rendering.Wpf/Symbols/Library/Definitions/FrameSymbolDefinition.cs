@@ -33,7 +33,7 @@ public sealed class FrameSymbolDefinition : ISymbolDefinition
                 context.Fill)
         };
 
-        if (context.Label is not null)
+        if (context.IncludeLabel && context.Label is not null)
         {
             elements.Add(
                 new SceneText(

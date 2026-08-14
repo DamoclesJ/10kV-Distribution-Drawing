@@ -15,7 +15,8 @@ public sealed record SymbolRenderContext
         SymbolVisualState state = SymbolVisualState.None,
         Color? stroke = null,
         Color? fill = null,
-        double thicknessMillimeters = 0.8)
+        double thicknessMillimeters = 0.8,
+        bool includeLabel = true)
     {
         if (widthMillimeters <= 0 || heightMillimeters <= 0)
         {
@@ -41,6 +42,7 @@ public sealed record SymbolRenderContext
         Stroke = stroke ?? Colors.Black;
         Fill = fill ?? Colors.Transparent;
         ThicknessMillimeters = thicknessMillimeters;
+        IncludeLabel = includeLabel;
     }
 
     public DocumentPoint Origin { get; }
@@ -62,4 +64,6 @@ public sealed record SymbolRenderContext
     public Color Fill { get; }
 
     public double ThicknessMillimeters { get; }
+
+    public bool IncludeLabel { get; }
 }
