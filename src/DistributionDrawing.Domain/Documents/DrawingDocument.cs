@@ -508,6 +508,60 @@ public sealed class DrawingDocument
         return cableSegment;
     }
 
+    public void ReplaceCableSegmentConnection(
+        CableSegment beforeCableSegment,
+        Connection beforeConnection,
+        CableSegment afterCableSegment,
+        Connection afterConnection)
+    {
+        ArgumentNullException.ThrowIfNull(beforeCableSegment);
+        ArgumentNullException.ThrowIfNull(beforeConnection);
+        ArgumentNullException.ThrowIfNull(afterCableSegment);
+        ArgumentNullException.ThrowIfNull(afterConnection);
+
+        if (beforeCableSegment.Id != afterCableSegment.Id)
+        {
+            throw new InvalidOperationException(
+                "Reconnect must preserve the cable segment ID.");
+        }
+
+        if (beforeConnection.Id == afterConnection.Id)
+        {
+            throw new InvalidOperationException(
+                "Reconnect must create a new connection ID.");
+        }
+
+        ValidateCableSegmentConnection(beforeCableSegment, beforeConnection);
+        ValidateCableSegmentConnection(afterCableSegment, afterConnection);
+
+        CableSegment currentCableSegment = _cableSegments.SingleOrDefault(segment =>
+                segment.Id == beforeCableSegment.Id)
+            ?? throw new InvalidOperationException(
+                $"Cable segment '{beforeCableSegment.Id}' does not exist.");
+        Connection currentConnection = _connections.SingleOrDefault(connection =>
+                connection.Id == beforeConnection.Id)
+            ?? throw new InvalidOperationException(
+                $"Connection '{beforeConnection.Id}' does not exist.");
+
+        if (!CableSegmentFactsEqual(currentCableSegment, beforeCableSegment) ||
+            !ConnectionFactsEqual(currentConnection, beforeConnection))
+        {
+            throw new InvalidOperationException(
+                "The reconnect before state does not match the document.");
+        }
+
+        RemoveCableSegment(beforeCableSegment.Id);
+        try
+        {
+            AddCableSegment(afterCableSegment, afterConnection);
+        }
+        catch
+        {
+            AddCableSegment(beforeCableSegment, beforeConnection);
+            throw;
+        }
+    }
+
     public SwitchStateChangeResult ChangeSwitchState(
         Guid switchDeviceId,
         SwitchState targetState)
@@ -1335,6 +1389,48 @@ public sealed class DrawingDocument
             throw new InvalidOperationException(
                 $"{terminalDescription} '{terminal.Id}' has an invalid connection policy.");
         }
+    }
+
+    private static void ValidateCableSegmentConnection(
+        CableSegment cableSegment,
+        Connection connection)
+    {
+        if (connection.Type != ConnectionType.Cable ||
+            cableSegment.ConnectionId != connection.Id ||
+            cableSegment.StartTerminalId != connection.StartTerminalId ||
+            cableSegment.EndTerminalId != connection.EndTerminalId ||
+            !string.Equals(
+                cableSegment.VoltageLevel,
+                connection.VoltageLevel,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Cable segment '{cableSegment.Id}' and connection '{connection.Id}' are inconsistent.");
+        }
+    }
+
+    private static bool CableSegmentFactsEqual(
+        CableSegment first,
+        CableSegment second)
+    {
+        return first.Id == second.Id &&
+            string.Equals(first.Name, second.Name, StringComparison.Ordinal) &&
+            string.Equals(first.CableType, second.CableType, StringComparison.Ordinal) &&
+            first.Length == second.Length &&
+            string.Equals(first.VoltageLevel, second.VoltageLevel, StringComparison.Ordinal) &&
+            first.ConnectionId == second.ConnectionId &&
+            first.StartTerminalId == second.StartTerminalId &&
+            first.EndTerminalId == second.EndTerminalId;
+    }
+
+    private static bool ConnectionFactsEqual(Connection first, Connection second)
+    {
+        return first.Id == second.Id &&
+            first.Type == second.Type &&
+            first.StartTerminalId == second.StartTerminalId &&
+            first.EndTerminalId == second.EndTerminalId &&
+            string.Equals(first.DisplayName, second.DisplayName, StringComparison.Ordinal) &&
+            string.Equals(first.VoltageLevel, second.VoltageLevel, StringComparison.Ordinal);
     }
 
     private void ValidateOverheadEndpoint(Guid terminalId, Guid expectedPoleId)
