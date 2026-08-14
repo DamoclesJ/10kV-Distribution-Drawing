@@ -46,6 +46,7 @@ public partial class MainWindow : Window
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
     private readonly DrawingToolCoordinator _drawingTools;
     private MainWindowViewModel _shellViewModel = null!;
+    private bool _gridVisible;
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
@@ -96,7 +97,9 @@ public partial class MainWindow : Window
             OnSelectModeRequested,
             OnCreateRingCabinetModeRequested,
             OnCreatePoleModeRequested);
+        _shellViewModel.Toolbox.PropertyChanged += OnToolboxPropertyChanged;
         DataContext = _shellViewModel;
+        UpdateCanvasStatus();
     }
 
     private void OnNewProject(object sender, RoutedEventArgs e) => _shellViewModel.NewProjectCommand.Execute(null);
@@ -241,11 +244,23 @@ public partial class MainWindow : Window
 
     private void OnCancelRequested() => _drawingTools.Cancel();
 
-    private void OnSelectModeRequested() => _drawingTools.Cancel();
+    private void OnSelectModeRequested()
+    {
+        _drawingTools.Cancel();
+        UpdateCanvasStatus();
+    }
 
-    private void OnCreateRingCabinetModeRequested() => OnBeginPlaceRingCabinet(this, new RoutedEventArgs());
+    private void OnCreateRingCabinetModeRequested()
+    {
+        OnBeginPlaceRingCabinet(this, new RoutedEventArgs());
+        UpdateCanvasStatus();
+    }
 
-    private void OnCreatePoleModeRequested() => OnBeginPlacePole(this, new RoutedEventArgs());
+    private void OnCreatePoleModeRequested()
+    {
+        OnBeginPlacePole(this, new RoutedEventArgs());
+        UpdateCanvasStatus();
+    }
 
     private void OnUndoRequested() => OnUndo(this, new RoutedEventArgs());
 
@@ -489,6 +504,27 @@ public partial class MainWindow : Window
     private void OnViewportChanged(object? sender, EventArgs e)
     {
         DrawingSurface.SetViewTransform(_viewport.Transform);
+        UpdateCanvasStatus();
+    }
+
+    private void OnToggleGrid(object sender, RoutedEventArgs e)
+    {
+        _gridVisible = sender is System.Windows.Controls.MenuItem menuItem && menuItem.IsChecked;
+        DrawingSurface.ShowGrid = _gridVisible;
+        UpdateCanvasStatus();
+    }
+
+    private void UpdateCanvasStatus()
+    {
+        _shellViewModel.UpdateCanvasState(
+            _viewport.Transform.Scale,
+            _gridVisible,
+            _shellViewModel.Toolbox.SelectedMode switch
+            {
+                DesktopToolMode.CreateRingCabinet => "创建环网柜",
+                DesktopToolMode.CreatePole => "创建杆塔",
+                _ => "选择"
+            });
     }
 
     private void OnDrawingSurfaceSizeChanged(
@@ -769,6 +805,16 @@ public partial class MainWindow : Window
                 RingCabinetLayout = layout,
                 HitTestIndex = scene.HitTestIndex
         });
+    }
+
+    private void OnToolboxPropertyChanged(
+        object? sender,
+        System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ToolboxViewModel.SelectedMode))
+        {
+            UpdateCanvasStatus();
+        }
     }
 
     private void OnConfirmWorkScopeBoundaryA(object sender, RoutedEventArgs e)

@@ -45,6 +45,9 @@
                   Click="OnZoomOut" />
         <MenuItem Header="适合图形"
                   Click="OnFitDrawing" />
+        <MenuItem Header="显示网格"
+                  IsCheckable="True"
+                  Click="OnToggleGrid" />
         <Separator />
         <MenuItem Header="绘制测试内容"
                   Click="OnDrawTestContent" />
@@ -56,7 +59,9 @@
     </Menu>
 
     <StatusBar DockPanel.Dock="Bottom">
-      <StatusBarItem Content="{Binding StatusText}" />
+      <StatusBarItem Content="{Binding ZoomText}" />
+      <StatusBarItem Content="{Binding GridText}" />
+      <StatusBarItem Content="{Binding ModeText}" />
     </StatusBar>
 
     <Grid>

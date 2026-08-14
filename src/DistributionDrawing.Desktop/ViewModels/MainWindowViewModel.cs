@@ -1,13 +1,17 @@
 using DistributionDrawing.Desktop.Services;
 using System.Windows.Input;
+using System.ComponentModel;
 
 namespace DistributionDrawing.Desktop.ViewModels;
 
-public sealed class MainWindowViewModel
+public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly RelayCommand _undoCommand;
     private readonly RelayCommand _redoCommand;
     private readonly RelayCommand _deleteCommand;
+    private double _zoom = 1.0;
+    private bool _gridVisible;
+    private string _modeText = "选择";
 
     public MainWindowViewModel(
         DesktopShellService shellService,
@@ -33,7 +37,7 @@ public sealed class MainWindowViewModel
         ArgumentNullException.ThrowIfNull(redo);
         ArgumentNullException.ThrowIfNull(delete);
         ArgumentNullException.ThrowIfNull(cancel);
-        StatusText = shellService.InitialStatus;
+        _modeText = shellService.InitialStatus;
         NewProjectCommand = new RelayCommand(newProject);
         OpenProjectCommand = new RelayCommand(openProject);
         SaveProjectCommand = new RelayCommand(saveProject);
@@ -50,11 +54,19 @@ public sealed class MainWindowViewModel
             createPoleMode ?? (() => { }));
     }
 
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     public string CanvasTitle => "绘图区";
 
     public string InspectorTitle => "属性检查器";
 
-    public string StatusText { get; }
+    public string StatusText => $"缩放 {_zoom:0.00}x · 网格 {(_gridVisible ? "开" : "关")} · 模式 {_modeText}";
+
+    public string ZoomText => $"缩放: {_zoom:0.00}x";
+
+    public string GridText => $"网格: {(_gridVisible ? "开" : "关")}";
+
+    public string ModeText => $"模式: {_modeText}";
 
     public ICommand NewProjectCommand { get; }
 
@@ -72,12 +84,26 @@ public sealed class MainWindowViewModel
 
     public ToolboxViewModel Toolbox { get; }
 
+    public void UpdateCanvasState(double zoom, bool gridVisible, string modeText)
+    {
+        _zoom = zoom;
+        _gridVisible = gridVisible;
+        _modeText = string.IsNullOrWhiteSpace(modeText) ? "选择" : modeText;
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(ZoomText));
+        OnPropertyChanged(nameof(GridText));
+        OnPropertyChanged(nameof(ModeText));
+    }
+
     public void RefreshCommandStates()
     {
         _undoCommand.Refresh();
         _redoCommand.Refresh();
         _deleteCommand.Refresh();
     }
+
+    private void OnPropertyChanged(string propertyName) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     private sealed class RelayCommand : ICommand
     {
