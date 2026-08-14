@@ -74,6 +74,63 @@ public sealed class CableRendererTests
         Assert.Equal(cable.Id, layout.CableSegmentId);
     }
 
+    [Fact]
+    public void RenderUsesCableLayoutLabelPositionAsLabelAnchor()
+    {
+        CableSegment cable = CreateCable();
+        CableLayout layout = new(
+            cable.Id,
+            [new DocumentPoint(10, 20), new DocumentPoint(50, 20)],
+            new DocumentPoint(37, 14));
+
+        SceneText label = Assert.Single(new CableRenderer().Render(cable, layout).OfType<SceneText>());
+
+        Assert.Equal(new DocumentPoint(37, 14), label.Origin);
+    }
+
+    [Fact]
+    public void RenderBatchUsesLabelEngineToAvoidInitialCableLabelCollision()
+    {
+        CableSegment firstCable = CreateCable();
+        CableSegment secondCable = CreateCable();
+        CableLayout firstLayout = CreateLayout(firstCable, new DocumentPoint(30, 20));
+        CableLayout secondLayout = CreateLayout(secondCable, new DocumentPoint(30, 20));
+
+        IReadOnlyList<SceneText> labels = new CableRenderer()
+            .Render([(firstCable, firstLayout), (secondCable, secondLayout)])
+            .OfType<SceneText>()
+            .ToArray();
+
+        Assert.Equal(2, labels.Count);
+        Assert.NotEqual(labels[0].Origin, labels[1].Origin);
+    }
+
+    [Fact]
+    public void RenderBatchProducesStableLabelPositions()
+    {
+        CableSegment firstCable = CreateCable();
+        CableSegment secondCable = CreateCable();
+        CableLayout firstLayout = CreateLayout(firstCable, new DocumentPoint(30, 20));
+        CableLayout secondLayout = CreateLayout(secondCable, new DocumentPoint(30, 20));
+        (CableSegment CableSegment, CableLayout Layout)[] inputs =
+        [
+            (firstCable, firstLayout),
+            (secondCable, secondLayout)
+        ];
+
+        CableRenderer renderer = new();
+        IReadOnlyList<DocumentPoint> first = renderer.Render(inputs)
+            .OfType<SceneText>()
+            .Select(label => label.Origin)
+            .ToArray();
+        IReadOnlyList<DocumentPoint> second = renderer.Render(inputs)
+            .OfType<SceneText>()
+            .Select(label => label.Origin)
+            .ToArray();
+
+        Assert.Equal(first, second);
+    }
+
     private static CableSegment CreateCable()
     {
         return new CableSegment(
@@ -85,5 +142,13 @@ public sealed class CableRendererTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             Guid.NewGuid());
+    }
+
+    private static CableLayout CreateLayout(CableSegment cable, DocumentPoint labelPosition)
+    {
+        return new CableLayout(
+            cable.Id,
+            [new DocumentPoint(10, 20), new DocumentPoint(50, 20)],
+            labelPosition);
     }
 }
