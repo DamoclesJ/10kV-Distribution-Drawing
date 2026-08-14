@@ -84,4 +84,68 @@ public sealed class PoleRendererTests
         Assert.Equal(attachmentId, attachment.AttachmentId);
         Assert.Equal(terminationId, cableTermination.Id);
     }
+
+    [Fact]
+    public void RenderPoleLabelUsesLayoutAndUpdatesWhenPoleMoves()
+    {
+        PoleCreationResult result = new PoleCreationFactory().Create(
+            "P-004",
+            PoleType.Cement,
+            null);
+        var renderer = new PoleRenderer();
+
+        SceneText first = Assert.Single(
+            renderer.Render(
+                result.Pole,
+                new PoleLayout(result.Pole.Id, new DocumentPoint(10, 20)))
+                .OfType<SceneText>());
+        SceneText second = Assert.Single(
+            renderer.Render(
+                result.Pole,
+                new PoleLayout(result.Pole.Id, new DocumentPoint(40, 50)))
+                .OfType<SceneText>());
+
+        Assert.Equal("P-004", first.Text);
+        Assert.Equal("P-004", second.Text);
+        Assert.NotEqual(first.Origin, second.Origin);
+    }
+
+    [Fact]
+    public void RenderAttachmentLabelUsesLatestAttachmentLayout()
+    {
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P-005",
+            PoleType.Cement,
+            null,
+            switchKinds: null,
+            includeCableTerminal: true);
+        CableTermination cableTermination = Assert.IsType<CableTermination>(
+            Assert.Single(result.Devices));
+        PoleAttachment attachment = Assert.Single(result.Attachments);
+        var renderer = new PoleRenderer();
+        var poleLayout = new PoleLayout(result.Pole.Id, new DocumentPoint(10, 20));
+
+        SceneText first = Assert.Single(
+            renderer.Render(
+                result.Pole,
+                poleLayout,
+                [new PoleAttachmentRenderInput(
+                    attachment,
+                    cableTermination,
+                    new AttachmentLayout(attachment.AttachmentId, new DocumentPoint(5, 5)))])
+                .OfType<SceneText>()
+                .Where(text => text.Text == cableTermination.DisplayName));
+        SceneText second = Assert.Single(
+            renderer.Render(
+                result.Pole,
+                poleLayout,
+                [new PoleAttachmentRenderInput(
+                    attachment,
+                    cableTermination,
+                    new AttachmentLayout(attachment.AttachmentId, new DocumentPoint(25, 5)))])
+                .OfType<SceneText>()
+                .Where(text => text.Text == cableTermination.DisplayName));
+
+        Assert.NotEqual(first.Origin, second.Origin);
+    }
 }

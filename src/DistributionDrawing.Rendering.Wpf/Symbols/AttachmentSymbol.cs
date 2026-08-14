@@ -18,7 +18,8 @@ public sealed class AttachmentSymbol
         PoleAttachment attachment,
         Device attachedDevice,
         PoleLayout poleLayout,
-        AttachmentLayout layout)
+        AttachmentLayout layout,
+        bool includeLabel = true)
     {
         ArgumentNullException.ThrowIfNull(attachment);
         ArgumentNullException.ThrowIfNull(attachedDevice);
@@ -29,6 +30,7 @@ public sealed class AttachmentSymbol
             attachment,
             attachedDevice,
             poleLayout,
-            layout);
+            layout,
+            includeLabel: includeLabel);
     }
 }

@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Labels;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
@@ -19,12 +20,18 @@ public sealed class SwitchAttachmentRenderer
 {
     private readonly PoleSymbol _poleSymbol;
     private readonly AttachmentSymbol _attachmentSymbol;
+    private readonly PoleLabel _poleLabel;
+    private readonly LabelLayoutEngine _labelLayoutEngine;
 
-    public SwitchAttachmentRenderer(SymbolLibrary? symbolLibrary = null)
+    public SwitchAttachmentRenderer(
+        SymbolLibrary? symbolLibrary = null,
+        LabelLayoutEngine? labelLayoutEngine = null)
     {
         var library = symbolLibrary ?? new SymbolLibrary();
         _poleSymbol = new PoleSymbol(library);
         _attachmentSymbol = new AttachmentSymbol(library);
+        _poleLabel = new PoleLabel();
+        _labelLayoutEngine = labelLayoutEngine ?? new LabelLayoutEngine();
     }
 
     public IReadOnlyList<SceneElement> Render(
@@ -37,7 +44,11 @@ public sealed class SwitchAttachmentRenderer
         ArgumentNullException.ThrowIfNull(attachments);
 
         var elements = new List<SceneElement>();
-        elements.AddRange(_poleSymbol.CreateElements(pole, poleLayout));
+        elements.AddRange(_poleSymbol.CreateElements(pole, poleLayout, includeLabel: false));
+        var labelRequests = new List<LabelRequest>
+        {
+            _poleLabel.CreatePoleRequest(pole, poleLayout)
+        };
 
         foreach (SwitchAttachmentRenderInput input in attachments)
         {
@@ -71,8 +82,17 @@ public sealed class SwitchAttachmentRenderer
                 input.Attachment,
                 input.SwitchDevice,
                 poleLayout,
+                input.Layout,
+                includeLabel: false));
+            labelRequests.Add(_poleLabel.CreateAttachmentRequest(
+                input.Attachment,
+                input.SwitchDevice,
+                poleLayout,
                 input.Layout));
         }
+
+        elements.AddRange(_labelLayoutEngine.Layout(labelRequests)
+            .Select(_poleLabel.CreateElement));
 
         return elements;
     }

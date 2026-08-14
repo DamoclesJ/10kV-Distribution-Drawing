@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Labels;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
@@ -19,12 +20,18 @@ public sealed class PoleRenderer
 {
     private readonly PoleSymbol _poleSymbol;
     private readonly AttachmentSymbol _attachmentSymbol;
+    private readonly PoleLabel _poleLabel;
+    private readonly LabelLayoutEngine _labelLayoutEngine;
 
-    public PoleRenderer(SymbolLibrary? symbolLibrary = null)
+    public PoleRenderer(
+        SymbolLibrary? symbolLibrary = null,
+        LabelLayoutEngine? labelLayoutEngine = null)
     {
         var library = symbolLibrary ?? new SymbolLibrary();
         _poleSymbol = new PoleSymbol(library);
         _attachmentSymbol = new AttachmentSymbol(library);
+        _poleLabel = new PoleLabel();
+        _labelLayoutEngine = labelLayoutEngine ?? new LabelLayoutEngine();
     }
 
     public IReadOnlyList<SceneElement> Render(
@@ -36,7 +43,11 @@ public sealed class PoleRenderer
         ArgumentNullException.ThrowIfNull(layout);
 
         var elements = new List<SceneElement>();
-        elements.AddRange(_poleSymbol.CreateElements(pole, layout));
+        elements.AddRange(_poleSymbol.CreateElements(pole, layout, includeLabel: false));
+        var labelRequests = new List<LabelRequest>
+        {
+            _poleLabel.CreatePoleRequest(pole, layout)
+        };
 
         foreach (PoleAttachmentRenderInput input in attachments ?? [])
         {
@@ -57,8 +68,17 @@ public sealed class PoleRenderer
                 input.Attachment,
                 input.CableTermination,
                 layout,
+                input.Layout,
+                includeLabel: false));
+            labelRequests.Add(_poleLabel.CreateAttachmentRequest(
+                input.Attachment,
+                input.CableTermination,
+                layout,
                 input.Layout));
         }
+
+        elements.AddRange(_labelLayoutEngine.Layout(labelRequests)
+            .Select(_poleLabel.CreateElement));
 
         return elements;
     }

@@ -14,11 +14,14 @@ public sealed class PoleSymbol
         _library = library ?? new SymbolLibrary();
     }
 
-    public IReadOnlyList<SceneElement> CreateElements(Pole pole, PoleLayout layout)
+    public IReadOnlyList<SceneElement> CreateElements(
+        Pole pole,
+        PoleLayout layout,
+        bool includeLabel = true)
     {
         ArgumentNullException.ThrowIfNull(pole);
         ArgumentNullException.ThrowIfNull(layout);
 
-        return _library.CreatePole(pole, layout);
+        return _library.CreatePole(pole, layout, includeLabel);
     }
 }

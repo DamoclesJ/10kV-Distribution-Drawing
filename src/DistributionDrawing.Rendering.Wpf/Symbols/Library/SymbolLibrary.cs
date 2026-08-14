@@ -54,7 +54,8 @@ public sealed class SymbolLibrary
 
     public IReadOnlyList<SceneElement> CreatePole(
         Pole pole,
-        PoleLayout layout)
+        PoleLayout layout,
+        bool includeLabel = true)
     {
         ArgumentNullException.ThrowIfNull(pole);
         ArgumentNullException.ThrowIfNull(layout);
@@ -71,7 +72,8 @@ public sealed class SymbolLibrary
                     layout.Position.XMillimeters + layout.LabelOffset.XMillimeters,
                     layout.Position.YMillimeters + layout.LabelOffset.YMillimeters),
                 label: pole.PoleNumber,
-                thicknessMillimeters: 1));
+                thicknessMillimeters: 1,
+                includeLabel: includeLabel));
     }
 
     public IReadOnlyList<SceneElement> CreateAttachment(
@@ -79,7 +81,8 @@ public sealed class SymbolLibrary
         Device attachedDevice,
         PoleLayout poleLayout,
         AttachmentLayout layout,
-        SymbolVisualState? state = null)
+        SymbolVisualState? state = null,
+        bool includeLabel = true)
     {
         ArgumentNullException.ThrowIfNull(attachment);
         ArgumentNullException.ThrowIfNull(attachedDevice);
@@ -122,7 +125,8 @@ public sealed class SymbolLibrary
                         origin.YMillimeters + layout.LabelOffset.YMillimeters),
                     label: ResolveAttachmentLabel(attachedDevice),
                     state: visualState,
-                    fill: Colors.White)));
+                    fill: Colors.White,
+                    includeLabel: includeLabel)));
 
         return elements;
     }
@@ -288,7 +292,7 @@ public sealed class SymbolLibrary
         };
     }
 
-    private static string ResolveAttachmentLabel(Device device)
+    public static string ResolveAttachmentLabel(Device device)
     {
         if (device is SwitchDevice switchDevice)
         {

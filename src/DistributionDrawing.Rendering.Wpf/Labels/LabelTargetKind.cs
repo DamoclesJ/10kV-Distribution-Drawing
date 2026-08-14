@@ -5,6 +5,7 @@ public enum LabelTargetKind
     CableSegment,
     RingCabinet,
     Pole,
+    PoleAttachment,
     Interval,
     SwitchDevice
 }
