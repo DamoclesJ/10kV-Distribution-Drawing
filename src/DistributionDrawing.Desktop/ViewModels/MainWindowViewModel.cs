@@ -20,7 +20,10 @@ public sealed class MainWindowViewModel
         Action cancel,
         Func<bool>? canUndo = null,
         Func<bool>? canRedo = null,
-        Func<bool>? canDelete = null)
+        Func<bool>? canDelete = null,
+        Action? selectMode = null,
+        Action? createRingCabinetMode = null,
+        Action? createPoleMode = null)
     {
         ArgumentNullException.ThrowIfNull(shellService);
         ArgumentNullException.ThrowIfNull(newProject);
@@ -41,6 +44,10 @@ public sealed class MainWindowViewModel
         RedoCommand = _redoCommand;
         DeleteCommand = _deleteCommand;
         CancelCommand = new RelayCommand(cancel);
+        Toolbox = new ToolboxViewModel(
+            selectMode ?? (() => { }),
+            createRingCabinetMode ?? (() => { }),
+            createPoleMode ?? (() => { }));
     }
 
     public string CanvasTitle => "绘图区";
@@ -62,6 +69,8 @@ public sealed class MainWindowViewModel
     public ICommand DeleteCommand { get; }
 
     public ICommand CancelCommand { get; }
+
+    public ToolboxViewModel Toolbox { get; }
 
     public void RefreshCommandStates()
     {

@@ -61,11 +61,34 @@
 
     <Grid>
       <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="170" />
         <ColumnDefinition />
         <ColumnDefinition Width="300" />
       </Grid.ColumnDefinitions>
 
       <Border Grid.Column="0"
+              Margin="12,12,0,12"
+              Padding="10"
+              Background="#FFF"
+              BorderBrush="#D0D0D0"
+              BorderThickness="1">
+        <StackPanel>
+          <TextBlock FontSize="16"
+                     FontWeight="SemiBold"
+                     Text="工具箱" />
+          <Button Margin="0,12,0,4"
+                  Content="选择"
+                  Command="{Binding Toolbox.SelectModeCommand}" />
+          <Button Margin="0,4"
+                  Content="创建环网柜"
+                  Command="{Binding Toolbox.CreateRingCabinetModeCommand}" />
+          <Button Margin="0,4"
+                  Content="创建杆塔"
+                  Command="{Binding Toolbox.CreatePoleModeCommand}" />
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1"
               Margin="12"
               Background="#FFF"
               BorderBrush="#D0D0D0"
@@ -82,7 +105,7 @@
       </Border>
 
       <Border x:Name="PropertyInspectorPanel"
-              Grid.Column="1"
+              Grid.Column="2"
               Margin="0,12,12,12"
               Padding="10"
               Background="#FFF"

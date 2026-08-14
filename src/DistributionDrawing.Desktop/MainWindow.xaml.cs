@@ -92,7 +92,10 @@ public partial class MainWindow : Window
             OnCancelRequested,
             () => _commandStack.CanUndo,
             () => _commandStack.CanRedo,
-            () => _selectionManager.Selected is not null);
+            () => _selectionManager.Selected is not null,
+            OnSelectModeRequested,
+            OnCreateRingCabinetModeRequested,
+            OnCreatePoleModeRequested);
         DataContext = _shellViewModel;
     }
 
@@ -237,6 +240,12 @@ public partial class MainWindow : Window
     }
 
     private void OnCancelRequested() => _drawingTools.Cancel();
+
+    private void OnSelectModeRequested() => _drawingTools.Cancel();
+
+    private void OnCreateRingCabinetModeRequested() => OnBeginPlaceRingCabinet(this, new RoutedEventArgs());
+
+    private void OnCreatePoleModeRequested() => OnBeginPlacePole(this, new RoutedEventArgs());
 
     private void OnUndoRequested() => OnUndo(this, new RoutedEventArgs());
 
