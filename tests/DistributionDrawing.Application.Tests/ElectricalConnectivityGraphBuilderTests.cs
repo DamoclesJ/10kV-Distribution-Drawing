@@ -110,6 +110,77 @@ public sealed class ElectricalConnectivityGraphBuilderTests
                 .Concat(document.Terminals.Select(terminal => terminal.Id)));
     }
 
+    [Fact]
+    public void Query_IsConnected_FollowsElectricalNodeAndConnectionEdges()
+    {
+        (DrawingDocument document, PoleCreationResult result) = CreateCableTermination();
+        Pole secondPole = new(Guid.NewGuid(), "P-012");
+        Terminal secondTerminal = secondPole.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        document.AddDevice(secondPole);
+        document.AddTerminal(secondTerminal);
+        document.AddConnection(new Connection(
+            Guid.NewGuid(),
+            ConnectionType.OverheadLine,
+            result.Terminals[1].Id,
+            secondTerminal.Id,
+            "架空连接",
+            "10kV"));
+
+        ElectricalConnectivityGraph graph = new ElectricalConnectivityGraphBuilder()
+            .Build(document);
+        var query = new ElectricalConnectivityQuery(graph);
+
+        Assert.True(query.IsConnected(result.Terminals[0].Id, secondTerminal.Id));
+        Assert.Contains(
+            result.Terminals[0].Id,
+            query.FindConnectedTerminalIds(secondTerminal.Id));
+    }
+
+    [Fact]
+    public void Query_DoesNotCrossOpenSwitch_AndCrossesClosedSwitch()
+    {
+        (DrawingDocument document, PoleCreationResult result) = CreatePoleSwitch(
+            SwitchState.Open);
+        SwitchDevice switchDevice = Assert.IsType<SwitchDevice>(Assert.Single(result.Devices));
+        ElectricalConnectivityGraph openGraph = new ElectricalConnectivityGraphBuilder()
+            .Build(document);
+        var openQuery = new ElectricalConnectivityQuery(openGraph);
+
+        Assert.False(openQuery.IsConnected(
+            switchDevice.TerminalIds[0],
+            switchDevice.TerminalIds[1]));
+
+        document.ChangeSwitchState(switchDevice.Id, SwitchState.Closed);
+        ElectricalConnectivityGraph closedGraph = new ElectricalConnectivityGraphBuilder()
+            .Build(document);
+        var closedQuery = new ElectricalConnectivityQuery(closedGraph);
+
+        Assert.True(closedQuery.IsConnected(
+            switchDevice.TerminalIds[0],
+            switchDevice.TerminalIds[1]));
+        Assert.False(openQuery.IsConnected(
+            switchDevice.TerminalIds[0],
+            switchDevice.TerminalIds[1]));
+    }
+
+    [Fact]
+    public void Query_ReturnsImmutableConnectedSet_AndRejectsUnknownTerminal()
+    {
+        (DrawingDocument document, PoleCreationResult result) = CreatePoleSwitch(
+            SwitchState.Closed);
+        ElectricalConnectivityGraph graph = new ElectricalConnectivityGraphBuilder()
+            .Build(document);
+        var query = new ElectricalConnectivityQuery(graph);
+
+        IReadOnlySet<Guid> connected = query.FindConnectedTerminalIds(result.Terminals[0].Id);
+
+        Assert.Contains(result.Terminals[0].Id, connected);
+        Assert.Contains(result.Terminals[1].Id, connected);
+        Assert.Throws<KeyNotFoundException>(() => query.IsConnected(
+            Guid.NewGuid(),
+            result.Terminals[0].Id));
+    }
+
     private static (DrawingDocument Document, PoleCreationResult Result) CreatePoleSwitch(
         SwitchState state)
     {
