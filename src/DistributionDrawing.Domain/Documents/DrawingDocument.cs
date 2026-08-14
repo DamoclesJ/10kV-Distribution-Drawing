@@ -13,6 +13,7 @@ public sealed class DrawingDocument
     private readonly List<ElectricalNode> _electricalNodes = [];
     private readonly List<SwitchAssembly> _switchAssemblies = [];
     private readonly List<Connection> _connections = [];
+    private readonly List<CableSegment> _cableSegments = [];
     private readonly List<PoleAttachment> _poleAttachments = [];
     private readonly List<OverheadLine> _overheadLines = [];
     private readonly List<WorkScope> _workScopes = [];
@@ -48,6 +49,8 @@ public sealed class DrawingDocument
     public IReadOnlyList<SwitchAssembly> SwitchAssemblies => _switchAssemblies;
 
     public IReadOnlyList<Connection> Connections => _connections;
+
+    public IReadOnlyList<CableSegment> CableSegments => _cableSegments;
 
     public IReadOnlyList<PoleAttachment> PoleAttachments => _poleAttachments;
 
@@ -350,6 +353,74 @@ public sealed class DrawingDocument
         _connections.Add(connection);
     }
 
+    public void AddCableSegment(CableSegment cableSegment, Connection connection)
+    {
+        ArgumentNullException.ThrowIfNull(cableSegment);
+        ArgumentNullException.ThrowIfNull(connection);
+
+        if (connection.Type != ConnectionType.Cable)
+        {
+            throw new InvalidOperationException(
+                "A cable segment requires a cable connection.");
+        }
+
+        if (cableSegment.ConnectionId != connection.Id ||
+            cableSegment.StartTerminalId != connection.StartTerminalId ||
+            cableSegment.EndTerminalId != connection.EndTerminalId ||
+            !string.Equals(
+                cableSegment.VoltageLevel,
+                connection.VoltageLevel,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Cable segment and connection facts are inconsistent.");
+        }
+
+        EnsureObjectIdIsAvailable(cableSegment.Id, nameof(CableSegment));
+        if (_cableSegments.Any(existing => existing.ConnectionId == connection.Id))
+        {
+            throw new InvalidOperationException(
+                $"Connection '{connection.Id}' already has a cable segment.");
+        }
+
+        AddConnection(connection);
+        try
+        {
+            _cableSegments.Add(cableSegment);
+        }
+        catch
+        {
+            _connections.Remove(connection);
+            throw;
+        }
+    }
+
+    public CableSegment RemoveCableSegment(Guid cableSegmentId)
+    {
+        CableSegment cableSegment = _cableSegments.SingleOrDefault(existing =>
+                existing.Id == cableSegmentId)
+            ?? throw new InvalidOperationException(
+                $"Cable segment '{cableSegmentId}' does not exist.");
+
+        Connection connection = _connections.SingleOrDefault(existing =>
+                existing.Id == cableSegment.ConnectionId)
+            ?? throw new InvalidOperationException(
+                $"Cable segment '{cableSegmentId}' connection is missing.");
+
+        _cableSegments.Remove(cableSegment);
+        try
+        {
+            RemoveConnection(connection.Id);
+        }
+        catch
+        {
+            _cableSegments.Add(cableSegment);
+            throw;
+        }
+
+        return cableSegment;
+    }
+
     public SwitchStateChangeResult ChangeSwitchState(
         Guid switchDeviceId,
         SwitchState targetState)
@@ -409,6 +480,12 @@ public sealed class DrawingDocument
         {
             throw new InvalidOperationException(
                 $"Connection '{connectionId}' still has an overhead-line detail.");
+        }
+
+        if (_cableSegments.Any(segment => segment.ConnectionId == connectionId))
+        {
+            throw new InvalidOperationException(
+                $"Connection '{connectionId}' still has a cable segment.");
         }
 
         _connections.Remove(connection);
@@ -1120,6 +1197,7 @@ public sealed class DrawingDocument
             _electricalNodes.Any(node => node.Id == objectId) ||
             _switchAssemblies.Any(assembly => assembly.AssemblyId == objectId) ||
             _connections.Any(connection => connection.Id == objectId) ||
+            _cableSegments.Any(segment => segment.Id == objectId) ||
             _poleAttachments.Any(attachment => attachment.AttachmentId == objectId) ||
             _workScopes.Any(workScope => workScope.WorkScopeId == objectId) ||
             _groundingPoints.Any(point => point.GroundingPointId == objectId) ||
