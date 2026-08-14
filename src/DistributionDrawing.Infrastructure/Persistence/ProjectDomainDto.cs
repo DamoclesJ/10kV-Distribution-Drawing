@@ -15,11 +15,25 @@ public sealed record ProjectDomainDto(
     IReadOnlyList<ProjectConnectionDto>? Connections = null,
     IReadOnlyList<ProjectOverheadLineDto>? OverheadLines = null,
     IReadOnlyList<ProjectPoleAttachmentDto>? PoleAttachments = null,
-    IReadOnlyList<ProjectSwitchDeviceDto>? SwitchDevices = null)
+    IReadOnlyList<ProjectSwitchDeviceDto>? SwitchDevices = null,
+    IReadOnlyList<ProjectCableSegmentDto>? CableSegments = null,
+    IReadOnlyList<ProjectIntermediateTerminalDto>? IntermediateTerminals = null)
 {
     public static ProjectDomainDto Empty(Guid documentId, string title)
     {
-        return new ProjectDomainDto(documentId, title, [], [], [], [], [], [], [], []);
+        return new ProjectDomainDto(
+            documentId,
+            title,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []);
     }
 }
 
@@ -115,6 +129,21 @@ public sealed record ProjectPoleAttachmentDto(
     Guid AttachmentId,
     Guid PoleId,
     Guid AttachedDeviceId);
+
+public sealed record ProjectCableSegmentDto(
+    Guid Id,
+    string DisplayName,
+    string CableType,
+    double Length,
+    string VoltageLevel,
+    Guid ConnectionId,
+    Guid StartTerminalId,
+    Guid EndTerminalId);
+
+public sealed record ProjectIntermediateTerminalDto(
+    Guid Id,
+    string DisplayName,
+    Guid TerminalId);
 
 internal static class ProjectDomainMapper
 {
@@ -239,7 +268,9 @@ internal static class ProjectDomainMapper
                 .OfType<SwitchDevice>()
                 .Where(device => !ringCabinetSwitchIds.Contains(device.Id))
                 .Select(ToDto)
-                .ToArray());
+                .ToArray(),
+            document.CableSegments.Select(ToDto).ToArray(),
+            document.IntermediateTerminals.Select(ToDto).ToArray());
 
         ValidateTopology(document, result);
         return result;
@@ -294,7 +325,50 @@ internal static class ProjectDomainMapper
 
         foreach (ProjectTerminalDto terminalDto in dto.Terminals ?? [])
         {
-            document.AddTerminal(RestoreTerminal(terminalDto));
+            if (Parse<TopologyOwnerType>(
+                    terminalDto.OwnerType,
+                    terminalDto.TerminalId,
+                    "ownerType") != TopologyOwnerType.IntermediateTerminal)
+            {
+                document.AddTerminal(RestoreTerminal(terminalDto));
+            }
+        }
+
+        foreach (ProjectIntermediateTerminalDto intermediateDto in
+                 dto.IntermediateTerminals ?? [])
+        {
+            ProjectTerminalDto terminalDto = (dto.Terminals ?? [])
+                .SingleOrDefault(terminal => terminal.TerminalId == intermediateDto.TerminalId)
+                ?? throw new InvalidDataException(
+                    $"Intermediate terminal '{intermediateDto.Id}' child terminal is missing.");
+            document.AddIntermediateTerminal(
+                RestoreIntermediateTerminal(intermediateDto),
+                RestoreTerminal(terminalDto));
+        }
+
+        HashSet<Guid> cableConnectionIds = (dto.CableSegments ?? [])
+            .Select(segment => segment.ConnectionId)
+            .ToHashSet();
+        foreach (ProjectConnectionDto connectionDto in dto.Connections ?? [])
+        {
+            if (cableConnectionIds.Contains(connectionDto.ConnectionId))
+            {
+                continue;
+            }
+
+            document.AddConnection(RestoreConnection(connectionDto));
+        }
+
+        foreach (ProjectCableSegmentDto cableSegmentDto in dto.CableSegments ?? [])
+        {
+            ProjectConnectionDto connectionDto = (dto.Connections ?? [])
+                .SingleOrDefault(candidate => candidate.ConnectionId == cableSegmentDto.ConnectionId)
+                ?? throw new InvalidDataException(
+                    $"Cable segment '{cableSegmentDto.Id}' connection is missing.");
+            Connection connection = RestoreConnection(connectionDto);
+            document.AddCableSegment(
+                RestoreCableSegment(cableSegmentDto),
+                connection);
         }
 
         foreach (ProjectPoleAttachmentDto attachmentDto in dto.PoleAttachments ?? [])
@@ -304,11 +378,6 @@ internal static class ProjectDomainMapper
                     attachmentDto.AttachmentId,
                     attachmentDto.PoleId,
                     attachmentDto.AttachedDeviceId));
-        }
-
-        foreach (ProjectConnectionDto connectionDto in dto.Connections ?? [])
-        {
-            document.AddConnection(RestoreConnection(connectionDto));
         }
 
         foreach (ProjectOverheadLineDto overheadLineDto in dto.OverheadLines ?? [])
@@ -372,6 +441,28 @@ internal static class ProjectDomainMapper
             attachment.AttachmentId,
             attachment.PoleId,
             attachment.AttachedDeviceId);
+    }
+
+    private static ProjectCableSegmentDto ToDto(CableSegment cableSegment)
+    {
+        return new ProjectCableSegmentDto(
+            cableSegment.Id,
+            cableSegment.Name,
+            cableSegment.CableType,
+            cableSegment.Length,
+            cableSegment.VoltageLevel,
+            cableSegment.ConnectionId,
+            cableSegment.StartTerminalId,
+            cableSegment.EndTerminalId);
+    }
+
+    private static ProjectIntermediateTerminalDto ToDto(
+        IntermediateTerminal intermediateTerminal)
+    {
+        return new ProjectIntermediateTerminalDto(
+            intermediateTerminal.Id,
+            intermediateTerminal.DisplayName,
+            intermediateTerminal.TerminalId);
     }
 
     private static ProjectRingCabinetIntervalDto ToDto(RingCabinetInterval interval)
@@ -579,6 +670,15 @@ internal static class ProjectDomainMapper
             allowedConnectionTypes);
     }
 
+    private static IntermediateTerminal RestoreIntermediateTerminal(
+        ProjectIntermediateTerminalDto dto)
+    {
+        return new IntermediateTerminal(
+            dto.Id,
+            dto.DisplayName,
+            dto.TerminalId);
+    }
+
     private static Connection RestoreConnection(ProjectConnectionDto dto)
     {
         return new Connection(
@@ -588,6 +688,19 @@ internal static class ProjectDomainMapper
             dto.EndTerminalId,
             dto.DisplayName,
             dto.VoltageLevel);
+    }
+
+    private static CableSegment RestoreCableSegment(ProjectCableSegmentDto dto)
+    {
+        return new CableSegment(
+            dto.Id,
+            dto.DisplayName,
+            dto.CableType,
+            dto.Length,
+            dto.VoltageLevel,
+            dto.ConnectionId,
+            dto.StartTerminalId,
+            dto.EndTerminalId);
     }
 
     private static OverheadLine RestoreOverheadLine(ProjectOverheadLineDto dto)
@@ -619,6 +732,9 @@ internal static class ProjectDomainMapper
         IReadOnlyList<ProjectTerminalDto> terminalDtos = dto.Terminals ?? [];
         IReadOnlyList<ProjectConnectionDto> connectionDtos = dto.Connections ?? [];
         IReadOnlyList<ProjectOverheadLineDto> overheadLineDtos = dto.OverheadLines ?? [];
+        IReadOnlyList<ProjectCableSegmentDto> cableSegmentDtos = dto.CableSegments ?? [];
+        IReadOnlyList<ProjectIntermediateTerminalDto> intermediateTerminalDtos =
+            dto.IntermediateTerminals ?? [];
 
         HashSet<Guid> rootNodeIds = nodeDtos.Select(node => node.NodeId).ToHashSet();
         HashSet<Guid> rootTerminalIds = terminalDtos.Select(terminal => terminal.TerminalId).ToHashSet();
@@ -656,6 +772,80 @@ internal static class ProjectDomainMapper
         {
             throw new InvalidDataException(
                 "Domain topology DTO does not match restored nodes or terminals.");
+        }
+
+        if (intermediateTerminalDtos.Count != document.IntermediateTerminals.Count ||
+            intermediateTerminalDtos.Select(item => item.Id).Distinct().Count() !=
+                intermediateTerminalDtos.Count ||
+            intermediateTerminalDtos.Select(item => item.TerminalId).Distinct().Count() !=
+                intermediateTerminalDtos.Count)
+        {
+            throw new InvalidDataException(
+                "Intermediate terminal DTOs contain duplicate or missing objects.");
+        }
+
+        foreach (IntermediateTerminal intermediateTerminal in document.IntermediateTerminals)
+        {
+            ProjectIntermediateTerminalDto intermediateDto =
+                intermediateTerminalDtos.SingleOrDefault(item =>
+                    item.Id == intermediateTerminal.Id)
+                ?? throw new InvalidDataException(
+                    $"Intermediate terminal '{intermediateTerminal.Id}' is missing from DTO.");
+            if (intermediateDto.TerminalId != intermediateTerminal.TerminalId)
+            {
+                throw new InvalidDataException(
+                    $"Intermediate terminal '{intermediateTerminal.Id}' has an inconsistent terminal reference.");
+            }
+
+            Terminal terminal = document.Terminals.Single(candidate =>
+                candidate.Id == intermediateTerminal.TerminalId);
+            if (terminal.OwnerType != TopologyOwnerType.IntermediateTerminal ||
+                terminal.OwnerId != intermediateTerminal.Id ||
+                terminal.ElectricalNodeId is not null)
+            {
+                throw new InvalidDataException(
+                    $"Intermediate terminal '{intermediateTerminal.Id}' owner relationship is invalid.");
+            }
+        }
+
+        if (cableSegmentDtos.Count != document.CableSegments.Count ||
+            cableSegmentDtos.Select(item => item.Id).Distinct().Count() != cableSegmentDtos.Count ||
+            cableSegmentDtos.Select(item => item.ConnectionId).Distinct().Count() !=
+                cableSegmentDtos.Count)
+        {
+            throw new InvalidDataException(
+                "Cable segment DTOs contain duplicate or missing objects.");
+        }
+
+        foreach (CableSegment cableSegment in document.CableSegments)
+        {
+            ProjectCableSegmentDto cableSegmentDto = cableSegmentDtos.SingleOrDefault(item =>
+                    item.Id == cableSegment.Id)
+                ?? throw new InvalidDataException(
+                    $"Cable segment '{cableSegment.Id}' is missing from DTO.");
+            if (cableSegmentDto.ConnectionId != cableSegment.ConnectionId ||
+                cableSegmentDto.StartTerminalId != cableSegment.StartTerminalId ||
+                cableSegmentDto.EndTerminalId != cableSegment.EndTerminalId ||
+                cableSegmentDto.DisplayName != cableSegment.Name ||
+                cableSegmentDto.CableType != cableSegment.CableType ||
+                cableSegmentDto.Length != cableSegment.Length ||
+                cableSegmentDto.VoltageLevel != cableSegment.VoltageLevel)
+            {
+                throw new InvalidDataException(
+                    $"Cable segment '{cableSegment.Id}' is inconsistent with its DTO.");
+            }
+
+            Connection connection = document.Connections.SingleOrDefault(candidate =>
+                    candidate.Id == cableSegment.ConnectionId)
+                ?? throw new InvalidDataException(
+                    $"Cable segment '{cableSegment.Id}' connection is missing.");
+            if (connection.Type != ConnectionType.Cable ||
+                connection.StartTerminalId != cableSegment.StartTerminalId ||
+                connection.EndTerminalId != cableSegment.EndTerminalId)
+            {
+                throw new InvalidDataException(
+                    $"Cable segment '{cableSegment.Id}' connection relationship is invalid.");
+            }
         }
 
         foreach (ElectricalNode node in document.ElectricalNodes)
@@ -916,6 +1106,7 @@ internal static class ProjectDomainMapper
     {
         TopologyOwnerType.Device => "device",
         TopologyOwnerType.InternalAggregate => "internal-aggregate",
+        TopologyOwnerType.IntermediateTerminal => "intermediate-terminal",
         _ => throw new ArgumentOutOfRangeException(nameof(value))
     };
 

@@ -18,7 +18,7 @@ public sealed class ProjectPersistenceRoundTripTests
     };
 
     [Fact]
-    public void Version5RoundTrip_OmitsFunctionAndPreservesStructureAndStableIds()
+    public void Version6RoundTrip_OmitsFunctionAndPreservesStructureAndStableIds()
     {
         DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
         RingCabinet original = GetCabinet(originalDocument);
@@ -39,7 +39,7 @@ public sealed class ProjectPersistenceRoundTripTests
             DrawingDocument restoredDocument = ProjectDomainMapper.ToDomain(opened.Domain!);
             RingCabinet restored = GetCabinet(restoredDocument);
 
-            Assert.Equal(ProjectFileFormat.Version5, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version6, opened.Manifest.FormatVersion);
             Assert.Equal(
                 original.Intervals.Select(x => x.Sequence),
                 restored.Intervals.Select(x => x.Sequence));
@@ -59,7 +59,7 @@ public sealed class ProjectPersistenceRoundTripTests
     [InlineData(ProjectFileFormat.Version2)]
     [InlineData(ProjectFileFormat.Version3)]
     [InlineData(ProjectFileFormat.Version4)]
-    public void LegacyArchive_MigratesToVersion5WithoutChangingStableIds(int sourceVersion)
+    public void LegacyArchive_MigratesToVersion6WithoutChangingStableIds(int sourceVersion)
     {
         DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
         RingCabinet original = GetCabinet(originalDocument);
@@ -75,7 +75,7 @@ public sealed class ProjectPersistenceRoundTripTests
             RingCabinet restored = GetCabinet(
                 ProjectDomainMapper.ToDomain(opened.Domain!));
 
-            Assert.Equal(ProjectFileFormat.Version5, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version6, opened.Manifest.FormatVersion);
             if (sourceVersion <= ProjectFileFormat.Version2)
             {
                 Assert.Equal(
@@ -247,7 +247,7 @@ public sealed class ProjectPersistenceRoundTripTests
     }
 
     [Fact]
-    public void Version5RoundTrip_PoleSwitchPreservesStableIdsAndStateData()
+    public void Version6RoundTrip_PoleSwitchPreservesStableIdsAndStateData()
     {
         DrawingDocument originalDocument = CreateDocumentWithPoleSwitch();
         Pole originalPole = Assert.Single(originalDocument.Devices.OfType<Pole>());
@@ -273,7 +273,7 @@ public sealed class ProjectPersistenceRoundTripTests
             SwitchDevice restoredSwitch = Assert.Single(
                 restored.Devices.OfType<SwitchDevice>());
 
-            Assert.Equal(ProjectFileFormat.Version5, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version6, opened.Manifest.FormatVersion);
             Assert.Equal(originalPole.Id, restoredPole.Id);
             Assert.Equal(originalSwitch.Id, restoredSwitch.Id);
             Assert.Equal(originalSwitch.SwitchKind, restoredSwitch.SwitchKind);
@@ -292,7 +292,7 @@ public sealed class ProjectPersistenceRoundTripTests
     }
 
     [Fact]
-    public void Version5RoundTrip_PoleSwitchAndCableTerminationPreserveAttachments()
+    public void Version6RoundTrip_PoleSwitchAndCableTerminationPreserveAttachments()
     {
         DrawingDocument originalDocument = CreateDocumentWithPoleAttachments();
         string filePath = CreateTemporaryPath("v5-mixed-pole-attachments");

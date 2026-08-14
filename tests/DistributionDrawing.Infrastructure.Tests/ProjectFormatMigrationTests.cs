@@ -7,16 +7,16 @@ namespace DistributionDrawing.Infrastructure.Tests;
 public sealed class ProjectFormatMigrationTests
 {
     [Fact]
-    public void CurrentVersion_IsVersion5()
+    public void CurrentVersion_IsVersion6()
     {
-        Assert.Equal(ProjectFileFormat.Version5, ProjectFileFormat.CurrentVersion);
-        Assert.Equal(5, ProjectFileFormat.CurrentVersion);
+        Assert.Equal(ProjectFileFormat.Version6, ProjectFileFormat.CurrentVersion);
+        Assert.Equal(6, ProjectFileFormat.CurrentVersion);
     }
 
     [Theory]
     [InlineData(ProjectFileFormat.Version1)]
     [InlineData(ProjectFileFormat.Version2)]
-    public void LegacyMigration_AppliesSequentialStepsAndProducesV5Shape(int sourceVersion)
+    public void LegacyMigration_AppliesSequentialStepsAndProducesV6Shape(int sourceVersion)
     {
         Guid projectId = Guid.NewGuid();
         JsonObject payload = CreatePayload(
@@ -108,7 +108,7 @@ public sealed class ProjectFormatMigrationTests
     }
 
     [Fact]
-    public void Version5Payload_DoesNotRunMigrationAgain()
+    public void Version6Payload_DoesNotRunMigrationAgain()
     {
         JsonObject payload = CreatePayload("负1间隔", "load-switch-interval", 1);
         JsonObject domain = Assert.IsType<JsonObject>(payload["domain"]);
@@ -119,11 +119,26 @@ public sealed class ProjectFormatMigrationTests
 
         JsonObject migrated = ProjectFormatMigration.Migrate(
             payload,
-            ProjectFileFormat.Version5,
+            ProjectFileFormat.Version6,
             Guid.NewGuid());
 
         Assert.Single(Assert.IsType<JsonArray>(
             Assert.IsType<JsonObject>(migrated["domain"])["switchDevices"]));
+    }
+
+    [Fact]
+    public void Version5Payload_AddsEmptyCableCollections()
+    {
+        JsonObject payload = CreatePayload("负1间隔", "load-switch-interval", 1);
+
+        JsonObject migrated = ProjectFormatMigration.Migrate(
+            payload,
+            ProjectFileFormat.Version5,
+            Guid.NewGuid());
+
+        JsonObject domain = Assert.IsType<JsonObject>(migrated["domain"]);
+        Assert.Empty(Assert.IsType<JsonArray>(domain["cableSegments"]));
+        Assert.Empty(Assert.IsType<JsonArray>(domain["intermediateTerminals"]));
     }
 
     [Fact]

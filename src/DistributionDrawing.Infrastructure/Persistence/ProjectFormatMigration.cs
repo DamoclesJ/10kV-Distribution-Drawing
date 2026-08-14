@@ -44,6 +44,12 @@ internal static class ProjectFormatMigration
             version = ProjectFileFormat.Version5;
         }
 
+        if (version == ProjectFileFormat.Version5)
+        {
+            MigrateVersion5ToVersion6(migrated);
+            version = ProjectFileFormat.Version6;
+        }
+
         if (version != ProjectFileFormat.CurrentVersion)
         {
             throw new InvalidDataException(
@@ -132,6 +138,17 @@ internal static class ProjectFormatMigration
         }
 
         domain["switchDevices"] ??= new JsonArray();
+    }
+
+    private static void MigrateVersion5ToVersion6(JsonObject payload)
+    {
+        if (payload["domain"] is not JsonObject domain)
+        {
+            return;
+        }
+
+        domain["cableSegments"] ??= new JsonArray();
+        domain["intermediateTerminals"] ??= new JsonArray();
     }
 
     private static JsonObject RequireObject(JsonNode? node, string path)

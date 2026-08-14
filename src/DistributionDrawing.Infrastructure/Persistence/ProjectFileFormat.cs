@@ -14,7 +14,9 @@ public static class ProjectFileFormat
 
     public const int Version5 = 5;
 
-    public const int CurrentVersion = Version5;
+    public const int Version6 = 6;
+
+    public const int CurrentVersion = Version6;
 
     public const string ManifestEntryName = "manifest.json";
 
