@@ -1082,6 +1082,7 @@ internal static class ProjectDomainMapper
     {
         IntervalKind.LoadSwitchInterval => "load-switch-interval",
         IntervalKind.IntegratedFeederInterval => "integrated-feeder-interval",
+        IntervalKind.PTInterval => "pt-interval",
         _ => throw new ArgumentOutOfRangeException(nameof(value))
     };
 

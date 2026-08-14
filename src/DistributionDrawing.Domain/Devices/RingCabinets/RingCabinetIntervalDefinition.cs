@@ -91,6 +91,27 @@ public sealed class RingCabinetIntervalDefinition
             groundingStructureKind);
     }
 
+    public static RingCabinetIntervalDefinition CreatePT(
+        int bayIndex,
+        SwitchState initialIsolationSwitchState,
+        SwitchState initialGroundSwitchState,
+        string? displayName = null)
+    {
+        EnsureCreatableBayIndex(bayIndex);
+        EnsureDefined(initialIsolationSwitchState, nameof(initialIsolationSwitchState));
+        EnsureDefined(initialGroundSwitchState, nameof(initialGroundSwitchState));
+
+        return new RingCabinetIntervalDefinition(
+            bayIndex,
+            IntervalKind.PTInterval,
+            displayName,
+            null,
+            initialIsolationSwitchState,
+            null,
+            initialGroundSwitchState,
+            null);
+    }
+
     private static void EnsureCreatableBayIndex(int bayIndex)
     {
         if (bayIndex < 1)

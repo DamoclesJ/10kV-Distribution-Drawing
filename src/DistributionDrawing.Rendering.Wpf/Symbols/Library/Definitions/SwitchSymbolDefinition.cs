@@ -75,6 +75,18 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
                     3.5));
         }
 
+        if (context.State is SymbolVisualState.Open or SymbolVisualState.Closed)
+        {
+            elements.Add(
+                new SceneText(
+                    new DocumentPoint(
+                        context.Origin.XMillimeters + context.WidthMillimeters + 2,
+                        context.Origin.YMillimeters + context.HeightMillimeters / 2),
+                    context.State == SymbolVisualState.Closed ? "合" : "分",
+                    context.Stroke,
+                    3.5));
+        }
+
         return elements;
     }
 }

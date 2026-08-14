@@ -183,6 +183,41 @@ public sealed class SwitchAssembly
             CreateIntegratedFeederRules());
     }
 
+    internal static SwitchAssembly CreatePT(
+        Guid assemblyId,
+        Guid parentIntervalId,
+        SwitchDevice isolationSwitch,
+        SwitchDevice groundSwitch)
+    {
+        ArgumentNullException.ThrowIfNull(isolationSwitch);
+        ArgumentNullException.ThrowIfNull(groundSwitch);
+
+        if (isolationSwitch.SwitchKind != SwitchKind.IsolationSwitch)
+        {
+            throw new ArgumentException(
+                "The PT interval requires an isolation switch.",
+                nameof(isolationSwitch));
+        }
+
+        if (groundSwitch.SwitchKind != SwitchKind.GroundSwitch)
+        {
+            throw new ArgumentException(
+                "The PT interval requires a ground switch.",
+                nameof(groundSwitch));
+        }
+
+        EnsureCabinetIntervalMember(isolationSwitch, parentIntervalId);
+        EnsureCabinetIntervalMember(groundSwitch, parentIntervalId);
+
+        return new SwitchAssembly(
+            assemblyId,
+            parentIntervalId,
+            SwitchAssemblyType.PT,
+            [isolationSwitch, groundSwitch],
+            "pt/v1",
+            []);
+    }
+
     internal static string GetIntegratedFeederRuleSetRef(
         GroundingStructureKind groundingStructureKind)
     {

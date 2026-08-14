@@ -127,6 +127,21 @@ public sealed class ProjectFormatMigrationTests
     }
 
     [Fact]
+    public void Version6Payload_PreservesPTIntervalKind()
+    {
+        JsonObject payload = CreatePayload("负7 PT间隔", "pt-interval", 1);
+
+        JsonObject migrated = ProjectFormatMigration.Migrate(
+            payload,
+            ProjectFileFormat.Version6,
+            Guid.NewGuid());
+
+        Assert.Equal(
+            "pt-interval",
+            GetInterval(migrated)["intervalKind"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void Version5Payload_AddsEmptyCableCollections()
     {
         JsonObject payload = CreatePayload("负1间隔", "load-switch-interval", 1);

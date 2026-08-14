@@ -13,7 +13,8 @@ public sealed class RingCabinetIntervalLayout
         double heightMillimeters = 90,
         DocumentPoint? sequenceLabelOffset = null,
         DocumentPoint? nameLabelOffset = null,
-        IEnumerable<RingCabinetSwitchLayout>? switchLayouts = null)
+        IEnumerable<RingCabinetSwitchLayout>? switchLayouts = null,
+        DocumentPoint? ptSymbolPosition = null)
     {
         if (intervalId == Guid.Empty)
         {
@@ -35,6 +36,7 @@ public sealed class RingCabinetIntervalLayout
         HeightMillimeters = heightMillimeters;
         SequenceLabelOffset = sequenceLabelOffset ?? new DocumentPoint(2, -8);
         NameLabelOffset = nameLabelOffset ?? new DocumentPoint(2, heightMillimeters + 5);
+        PTSymbolPosition = ptSymbolPosition;
 
         if (switchLayouts is not null)
         {
@@ -56,6 +58,8 @@ public sealed class RingCabinetIntervalLayout
     public DocumentPoint SequenceLabelOffset { get; }
 
     public DocumentPoint NameLabelOffset { get; }
+
+    public DocumentPoint? PTSymbolPosition { get; }
 
     public IReadOnlyDictionary<Guid, RingCabinetSwitchLayout> SwitchLayouts => _switches;
 

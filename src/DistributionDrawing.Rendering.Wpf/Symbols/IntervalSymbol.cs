@@ -16,6 +16,7 @@ public sealed class IntervalSymbol
         SymbolLibrary = symbolLibrary;
         Register(new LoadSwitchIntervalSymbol());
         Register(new IntegratedFeederIntervalSymbol());
+        Register(new PTIntervalSymbol());
     }
 
     public SymbolLibrary SymbolLibrary { get; }

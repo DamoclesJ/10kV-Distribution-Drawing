@@ -4,5 +4,6 @@ public enum CabinetCompositionKind
 {
     LoadSwitchOnly,
     IntegratedFeederOnly,
+    PTOnly,
     Mixed
 }

@@ -129,7 +129,22 @@ public sealed class RingCabinetInterval
                         SwitchKind.IsolationSwitch,
                         SwitchKind.CircuitBreaker,
                         SwitchKind.GroundSwitch
-                    ]);
+                ]);
+                break;
+
+            case IntervalKind.PTInterval:
+                if (groundingStructureKind is not null || intermediateNodeId is not null)
+                {
+                    throw new ArgumentException(
+                        "A PT interval cannot have integrated-feeder fields.");
+                }
+
+                EnsureSwitchStructure(
+                    devices,
+                    switchAssembly,
+                    id,
+                    SwitchAssemblyType.PT,
+                    [SwitchKind.IsolationSwitch, SwitchKind.GroundSwitch]);
                 break;
 
             default:

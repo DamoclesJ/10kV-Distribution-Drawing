@@ -48,6 +48,7 @@ public sealed class RingCabinetLayoutFactory
         {
             IntervalKind.LoadSwitchInterval => CreateLoadSwitchLayouts(interval),
             IntervalKind.IntegratedFeederInterval => CreateIntegratedFeederLayouts(interval),
+            IntervalKind.PTInterval => CreatePTLayouts(interval),
             _ => throw new NotSupportedException(
                 $"No initial layout strategy exists for '{interval.IntervalKind}'.")
         };
@@ -70,7 +71,10 @@ public sealed class RingCabinetLayoutFactory
             new DocumentPoint(x, CabinetPadding),
             IntervalWidth,
             IntervalHeight,
-            switchLayouts: switches);
+            switchLayouts: switches,
+            ptSymbolPosition: interval.IntervalKind == IntervalKind.PTInterval
+                ? new DocumentPoint(14, 45)
+                : null);
     }
 
     private static IReadOnlyList<RingCabinetSwitchLayout> CreateLoadSwitchLayouts(
@@ -105,6 +109,16 @@ public sealed class RingCabinetLayoutFactory
             CreateSwitchLayout(interval, upper, new DocumentPoint(18, 28)),
             CreateSwitchLayout(interval, lower, new DocumentPoint(18, 70)),
             CreateSwitchLayout(interval, SwitchKind.GroundSwitch, groundPosition)
+        ];
+    }
+
+    private static IReadOnlyList<RingCabinetSwitchLayout> CreatePTLayouts(
+        RingCabinetInterval interval)
+    {
+        return
+        [
+            CreateSwitchLayout(interval, SwitchKind.IsolationSwitch, new DocumentPoint(13, 24)),
+            CreateSwitchLayout(interval, SwitchKind.GroundSwitch, new DocumentPoint(13, 68))
         ];
     }
 
