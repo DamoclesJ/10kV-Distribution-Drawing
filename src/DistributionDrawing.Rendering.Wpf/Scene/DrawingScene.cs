@@ -1,5 +1,7 @@
 using System.Windows.Media;
+using DistributionDrawing.Application.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using ApplicationSelectionTargetKind = DistributionDrawing.Application.Interaction.SelectionTargetKind;
 
 namespace DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -18,7 +20,14 @@ public sealed class DrawingScene
     public SelectionHitTestIndex HitTestIndex { get; }
 }
 
-public abstract record SceneElement;
+public abstract record SceneElement
+{
+    public ApplicationSelectionTargetKind? TargetKind { get; init; }
+
+    public Guid? TargetId { get; init; }
+
+    public DocumentRect? HitTestBounds { get; init; }
+}
 
 public sealed record SceneLine(
     DocumentPoint Start,
