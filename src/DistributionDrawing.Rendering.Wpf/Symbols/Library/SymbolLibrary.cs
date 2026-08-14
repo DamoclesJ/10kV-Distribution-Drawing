@@ -24,6 +24,7 @@ public sealed class SymbolLibrary
         Register(new SwitchSymbolDefinition(SymbolKind.GroundSwitch));
         Register(new SwitchSymbolDefinition(SymbolKind.DropoutFuse));
         Register(new CableTerminationSymbolDefinition());
+        Register(new JointSymbolDefinition());
         Register(new FrameSymbolDefinition(SymbolKind.RingCabinet));
         Register(new FrameSymbolDefinition(SymbolKind.RingCabinetInterval));
     }
@@ -157,6 +158,23 @@ public sealed class SymbolLibrary
                 1,
                 end: end,
                 label: label));
+    }
+
+    public IReadOnlyList<SceneElement> CreateJoint(
+        DocumentPoint position,
+        double sizeMillimeters,
+        string? label,
+        DocumentPoint labelPosition)
+    {
+        return Create(
+            SymbolKind.Joint,
+            new SymbolRenderContext(
+                position,
+                sizeMillimeters,
+                sizeMillimeters,
+                labelOrigin: labelPosition,
+                label: label,
+                fill: Colors.White));
     }
 
     public IReadOnlyList<SceneElement> CreateGroundingLine(

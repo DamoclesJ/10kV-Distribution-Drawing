@@ -12,6 +12,7 @@ public enum SymbolKind
     GroundSwitch,
     DropoutFuse,
     CableTermination,
+    Joint,
     RingCabinet,
     RingCabinetInterval
 }
