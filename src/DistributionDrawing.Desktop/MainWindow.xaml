@@ -12,9 +12,9 @@
   <DockPanel>
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="文件">
-        <MenuItem Header="新建工程" Click="OnNewProject" />
-        <MenuItem Header="打开工程" Click="OnOpenProject" />
-        <MenuItem Header="保存工程" Click="OnSaveProject" />
+        <MenuItem Header="新建工程" Command="{Binding NewProjectCommand}" />
+        <MenuItem Header="打开工程" Command="{Binding OpenProjectCommand}" />
+        <MenuItem Header="保存工程" Command="{Binding SaveProjectCommand}" />
         <MenuItem Header="另存为" Click="OnSaveProjectAs" />
         <Separator />
         <MenuItem Header="关闭工程" Click="OnCloseProject" />
@@ -26,13 +26,13 @@
         <MenuItem Header="绘制架空线" Click="OnBeginOverheadLine" />
         <MenuItem Header="取消放置" Click="OnCancelPlacement" />
         <Separator />
-        <MenuItem Header="删除所选对象" Click="OnRemoveSelectedDevice" />
+        <MenuItem Header="删除所选对象" Command="{Binding DeleteCommand}" />
       </MenuItem>
       <MenuItem Header="编辑">
         <MenuItem Header="撤销"
-                  Click="OnUndo" />
+                  Command="{Binding UndoCommand}" />
         <MenuItem Header="重做"
-                  Click="OnRedo" />
+                  Command="{Binding RedoCommand}" />
         <MenuItem Header="添加工作地线"
                   Click="OnBeginAddGroundingPoint" />
         <MenuItem Header="添加工作范围"

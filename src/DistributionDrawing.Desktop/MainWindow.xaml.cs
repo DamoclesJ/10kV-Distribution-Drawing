@@ -45,6 +45,7 @@ public partial class MainWindow : Window
     private readonly OverheadLineConnectionController _overheadLineConnection;
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
     private readonly DrawingToolCoordinator _drawingTools;
+    private MainWindowViewModel _shellViewModel = null!;
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
@@ -58,7 +59,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = new MainWindowViewModel(new DesktopShellService());
         _propertyEditor = new(_selectionResolver, _commandStack);
         PropertyInspectorPanel.DataContext = _propertyInspector;
         _selectionManager.SelectionChanged += OnSelectionChanged;
@@ -81,13 +81,26 @@ public partial class MainWindow : Window
         _cableTerminationAttachment.SceneChanged += OnDrawingToolVisualChanged;
         _viewport.ViewChanged += OnViewportChanged;
         DrawingSurface.SetViewTransform(_viewport.Transform);
+        _shellViewModel = new MainWindowViewModel(
+            new DesktopShellService(),
+            () => _workspace.NewProject(),
+            () => _workspace.OpenProject(),
+            () => _workspace.SaveProject(),
+            OnUndoRequested,
+            OnRedoRequested,
+            OnDeleteRequested,
+            OnCancelRequested,
+            () => _commandStack.CanUndo,
+            () => _commandStack.CanRedo,
+            () => _selectionManager.Selected is not null);
+        DataContext = _shellViewModel;
     }
 
-    private void OnNewProject(object sender, RoutedEventArgs e) => _workspace.NewProject();
+    private void OnNewProject(object sender, RoutedEventArgs e) => _shellViewModel.NewProjectCommand.Execute(null);
 
-    private void OnOpenProject(object sender, RoutedEventArgs e) => _workspace.OpenProject();
+    private void OnOpenProject(object sender, RoutedEventArgs e) => _shellViewModel.OpenProjectCommand.Execute(null);
 
-    private void OnSaveProject(object sender, RoutedEventArgs e) => _workspace.SaveProject();
+    private void OnSaveProject(object sender, RoutedEventArgs e) => _shellViewModel.SaveProjectCommand.Execute(null);
 
     private void OnSaveProjectAs(object sender, RoutedEventArgs e) => _workspace.SaveProjectAs();
 
@@ -154,7 +167,9 @@ public partial class MainWindow : Window
         _drawingTools.Cancel();
     }
 
-    private void OnRemoveSelectedDevice(object sender, RoutedEventArgs e)
+    private void OnRemoveSelectedDevice(object sender, RoutedEventArgs e) => OnDeleteRequested();
+
+    private void OnDeleteRequested()
     {
         try
         {
@@ -169,6 +184,37 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+        {
+            if (e.Key == System.Windows.Input.Key.Z)
+            {
+                _shellViewModel.UndoCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == System.Windows.Input.Key.Y)
+            {
+                _shellViewModel.RedoCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == System.Windows.Input.Key.S)
+            {
+                _shellViewModel.SaveProjectCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (e.Key == System.Windows.Input.Key.Delete)
+        {
+            _shellViewModel.DeleteCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == System.Windows.Input.Key.Escape)
         {
             if (_deviceDrag.IsActive)
@@ -185,10 +231,16 @@ public partial class MainWindow : Window
                 return;
             }
 
-            _drawingTools.Cancel();
+            _shellViewModel.CancelCommand.Execute(null);
             e.Handled = true;
         }
     }
+
+    private void OnCancelRequested() => _drawingTools.Cancel();
+
+    private void OnUndoRequested() => OnUndo(this, new RoutedEventArgs());
+
+    private void OnRedoRequested() => OnRedo(this, new RoutedEventArgs());
 
     private void OnDrawingToolVisualChanged(object? sender, EventArgs e)
     {
@@ -286,6 +338,7 @@ public partial class MainWindow : Window
 
     private void OnWorkspaceSessionChanged(object? sender, EventArgs e)
     {
+        _shellViewModel.RefreshCommandStates();
         _deviceDrag.Cancel();
         DrawingSurface.ReleaseMouseCapture();
         EndCanvasPan();
@@ -1052,6 +1105,7 @@ public partial class MainWindow : Window
 
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
+        _shellViewModel.RefreshCommandStates();
         _propertyInspector.Apply(
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
