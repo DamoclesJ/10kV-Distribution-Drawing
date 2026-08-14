@@ -82,9 +82,9 @@ public sealed class CableSegment
 
     public string Name { get; }
 
-    public string CableType { get; }
+    public string CableType { get; private set; }
 
-    public double Length { get; }
+    public double Length { get; private set; }
 
     public string VoltageLevel { get; }
 
@@ -93,4 +93,28 @@ public sealed class CableSegment
     public Guid StartTerminalId { get; }
 
     public Guid EndTerminalId { get; }
+
+    public void ChangeCableType(string cableType)
+    {
+        if (string.IsNullOrWhiteSpace(cableType))
+        {
+            throw new ArgumentException(
+                "Cable segment cable type is required.",
+                nameof(cableType));
+        }
+
+        CableType = cableType.Trim();
+    }
+
+    public void ChangeLength(double length)
+    {
+        if (double.IsNaN(length) || double.IsInfinity(length) || length <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(length),
+                "Cable segment length must be greater than zero.");
+        }
+
+        Length = length;
+    }
 }

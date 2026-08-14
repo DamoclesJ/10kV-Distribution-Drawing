@@ -30,6 +30,26 @@ public sealed class CablePersistenceV6Tests
     }
 
     [Fact]
+    public void EditedCableSegment_RoundTrip_PreservesEditedProperties()
+    {
+        DrawingDocument original = CreateDocumentWithIntermediateTerminals(2);
+        IntermediateTerminal[] terminals = original.IntermediateTerminals.ToArray();
+        CableSegmentCreationResult cable = CreateCable(original, terminals[0], terminals[1], "A-B");
+        new CreateCableSegmentCommand(original, cable).Execute();
+
+        cable.CableSegment.ChangeCableType("YJV");
+        cable.CableSegment.ChangeLength(125);
+
+        DrawingDocument restored = RoundTrip(original);
+        CableSegment restoredCable = Assert.Single(restored.CableSegments);
+
+        Assert.Equal("YJV", restoredCable.CableType);
+        Assert.Equal(125, restoredCable.Length);
+        Assert.Equal(cable.CableSegment.Id, restoredCable.Id);
+        Assert.Equal(cable.CableSegment.ConnectionId, restoredCable.ConnectionId);
+    }
+
+    [Fact]
     public void SplitCable_RoundTrip_PreservesSegmentsIntermediateTerminalAndConnections()
     {
         DrawingDocument original = CreateDocumentWithIntermediateTerminals(2);
