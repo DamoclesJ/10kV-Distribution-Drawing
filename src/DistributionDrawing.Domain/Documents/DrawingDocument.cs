@@ -350,6 +350,56 @@ public sealed class DrawingDocument
         _connections.Add(connection);
     }
 
+    public SwitchStateChangeResult ChangeSwitchState(
+        Guid switchDeviceId,
+        SwitchState targetState)
+    {
+        if (!Enum.IsDefined(targetState))
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetState));
+        }
+
+        SwitchDevice switchDevice = _devices
+            .OfType<SwitchDevice>()
+            .SingleOrDefault(device => device.Id == switchDeviceId)
+            ?? throw new InvalidOperationException(
+                $"Switch '{switchDeviceId}' does not exist.");
+        SwitchState previousState = switchDevice.SwitchState
+            ?? throw new InvalidOperationException(
+                $"Switch '{switchDeviceId}' has no switch state.");
+
+        switch (switchDevice.InstallationType)
+        {
+            case SwitchInstallationType.Pole:
+                if (_switchAssemblies.Any(assembly =>
+                        assembly.MemberSwitchIds.Contains(switchDeviceId)))
+                {
+                    throw new InvalidOperationException(
+                        $"Pole switch '{switchDeviceId}' cannot belong to a switch assembly.");
+                }
+
+                switchDevice.SetSwitchState(targetState);
+                break;
+
+            case SwitchInstallationType.CabinetInterval:
+                SwitchAssembly assembly = _switchAssemblies.SingleOrDefault(candidate =>
+                        candidate.MemberSwitchIds.Contains(switchDeviceId))
+                    ?? throw new InvalidOperationException(
+                        $"Cabinet switch '{switchDeviceId}' has no switch assembly.");
+                assembly.ChangeSwitchState(switchDeviceId, targetState);
+                break;
+
+            default:
+                throw new InvalidOperationException(
+                    $"Switch '{switchDeviceId}' has an unsupported installation type.");
+        }
+
+        return new SwitchStateChangeResult(
+            switchDevice,
+            previousState,
+            targetState);
+    }
+
     public Connection RemoveConnection(Guid connectionId)
     {
         Connection connection = _connections.SingleOrDefault(existing => existing.Id == connectionId)

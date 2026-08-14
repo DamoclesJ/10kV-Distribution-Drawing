@@ -253,6 +253,7 @@ public sealed class ProjectPersistenceRoundTripTests
         Pole originalPole = Assert.Single(originalDocument.Devices.OfType<Pole>());
         SwitchDevice originalSwitch = Assert.Single(
             originalDocument.Devices.OfType<SwitchDevice>());
+        originalDocument.ChangeSwitchState(originalSwitch.Id, SwitchState.Closed);
         string filePath = CreateTemporaryPath("v5-pole-switch");
 
         try
