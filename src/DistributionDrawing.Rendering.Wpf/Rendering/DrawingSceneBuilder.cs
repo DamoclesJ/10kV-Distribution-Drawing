@@ -14,17 +14,15 @@ namespace DistributionDrawing.Rendering.Wpf.Rendering;
 public sealed class DrawingSceneBuilder
 {
     private readonly SymbolLibrary _symbolLibrary;
-    private readonly PoleSymbol _poleSymbol;
-    private readonly AttachmentSymbol _attachmentSymbol;
+    private readonly MixedPoleRenderer _mixedPoleRenderer;
     private readonly RingCabinetRenderer _ringCabinetRenderer;
     private readonly ProfessionalSceneBuilder _professionalSceneBuilder;
 
     public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
     {
         _symbolLibrary = symbolLibrary ?? new SymbolLibrary();
-        _poleSymbol = new PoleSymbol(_symbolLibrary);
-        _attachmentSymbol = new AttachmentSymbol(_symbolLibrary);
         _ringCabinetRenderer = new RingCabinetRenderer(_symbolLibrary);
+        _mixedPoleRenderer = new MixedPoleRenderer(_symbolLibrary);
         _professionalSceneBuilder = new ProfessionalSceneBuilder(_symbolLibrary);
     }
 
@@ -195,6 +193,7 @@ public sealed class DrawingSceneBuilder
         var elements = new List<SceneElement>();
         var hitTestEntries = new List<SelectionHitTestEntry>();
         var poleById = poles.ToDictionary(pole => pole.Id);
+        PoleAttachment[] poleAttachments = attachments.ToArray();
         var deviceById = devices.ToDictionary(device => device.Id);
         var connectionById = connections?.ToDictionary(connection => connection.Id);
 
@@ -264,7 +263,53 @@ public sealed class DrawingSceneBuilder
                     $"No layout exists for pole '{pole.Id}'.");
             }
 
-            elements.AddRange(_poleSymbol.CreateElements(pole, poleLayout));
+            var switchInputs = new List<SwitchAttachmentRenderInput>();
+            var cableTerminationInputs = new List<PoleAttachmentRenderInput>();
+            foreach (PoleAttachment attachment in poleAttachments.Where(
+                         attachment => attachment.PoleId == pole.Id))
+            {
+                if (!deviceById.TryGetValue(
+                        attachment.AttachedDeviceId,
+                        out Device? attachedDevice))
+                {
+                    throw new InvalidOperationException(
+                        $"No attached device exists for attachment '{attachment.AttachmentId}'.");
+                }
+
+                if (!layout.Attachments.TryGetValue(
+                        attachment.AttachmentId,
+                        out AttachmentLayout? attachmentLayout) ||
+                    attachmentLayout is null)
+                {
+                    throw new InvalidOperationException(
+                        $"No layout exists for attachment '{attachment.AttachmentId}'.");
+                }
+
+                switch (attachedDevice)
+                {
+                    case SwitchDevice switchDevice:
+                        switchInputs.Add(new SwitchAttachmentRenderInput(
+                            attachment,
+                            switchDevice,
+                            attachmentLayout));
+                        break;
+                    case CableTermination cableTermination:
+                        cableTerminationInputs.Add(new PoleAttachmentRenderInput(
+                            attachment,
+                            cableTermination,
+                            attachmentLayout));
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"Device '{attachedDevice.Id}' cannot be rendered as a pole attachment.");
+                }
+            }
+
+            elements.AddRange(_mixedPoleRenderer.Render(
+                pole,
+                poleLayout,
+                switchInputs,
+                cableTerminationInputs));
             hitTestEntries.Add(
                 new SelectionHitTestEntry(
                     new SelectionReference(SelectionTargetKind.Device, pole.Id),
@@ -276,7 +321,7 @@ public sealed class DrawingSceneBuilder
                     20));
         }
 
-        foreach (PoleAttachment attachment in attachments)
+        foreach (PoleAttachment attachment in poleAttachments)
         {
             if (!poleById.TryGetValue(attachment.PoleId, out Pole pole) ||
                 !layout.Poles.TryGetValue(pole.Id, out PoleLayout poleLayout))
@@ -285,9 +330,7 @@ public sealed class DrawingSceneBuilder
                     $"No pole or pole layout exists for attachment '{attachment.AttachmentId}'.");
             }
 
-            if (!deviceById.TryGetValue(
-                    attachment.AttachedDeviceId,
-                    out Device attachedDevice))
+            if (!deviceById.ContainsKey(attachment.AttachedDeviceId))
             {
                 throw new InvalidOperationException(
                     $"No attached device exists for attachment '{attachment.AttachmentId}'.");
@@ -295,18 +338,13 @@ public sealed class DrawingSceneBuilder
 
             if (!layout.Attachments.TryGetValue(
                     attachment.AttachmentId,
-                    out AttachmentLayout attachmentLayout))
+                    out AttachmentLayout? attachmentLayout) ||
+                attachmentLayout is null)
             {
                 throw new InvalidOperationException(
                     $"No layout exists for attachment '{attachment.AttachmentId}'.");
             }
 
-            elements.AddRange(
-                _attachmentSymbol.CreateElements(
-                    attachment,
-                    attachedDevice,
-                    poleLayout,
-                    attachmentLayout));
             hitTestEntries.Add(
                 new SelectionHitTestEntry(
                     new SelectionReference(

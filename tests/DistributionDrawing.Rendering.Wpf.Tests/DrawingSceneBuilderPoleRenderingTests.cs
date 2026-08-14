@@ -1,0 +1,119 @@
+using DistributionDrawing.Application.Devices;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Rendering;
+using DistributionDrawing.Rendering.Wpf.Scene;
+using Xunit;
+
+namespace DistributionDrawing.Rendering.Wpf.Tests;
+
+public sealed class DrawingSceneBuilderPoleRenderingTests
+{
+    [Fact]
+    public void BuildMixedPole_UsesUnifiedLabelsAndPreservesSelectionAndDomain()
+    {
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P-301",
+            PoleType.Cement,
+            null,
+            [SwitchKind.IsolationSwitch],
+            includeCableTerminal: true);
+        var document = new DrawingDocument(Guid.NewGuid(), "Scene builder pole test");
+        document.AddDevice(result.Pole);
+        foreach (Device device in result.Devices)
+        {
+            document.AddDevice(device);
+        }
+
+        foreach (ElectricalNode node in result.ElectricalNodes)
+        {
+            document.AddElectricalNode(node);
+        }
+
+        foreach (Terminal terminal in result.Terminals)
+        {
+            document.AddTerminal(terminal);
+        }
+
+        foreach (PoleAttachment attachment in result.Attachments)
+        {
+            document.AddPoleAttachment(attachment);
+        }
+
+        SwitchDevice switchDevice = Assert.Single(result.Devices.OfType<SwitchDevice>());
+        CableTermination cableTermination = Assert.Single(result.Devices.OfType<CableTermination>());
+        PoleAttachment switchAttachment = Assert.Single(
+            result.Attachments,
+            attachment => attachment.AttachedDeviceId == switchDevice.Id);
+        PoleAttachment cableAttachment = Assert.Single(
+            result.Attachments,
+            attachment => attachment.AttachedDeviceId == cableTermination.Id);
+        var drawingLayout = new DrawingLayout();
+        drawingLayout.Add(new PoleLayout(result.Pole.Id, new DocumentPoint(10, 20)));
+        drawingLayout.Add(new AttachmentLayout(
+            switchAttachment.AttachmentId,
+            new DocumentPoint(0, 0)));
+        drawingLayout.Add(new AttachmentLayout(
+            cableAttachment.AttachmentId,
+            new DocumentPoint(0, 0)));
+        var runtimeLayout = new RuntimeLayoutDocument(
+            drawingLayout,
+            new Dictionary<Guid, RingCabinetLayout>());
+        var builder = new DrawingSceneBuilder();
+        Guid poleId = result.Pole.Id;
+        Guid switchId = switchDevice.Id;
+        Guid cableId = cableTermination.Id;
+        SwitchState switchState = switchDevice.SwitchState;
+
+        DrawingScene scene = builder.Build(document, runtimeLayout);
+        SceneText[] labels = scene.Elements.OfType<SceneText>().ToArray();
+
+        Assert.Equal(3, labels.Length);
+        Assert.Equal(1, labels.Count(text => text.Text == "P-301"));
+        Assert.Equal(1, labels.Count(text => text.Text == switchDevice.DisplayName));
+        Assert.Equal(1, labels.Count(text => text.Text == cableTermination.DisplayName));
+        Assert.Contains(scene.HitTestIndex.Entries, entry =>
+            entry.Reference.TargetId == poleId);
+        Assert.Contains(scene.HitTestIndex.Entries, entry =>
+            entry.Reference.TargetId == switchAttachment.AttachmentId);
+        Assert.Contains(scene.HitTestIndex.Entries, entry =>
+            entry.Reference.TargetId == cableAttachment.AttachmentId);
+        Assert.Equal(poleId, result.Pole.Id);
+        Assert.Equal(switchId, switchDevice.Id);
+        Assert.Equal(cableId, cableTermination.Id);
+        Assert.Equal(switchState, switchDevice.SwitchState);
+    }
+
+    [Fact]
+    public void BuildPoleAgainAfterLayoutMove_UpdatesPoleLabelPosition()
+    {
+        PoleCreationResult result = new PoleCreationFactory().Create(
+            "P-302",
+            PoleType.Cement,
+            null);
+        var document = new DrawingDocument(Guid.NewGuid(), "Scene builder move test");
+        document.AddDevice(result.Pole);
+        foreach (Terminal terminal in result.Terminals)
+        {
+            document.AddTerminal(terminal);
+        }
+
+        var layout = new DrawingLayout();
+        layout.Add(new PoleLayout(result.Pole.Id, new DocumentPoint(10, 20)));
+        var runtimeLayout = new RuntimeLayoutDocument(
+            layout,
+            new Dictionary<Guid, RingCabinetLayout>());
+        var builder = new DrawingSceneBuilder();
+
+        SceneText first = Assert.Single(
+            builder.Build(document, runtimeLayout).Elements.OfType<SceneText>());
+        layout.Replace(new PoleLayout(result.Pole.Id, new DocumentPoint(40, 50)));
+        SceneText second = Assert.Single(
+            builder.Build(document, runtimeLayout).Elements.OfType<SceneText>());
+
+        Assert.Equal("P-302", first.Text);
+        Assert.Equal("P-302", second.Text);
+        Assert.NotEqual(first.Origin, second.Origin);
+    }
+}
