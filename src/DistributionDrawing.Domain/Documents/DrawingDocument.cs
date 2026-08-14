@@ -14,6 +14,7 @@ public sealed class DrawingDocument
     private readonly List<SwitchAssembly> _switchAssemblies = [];
     private readonly List<Connection> _connections = [];
     private readonly List<CableSegment> _cableSegments = [];
+    private readonly List<IntermediateTerminal> _intermediateTerminals = [];
     private readonly List<PoleAttachment> _poleAttachments = [];
     private readonly List<OverheadLine> _overheadLines = [];
     private readonly List<WorkScope> _workScopes = [];
@@ -51,6 +52,9 @@ public sealed class DrawingDocument
     public IReadOnlyList<Connection> Connections => _connections;
 
     public IReadOnlyList<CableSegment> CableSegments => _cableSegments;
+
+    public IReadOnlyList<IntermediateTerminal> IntermediateTerminals =>
+        _intermediateTerminals;
 
     public IReadOnlyList<PoleAttachment> PoleAttachments => _poleAttachments;
 
@@ -219,6 +223,89 @@ public sealed class DrawingDocument
         }
 
         _electricalNodes.Add(electricalNode);
+    }
+
+    public void AddIntermediateTerminal(
+        IntermediateTerminal intermediateTerminal,
+        Terminal terminal)
+    {
+        ArgumentNullException.ThrowIfNull(intermediateTerminal);
+        ArgumentNullException.ThrowIfNull(terminal);
+
+        if (intermediateTerminal.TerminalId != terminal.Id ||
+            terminal.OwnerType != TopologyOwnerType.IntermediateTerminal ||
+            terminal.OwnerId != intermediateTerminal.Id)
+        {
+            throw new InvalidOperationException(
+                $"Intermediate terminal '{intermediateTerminal.Id}' owner relation is inconsistent.");
+        }
+
+        if (terminal.ElectricalNodeId is not null)
+        {
+            throw new InvalidOperationException(
+                $"Intermediate terminal '{intermediateTerminal.Id}' cannot own an electrical node.");
+        }
+
+        if (!terminal.AllowsMultipleConnections)
+        {
+            throw new InvalidOperationException(
+                $"Intermediate terminal '{intermediateTerminal.Id}' must allow multiple connections.");
+        }
+
+        EnsureObjectIdIsAvailable(intermediateTerminal.Id, nameof(IntermediateTerminal));
+        EnsureObjectIdIsAvailable(terminal.Id, nameof(Terminal));
+
+        EnsureTerminalPolicy(
+            terminal,
+            ConnectionType.Cable,
+            "Intermediate terminal",
+            allowMultipleConnections: true);
+
+        _intermediateTerminals.Add(intermediateTerminal);
+        try
+        {
+            AddTerminal(terminal);
+        }
+        catch
+        {
+            _intermediateTerminals.Remove(intermediateTerminal);
+            throw;
+        }
+    }
+
+    public IntermediateTerminal? FindIntermediateTerminal(Guid intermediateTerminalId)
+    {
+        return _intermediateTerminals.SingleOrDefault(existing =>
+            existing.Id == intermediateTerminalId);
+    }
+
+    public void RemoveIntermediateTerminal(Guid intermediateTerminalId)
+    {
+        IntermediateTerminal intermediateTerminal =
+            FindIntermediateTerminal(intermediateTerminalId)
+            ?? throw new InvalidOperationException(
+                $"Intermediate terminal '{intermediateTerminalId}' does not exist.");
+        Guid terminalId = intermediateTerminal.TerminalId;
+        HashSet<Guid> referencedConnectionIds = _connections
+            .Where(connection => connection.UsesTerminal(terminalId))
+            .Select(connection => connection.Id)
+            .ToHashSet();
+
+        if (referencedConnectionIds.Count > 0 ||
+            _cableSegments.Any(segment =>
+                referencedConnectionIds.Contains(segment.ConnectionId) ||
+                segment.StartTerminalId == terminalId ||
+                segment.EndTerminalId == terminalId))
+        {
+            throw new InvalidOperationException(
+                $"Intermediate terminal '{intermediateTerminalId}' is still referenced by a connection or cable segment.");
+        }
+
+        Terminal terminal = _terminals.SingleOrDefault(existing => existing.Id == terminalId)
+            ?? throw new InvalidOperationException(
+                $"Intermediate terminal '{intermediateTerminalId}' child terminal is missing.");
+        _terminals.Remove(terminal);
+        _intermediateTerminals.Remove(intermediateTerminal);
     }
 
     public void AddTerminal(Terminal terminal)
@@ -1099,6 +1186,8 @@ public sealed class DrawingDocument
         {
             TopologyOwnerType.Device => _devices.Any(device => device.Id == ownerId),
             TopologyOwnerType.InternalAggregate => _internalAggregateOwnerIds.Contains(ownerId),
+            TopologyOwnerType.IntermediateTerminal => _intermediateTerminals.Any(
+                intermediateTerminal => intermediateTerminal.Id == ownerId),
             _ => false
         };
 
@@ -1198,6 +1287,7 @@ public sealed class DrawingDocument
             _switchAssemblies.Any(assembly => assembly.AssemblyId == objectId) ||
             _connections.Any(connection => connection.Id == objectId) ||
             _cableSegments.Any(segment => segment.Id == objectId) ||
+            _intermediateTerminals.Any(terminal => terminal.Id == objectId) ||
             _poleAttachments.Any(attachment => attachment.AttachmentId == objectId) ||
             _workScopes.Any(workScope => workScope.WorkScopeId == objectId) ||
             _groundingPoints.Any(point => point.GroundingPointId == objectId) ||
