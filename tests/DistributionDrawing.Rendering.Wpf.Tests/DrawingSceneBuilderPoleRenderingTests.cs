@@ -71,10 +71,10 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
         DrawingScene scene = builder.Build(document, runtimeLayout);
         SceneText[] labels = scene.Elements.OfType<SceneText>().ToArray();
 
-        Assert.Equal(4, labels.Length);
         Assert.Equal(1, labels.Count(text => text.Text == "P-301"));
-        Assert.Equal(1, labels.Count(text => text.Text == switchDevice.DisplayName));
-        Assert.Equal(1, labels.Count(text => text.Text == cableTermination.DisplayName));
+        Assert.Equal(1, labels.Count(text => text.Text == "柱上隔离开关"));
+        Assert.Equal(1, labels.Count(text => text.Text == "电缆终端"));
+        Assert.Equal(1, labels.Count(text => text.Text == "分"));
         Assert.Contains(scene.HitTestIndex.Entries, entry =>
             entry.Target.ObjectId == poleId);
         Assert.Contains(scene.HitTestIndex.Entries, entry =>

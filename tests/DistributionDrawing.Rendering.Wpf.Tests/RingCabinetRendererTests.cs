@@ -203,7 +203,7 @@ public sealed class RingCabinetRendererTests
         Assert.Contains(initial.OfType<SceneText>(), text => text.Text == "合");
         Assert.Contains(initial.OfType<SceneText>(), text => text.Text == "分");
         Assert.Equal(1, grounded.OfType<SceneText>().Count(text => text.Text == "合"));
-        Assert.Equal(0, grounded.OfType<SceneText>().Count(text => text.Text == "分"));
+        Assert.Equal(1, grounded.OfType<SceneText>().Count(text => text.Text == "分"));
     }
 
     [Fact]

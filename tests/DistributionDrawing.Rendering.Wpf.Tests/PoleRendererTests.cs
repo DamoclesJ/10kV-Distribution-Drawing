@@ -52,8 +52,7 @@ public sealed class PoleRendererTests
         Assert.NotEmpty(elements.OfType<SceneLine>());
         Assert.Contains(elements.OfType<SceneRectangle>(), rectangle =>
             rectangle.Bounds.WidthMillimeters == attachmentLayout.WidthMillimeters);
-        Assert.Contains(elements.OfType<SceneText>(), text =>
-            text.Text == cableTermination.DisplayName);
+        Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "电缆终端");
     }
 
     [Fact]
@@ -136,8 +135,8 @@ public sealed class PoleRendererTests
                     attachment,
                     cableTermination,
                     new AttachmentLayout(attachment.AttachmentId, new DocumentPoint(5, 5)))])
-                .OfType<SceneText>()
-                .Where(text => text.Text == cableTermination.DisplayName));
+                .OfType<SceneText>(),
+            text => text.Text == "电缆终端");
         SceneText second = Assert.Single(
             renderer.Render(
                 result.Pole,
@@ -146,8 +145,8 @@ public sealed class PoleRendererTests
                     attachment,
                     cableTermination,
                     new AttachmentLayout(attachment.AttachmentId, new DocumentPoint(25, 5)))])
-                .OfType<SceneText>()
-                .Where(text => text.Text == cableTermination.DisplayName));
+                .OfType<SceneText>(),
+            text => text.Text == "电缆终端");
 
         Assert.NotEqual(first.Origin, second.Origin);
     }

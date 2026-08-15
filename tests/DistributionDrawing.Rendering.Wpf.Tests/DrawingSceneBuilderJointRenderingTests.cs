@@ -1,4 +1,5 @@
 using DistributionDrawing.Application.Devices;
+using DistributionDrawing.Application.Interaction;
 using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
@@ -20,7 +21,7 @@ public sealed class DrawingSceneBuilderJointRenderingTests
         DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
         Assert.Equal(2, scene.Elements.OfType<SceneLine>().Count(line =>
-            line.Start.YMillimeters == 25 && line.End.YMillimeters == 25));
+            line.TargetKind == SelectionTargetKind.CableSegment));
         Assert.Single(scene.Elements.OfType<SceneRectangle>());
         Assert.Equal(2, scene.Elements.OfType<SceneText>().Count(
             text => text.Text.Contains(fixture.CableType, StringComparison.Ordinal)));

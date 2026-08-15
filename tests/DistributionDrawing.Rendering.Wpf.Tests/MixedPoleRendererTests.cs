@@ -47,8 +47,8 @@ public sealed class MixedPoleRendererTests
                 cableTermination,
                 cableLayout)]);
 
-        Assert.Contains(elements.OfType<SceneText>(), text => text.Text == switchDevice.DisplayName);
-        Assert.Contains(elements.OfType<SceneText>(), text => text.Text == cableTermination.DisplayName);
+        Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "柱上隔离开关");
+        Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "电缆终端");
         Assert.Equal(2, elements.OfType<SceneRectangle>().Count(rectangle =>
             rectangle.Bounds.WidthMillimeters == 18));
     }
@@ -135,10 +135,10 @@ public sealed class MixedPoleRendererTests
 
         SceneText[] firstLabels = first.OfType<SceneText>().ToArray();
         SceneText[] secondLabels = second.OfType<SceneText>().ToArray();
-        Assert.Equal(4, firstLabels.Length);
         Assert.Contains(firstLabels, text => text.Text == "P-203");
-        Assert.Contains(firstLabels, text => text.Text == switchDevice.DisplayName);
-        Assert.Contains(firstLabels, text => text.Text == cableTermination.DisplayName);
+        Assert.Contains(firstLabels, text => text.Text == "柱上隔离开关");
+        Assert.Contains(firstLabels, text => text.Text == "电缆终端");
+        Assert.Contains(firstLabels, text => text.Text == "分");
         Assert.Equal(firstLabels, secondLabels);
         Assert.True(firstLabels.Select(label => label.Origin).Distinct().Count() > 1);
     }

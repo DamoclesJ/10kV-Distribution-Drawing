@@ -1,4 +1,5 @@
 using DistributionDrawing.Application.Devices;
+using DistributionDrawing.Application.Interaction;
 using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
@@ -18,7 +19,9 @@ public sealed class DrawingSceneBuilderCableRenderingTests
         CableSceneFixture fixture = CreateFixture();
         DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
-        Assert.Single(scene.Elements.OfType<SceneLine>());
+        Assert.Single(
+            scene.Elements.OfType<SceneLine>(),
+            line => line.TargetKind == SelectionTargetKind.CableSegment);
         SceneText label = Assert.Single(scene.Elements.OfType<SceneText>());
         Assert.Contains(fixture.Cable.CableType, label.Text, StringComparison.Ordinal);
         Assert.Contains("120", label.Text, StringComparison.Ordinal);
