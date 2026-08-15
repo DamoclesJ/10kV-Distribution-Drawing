@@ -7,5 +7,6 @@ public enum LabelTargetKind
     Pole,
     PoleAttachment,
     Interval,
-    SwitchDevice
+    SwitchDevice,
+    IntermediateTerminal
 }

@@ -30,7 +30,7 @@ public sealed class JointSymbol
         return _library.CreateJoint(
             layout.Position,
             layout.SizeMillimeters,
-            intermediateTerminal.DisplayName,
+            label: null,
             layout.LabelPosition);
     }
 }

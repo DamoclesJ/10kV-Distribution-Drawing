@@ -16,6 +16,8 @@ public sealed class DrawingSceneBuilder
     private readonly SymbolLibrary _symbolLibrary;
     private readonly MixedPoleRenderer _mixedPoleRenderer;
     private readonly RingCabinetRenderer _ringCabinetRenderer;
+    private readonly CableRenderer _cableRenderer;
+    private readonly JointRenderer _jointRenderer;
     private readonly ProfessionalSceneBuilder _professionalSceneBuilder;
 
     public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
@@ -23,6 +25,8 @@ public sealed class DrawingSceneBuilder
         _symbolLibrary = symbolLibrary ?? new SymbolLibrary();
         _ringCabinetRenderer = new RingCabinetRenderer(_symbolLibrary);
         _mixedPoleRenderer = new MixedPoleRenderer(_symbolLibrary);
+        _cableRenderer = new CableRenderer(_symbolLibrary);
+        _jointRenderer = new JointRenderer(_symbolLibrary);
         _professionalSceneBuilder = new ProfessionalSceneBuilder(_symbolLibrary);
     }
 
@@ -109,6 +113,8 @@ public sealed class DrawingSceneBuilder
             document.Devices.OfType<Pole>(),
             document.PoleAttachments,
             document.Devices,
+            document.CableSegments,
+            document.IntermediateTerminals,
             document.Connections,
             document.OverheadLines,
             terminalAnchors);
@@ -150,6 +156,8 @@ public sealed class DrawingSceneBuilder
             poles,
             attachments,
             devices,
+            cableSegments: null,
+            intermediateTerminals: null,
             connections: null,
             overheadLines: overheadLines,
             terminalAnchors: null);
@@ -170,6 +178,8 @@ public sealed class DrawingSceneBuilder
             poles,
             attachments,
             devices,
+            cableSegments: null,
+            intermediateTerminals: null,
             connections,
             overheadLines,
             terminalAnchors: null);
@@ -180,6 +190,8 @@ public sealed class DrawingSceneBuilder
         IEnumerable<Pole> poles,
         IEnumerable<PoleAttachment> attachments,
         IEnumerable<Device> devices,
+        IEnumerable<CableSegment>? cableSegments,
+        IEnumerable<IntermediateTerminal>? intermediateTerminals,
         IEnumerable<Connection>? connections,
         IEnumerable<OverheadLine> overheadLines,
         TerminalAnchorIndex? terminalAnchors)
@@ -195,7 +207,142 @@ public sealed class DrawingSceneBuilder
         var poleById = poles.ToDictionary(pole => pole.Id);
         PoleAttachment[] poleAttachments = attachments.ToArray();
         var deviceById = devices.ToDictionary(device => device.Id);
+        CableSegment[] cableSegmentsArray = cableSegments?.ToArray() ?? [];
+        IntermediateTerminal[] intermediateTerminalsArray =
+            intermediateTerminals?.ToArray() ?? [];
+        HashSet<Guid> cableConnectionIds = cableSegmentsArray
+            .Select(cableSegment => cableSegment.ConnectionId)
+            .ToHashSet();
         var connectionById = connections?.ToDictionary(connection => connection.Id);
+        Dictionary<Guid, DocumentPoint> terminalPositions = terminalAnchors?.Anchors
+            .ToDictionary(anchor => anchor.TerminalId, anchor => anchor.Position) ?? [];
+        var jointInputs = new List<(IntermediateTerminal IntermediateTerminal, JointLayout Layout)>();
+
+        foreach (IntermediateTerminal intermediateTerminal in intermediateTerminalsArray)
+        {
+            if (connectionById is null || terminalAnchors is null)
+            {
+                throw new InvalidOperationException(
+                    "Joint rendering requires Connections and terminal anchors.");
+            }
+
+            Connection[] jointConnections = connectionById.Values
+                .Where(connection => connection.Type == ConnectionType.Cable &&
+                                     connection.UsesTerminal(intermediateTerminal.TerminalId))
+                .ToArray();
+            if (jointConnections.Length != 2)
+            {
+                throw new InvalidOperationException(
+                    $"Intermediate terminal '{intermediateTerminal.Id}' must connect exactly two cable connections.");
+            }
+
+            if (jointConnections.Any(connection => !cableConnectionIds.Contains(connection.Id)))
+            {
+                throw new InvalidOperationException(
+                    $"Intermediate terminal '{intermediateTerminal.Id}' is not connected by two current cable segments.");
+            }
+
+            DocumentPoint[] outerPositions = jointConnections
+                .Select(connection =>
+                {
+                    Guid outerTerminalId = connection.StartTerminalId == intermediateTerminal.TerminalId
+                        ? connection.EndTerminalId
+                        : connection.StartTerminalId;
+                    if (!terminalPositions.TryGetValue(
+                            outerTerminalId,
+                            out DocumentPoint position))
+                    {
+                        throw new InvalidOperationException(
+                            $"No terminal anchor exists for joint '{intermediateTerminal.Id}'.");
+                    }
+
+                    return position;
+                })
+                .ToArray();
+            DocumentPoint jointPosition = Midpoint(outerPositions[0], outerPositions[1]);
+            terminalPositions[intermediateTerminal.TerminalId] = jointPosition;
+            jointInputs.Add(
+                (intermediateTerminal,
+                    new JointLayout(intermediateTerminal.Id, jointPosition)));
+        }
+
+        if (cableSegmentsArray.Length > 0)
+        {
+            if (connectionById is null || terminalAnchors is null)
+            {
+                throw new InvalidOperationException(
+                    "Cable rendering requires Connections and terminal anchors.");
+            }
+
+            var cableInputs = new List<(CableSegment CableSegment, CableLayout Layout)>();
+            foreach (CableSegment cableSegment in cableSegmentsArray)
+            {
+                if (!connectionById.TryGetValue(
+                        cableSegment.ConnectionId,
+                        out Connection? connection))
+                {
+                    throw new InvalidOperationException(
+                        $"No connection exists for cable segment '{cableSegment.Id}'.");
+                }
+
+                if (connection.StartTerminalId != cableSegment.StartTerminalId ||
+                    connection.EndTerminalId != cableSegment.EndTerminalId)
+                {
+                    throw new InvalidOperationException(
+                        $"Cable segment '{cableSegment.Id}' does not match its connection endpoints.");
+                }
+
+                if (!terminalPositions.TryGetValue(
+                        connection.StartTerminalId,
+                        out DocumentPoint startPosition) ||
+                    !terminalPositions.TryGetValue(
+                        connection.EndTerminalId,
+                        out DocumentPoint endPosition))
+                {
+                    throw new InvalidOperationException(
+                        $"No terminal anchors exist for cable segment '{cableSegment.Id}'.");
+                }
+
+                cableInputs.Add(
+                    (cableSegment,
+                        new CableLayout(
+                            cableSegment.Id,
+                            [startPosition, endPosition])));
+            }
+
+            elements.AddRange(_cableRenderer.Render(cableInputs));
+            foreach ((CableSegment cableSegment, CableLayout cableLayout) in cableInputs)
+            {
+                hitTestEntries.Add(
+                    new SelectionHitTestEntry(
+                        new SelectionReference(
+                            SelectionTargetKind.CableSegment,
+                            cableSegment.Id),
+                        CreateBounds(cableLayout.Start, cableLayout.End, 2),
+                        30,
+                        cableLayout.Start,
+                        cableLayout.End));
+            }
+        }
+
+        if (jointInputs.Count > 0)
+        {
+            elements.AddRange(_jointRenderer.Render(jointInputs));
+            foreach ((IntermediateTerminal intermediateTerminal, JointLayout jointLayout) in jointInputs)
+            {
+                hitTestEntries.Add(
+                    new SelectionHitTestEntry(
+                        new SelectionReference(
+                            SelectionTargetKind.IntermediateTerminal,
+                            intermediateTerminal.Id),
+                        new DocumentRect(
+                            jointLayout.Position.XMillimeters - jointLayout.SizeMillimeters / 2,
+                            jointLayout.Position.YMillimeters - jointLayout.SizeMillimeters / 2,
+                            jointLayout.SizeMillimeters,
+                            jointLayout.SizeMillimeters),
+                        50));
+            }
+        }
 
         foreach (OverheadLine overheadLine in overheadLines)
         {
@@ -372,5 +519,12 @@ public sealed class DrawingSceneBuilder
         double maxX = Math.Max(first.XMillimeters, second.XMillimeters) + paddingMillimeters;
         double maxY = Math.Max(first.YMillimeters, second.YMillimeters) + paddingMillimeters;
         return new DocumentRect(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    private static DocumentPoint Midpoint(DocumentPoint first, DocumentPoint second)
+    {
+        return new DocumentPoint(
+            (first.XMillimeters + second.XMillimeters) / 2,
+            (first.YMillimeters + second.YMillimeters) / 2);
     }
 }

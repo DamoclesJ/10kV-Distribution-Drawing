@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Application.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Labels;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -54,10 +55,28 @@ public sealed class CableRenderer
         var elements = new List<SceneElement>();
         foreach ((CableSegment cableSegment, CableLayout layout) in inputs)
         {
-            elements.AddRange(_cableSymbol.CreateElements(layout));
+            DocumentRect hitTestBounds = CreateBounds(layout.Start, layout.End, 2);
+            elements.AddRange(_cableSymbol.CreateElements(layout).Select(element => element with
+            {
+                TargetKind = SelectionTargetKind.CableSegment,
+                TargetId = cableSegment.Id,
+                HitTestBounds = hitTestBounds
+            }));
             elements.Add(_cableLabel.CreateElement(labelsByCableId[cableSegment.Id]));
         }
 
         return elements;
+    }
+
+    private static DocumentRect CreateBounds(
+        DocumentPoint first,
+        DocumentPoint second,
+        double paddingMillimeters)
+    {
+        double minX = Math.Min(first.XMillimeters, second.XMillimeters) - paddingMillimeters;
+        double minY = Math.Min(first.YMillimeters, second.YMillimeters) - paddingMillimeters;
+        double maxX = Math.Max(first.XMillimeters, second.XMillimeters) + paddingMillimeters;
+        double maxY = Math.Max(first.YMillimeters, second.YMillimeters) + paddingMillimeters;
+        return new DocumentRect(minX, minY, maxX - minX, maxY - minY);
     }
 }

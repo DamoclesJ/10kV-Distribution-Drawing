@@ -9,7 +9,9 @@ public enum SelectionTargetKind
     Connection,
     GroundingPoint,
     WorkScope,
-    Terminal
+    Terminal,
+    CableSegment,
+    IntermediateTerminal
 }
 
 public sealed record SelectionReference(
