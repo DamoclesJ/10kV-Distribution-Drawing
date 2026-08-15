@@ -45,10 +45,6 @@ public sealed class RingCabinetSymbol
                     layout.Position,
                     layout.WidthMillimeters,
                     layout.HeightMillimeters,
-                    labelOrigin: new DocumentPoint(
-                        layout.Position.XMillimeters + layout.LabelOffset.XMillimeters,
-                        layout.Position.YMillimeters + layout.LabelOffset.YMillimeters),
-                    label: cabinet.DisplayName,
                     fill: Colors.White,
                     thicknessMillimeters: 1)));
 

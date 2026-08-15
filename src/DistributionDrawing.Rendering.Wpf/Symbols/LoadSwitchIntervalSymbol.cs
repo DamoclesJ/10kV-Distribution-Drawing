@@ -37,26 +37,6 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
                     fill: Colors.White,
                     thicknessMillimeters: 0.6)));
 
-        if (includeLabels)
-        {
-            elements.Add(
-                new SceneText(
-                    new DocumentPoint(
-                        origin.XMillimeters + layout.SequenceLabelOffset.XMillimeters,
-                        origin.YMillimeters + layout.SequenceLabelOffset.YMillimeters),
-                    $"{interval.Sequence}#",
-                    Colors.Black,
-                    3.5));
-            elements.Add(
-                new SceneText(
-                    new DocumentPoint(
-                        origin.XMillimeters + layout.NameLabelOffset.XMillimeters,
-                        origin.YMillimeters + layout.NameLabelOffset.YMillimeters),
-                    interval.DisplayName,
-                    Colors.Black,
-                    3.5));
-        }
-
         double centerX = origin.XMillimeters + layout.WidthMillimeters / 2;
         elements.Add(
             new SceneLine(
@@ -73,15 +53,13 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             loadSwitch,
             layout,
             origin,
-            symbolLibrary,
-            includeLabels);
+            symbolLibrary);
         AddSwitch(
             elements,
             groundSwitch,
             layout,
             origin,
-            symbolLibrary,
-            includeLabels);
+            symbolLibrary);
 
         return elements;
     }
@@ -91,8 +69,7 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
         SwitchDevice switchDevice,
         RingCabinetIntervalLayout intervalLayout,
         DocumentPoint intervalOrigin,
-        SymbolLibrary symbolLibrary,
-        bool includeLabels)
+        SymbolLibrary symbolLibrary)
     {
         if (!intervalLayout.SwitchLayouts.TryGetValue(
                 switchDevice.Id,
@@ -116,7 +93,6 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
                          labelOrigin: new DocumentPoint(
                              switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
                              switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
-                         label: includeLabels ? switchDevice.DisplayName : null,
                          state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
                          fill: Colors.White)))
         {

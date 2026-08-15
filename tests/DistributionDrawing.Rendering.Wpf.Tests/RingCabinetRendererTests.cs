@@ -5,6 +5,8 @@ using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Symbols;
+using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 using Xunit;
 
 namespace DistributionDrawing.Rendering.Wpf.Tests;
@@ -212,9 +214,87 @@ public sealed class RingCabinetRendererTests
             .ToArray();
 
         Assert.Contains(labels, label => label.Text == "Rendering Test Cabinet");
+        Assert.Equal(1, labels.Count(label => label.Text == "Rendering Test Cabinet"));
         Assert.Contains(labels, label => label.Text == "-1");
         Assert.Contains(labels, label => label.Text == "-2");
         Assert.DoesNotContain(labels, label => label.Text is "1#" or "2#");
+    }
+
+    [Fact]
+    public void RingCabinetSymbol_DoesNotCreateDirectBusinessLabels()
+    {
+        RingCabinet cabinet = BuildCabinet(
+            new BayTemplate(
+                3,
+                new IntegratedFeederConfiguration(
+                    GroundingStructureKind.UpperLowerGrounding)));
+        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
+            cabinet,
+            new DocumentPoint(0, 0));
+
+        IReadOnlyList<SceneText> labels = new RingCabinetSymbol(new SymbolLibrary())
+            .CreateElements(cabinet, layout, includeLabels: false)
+            .OfType<SceneText>()
+            .ToArray();
+
+        Assert.DoesNotContain(labels, label => label.Text == cabinet.DisplayName);
+        Assert.DoesNotContain(labels, label => label.Text == interval.DisplayName);
+        Assert.DoesNotContain(labels, label => label.Text == "3#");
+        Assert.DoesNotContain(
+            labels,
+            label => interval.SwitchDevices.Any(device => device.DisplayName == label.Text));
+        Assert.Contains(labels, label => label.Text is "合" or "分");
+    }
+
+    [Fact]
+    public void LowLevelIntervalSymbolsDoNotCreateLegacyLabels()
+    {
+        RingCabinet[] cabinets =
+        [
+            BuildCabinet(new BayTemplate(1, new LoadSwitchConfiguration())),
+            BuildCabinet(new BayTemplate(
+                2,
+                new IntegratedFeederConfiguration(
+                    GroundingStructureKind.UpperLowerGrounding))),
+            RingCabinet.Create(
+                RingCabinetDefinition.Create(
+                    Guid.NewGuid(),
+                    "PT cabinet",
+                    [RingCabinetIntervalDefinition.CreatePT(
+                        5,
+                        SwitchState.Closed,
+                        SwitchState.Open,
+                        "PT interval")]))
+        ];
+        var layoutFactory = new RingCabinetLayoutFactory();
+
+        foreach (RingCabinet cabinet in cabinets)
+        {
+            RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+            RingCabinetLayout cabinetLayout = layoutFactory.Create(
+                cabinet,
+                new DocumentPoint(0, 0));
+            RingCabinetIntervalLayout intervalLayout =
+                cabinetLayout.IntervalLayouts[interval.IntervalId];
+
+            IReadOnlyList<SceneText> labels = new RingCabinetSymbol(new SymbolLibrary())
+                .IntervalSymbol
+                .CreateElements(
+                    interval,
+                    intervalLayout,
+                    cabinetLayout.Position,
+                    includeLabels: true)
+                .OfType<SceneText>()
+                .ToArray();
+
+            Assert.DoesNotContain(labels, label => label.Text.EndsWith("#"));
+            Assert.DoesNotContain(labels, label => label.Text == interval.DisplayName);
+            Assert.DoesNotContain(
+                labels,
+                label => interval.SwitchDevices.Any(device => device.DisplayName == label.Text));
+            Assert.Contains(labels, label => label.Text is "合" or "分");
+        }
     }
 
     [Fact]
