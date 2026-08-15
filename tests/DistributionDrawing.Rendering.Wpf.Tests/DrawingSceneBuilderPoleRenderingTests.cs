@@ -1,6 +1,7 @@
 using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -64,7 +65,7 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
         Guid poleId = result.Pole.Id;
         Guid switchId = switchDevice.Id;
         Guid cableId = cableTermination.Id;
-        SwitchState switchState = switchDevice.SwitchState;
+        SwitchState switchState = switchDevice.SwitchState!.Value;
 
         DrawingScene scene = builder.Build(document, runtimeLayout);
         SceneText[] labels = scene.Elements.OfType<SceneText>().ToArray();
@@ -74,11 +75,11 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
         Assert.Equal(1, labels.Count(text => text.Text == switchDevice.DisplayName));
         Assert.Equal(1, labels.Count(text => text.Text == cableTermination.DisplayName));
         Assert.Contains(scene.HitTestIndex.Entries, entry =>
-            entry.Reference.TargetId == poleId);
+            entry.Target.ObjectId == poleId);
         Assert.Contains(scene.HitTestIndex.Entries, entry =>
-            entry.Reference.TargetId == switchAttachment.AttachmentId);
+            entry.Target.ObjectId == switchAttachment.AttachmentId);
         Assert.Contains(scene.HitTestIndex.Entries, entry =>
-            entry.Reference.TargetId == cableAttachment.AttachmentId);
+            entry.Target.ObjectId == cableAttachment.AttachmentId);
         Assert.Equal(poleId, result.Pole.Id);
         Assert.Equal(switchId, switchDevice.Id);
         Assert.Equal(cableId, cableTermination.Id);

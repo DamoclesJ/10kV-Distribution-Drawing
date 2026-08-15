@@ -1,3 +1,4 @@
+using System.IO;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Rendering;
