@@ -159,12 +159,22 @@ public sealed class PropertyProjector
             DomainRow("IntervalId", "标识", interval.IntervalId),
             DomainRow("ParentCabinetId", "所属环网柜", interval.ParentCabinetId),
             DomainRow("Sequence", "序号", interval.Sequence),
+            DomainRow("BayIndex", "业务位置", interval.BayIndex),
+            DomainRow("BusinessNumber", "业务编号", interval.BusinessNumber),
             DomainRow("DisplayName", "名称", interval.DisplayName),
             DomainRow("IntervalKind", "间隔类型", interval.IntervalKind),
             DomainRow("GroundingStructureKind", "接地结构", interval.GroundingStructureKind),
             DomainRow("ExternalTerminalId", "外部端子", interval.ExternalTerminalId),
             DomainRow("SwitchCount", "开关数量", interval.SwitchDevices.Count)
         };
+        foreach (SwitchDevice switchDevice in interval.SwitchDevices)
+        {
+            string? number = interval.GetSwitchBusinessNumber(switchDevice.Id);
+            rows.Add(DomainRow(
+                $"Switch.{switchDevice.Id}",
+                switchDevice.DisplayName ?? switchDevice.SwitchKind.ToString(),
+                number ?? "未定义"));
+        }
         var sections = new List<PropertySectionViewModel>
         {
             new("专业属性", rows),

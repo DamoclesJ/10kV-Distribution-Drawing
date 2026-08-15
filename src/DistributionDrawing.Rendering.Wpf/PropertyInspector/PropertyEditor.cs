@@ -1,5 +1,6 @@
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 
 namespace DistributionDrawing.Rendering.Wpf.PropertyInspector;
 
@@ -47,6 +48,45 @@ public sealed class PropertyEditor
         {
             PropertyEditError failure = error ??
                 new PropertyEditError("PropertyInvalid", "The property edit was rejected.");
+            return PropertyEditResult.Failure(failure.Code, failure.Message);
+        }
+
+        try
+        {
+            _commandStack.ExecuteCommand(command!);
+            return PropertyEditResult.Success();
+        }
+        catch (ArgumentException exception)
+        {
+            return PropertyEditResult.Failure("DomainRuleViolation", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return PropertyEditResult.Failure("DomainRuleViolation", exception.Message);
+        }
+    }
+
+    public PropertyEditResult TryChangeIntervalType(
+        SelectionReference target,
+        IntervalKind intervalKind,
+        GroundingStructureKind? groundingStructureKind)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ResolvedSelection? selection = _resolver.Resolve(target);
+        if (selection is null)
+        {
+            return PropertyEditResult.Failure("TargetNotFound", "The selected interval no longer exists.");
+        }
+
+        if (!_commandFactory.TryCreateIntervalTypeChange(
+                selection,
+                intervalKind,
+                groundingStructureKind,
+                out ICommand? command,
+                out PropertyEditError? error))
+        {
+            PropertyEditError failure = error ??
+                new PropertyEditError("PropertyInvalid", "The interval change was rejected.");
             return PropertyEditResult.Failure(failure.Code, failure.Message);
         }
 

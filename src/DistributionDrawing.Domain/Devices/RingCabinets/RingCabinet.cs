@@ -46,6 +46,40 @@ public sealed class RingCabinet : Device
 
     public IReadOnlyList<Terminal> Terminals => _terminals;
 
+    public RingCabinetRestoreDefinition CaptureRestoreDefinition()
+    {
+        return new RingCabinetRestoreDefinition(
+            Id,
+            DisplayName ?? throw new InvalidOperationException(
+                "A ring cabinet must have a display name."),
+            MainBusNodeId,
+            _intervals.Select(CreateRestoreDefinition).ToArray());
+    }
+
+    public void RestoreState(RingCabinetRestoreDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (definition.CabinetId != Id)
+        {
+            throw new ArgumentException(
+                "The restore definition belongs to another ring cabinet.",
+                nameof(definition));
+        }
+
+        if (definition.MainBusNodeId != MainBusNodeId)
+        {
+            throw new ArgumentException(
+                "The restore definition belongs to another ring cabinet topology.",
+                nameof(definition));
+        }
+
+        RingCabinet candidate = Restore(definition);
+        _intervals = candidate._intervals;
+        _electricalNodes = candidate._electricalNodes;
+        _terminals = candidate._terminals;
+        CompositionKind = candidate.CompositionKind;
+    }
+
     public void ChangeIntervalType(
         Guid intervalId,
         IntervalKind targetIntervalKind,

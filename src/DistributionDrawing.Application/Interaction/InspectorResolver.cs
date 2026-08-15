@@ -57,8 +57,13 @@ public sealed class InspectorResolver
                 interval.DisplayName,
                 ("IntervalId", interval.IntervalId),
                 ("Sequence", interval.Sequence),
+                ("BayIndex", interval.BayIndex),
+                ("BusinessNumber", interval.BusinessNumber),
                 ("IntervalKind", interval.IntervalKind),
-                ("SwitchCount", interval.SwitchDevices.Count));
+                ("GroundingStructureKind", interval.GroundingStructureKind),
+                ("SwitchCount", interval.SwitchDevices.Count),
+                ("SwitchNumbers", string.Join(", ", interval.SwitchDevices.Select(device =>
+                    $"{device.DisplayName}: {interval.GetSwitchBusinessNumber(device.Id) ?? "未定义"}"))));
     }
 
     private InspectorModel? ResolveSwitchDevice(Guid id)

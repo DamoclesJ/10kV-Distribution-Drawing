@@ -126,6 +126,21 @@
                      Foreground="#666"
                      Text="{Binding ObjectTitle}"
                      TextWrapping="Wrap" />
+          <StackPanel x:Name="IntervalEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="间隔类型" />
+            <ComboBox x:Name="IntervalTypeInput"
+                      Margin="0,4,0,4" />
+            <TextBlock Foreground="#555"
+                       Text="接地结构（IntegratedFeeder）" />
+            <ComboBox x:Name="IntervalGroundingStructureInput"
+                      Margin="0,4,0,4" />
+            <Button Content="应用间隔配置"
+                    Click="OnApplyIntervalConfiguration" />
+          </StackPanel>
           <StackPanel x:Name="PoleNumberEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"

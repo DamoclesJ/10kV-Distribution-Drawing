@@ -56,6 +56,10 @@ public partial class MainWindow : Window
     private BoundaryPointCommandValue? _pendingWorkScopeEndBoundary;
     private Guid? _pendingWorkScopeTerminalId;
     private Guid? _pendingWorkScopeDeviceId;
+    private static readonly IReadOnlyList<IntervalKind> SupportedIntervalKinds =
+        Array.AsReadOnly(Enum.GetValues<IntervalKind>());
+    private static readonly IReadOnlyList<GroundingStructureKind> SupportedGroundingStructures =
+        Array.AsReadOnly(Enum.GetValues<GroundingStructureKind>());
 
     public MainWindow()
     {
@@ -280,6 +284,7 @@ public partial class MainWindow : Window
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
+        UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
         UpdateAttachmentLayoutEditor();
         UpdateCableTerminationDisplayNameEditor();
@@ -466,6 +471,7 @@ public partial class MainWindow : Window
         _selectionResolver.SetSource(null);
         _selectionManager.Clear();
         _propertyInspector.Clear();
+        IntervalEditorPanel.Visibility = Visibility.Collapsed;
         PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
         GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
         WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
@@ -614,6 +620,36 @@ public partial class MainWindow : Window
         if (DrawingSurface.IsMouseCaptured)
         {
             DrawingSurface.ReleaseMouseCapture();
+        }
+
+        RefreshDrawingScene();
+    }
+
+    private void OnApplyIntervalConfiguration(object sender, RoutedEventArgs e)
+    {
+        if (_selectionManager.Selected is not
+                { Kind: SelectionTargetKind.RingCabinetInterval } target ||
+            !Enum.TryParse(IntervalTypeInput.SelectedItem?.ToString(), out IntervalKind intervalKind))
+        {
+            ShowCommandError("间隔修改失败", "请先选择一个有效的环网柜间隔。");
+            return;
+        }
+
+        GroundingStructureKind? groundingStructure = intervalKind == IntervalKind.IntegratedFeederInterval
+            ? Enum.TryParse(
+                IntervalGroundingStructureInput.SelectedItem?.ToString(),
+                out GroundingStructureKind parsed)
+                ? parsed
+                : null
+            : null;
+        PropertyEditResult result = _propertyEditor.TryChangeIntervalType(
+            target,
+            intervalKind,
+            groundingStructure);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError("间隔修改失败", result.ErrorMessage ?? "间隔配置未能应用。");
+            return;
         }
 
         RefreshDrawingScene();
@@ -1165,6 +1201,7 @@ public partial class MainWindow : Window
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
+        UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
         UpdateAttachmentLayoutEditor();
         UpdateCableTerminationDisplayNameEditor();
@@ -1399,6 +1436,25 @@ public partial class MainWindow : Window
 
         PoleNumberEditorPanel.Visibility = Visibility.Visible;
         PoleNumberInput.Text = pole.PoleNumber;
+    }
+
+    private void UpdateIntervalEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.Reference.Kind != SelectionTargetKind.RingCabinetInterval ||
+            selection.RingCabinetInterval is not { } interval)
+        {
+            IntervalEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        IntervalEditorPanel.Visibility = Visibility.Visible;
+        IntervalTypeInput.ItemsSource = SupportedIntervalKinds;
+        IntervalGroundingStructureInput.ItemsSource = SupportedGroundingStructures;
+        IntervalTypeInput.SelectedItem = interval.IntervalKind;
+        IntervalGroundingStructureInput.SelectedItem = interval.GroundingStructureKind;
+        IntervalGroundingStructureInput.IsEnabled =
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval;
     }
 
     private void UpdateAttachmentOffsetEditor()
@@ -1643,6 +1699,7 @@ public partial class MainWindow : Window
                 _propertyProjector.Project(
                     _selectionResolver.Resolve(_selectionManager.Selected)));
             UpdatePoleNumberEditor();
+            UpdateIntervalEditor();
             UpdateAttachmentOffsetEditor();
             UpdateAttachmentLayoutEditor();
             UpdateCableTerminationDisplayNameEditor();
@@ -1696,6 +1753,7 @@ public partial class MainWindow : Window
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdatePoleNumberEditor();
+        UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
         UpdateAttachmentLayoutEditor();
         UpdateCableTerminationDisplayNameEditor();

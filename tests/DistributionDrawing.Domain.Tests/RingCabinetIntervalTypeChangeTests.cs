@@ -244,6 +244,52 @@ public sealed class RingCabinetIntervalTypeChangeTests
                 ])));
     }
 
+    [Fact]
+    public void RestoreState_RejectsDifferentCabinetIdWithoutChangingAggregate()
+    {
+        RingCabinet cabinet = CreateMixedCabinet();
+        CabinetSnapshot before = Snapshot(cabinet);
+        RingCabinetRestoreDefinition invalid = cabinet.CaptureRestoreDefinition() with
+        {
+            CabinetId = Guid.NewGuid()
+        };
+
+        Assert.Throws<ArgumentException>(() => cabinet.RestoreState(invalid));
+
+        AssertCabinetSnapshotEqual(before, Snapshot(cabinet));
+    }
+
+    [Fact]
+    public void RestoreState_RejectsDifferentMainBusNodeIdWithoutChangingAggregate()
+    {
+        RingCabinet cabinet = CreateMixedCabinet();
+        CabinetSnapshot before = Snapshot(cabinet);
+        RingCabinetRestoreDefinition invalid = cabinet.CaptureRestoreDefinition() with
+        {
+            MainBusNodeId = Guid.NewGuid()
+        };
+
+        Assert.Throws<ArgumentException>(() => cabinet.RestoreState(invalid));
+
+        AssertCabinetSnapshotEqual(before, Snapshot(cabinet));
+    }
+
+    [Fact]
+    public void RestoreState_ValidSnapshotsRestoreTypeChangeStates()
+    {
+        RingCabinet cabinet = CreateMixedCabinet();
+        Guid intervalId = GetInterval(cabinet, 3).IntervalId;
+        RingCabinetRestoreDefinition before = cabinet.CaptureRestoreDefinition();
+
+        cabinet.ChangeIntervalType(intervalId, IntervalKind.PTInterval);
+        RingCabinetRestoreDefinition after = cabinet.CaptureRestoreDefinition();
+
+        cabinet.RestoreState(before);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, GetInterval(cabinet, 3).IntervalKind);
+        cabinet.RestoreState(after);
+        Assert.Equal(IntervalKind.PTInterval, GetInterval(cabinet, 3).IntervalKind);
+    }
+
     private static RingCabinet CreateMixedCabinet()
     {
         return RingCabinet.Create(RingCabinetDefinition.Create(
@@ -389,6 +435,29 @@ public sealed class RingCabinetIntervalTypeChangeTests
             interval.ExternalTerminalId);
     }
 
+    private static CabinetSnapshot Snapshot(RingCabinet cabinet)
+    {
+        return new CabinetSnapshot(
+            cabinet.Id,
+            cabinet.MainBusNodeId,
+            cabinet.Intervals.Select(Snapshot).ToArray(),
+            cabinet.ElectricalNodes.Select(node => node.Id).ToArray());
+    }
+
+    private static void AssertCabinetSnapshotEqual(
+        CabinetSnapshot expected,
+        CabinetSnapshot actual)
+    {
+        Assert.Equal(expected.CabinetId, actual.CabinetId);
+        Assert.Equal(expected.MainBusNodeId, actual.MainBusNodeId);
+        Assert.Equal(expected.NodeIds, actual.NodeIds);
+        Assert.Equal(expected.Intervals.Count, actual.Intervals.Count);
+        for (int index = 0; index < expected.Intervals.Count; index++)
+        {
+            AssertSnapshotEqual(expected.Intervals[index], actual.Intervals[index]);
+        }
+    }
+
     private static void AssertSnapshotEqual(
         IntervalSnapshot expected,
         IntervalSnapshot actual)
@@ -426,6 +495,12 @@ public sealed class RingCabinetIntervalTypeChangeTests
         Guid? IntermediateNodeId,
         Guid EarthNodeId,
         Guid ExternalTerminalId);
+
+    private sealed record CabinetSnapshot(
+        Guid CabinetId,
+        Guid MainBusNodeId,
+        IReadOnlyList<IntervalSnapshot> Intervals,
+        IReadOnlyList<Guid> NodeIds);
 
     private sealed record SwitchSnapshot(
         Guid Id,

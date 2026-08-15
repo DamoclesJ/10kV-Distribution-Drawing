@@ -1,5 +1,6 @@
 using System.Globalization;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
@@ -24,6 +25,65 @@ public sealed class PropertyCommandFactory
     public const string WorkScopeDescriptionPropertyKey = "WorkScope.Description";
     public const string CableTerminationDisplayNamePropertyKey =
         "CableTermination.DisplayName";
+
+    public bool TryCreateIntervalTypeChange(
+        ResolvedSelection selection,
+        IntervalKind targetIntervalKind,
+        GroundingStructureKind? targetGroundingStructureKind,
+        out ICommand? command,
+        out PropertyEditError? error)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        command = null;
+        error = null;
+
+        if (selection.RingCabinet is null || selection.RingCabinetInterval is null ||
+            selection.Reference.Kind != SelectionTargetKind.RingCabinetInterval)
+        {
+            error = new PropertyEditError(
+                "TargetNotSupported",
+                "Interval type editing requires a selected ring-cabinet interval.");
+            return false;
+        }
+
+        if (!Enum.IsDefined(targetIntervalKind))
+        {
+            error = new PropertyEditError("InputInvalid", "The interval type is invalid.");
+            return false;
+        }
+
+        if (targetIntervalKind == IntervalKind.IntegratedFeederInterval &&
+            targetGroundingStructureKind is not GroundingStructureKind)
+        {
+            error = new PropertyEditError(
+                "InputInvalid",
+                "Integrated-feeder intervals require a grounding structure.");
+            return false;
+        }
+
+        if (targetIntervalKind != IntervalKind.IntegratedFeederInterval &&
+            targetGroundingStructureKind is not null)
+        {
+            error = new PropertyEditError(
+                "InputInvalid",
+                "Only integrated-feeder intervals accept a grounding structure.");
+            return false;
+        }
+
+        if (selection.RingCabinetInterval.IntervalKind == targetIntervalKind &&
+            selection.RingCabinetInterval.GroundingStructureKind == targetGroundingStructureKind)
+        {
+            error = new PropertyEditError("NoChange", "The interval configuration has not changed.");
+            return false;
+        }
+
+        command = new ChangeIntervalTypeCommand(
+            selection.RingCabinet,
+            selection.RingCabinetInterval.IntervalId,
+            targetIntervalKind,
+            targetGroundingStructureKind);
+        return true;
+    }
 
     public bool TryCreate(
         ResolvedSelection selection,
