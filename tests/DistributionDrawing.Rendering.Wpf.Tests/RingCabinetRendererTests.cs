@@ -212,33 +212,91 @@ public sealed class RingCabinetRendererTests
             .ToArray();
 
         Assert.Contains(labels, label => label.Text == "Rendering Test Cabinet");
-        Assert.Contains(labels, label => label.Text == "1#");
-        Assert.Contains(labels, label => label.Text == "2#");
+        Assert.Contains(labels, label => label.Text == "-1");
+        Assert.Contains(labels, label => label.Text == "-2");
+        Assert.DoesNotContain(labels, label => label.Text is "1#" or "2#");
     }
 
     [Fact]
-    public void Render_PTIntervalUsesExistingDisplayTextWithoutInventingPTNumberContract()
+    public void Render_PTIntervalUsesDomainBusinessNumbersAtAnyBayIndex()
     {
-        RingCabinet cabinet = RingCabinet.Create(
-            RingCabinetDefinition.Create(
-                Guid.NewGuid(),
-                "PT cabinet",
-                [RingCabinetIntervalDefinition.CreatePT(
-                    7,
-                    SwitchState.Closed,
-                    SwitchState.Open,
-                    "负7 PT间隔")]));
+        foreach (int bayIndex in new[] { 1, 3, 5 })
+        {
+            RingCabinet cabinet = RingCabinet.Create(
+                RingCabinetDefinition.Create(
+                    Guid.NewGuid(),
+                    "PT cabinet",
+                    [RingCabinetIntervalDefinition.CreatePT(
+                        bayIndex,
+                        SwitchState.Closed,
+                        SwitchState.Open,
+                        $"PT {bayIndex}")]));
+            RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
+                cabinet,
+                new DocumentPoint(0, 0));
+
+            IReadOnlyList<string> labels = new RingCabinetRenderer()
+                .Render(cabinet, layout)
+                .OfType<SceneText>()
+                .Select(label => label.Text)
+                .ToArray();
+            string intervalNumber = $"-{bayIndex}";
+
+            Assert.Contains(intervalNumber, labels);
+            Assert.Contains($"{intervalNumber}-2", labels);
+            Assert.Contains($"{intervalNumber}-7", labels);
+        }
+    }
+
+    [Fact]
+    public void Render_IntegratedFeederUsesDomainBusinessNumbersForAllGroundingStructures()
+    {
+        foreach (GroundingStructureKind structureKind in Enum.GetValues<GroundingStructureKind>())
+        {
+            RingCabinet cabinet = BuildCabinet(
+                new BayTemplate(
+                    3,
+                    new IntegratedFeederConfiguration(structureKind)));
+            RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
+                cabinet,
+                new DocumentPoint(0, 0));
+
+            IReadOnlyList<string> labels = new RingCabinetRenderer()
+                .Render(cabinet, layout)
+                .OfType<SceneText>()
+                .Select(label => label.Text)
+                .ToArray();
+            string isolationNumber = structureKind == GroundingStructureKind.LowerLowerGrounding
+                ? "-3-2"
+                : "-3-4";
+            string groundNumber = structureKind == GroundingStructureKind.UpperIsolationGrounding
+                ? "-3-47"
+                : "-3-7";
+
+            Assert.Contains("-3", labels);
+            Assert.Contains(isolationNumber, labels);
+            Assert.Contains(groundNumber, labels);
+        }
+    }
+
+    [Fact]
+    public void Render_LoadSwitchOnlyDisplaysDomainProvidedGroundSwitchNumber()
+    {
+        RingCabinet cabinet = BuildCabinet(
+            new BayTemplate(3, new LoadSwitchConfiguration()));
         RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
             cabinet,
             new DocumentPoint(0, 0));
 
-        IReadOnlyList<SceneText> labels = new RingCabinetRenderer()
+        IReadOnlyList<string> labels = new RingCabinetRenderer()
             .Render(cabinet, layout)
             .OfType<SceneText>()
+            .Select(label => label.Text)
             .ToArray();
 
-        Assert.Contains(labels, label => label.Text == "负7 PT间隔");
-        Assert.DoesNotContain(labels, label => label.Text is "负7-2" or "负7-7");
+        Assert.Equal(1, labels.Count(label => label == "-3"));
+        Assert.Contains("-3-7", labels);
+        Assert.DoesNotContain(labels, label => label is "-3-2" or "-3-4" or "-3-47");
     }
 
     [Fact]

@@ -128,7 +128,7 @@ public sealed class RingCabinetSymbol
             requests.Add(new LabelRequest(
                 LabelTargetKind.Interval,
                 interval.IntervalId,
-                $"{interval.Sequence}#",
+                interval.BusinessNumber,
                 origin,
                 intervalLayout.SequenceLabelOffset,
                 priority: 80));
@@ -155,11 +155,24 @@ public sealed class RingCabinetSymbol
                         $"No layout exists for switch '{switchDevice.Id}' in interval '{interval.IntervalId}'.");
                 }
 
+                string? switchBusinessNumber = interval.GetSwitchBusinessNumber(switchDevice.Id);
+                DocumentPoint switchOrigin = new(
+                    origin.XMillimeters + switchLayout.RelativePosition.XMillimeters,
+                    origin.YMillimeters + switchLayout.RelativePosition.YMillimeters);
+
+                if (!string.IsNullOrWhiteSpace(switchBusinessNumber))
+                {
+                    requests.Add(new LabelRequest(
+                        LabelTargetKind.SwitchDevice,
+                        switchDevice.Id,
+                        switchBusinessNumber,
+                        switchOrigin,
+                        switchLayout.LabelOffset,
+                        priority: 70));
+                }
+
                 if (!string.IsNullOrWhiteSpace(switchDevice.DisplayName))
                 {
-                    DocumentPoint switchOrigin = new(
-                        origin.XMillimeters + switchLayout.RelativePosition.XMillimeters,
-                        origin.YMillimeters + switchLayout.RelativePosition.YMillimeters);
                     requests.Add(new LabelRequest(
                         LabelTargetKind.SwitchDevice,
                         switchDevice.Id,
