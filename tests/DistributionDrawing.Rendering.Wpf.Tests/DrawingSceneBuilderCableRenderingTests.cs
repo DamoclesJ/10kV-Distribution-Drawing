@@ -88,8 +88,6 @@ public sealed class DrawingSceneBuilderCableRenderingTests
             secondTermination.CableSideTerminalId,
             "P-401至P-402电缆",
             "10kV");
-        document.AddConnection(connection);
-
         var cable = new CableSegment(
             Guid.NewGuid(),
             "Cable-401",

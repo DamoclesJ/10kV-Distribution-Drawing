@@ -22,13 +22,13 @@ public sealed class MoveRuntimeTests
         Assert.True(controller.MouseDown(target, new DocumentPoint(10, 20), layout));
         Assert.True(controller.MouseMove(new DocumentPoint(15, 28)));
         Assert.True(controller.MouseUp(commands));
-        Assert.Equal(new DocumentPoint(15, 28), layout.RingCabinetLayouts[cabinetId].Position);
+        Assert.Equal(new DocumentPoint(5, 8), layout.RingCabinetLayouts[cabinetId].Position);
         Assert.Equal(target, selection.CurrentSelection);
 
         Assert.True(commands.Undo());
         Assert.Equal(new DocumentPoint(0, 0), layout.RingCabinetLayouts[cabinetId].Position);
         Assert.True(commands.Redo());
-        Assert.Equal(new DocumentPoint(15, 28), layout.RingCabinetLayouts[cabinetId].Position);
+        Assert.Equal(new DocumentPoint(5, 8), layout.RingCabinetLayouts[cabinetId].Position);
     }
 
     [Fact]

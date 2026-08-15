@@ -34,7 +34,8 @@ public sealed class PoleRendererTests
             PoleType.Cement,
             null,
             switchKinds: null,
-            includeCableTerminal: true);
+            includeCableTerminal: true,
+            cableTerminalDisplayName: "电缆终端-002");
         CableTermination cableTermination = Assert.IsType<CableTermination>(
             Assert.Single(result.Devices));
         PoleAttachment attachment = Assert.Single(result.Attachments);
@@ -63,7 +64,8 @@ public sealed class PoleRendererTests
             PoleType.Cement,
             null,
             switchKinds: null,
-            includeCableTerminal: true);
+            includeCableTerminal: true,
+            cableTerminalDisplayName: "电缆终端-003");
         CableTermination cableTermination = Assert.IsType<CableTermination>(
             Assert.Single(result.Devices));
         PoleAttachment attachment = Assert.Single(result.Attachments);
@@ -118,7 +120,8 @@ public sealed class PoleRendererTests
             PoleType.Cement,
             null,
             switchKinds: null,
-            includeCableTerminal: true);
+            includeCableTerminal: true,
+            cableTerminalDisplayName: "电缆终端-005");
         CableTermination cableTermination = Assert.IsType<CableTermination>(
             Assert.Single(result.Devices));
         PoleAttachment attachment = Assert.Single(result.Attachments);

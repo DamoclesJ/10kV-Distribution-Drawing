@@ -17,7 +17,8 @@ public sealed class MixedPoleRendererTests
             PoleType.Cement,
             null,
             [SwitchKind.IsolationSwitch],
-            includeCableTerminal: true);
+            includeCableTerminal: true,
+            cableTerminalDisplayName: "电缆终端-201");
         SwitchDevice switchDevice = Assert.Single(result.Devices.OfType<SwitchDevice>());
         CableTermination cableTermination = Assert.Single(result.Devices.OfType<CableTermination>());
         PoleAttachment switchAttachment = Assert.Single(
@@ -60,7 +61,8 @@ public sealed class MixedPoleRendererTests
             PoleType.Cement,
             null,
             [SwitchKind.IsolationSwitch],
-            includeCableTerminal: true);
+            includeCableTerminal: true,
+            cableTerminalDisplayName: "电缆终端-202");
         SwitchDevice switchDevice = Assert.Single(result.Devices.OfType<SwitchDevice>());
         CableTermination cableTermination = Assert.Single(result.Devices.OfType<CableTermination>());
         PoleAttachment switchAttachment = Assert.Single(
@@ -101,7 +103,8 @@ public sealed class MixedPoleRendererTests
             PoleType.Cement,
             null,
             [SwitchKind.IsolationSwitch],
-            includeCableTerminal: true);
+            includeCableTerminal: true,
+            cableTerminalDisplayName: "电缆终端-203");
         SwitchDevice switchDevice = Assert.Single(result.Devices.OfType<SwitchDevice>());
         CableTermination cableTermination = Assert.Single(result.Devices.OfType<CableTermination>());
         PoleAttachment switchAttachment = Assert.Single(
@@ -132,7 +135,7 @@ public sealed class MixedPoleRendererTests
 
         SceneText[] firstLabels = first.OfType<SceneText>().ToArray();
         SceneText[] secondLabels = second.OfType<SceneText>().ToArray();
-        Assert.Equal(3, firstLabels.Length);
+        Assert.Equal(4, firstLabels.Length);
         Assert.Contains(firstLabels, text => text.Text == "P-203");
         Assert.Contains(firstLabels, text => text.Text == switchDevice.DisplayName);
         Assert.Contains(firstLabels, text => text.Text == cableTermination.DisplayName);

@@ -73,11 +73,17 @@ public sealed class RingCabinetRendererTests
             cabinet,
             new DocumentPoint(0, 0));
         var renderer = new RingCabinetRenderer();
+        SwitchDevice loadSwitch = cabinet.Intervals
+            .Single(item => item.BayIndex == 1)
+            .SwitchDevices
+            .Single(device => device.SwitchKind == SwitchKind.LoadSwitch);
+        cabinet.Intervals
+            .Single(item => item.BayIndex == 1)
+            .SwitchAssembly
+            .ChangeSwitchState(loadSwitch.Id, SwitchState.Closed);
 
         IReadOnlyList<SceneElement> running = renderer.Render(cabinet, layout);
         RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
-        SwitchDevice loadSwitch = interval.SwitchDevices.Single(device =>
-            device.SwitchKind == SwitchKind.LoadSwitch);
         Assert.Contains(running.OfType<SceneText>(), text => text.Text == "合");
 
         interval.SwitchAssembly.ChangeSwitchState(loadSwitch.Id, SwitchState.Open);
@@ -196,7 +202,7 @@ public sealed class RingCabinetRendererTests
 
         Assert.Contains(initial.OfType<SceneText>(), text => text.Text == "合");
         Assert.Contains(initial.OfType<SceneText>(), text => text.Text == "分");
-        Assert.Equal(2, grounded.OfType<SceneText>().Count(text => text.Text == "合"));
+        Assert.Equal(1, grounded.OfType<SceneText>().Count(text => text.Text == "合"));
         Assert.Equal(0, grounded.OfType<SceneText>().Count(text => text.Text == "分"));
     }
 

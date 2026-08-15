@@ -19,7 +19,8 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
             PoleType.Cement,
             null,
             [SwitchKind.IsolationSwitch],
-            includeCableTerminal: true);
+            includeCableTerminal: true,
+            cableTerminalDisplayName: "电缆终端-301");
         var document = new DrawingDocument(Guid.NewGuid(), "Scene builder pole test");
         document.AddDevice(result.Pole);
         foreach (Device device in result.Devices)
@@ -70,7 +71,7 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
         DrawingScene scene = builder.Build(document, runtimeLayout);
         SceneText[] labels = scene.Elements.OfType<SceneText>().ToArray();
 
-        Assert.Equal(3, labels.Length);
+        Assert.Equal(4, labels.Length);
         Assert.Equal(1, labels.Count(text => text.Text == "P-301"));
         Assert.Equal(1, labels.Count(text => text.Text == switchDevice.DisplayName));
         Assert.Equal(1, labels.Count(text => text.Text == cableTermination.DisplayName));

@@ -65,15 +65,16 @@ public sealed class AddDeviceRuntimeTests
         Pole existing = new(Guid.NewGuid(), "P-1");
         document.AddDevice(existing);
         var runtime = new RuntimeLayoutDocument(new DrawingLayout(), new Dictionary<Guid, RingCabinetLayout>());
-        runtime.DrawingLayout.Add(new PoleLayout(existing.Id, new DocumentPoint(0, 0)));
         Pole candidate = new(Guid.NewGuid(), "P-2");
         Terminal terminal = candidate.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        PoleLayout candidateLayout = new(candidate.Id, new DocumentPoint(2, 2));
+        runtime.DrawingLayout.Add(candidateLayout);
         var command = new AddPoleCommand(
             document,
             runtime,
             candidate,
             terminal,
-            new PoleLayout(existing.Id, new DocumentPoint(2, 2)));
+            candidateLayout);
 
         Assert.Throws<InvalidOperationException>(command.Execute);
         Assert.DoesNotContain(document.Devices, device => device.Id == candidate.Id);

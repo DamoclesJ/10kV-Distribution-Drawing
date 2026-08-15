@@ -19,7 +19,8 @@ public sealed class DrawingSceneBuilderJointRenderingTests
 
         DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
-        Assert.Equal(2, scene.Elements.OfType<SceneLine>().Count());
+        Assert.Equal(2, scene.Elements.OfType<SceneLine>().Count(line =>
+            line.Start.YMillimeters == 25 && line.End.YMillimeters == 25));
         Assert.Single(scene.Elements.OfType<SceneRectangle>());
         Assert.Equal(2, scene.Elements.OfType<SceneText>().Count(
             text => text.Text.Contains(fixture.CableType, StringComparison.Ordinal)));
