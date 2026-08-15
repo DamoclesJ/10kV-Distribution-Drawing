@@ -105,7 +105,11 @@ public sealed class PropertyEditRuntimeTests
                 new TemplateId("test:property-edit"),
                 name,
                 RingCabinetTemplateType.Conventional,
-                [new BayTemplate(1, new LoadSwitchConfiguration())],
+                [
+                    new BayTemplate(1, new LoadSwitchConfiguration()),
+                    new BayTemplate(2, new LoadSwitchConfiguration()),
+                    new BayTemplate(3, new LoadSwitchConfiguration())
+                ],
                 RingCabinetLayoutRule.Default,
                 NoSecondaryConfiguration.Instance),
             name);

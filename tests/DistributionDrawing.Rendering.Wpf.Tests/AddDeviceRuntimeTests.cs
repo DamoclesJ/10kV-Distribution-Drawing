@@ -88,7 +88,11 @@ public sealed class AddDeviceRuntimeTests
                 new TemplateId("test:add-cabinet"),
                 "Test cabinet",
                 RingCabinetTemplateType.Conventional,
-                [new BayTemplate(1, new LoadSwitchConfiguration())],
+                [
+                    new BayTemplate(1, new LoadSwitchConfiguration()),
+                    new BayTemplate(2, new LoadSwitchConfiguration()),
+                    new BayTemplate(3, new LoadSwitchConfiguration())
+                ],
                 RingCabinetLayoutRule.Default,
                 NoSecondaryConfiguration.Instance),
             "Test cabinet");

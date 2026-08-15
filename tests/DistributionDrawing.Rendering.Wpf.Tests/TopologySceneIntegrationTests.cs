@@ -72,11 +72,20 @@ public sealed class TopologySceneIntegrationTests
         RingCabinetDefinition cabinetDefinition = RingCabinetDefinition.Create(
             Guid.NewGuid(),
             "Cabinet-A",
-            [RingCabinetIntervalDefinition.CreateLoadSwitch(
-                1,
-                SwitchState.Open,
-                SwitchState.Open,
-                "负1")]);
+            [
+                RingCabinetIntervalDefinition.CreateLoadSwitch(
+                    1,
+                    SwitchState.Open,
+                    SwitchState.Open,
+                    "负1"),
+                RingCabinetIntervalDefinition.CreateLoadSwitch(
+                    2,
+                    SwitchState.Open,
+                    SwitchState.Open),
+                RingCabinetIntervalDefinition.CreateLoadSwitch(
+                    3,
+                    SwitchState.Open,
+                    SwitchState.Open)]);
         RingCabinet cabinet = RingCabinet.Create(cabinetDefinition);
         document.AddDevice(cabinet);
 

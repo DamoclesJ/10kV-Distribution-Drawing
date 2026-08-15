@@ -69,7 +69,7 @@ public sealed class RingCabinetRealScenarioTests
         string expectedGroundNumber)
     {
         RingCabinet cabinet = CreateCabinet(intervalDefinition);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals[0];
         Guid[] stableIds = interval.SwitchDevices.Select(device => device.Id).ToArray();
 
         IReadOnlyList<SceneText> labels = Render(cabinet);
@@ -99,7 +99,7 @@ public sealed class RingCabinetRealScenarioTests
         RingCabinetIntervalDefinition intervalDefinition)
     {
         RingCabinet cabinet = CreateCabinet(intervalDefinition);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals[0];
         IReadOnlyList<SceneText> labels = Render(cabinet);
 
         Assert.Equal($"-{bayIndex}", interval.BusinessNumber);
@@ -126,7 +126,7 @@ public sealed class RingCabinetRealScenarioTests
                 SwitchState.Closed,
                 SwitchState.Closed,
                 SwitchState.Open));
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals[0];
         RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
             cabinet,
             new DocumentPoint(10, 10));
@@ -158,10 +158,49 @@ public sealed class RingCabinetRealScenarioTests
     private static RingCabinet CreateCabinet(
         RingCabinetIntervalDefinition intervalDefinition)
     {
+        RingCabinetIntervalDefinition[] definitions = intervalDefinition.IntervalKind switch
+        {
+            IntervalKind.LoadSwitchInterval =>
+            [
+                intervalDefinition,
+                RingCabinetIntervalDefinition.CreateLoadSwitch(
+                    4,
+                    SwitchState.Closed,
+                    SwitchState.Open),
+                RingCabinetIntervalDefinition.CreateLoadSwitch(
+                    5,
+                    SwitchState.Closed,
+                    SwitchState.Open)
+            ],
+            IntervalKind.IntegratedFeederInterval =>
+            [
+                intervalDefinition,
+                RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                    4,
+                    intervalDefinition.GroundingStructureKind!.Value,
+                    SwitchState.Closed,
+                    SwitchState.Closed,
+                    SwitchState.Open),
+                RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                    5,
+                    intervalDefinition.GroundingStructureKind!.Value,
+                    SwitchState.Closed,
+                    SwitchState.Closed,
+                    SwitchState.Open),
+                RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                    6,
+                    intervalDefinition.GroundingStructureKind!.Value,
+                    SwitchState.Closed,
+                    SwitchState.Closed,
+                    SwitchState.Open)
+            ],
+            _ => [intervalDefinition]
+        };
+
         return RingCabinet.Create(
             RingCabinetDefinition.Create(
                 Guid.NewGuid(),
                 "真实场景环网柜",
-                [intervalDefinition]));
+                definitions));
     }
 }

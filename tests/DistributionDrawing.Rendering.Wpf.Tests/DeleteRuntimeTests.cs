@@ -21,7 +21,11 @@ public sealed class DeleteRuntimeTests
                 new TemplateId("test:ring-cabinet"),
                 "Test cabinet",
                 RingCabinetTemplateType.Conventional,
-                [new BayTemplate(1, new LoadSwitchConfiguration())],
+                [
+                    new BayTemplate(1, new LoadSwitchConfiguration()),
+                    new BayTemplate(2, new LoadSwitchConfiguration()),
+                    new BayTemplate(3, new LoadSwitchConfiguration())
+                ],
                 RingCabinetLayoutRule.Default,
                 NoSecondaryConfiguration.Instance),
             "Test cabinet");

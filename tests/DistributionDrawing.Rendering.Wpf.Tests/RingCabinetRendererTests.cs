@@ -18,7 +18,8 @@ public sealed class RingCabinetRendererTests
     {
         RingCabinet cabinet = BuildCabinet(
             new BayTemplate(1, new LoadSwitchConfiguration()),
-            new BayTemplate(2, new LoadSwitchConfiguration()));
+            new BayTemplate(2, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()));
         RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
             cabinet,
             new DocumentPoint(0, 0));
@@ -28,11 +29,11 @@ public sealed class RingCabinetRendererTests
             layout);
 
         Assert.Equal(
-            4,
+            6,
             elements.OfType<SceneRectangle>().Count(rectangle =>
                 rectangle.Bounds.WidthMillimeters == 16 &&
                 rectangle.Bounds.HeightMillimeters == 10));
-        Assert.Equal(4, elements.OfType<SceneText>().Count(text =>
+        Assert.Equal(6, elements.OfType<SceneText>().Count(text =>
             text.Text is "合" or "分"));
     }
 
@@ -65,14 +66,16 @@ public sealed class RingCabinetRendererTests
     public void Render_ReflectsSwitchStateChanges()
     {
         RingCabinet cabinet = BuildCabinet(
-            new BayTemplate(1, new LoadSwitchConfiguration()));
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()));
         RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
             cabinet,
             new DocumentPoint(0, 0));
         var renderer = new RingCabinetRenderer();
 
         IReadOnlyList<SceneElement> running = renderer.Render(cabinet, layout);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
         SwitchDevice loadSwitch = interval.SwitchDevices.Single(device =>
             device.SwitchKind == SwitchKind.LoadSwitch);
         Assert.Contains(running.OfType<SceneText>(), text => text.Text == "合");
@@ -227,8 +230,20 @@ public sealed class RingCabinetRendererTests
             new BayTemplate(
                 3,
                 new IntegratedFeederConfiguration(
+                    GroundingStructureKind.UpperLowerGrounding)),
+            new BayTemplate(
+                4,
+                new IntegratedFeederConfiguration(
+                    GroundingStructureKind.UpperLowerGrounding)),
+            new BayTemplate(
+                5,
+                new IntegratedFeederConfiguration(
+                    GroundingStructureKind.UpperLowerGrounding)),
+            new BayTemplate(
+                6,
+                new IntegratedFeederConfiguration(
                     GroundingStructureKind.UpperLowerGrounding)));
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 3);
         RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
             cabinet,
             new DocumentPoint(0, 0));
@@ -252,11 +267,26 @@ public sealed class RingCabinetRendererTests
     {
         RingCabinet[] cabinets =
         [
-            BuildCabinet(new BayTemplate(1, new LoadSwitchConfiguration())),
+            BuildCabinet(
+                new BayTemplate(1, new LoadSwitchConfiguration()),
+                new BayTemplate(2, new LoadSwitchConfiguration()),
+                new BayTemplate(3, new LoadSwitchConfiguration())),
             BuildCabinet(new BayTemplate(
                 2,
                 new IntegratedFeederConfiguration(
-                    GroundingStructureKind.UpperLowerGrounding))),
+                    GroundingStructureKind.UpperLowerGrounding)),
+                new BayTemplate(
+                    3,
+                    new IntegratedFeederConfiguration(
+                        GroundingStructureKind.UpperLowerGrounding)),
+                new BayTemplate(
+                    4,
+                    new IntegratedFeederConfiguration(
+                        GroundingStructureKind.UpperLowerGrounding)),
+                new BayTemplate(
+                    5,
+                    new IntegratedFeederConfiguration(
+                        GroundingStructureKind.UpperLowerGrounding))),
             RingCabinet.Create(
                 RingCabinetDefinition.Create(
                     Guid.NewGuid(),
@@ -271,7 +301,7 @@ public sealed class RingCabinetRendererTests
 
         foreach (RingCabinet cabinet in cabinets)
         {
-            RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+            RingCabinetInterval interval = cabinet.Intervals[0];
             RingCabinetLayout cabinetLayout = layoutFactory.Create(
                 cabinet,
                 new DocumentPoint(0, 0));
@@ -336,6 +366,15 @@ public sealed class RingCabinetRendererTests
             RingCabinet cabinet = BuildCabinet(
                 new BayTemplate(
                     3,
+                    new IntegratedFeederConfiguration(structureKind)),
+                new BayTemplate(
+                    4,
+                    new IntegratedFeederConfiguration(structureKind)),
+                new BayTemplate(
+                    5,
+                    new IntegratedFeederConfiguration(structureKind)),
+                new BayTemplate(
+                    6,
                     new IntegratedFeederConfiguration(structureKind)));
             RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
                 cabinet,
@@ -363,7 +402,9 @@ public sealed class RingCabinetRendererTests
     public void Render_LoadSwitchOnlyDisplaysDomainProvidedGroundSwitchNumber()
     {
         RingCabinet cabinet = BuildCabinet(
-            new BayTemplate(3, new LoadSwitchConfiguration()));
+            new BayTemplate(3, new LoadSwitchConfiguration()),
+            new BayTemplate(4, new LoadSwitchConfiguration()),
+            new BayTemplate(5, new LoadSwitchConfiguration()));
         RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
             cabinet,
             new DocumentPoint(0, 0));
@@ -384,7 +425,8 @@ public sealed class RingCabinetRendererTests
     {
         RingCabinet cabinet = BuildCabinet(
             new BayTemplate(1, new LoadSwitchConfiguration()),
-            new BayTemplate(2, new LoadSwitchConfiguration()));
+            new BayTemplate(2, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()));
         Guid cabinetId = cabinet.Id;
         Guid[] intervalIds = cabinet.Intervals.Select(interval => interval.IntervalId).ToArray();
         SwitchState?[] switchStates = cabinet.Intervals

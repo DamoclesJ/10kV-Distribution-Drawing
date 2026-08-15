@@ -13,7 +13,7 @@ public sealed class IntervalTypeChangeIntegrationTests
     public void ChangeIntervalTypeCommand_UndoRedoRestoresTheSameStableIds()
     {
         RingCabinet cabinet = CreateCabinet();
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
         Guid intervalId = interval.IntervalId;
         Guid[] beforeSwitchIds = interval.SwitchDevices.Select(device => device.Id).ToArray();
         Guid[] beforeTerminalIds = interval.SwitchDevices
@@ -29,7 +29,7 @@ public sealed class IntervalTypeChangeIntegrationTests
             null);
 
         commandStack.ExecuteCommand(command);
-        RingCabinetInterval changed = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval changed = cabinet.Intervals.Single(item => item.BayIndex == 1);
         Guid[] afterSwitchIds = changed.SwitchDevices.Select(device => device.Id).ToArray();
         Guid[] afterTerminalIds = changed.SwitchDevices
             .SelectMany(device => device.TerminalIds)
@@ -45,7 +45,7 @@ public sealed class IntervalTypeChangeIntegrationTests
         Assert.NotEqual(beforeNodeIds[1], afterNodeIds[1]);
 
         Assert.True(commandStack.Undo());
-        RingCabinetInterval undone = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval undone = cabinet.Intervals.Single(item => item.BayIndex == 1);
         Assert.Equal(IntervalKind.IntegratedFeederInterval, undone.IntervalKind);
         Assert.Equal(beforeSwitchIds, undone.SwitchDevices.Select(device => device.Id));
         Assert.Equal(beforeTerminalIds, undone.SwitchDevices.SelectMany(device => device.TerminalIds));
@@ -53,7 +53,7 @@ public sealed class IntervalTypeChangeIntegrationTests
         Assert.Equal(beforeAssemblyId, undone.SwitchAssembly.AssemblyId);
 
         Assert.True(commandStack.Redo());
-        RingCabinetInterval redone = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval redone = cabinet.Intervals.Single(item => item.BayIndex == 1);
         Assert.Equal(afterSwitchIds, redone.SwitchDevices.Select(device => device.Id));
         Assert.Equal(afterTerminalIds, redone.SwitchDevices.SelectMany(device => device.TerminalIds));
         Assert.Equal(afterNodeIds, cabinet.ElectricalNodes.Select(node => node.Id));
@@ -64,7 +64,7 @@ public sealed class IntervalTypeChangeIntegrationTests
     public void InspectorProjector_UsesDomainNumberingAndKeepsIntervalSelection()
     {
         RingCabinet cabinet = CreateCabinet();
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
         var selection = new ResolvedSelection
         {
             Reference = new SelectionReference(
@@ -121,10 +121,24 @@ public sealed class IntervalTypeChangeIntegrationTests
                 new TemplateId("test:interval-inspector"),
                 "Cabinet",
                 RingCabinetTemplateType.Conventional,
-                [new BayTemplate(
-                    1,
-                    new IntegratedFeederConfiguration(
-                        GroundingStructureKind.UpperIsolationGrounding))],
+                [
+                    new BayTemplate(
+                        1,
+                        new IntegratedFeederConfiguration(
+                            GroundingStructureKind.UpperIsolationGrounding)),
+                    new BayTemplate(
+                        2,
+                        new IntegratedFeederConfiguration(
+                            GroundingStructureKind.UpperIsolationGrounding)),
+                    new BayTemplate(
+                        3,
+                        new IntegratedFeederConfiguration(
+                            GroundingStructureKind.UpperIsolationGrounding)),
+                    new BayTemplate(
+                        4,
+                        new IntegratedFeederConfiguration(
+                            GroundingStructureKind.UpperIsolationGrounding))
+                ],
                 RingCabinetLayoutRule.Default,
                 NoSecondaryConfiguration.Instance),
             "Cabinet");
@@ -146,6 +160,14 @@ public sealed class IntervalTypeChangeIntegrationTests
                             GroundingStructureKind.UpperIsolationGrounding)),
                     new BayTemplate(
                         2,
+                        new IntegratedFeederConfiguration(
+                            GroundingStructureKind.UpperIsolationGrounding)),
+                    new BayTemplate(
+                        3,
+                        new IntegratedFeederConfiguration(
+                            GroundingStructureKind.UpperIsolationGrounding)),
+                    new BayTemplate(
+                        4,
                         new IntegratedFeederConfiguration(
                             GroundingStructureKind.UpperIsolationGrounding))
                 ],
