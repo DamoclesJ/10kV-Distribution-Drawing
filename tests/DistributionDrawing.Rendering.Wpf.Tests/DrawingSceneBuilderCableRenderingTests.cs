@@ -22,9 +22,9 @@ public sealed class DrawingSceneBuilderCableRenderingTests
         Assert.Single(
             scene.Elements.OfType<SceneLine>(),
             line => line.TargetKind == SelectionTargetKind.CableSegment);
-        SceneText label = Assert.Single(scene.Elements.OfType<SceneText>());
-        Assert.Contains(fixture.Cable.CableType, label.Text, StringComparison.Ordinal);
-        Assert.Contains("120", label.Text, StringComparison.Ordinal);
+        Assert.Single(
+            scene.Elements.OfType<SceneText>(),
+            text => text.Text == "YJV22-8.7/15kV 120m");
     }
 
     [Fact]

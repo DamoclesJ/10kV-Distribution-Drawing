@@ -22,7 +22,9 @@ public sealed class DrawingSceneBuilderJointRenderingTests
 
         Assert.Equal(2, scene.Elements.OfType<SceneLine>().Count(line =>
             line.TargetKind == SelectionTargetKind.CableSegment));
-        Assert.Single(scene.Elements.OfType<SceneRectangle>());
+        Assert.Single(
+            scene.Elements.OfType<SceneRectangle>(),
+            rectangle => rectangle.TargetKind == SelectionTargetKind.IntermediateTerminal);
         Assert.Equal(2, scene.Elements.OfType<SceneText>().Count(
             text => text.Text.Contains(fixture.CableType, StringComparison.Ordinal)));
         Assert.Contains(scene.Elements.OfType<SceneText>(), text => text.Text == "Joint-X");
