@@ -174,6 +174,8 @@ public sealed class RingCabinetInterval
 
     public int BayIndex { get; }
 
+    public string BusinessNumber => FormatBusinessNumber(BayIndex);
+
     public string DisplayName { get; }
 
     public IntervalKind IntervalKind { get; }
@@ -191,6 +193,37 @@ public sealed class RingCabinetInterval
     public Guid EarthNodeId { get; }
 
     public Guid ExternalTerminalId { get; }
+
+    public string? GetSwitchBusinessNumber(Guid switchDeviceId)
+    {
+        SwitchDevice switchDevice = _switchDevices.FirstOrDefault(device => device.Id == switchDeviceId)
+            ?? throw new ArgumentException(
+                "The switch device does not belong to this interval.",
+                nameof(switchDeviceId));
+
+        string intervalNumber = BusinessNumber;
+
+        return IntervalKind switch
+        {
+            IntervalKind.IntegratedFeederInterval =>
+                GetIntegratedFeederSwitchBusinessNumber(
+                    switchDevice.SwitchKind,
+                    intervalNumber,
+                    GroundingStructureKind),
+            IntervalKind.PTInterval => switchDevice.SwitchKind switch
+            {
+                SwitchKind.IsolationSwitch => $"{intervalNumber}-2",
+                SwitchKind.GroundSwitch => $"{intervalNumber}-7",
+                _ => null
+            },
+            IntervalKind.LoadSwitchInterval => switchDevice.SwitchKind switch
+            {
+                SwitchKind.GroundSwitch => $"{intervalNumber}-7",
+                _ => null
+            },
+            _ => null
+        };
+    }
 
     private static void EnsureSwitchStructure(
         IReadOnlyCollection<SwitchDevice> devices,
@@ -217,5 +250,41 @@ public sealed class RingCabinetInterval
                 "The switch assembly must contain exactly the switches owned by this interval.",
                 nameof(switchAssembly));
         }
+    }
+
+    private static string FormatBusinessNumber(int bayIndex)
+    {
+        return $"-{bayIndex}";
+    }
+
+    private static string? GetIntegratedFeederSwitchBusinessNumber(
+        SwitchKind switchKind,
+        string intervalNumber,
+        GroundingStructureKind? groundingStructureKind)
+    {
+        if (groundingStructureKind is not GroundingStructureKind structureKind)
+        {
+            return null;
+        }
+
+        return switchKind switch
+        {
+            SwitchKind.CircuitBreaker => intervalNumber,
+            SwitchKind.IsolationSwitch => structureKind switch
+            {
+                global::DistributionDrawing.Domain.Devices.RingCabinets.GroundingStructureKind.UpperIsolationGrounding
+                    or global::DistributionDrawing.Domain.Devices.RingCabinets.GroundingStructureKind.UpperLowerGrounding => $"{intervalNumber}-4",
+                global::DistributionDrawing.Domain.Devices.RingCabinets.GroundingStructureKind.LowerLowerGrounding => $"{intervalNumber}-2",
+                _ => null
+            },
+            SwitchKind.GroundSwitch => structureKind switch
+            {
+                global::DistributionDrawing.Domain.Devices.RingCabinets.GroundingStructureKind.UpperIsolationGrounding => $"{intervalNumber}-47",
+                global::DistributionDrawing.Domain.Devices.RingCabinets.GroundingStructureKind.UpperLowerGrounding
+                    or global::DistributionDrawing.Domain.Devices.RingCabinets.GroundingStructureKind.LowerLowerGrounding => $"{intervalNumber}-7",
+                _ => null
+            },
+            _ => null
+        };
     }
 }
