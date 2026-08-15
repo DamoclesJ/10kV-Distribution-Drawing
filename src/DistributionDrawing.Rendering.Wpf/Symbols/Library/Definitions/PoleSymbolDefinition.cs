@@ -28,7 +28,7 @@ public sealed class PoleSymbolDefinition : ISymbolDefinition
                 context.ThicknessMillimeters * 0.7)
         };
 
-        if (context.Label is not null)
+        if (context.IncludeLabel && context.Label is not null)
         {
             elements.Add(
                 new SceneText(
