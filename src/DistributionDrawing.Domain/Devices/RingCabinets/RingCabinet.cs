@@ -16,9 +16,9 @@ public sealed class RingCabinet : Device
     private const string FirstTerminalRole = "Terminal1";
     private const string SecondTerminalRole = "Terminal2";
 
-    private readonly IReadOnlyList<RingCabinetInterval> _intervals;
-    private readonly IReadOnlyList<ElectricalNode> _electricalNodes;
-    private readonly IReadOnlyList<Terminal> _terminals;
+    private IReadOnlyList<RingCabinetInterval> _intervals;
+    private IReadOnlyList<ElectricalNode> _electricalNodes;
+    private IReadOnlyList<Terminal> _terminals;
 
     private RingCabinet(
         Guid id,
@@ -38,13 +38,66 @@ public sealed class RingCabinet : Device
 
     public Guid MainBusNodeId { get; }
 
-    public CabinetCompositionKind CompositionKind { get; }
+    public CabinetCompositionKind CompositionKind { get; private set; }
 
     public IReadOnlyList<RingCabinetInterval> Intervals => _intervals;
 
     public IReadOnlyList<ElectricalNode> ElectricalNodes => _electricalNodes;
 
     public IReadOnlyList<Terminal> Terminals => _terminals;
+
+    public void ChangeIntervalType(
+        Guid intervalId,
+        IntervalKind targetIntervalKind,
+        GroundingStructureKind? targetGroundingStructureKind = null)
+    {
+        if (intervalId == Guid.Empty)
+        {
+            throw new ArgumentException("Interval ID cannot be empty.", nameof(intervalId));
+        }
+
+        if (!Enum.IsDefined(targetIntervalKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetIntervalKind));
+        }
+
+        RingCabinetInterval currentInterval = _intervals
+            .FirstOrDefault(interval => interval.IntervalId == intervalId)
+            ?? throw new InvalidOperationException(
+                $"Interval '{intervalId}' does not belong to cabinet '{Id}'.");
+
+        ValidateTypeChangeConfiguration(
+            currentInterval,
+            targetIntervalKind,
+            targetGroundingStructureKind);
+
+        if (currentInterval.IntervalKind == targetIntervalKind &&
+            currentInterval.GroundingStructureKind == targetGroundingStructureKind)
+        {
+            return;
+        }
+
+        RingCabinetIntervalRestoreDefinition[] definitions = _intervals
+            .Select(interval => interval.IntervalId == intervalId
+                ? CreateTypeChangeIntervalDefinition(
+                    interval,
+                    targetIntervalKind,
+                    targetGroundingStructureKind)
+                : CreateRestoreDefinition(interval))
+            .ToArray();
+
+        RingCabinet candidate = Restore(new RingCabinetRestoreDefinition(
+            Id,
+            DisplayName ?? throw new InvalidOperationException(
+                "A ring cabinet must have a display name."),
+            MainBusNodeId,
+            definitions));
+
+        _intervals = candidate._intervals;
+        _electricalNodes = candidate._electricalNodes;
+        _terminals = candidate._terminals;
+        CompositionKind = candidate.CompositionKind;
+    }
 
     internal IEnumerable<SwitchDevice> InternalSwitchDevices =>
         _intervals.SelectMany(interval => interval.SwitchDevices);
@@ -204,6 +257,182 @@ public sealed class RingCabinet : Device
 
         cabinet.ValidateStructure();
         return cabinet;
+    }
+
+    private void ValidateTypeChangeConfiguration(
+        RingCabinetInterval currentInterval,
+        IntervalKind targetIntervalKind,
+        GroundingStructureKind? targetGroundingStructureKind)
+    {
+        if (targetIntervalKind == IntervalKind.IntegratedFeederInterval)
+        {
+            if (targetGroundingStructureKind is not GroundingStructureKind structureKind ||
+                !Enum.IsDefined(structureKind))
+            {
+                throw new ArgumentException(
+                    "An integrated-feeder interval requires a valid grounding structure.",
+                    nameof(targetGroundingStructureKind));
+            }
+        }
+        else if (targetGroundingStructureKind is not null)
+        {
+            throw new ArgumentException(
+                "Only an integrated-feeder interval accepts a grounding structure.",
+                nameof(targetGroundingStructureKind));
+        }
+
+        bool alreadyContainsPT = _intervals.Any(interval =>
+            interval.IntervalKind == IntervalKind.PTInterval &&
+            interval.IntervalId != currentInterval.IntervalId);
+        if (targetIntervalKind == IntervalKind.PTInterval && alreadyContainsPT)
+        {
+            throw new InvalidOperationException(
+                "A ring cabinet can contain at most one PT interval.");
+        }
+    }
+
+    private static RingCabinetIntervalRestoreDefinition CreateRestoreDefinition(
+        RingCabinetInterval interval)
+    {
+        return new RingCabinetIntervalRestoreDefinition(
+            interval.IntervalId,
+            interval.ParentCabinetId,
+            interval.Sequence,
+            interval.BayIndex,
+            interval.DisplayName,
+            interval.IntervalKind,
+            interval.GroundingStructureKind,
+            interval.IntermediateNodeId,
+            interval.CircuitNodeId,
+            interval.EarthNodeId,
+            interval.ExternalTerminalId,
+            interval.SwitchAssembly.AssemblyId,
+            interval.SwitchDevices.Select(device => new SwitchDeviceRestoreDefinition(
+                device.Id,
+                device.SwitchKind,
+                device.InstallationType,
+                device.TerminalIds[0],
+                device.TerminalIds[1],
+                device.SwitchState ?? throw new InvalidOperationException(
+                    "A ring cabinet switch must have a state."),
+                device.DisplayName ?? throw new InvalidOperationException(
+                    "A ring cabinet switch must have a display name."),
+                device.VoltageLevel ?? TenKilovolts,
+                device.DispatchNumber)).ToArray());
+    }
+
+    private static RingCabinetIntervalRestoreDefinition CreateTypeChangeIntervalDefinition(
+        RingCabinetInterval interval,
+        IntervalKind targetIntervalKind,
+        GroundingStructureKind? targetGroundingStructureKind)
+    {
+        Guid circuitNodeId = Guid.NewGuid();
+        Guid earthNodeId = Guid.NewGuid();
+        Guid externalTerminalId = Guid.NewGuid();
+        Guid? intermediateNodeId = null;
+        List<SwitchDeviceRestoreDefinition> switches = [];
+
+        SwitchState GetState(SwitchKind switchKind)
+        {
+            return interval.SwitchDevices
+                .FirstOrDefault(device => device.SwitchKind == switchKind)
+                ?.SwitchState
+                ?? SwitchStateValue.Open;
+        }
+
+        string switchName(string suffix) => $"{interval.DisplayName}{suffix}";
+
+        switch (targetIntervalKind)
+        {
+            case IntervalKind.LoadSwitchInterval:
+                switches.Add(CreateSwitchRestoreDefinition(
+                    SwitchKind.LoadSwitch,
+                    GetState(SwitchKind.LoadSwitch),
+                    switchName("负荷开关"),
+                    Guid.NewGuid(),
+                    Guid.NewGuid()));
+                switches.Add(CreateSwitchRestoreDefinition(
+                    SwitchKind.GroundSwitch,
+                    GetState(SwitchKind.GroundSwitch),
+                    switchName("接地刀闸"),
+                    Guid.NewGuid(),
+                    Guid.NewGuid()));
+                break;
+
+            case IntervalKind.PTInterval:
+                switches.Add(CreateSwitchRestoreDefinition(
+                    SwitchKind.IsolationSwitch,
+                    GetState(SwitchKind.IsolationSwitch),
+                    switchName("PT隔离刀闸"),
+                    Guid.NewGuid(),
+                    Guid.NewGuid()));
+                switches.Add(CreateSwitchRestoreDefinition(
+                    SwitchKind.GroundSwitch,
+                    GetState(SwitchKind.GroundSwitch),
+                    switchName("PT接地刀闸"),
+                    Guid.NewGuid(),
+                    Guid.NewGuid()));
+                break;
+
+            case IntervalKind.IntegratedFeederInterval:
+                intermediateNodeId = Guid.NewGuid();
+                switches.Add(CreateSwitchRestoreDefinition(
+                    SwitchKind.IsolationSwitch,
+                    GetState(SwitchKind.IsolationSwitch),
+                    switchName("隔离刀闸"),
+                    Guid.NewGuid(),
+                    Guid.NewGuid()));
+                switches.Add(CreateSwitchRestoreDefinition(
+                    SwitchKind.CircuitBreaker,
+                    GetState(SwitchKind.CircuitBreaker),
+                    switchName("断路器"),
+                    Guid.NewGuid(),
+                    Guid.NewGuid()));
+                switches.Add(CreateSwitchRestoreDefinition(
+                    SwitchKind.GroundSwitch,
+                    GetState(SwitchKind.GroundSwitch),
+                    switchName("接地刀闸"),
+                    Guid.NewGuid(),
+                    Guid.NewGuid()));
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(targetIntervalKind));
+        }
+
+        return new RingCabinetIntervalRestoreDefinition(
+            interval.IntervalId,
+            interval.ParentCabinetId,
+            interval.Sequence,
+            interval.BayIndex,
+            interval.DisplayName,
+            targetIntervalKind,
+            targetGroundingStructureKind,
+            intermediateNodeId,
+            circuitNodeId,
+            earthNodeId,
+            externalTerminalId,
+            Guid.NewGuid(),
+            switches);
+    }
+
+    private static SwitchDeviceRestoreDefinition CreateSwitchRestoreDefinition(
+        SwitchKind switchKind,
+        SwitchState switchState,
+        string displayName,
+        Guid firstTerminalId,
+        Guid secondTerminalId)
+    {
+        return new SwitchDeviceRestoreDefinition(
+            Guid.NewGuid(),
+            switchKind,
+            SwitchInstallationType.CabinetInterval,
+            firstTerminalId,
+            secondTerminalId,
+            switchState,
+            displayName,
+            TenKilovolts,
+            null);
     }
 
     private static RingCabinetInterval CreateRestoredLoadSwitchInterval(
@@ -669,6 +898,12 @@ public sealed class RingCabinet : Device
         {
             throw new InvalidOperationException(
                 "Bay indexes must be unique within a ring cabinet.");
+        }
+
+        if (_intervals.Count(interval => interval.IntervalKind == IntervalKind.PTInterval) > 1)
+        {
+            throw new InvalidOperationException(
+                "A ring cabinet can contain at most one PT interval.");
         }
 
         Dictionary<Guid, ElectricalNode> nodes = _electricalNodes.ToDictionary(node => node.Id);
