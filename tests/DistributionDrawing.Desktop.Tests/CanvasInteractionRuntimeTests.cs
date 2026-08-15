@@ -1,6 +1,8 @@
 using System.Windows;
+using System.Runtime.ExceptionServices;
 using DistributionDrawing.Desktop.Viewport;
 using DistributionDrawing.Rendering.Wpf.Canvas;
+using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -12,11 +14,16 @@ public sealed class CanvasInteractionRuntimeTests
     {
         var viewport = new CanvasViewportController();
         double initialScale = viewport.Transform.Scale;
+        Point anchor = new(100, 100);
+        DocumentPoint documentAtAnchor = viewport.Transform.ViewToDocument(anchor);
 
-        viewport.ZoomFromWheel(new Point(100, 100), 120);
+        viewport.ZoomFromWheel(anchor, 120);
 
         Assert.True(viewport.Transform.Scale > initialScale);
-        Assert.Equal(new Vector(), viewport.Transform.Translation);
+        Assert.Equal(
+            documentAtAnchor,
+            viewport.Transform.ViewToDocument(anchor));
+        Assert.NotEqual(new Vector(), viewport.Transform.Translation);
     }
 
     [Fact]
@@ -35,12 +42,39 @@ public sealed class CanvasInteractionRuntimeTests
     [Fact]
     public void GridVisibility_IsCanvasDisplayState()
     {
-        var host = new DrawingVisualHost();
+        RunOnSta(() =>
+        {
+            var host = new DrawingVisualHost();
 
-        Assert.False(host.ShowGrid);
-        host.ShowGrid = true;
-        Assert.True(host.ShowGrid);
-        host.ShowGrid = false;
-        Assert.False(host.ShowGrid);
+            Assert.False(host.ShowGrid);
+            host.ShowGrid = true;
+            Assert.True(host.ShowGrid);
+            host.ShowGrid = false;
+            Assert.False(host.ShowGrid);
+        });
+    }
+
+    private static void RunOnSta(Action action)
+    {
+        Exception? exception = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception caught)
+            {
+                exception = caught;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (exception is not null)
+        {
+            ExceptionDispatchInfo.Capture(exception).Throw();
+        }
     }
 }
