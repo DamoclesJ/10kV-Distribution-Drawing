@@ -153,17 +153,37 @@ internal static class ProjectDomainMapper
 
         var devices = new List<ProjectDeviceDto>();
         var ringCabinets = new List<ProjectRingCabinetDto>();
+        HashSet<Guid> ringCabinetIntervalIds = document.Devices
+            .OfType<RingCabinet>()
+            .SelectMany(cabinet => cabinet.Intervals)
+            .Select(interval => interval.IntervalId)
+            .ToHashSet();
+        HashSet<Guid> ringCabinetSwitchIds = document.Devices
+            .OfType<SwitchDevice>()
+            .Where(device =>
+                device.InstallationType == SwitchInstallationType.CabinetInterval &&
+                device.ParentId is Guid parentId &&
+                ringCabinetIntervalIds.Contains(parentId))
+            .Select(device => device.Id)
+            .ToHashSet();
         HashSet<Guid> ringCabinetObjectIds = document.Devices
             .OfType<RingCabinet>()
             .SelectMany(cabinet => cabinet.ElectricalNodes.Select(node => node.Id)
                 .Concat(cabinet.Terminals.Select(terminal => terminal.Id)))
+            .Concat(document.ElectricalNodes
+                .Where(node => ringCabinetIntervalIds.Contains(node.OwnerId) ||
+                    ringCabinetSwitchIds.Contains(node.OwnerId))
+                .Select(node => node.Id))
+            .Concat(document.Terminals
+                .Where(terminal => ringCabinetIntervalIds.Contains(terminal.OwnerId) ||
+                    ringCabinetSwitchIds.Contains(terminal.OwnerId))
+                .Select(terminal => terminal.Id))
             .ToHashSet();
-        HashSet<Guid> ringCabinetSwitchIds = document.Devices
+        ringCabinetSwitchIds.UnionWith(document.Devices
             .OfType<RingCabinet>()
             .SelectMany(cabinet => cabinet.Intervals)
             .SelectMany(interval => interval.SwitchDevices)
-            .Select(device => device.Id)
-            .ToHashSet();
+            .Select(device => device.Id));
 
         foreach (Device device in document.Devices)
         {
@@ -738,15 +758,36 @@ internal static class ProjectDomainMapper
 
         HashSet<Guid> rootNodeIds = nodeDtos.Select(node => node.NodeId).ToHashSet();
         HashSet<Guid> rootTerminalIds = terminalDtos.Select(terminal => terminal.TerminalId).ToHashSet();
+        HashSet<Guid> ringCabinetIntervalIds = document.Devices
+            .OfType<RingCabinet>()
+            .SelectMany(cabinet => cabinet.Intervals)
+            .Select(interval => interval.IntervalId)
+            .ToHashSet();
+        HashSet<Guid> ringCabinetSwitchIds = document.Devices
+            .OfType<SwitchDevice>()
+            .Where(device =>
+                device.InstallationType == SwitchInstallationType.CabinetInterval &&
+                device.ParentId is Guid parentId &&
+                ringCabinetIntervalIds.Contains(parentId))
+            .Select(device => device.Id)
+            .ToHashSet();
         HashSet<Guid> ringNodeIds = document.Devices
             .OfType<RingCabinet>()
             .SelectMany(cabinet => cabinet.ElectricalNodes)
             .Select(node => node.Id)
+            .Concat(document.ElectricalNodes
+                .Where(node => ringCabinetIntervalIds.Contains(node.OwnerId) ||
+                    ringCabinetSwitchIds.Contains(node.OwnerId))
+                .Select(node => node.Id))
             .ToHashSet();
         HashSet<Guid> ringTerminalIds = document.Devices
             .OfType<RingCabinet>()
             .SelectMany(cabinet => cabinet.Terminals)
             .Select(terminal => terminal.Id)
+            .Concat(document.Terminals
+                .Where(terminal => ringCabinetIntervalIds.Contains(terminal.OwnerId) ||
+                    ringCabinetSwitchIds.Contains(terminal.OwnerId))
+                .Select(terminal => terminal.Id))
             .ToHashSet();
 
         if (rootNodeIds.Count != nodeDtos.Count ||

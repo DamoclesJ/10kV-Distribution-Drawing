@@ -137,6 +137,113 @@ public sealed class RingCabinetIntervalTypeChangeTests
         Assert.Equal(originalBayIndex, unchanged.BayIndex);
     }
 
+    [Theory]
+    [InlineData(IntervalKind.IntegratedFeederInterval)]
+    [InlineData(IntervalKind.PTInterval)]
+    public void LoadSwitchTypeChange_PreservesSlotIdentity(IntervalKind sourceKind)
+    {
+        RingCabinet cabinet = sourceKind == IntervalKind.IntegratedFeederInterval
+            ? CreateTwoLoadAndIntegratedCabinet()
+            : CreatePTMixedCabinet();
+        RingCabinetInterval source = GetInterval(cabinet, 3);
+        Guid intervalId = source.IntervalId;
+        int sequence = source.Sequence;
+        int bayIndex = source.BayIndex;
+
+        cabinet.ChangeIntervalType(intervalId, IntervalKind.LoadSwitchInterval);
+
+        RingCabinetInterval target = GetInterval(cabinet, 3);
+        Assert.Equal(intervalId, target.IntervalId);
+        Assert.Equal(sequence, target.Sequence);
+        Assert.Equal(bayIndex, target.BayIndex);
+        Assert.Equal(IntervalKind.LoadSwitchInterval, target.IntervalKind);
+        Assert.Equal("-3-7", NumberFor(target, SwitchKind.GroundSwitch));
+        Assert.Null(NumberFor(target, SwitchKind.LoadSwitch));
+    }
+
+    [Theory]
+    [InlineData(GroundingStructureKind.UpperLowerGrounding)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding)]
+    public void LoadSwitchTypeChange_ToIntegratedFeederSupportsExplicitStructure(
+        GroundingStructureKind structure)
+    {
+        RingCabinet cabinet = CreateLoadSwitchAndPTCabinet();
+        RingCabinetInterval source = GetInterval(cabinet, 3);
+
+        cabinet.ChangeIntervalType(
+            source.IntervalId,
+            IntervalKind.IntegratedFeederInterval,
+            structure);
+
+        RingCabinetInterval target = GetInterval(cabinet, 3);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, target.IntervalKind);
+        Assert.Equal(structure, target.GroundingStructureKind);
+        Assert.Equal("-3", NumberFor(target, SwitchKind.CircuitBreaker));
+    }
+
+    [Theory]
+    [InlineData(GroundingStructureKind.UpperLowerGrounding)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding)]
+    public void SameTypeIntegratedFeeder_ChangingStructureReplacesInternalObjects(
+        GroundingStructureKind targetStructure)
+    {
+        RingCabinet cabinet = CreateMixedCabinet();
+        RingCabinetInterval source = GetInterval(cabinet, 3);
+        Guid intervalId = source.IntervalId;
+        Guid oldAssemblyId = source.SwitchAssembly.AssemblyId;
+        Guid[] oldSwitchIds = source.SwitchDevices.Select(device => device.Id).ToArray();
+        Guid[] oldTerminalIds = source.SwitchDevices.SelectMany(device => device.TerminalIds).ToArray();
+        Guid[] oldNodeIds = [source.IntermediateNodeId!.Value, source.CircuitNodeId, source.EarthNodeId];
+
+            cabinet.ChangeIntervalType(
+                intervalId,
+                IntervalKind.IntegratedFeederInterval,
+                targetStructure);
+
+        RingCabinetInterval target = GetInterval(cabinet, 3);
+        Assert.Equal(intervalId, target.IntervalId);
+        Assert.Equal(source.Sequence, target.Sequence);
+        Assert.Equal(source.BayIndex, target.BayIndex);
+        Assert.Equal(targetStructure, target.GroundingStructureKind);
+        Assert.NotEqual(oldAssemblyId, target.SwitchAssembly.AssemblyId);
+        Assert.DoesNotContain(oldSwitchIds, id => target.SwitchDevices.Any(device => device.Id == id));
+        Assert.DoesNotContain(oldTerminalIds, id => target.SwitchDevices.Any(device => device.OwnsTerminal(id)));
+        Assert.DoesNotContain(oldNodeIds, id =>
+            target.IntermediateNodeId == id || target.CircuitNodeId == id || target.EarthNodeId == id);
+    }
+
+    [Fact]
+    public void PTUniquenessFailure_PreservesExistingPTAndCandidateCompletely()
+    {
+        RingCabinet cabinet = CreatePTAndIntegratedCabinet();
+        RingCabinetInterval existingPT = GetInterval(cabinet, 2);
+        RingCabinetInterval candidate = GetInterval(cabinet, 4);
+        IntervalSnapshot existingSnapshot = Snapshot(existingPT);
+        IntervalSnapshot candidateSnapshot = Snapshot(candidate);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            cabinet.ChangeIntervalType(candidate.IntervalId, IntervalKind.PTInterval));
+
+        AssertSnapshotEqual(existingSnapshot, Snapshot(GetInterval(cabinet, 2)));
+        AssertSnapshotEqual(candidateSnapshot, Snapshot(GetInterval(cabinet, 4)));
+    }
+
+    [Fact]
+    public void RestoreRejectsMultiplePTIntervals()
+    {
+        Guid cabinetId = Guid.NewGuid();
+
+        Assert.Throws<InvalidOperationException>(() => RingCabinet.Restore(
+            new RingCabinetRestoreDefinition(
+                cabinetId,
+                "Invalid two PT cabinet",
+                Guid.NewGuid(),
+                [
+                    CreatePTRestoreDefinition(cabinetId, 1, 1),
+                    CreatePTRestoreDefinition(cabinetId, 2, 2)
+                ])));
+    }
+
     private static RingCabinet CreateMixedCabinet()
     {
         return RingCabinet.Create(RingCabinetDefinition.Create(
@@ -181,6 +288,150 @@ public sealed class RingCabinetIntervalTypeChangeTests
                     SwitchState.Open)
             ]));
     }
+
+    private static RingCabinet CreateLoadSwitchAndPTCabinet()
+    {
+        return RingCabinet.Create(RingCabinetDefinition.Create(
+            Guid.NewGuid(),
+            "Load switch and PT cabinet",
+            [
+                RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+                RingCabinetIntervalDefinition.CreateLoadSwitch(3, SwitchState.Open, SwitchState.Open),
+                RingCabinetIntervalDefinition.CreatePT(5, SwitchState.Open, SwitchState.Open)
+            ]));
+    }
+
+    private static RingCabinetIntervalRestoreDefinition CreatePTRestoreDefinition(
+        Guid cabinetId,
+        int sequence,
+        int bayIndex)
+    {
+        Guid intervalId = Guid.NewGuid();
+        Guid circuitNodeId = Guid.NewGuid();
+        Guid earthNodeId = Guid.NewGuid();
+        Guid externalTerminalId = Guid.NewGuid();
+        Guid isolationId = Guid.NewGuid();
+        Guid groundId = Guid.NewGuid();
+
+        return new RingCabinetIntervalRestoreDefinition(
+            intervalId,
+            cabinetId,
+            sequence,
+            bayIndex,
+            $"PT {bayIndex}",
+            IntervalKind.PTInterval,
+            null,
+            null,
+            circuitNodeId,
+            earthNodeId,
+            externalTerminalId,
+            Guid.NewGuid(),
+            [
+                new SwitchDeviceRestoreDefinition(
+                    isolationId,
+                    SwitchKind.IsolationSwitch,
+                    SwitchInstallationType.CabinetInterval,
+                    Guid.NewGuid(),
+                    Guid.NewGuid(),
+                    SwitchState.Open,
+                    $"PT {bayIndex} isolation",
+                    "10kV",
+                    null),
+                new SwitchDeviceRestoreDefinition(
+                    groundId,
+                    SwitchKind.GroundSwitch,
+                    SwitchInstallationType.CabinetInterval,
+                    Guid.NewGuid(),
+                    Guid.NewGuid(),
+                    SwitchState.Open,
+                    $"PT {bayIndex} ground",
+                    "10kV",
+                    null)
+            ]);
+    }
+
+    private static RingCabinet CreateTwoLoadAndIntegratedCabinet()
+    {
+        return RingCabinet.Create(RingCabinetDefinition.Create(
+            Guid.NewGuid(),
+            "Two load switches and integrated cabinet",
+            [
+                RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+                RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                    3,
+                    GroundingStructureKind.UpperIsolationGrounding,
+                    SwitchState.Open,
+                    SwitchState.Open,
+                    SwitchState.Open),
+                RingCabinetIntervalDefinition.CreateLoadSwitch(5, SwitchState.Open, SwitchState.Open)
+            ]));
+    }
+
+    private static IntervalSnapshot Snapshot(RingCabinetInterval interval)
+    {
+        return new IntervalSnapshot(
+            interval.IntervalId,
+            interval.Sequence,
+            interval.BayIndex,
+            interval.IntervalKind,
+            interval.GroundingStructureKind,
+            interval.SwitchAssembly.AssemblyId,
+            interval.SwitchDevices
+                .Select(device => new SwitchSnapshot(
+                    device.Id,
+                    device.SwitchKind,
+                    device.SwitchState,
+                    device.TerminalIds.ToArray()))
+                .ToArray(),
+            interval.CircuitNodeId,
+            interval.IntermediateNodeId,
+            interval.EarthNodeId,
+            interval.ExternalTerminalId);
+    }
+
+    private static void AssertSnapshotEqual(
+        IntervalSnapshot expected,
+        IntervalSnapshot actual)
+    {
+        Assert.Equal(expected.IntervalId, actual.IntervalId);
+        Assert.Equal(expected.Sequence, actual.Sequence);
+        Assert.Equal(expected.BayIndex, actual.BayIndex);
+        Assert.Equal(expected.IntervalKind, actual.IntervalKind);
+        Assert.Equal(expected.GroundingStructureKind, actual.GroundingStructureKind);
+        Assert.Equal(expected.SwitchAssemblyId, actual.SwitchAssemblyId);
+        Assert.Equal(expected.CircuitNodeId, actual.CircuitNodeId);
+        Assert.Equal(expected.IntermediateNodeId, actual.IntermediateNodeId);
+        Assert.Equal(expected.EarthNodeId, actual.EarthNodeId);
+        Assert.Equal(expected.ExternalTerminalId, actual.ExternalTerminalId);
+        Assert.Equal(expected.Switches.Select(switchSnapshot => switchSnapshot.Id),
+            actual.Switches.Select(switchSnapshot => switchSnapshot.Id));
+        Assert.Equal(expected.Switches.Select(switchSnapshot => switchSnapshot.Kind),
+            actual.Switches.Select(switchSnapshot => switchSnapshot.Kind));
+        Assert.Equal(expected.Switches.Select(switchSnapshot => switchSnapshot.State),
+            actual.Switches.Select(switchSnapshot => switchSnapshot.State));
+        Assert.Equal(
+            expected.Switches.Select(switchSnapshot => switchSnapshot.TerminalIds),
+            actual.Switches.Select(switchSnapshot => switchSnapshot.TerminalIds));
+    }
+
+    private sealed record IntervalSnapshot(
+        Guid IntervalId,
+        int Sequence,
+        int BayIndex,
+        IntervalKind IntervalKind,
+        GroundingStructureKind? GroundingStructureKind,
+        Guid SwitchAssemblyId,
+        IReadOnlyList<SwitchSnapshot> Switches,
+        Guid CircuitNodeId,
+        Guid? IntermediateNodeId,
+        Guid EarthNodeId,
+        Guid ExternalTerminalId);
+
+    private sealed record SwitchSnapshot(
+        Guid Id,
+        SwitchKind Kind,
+        SwitchState? State,
+        IReadOnlyList<Guid> TerminalIds);
 
     private static RingCabinetInterval GetInterval(RingCabinet cabinet, int bayIndex)
     {
