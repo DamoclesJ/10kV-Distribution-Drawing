@@ -91,7 +91,8 @@ public sealed class IntervalTypeChangeIntegrationTests
     {
         RingCabinet cabinet = CreateCabinetWithPTAndFeeder();
         RingCabinetInterval candidate = cabinet.Intervals.Single(
-            interval => interval.IntervalKind == IntervalKind.IntegratedFeederInterval);
+            interval => interval.BayIndex == 2 &&
+                        interval.IntervalKind == IntervalKind.IntegratedFeederInterval);
         var selection = new ResolvedSelection
         {
             Reference = new SelectionReference(

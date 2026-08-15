@@ -158,42 +158,28 @@ public sealed class RingCabinetRealScenarioTests
     private static RingCabinet CreateCabinet(
         RingCabinetIntervalDefinition intervalDefinition)
     {
+        int[] fillerBayIndexes = Enumerable.Range(1, 7)
+            .Where(index => index != intervalDefinition.BayIndex)
+            .Take(intervalDefinition.IntervalKind == IntervalKind.IntegratedFeederInterval ? 3 : 2)
+            .ToArray();
         RingCabinetIntervalDefinition[] definitions = intervalDefinition.IntervalKind switch
         {
-            IntervalKind.LoadSwitchInterval =>
-            [
+            IntervalKind.LoadSwitchInterval => [
                 intervalDefinition,
-                RingCabinetIntervalDefinition.CreateLoadSwitch(
-                    4,
-                    SwitchState.Closed,
-                    SwitchState.Open),
-                RingCabinetIntervalDefinition.CreateLoadSwitch(
-                    5,
-                    SwitchState.Closed,
-                    SwitchState.Open)
-            ],
-            IntervalKind.IntegratedFeederInterval =>
-            [
+                ..fillerBayIndexes.Select(index =>
+                    RingCabinetIntervalDefinition.CreateLoadSwitch(
+                        index,
+                        SwitchState.Closed,
+                        SwitchState.Open))],
+            IntervalKind.IntegratedFeederInterval => [
                 intervalDefinition,
-                RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                    4,
-                    intervalDefinition.GroundingStructureKind!.Value,
-                    SwitchState.Closed,
-                    SwitchState.Closed,
-                    SwitchState.Open),
-                RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                    5,
-                    intervalDefinition.GroundingStructureKind!.Value,
-                    SwitchState.Closed,
-                    SwitchState.Closed,
-                    SwitchState.Open),
-                RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                    6,
-                    intervalDefinition.GroundingStructureKind!.Value,
-                    SwitchState.Closed,
-                    SwitchState.Closed,
-                    SwitchState.Open)
-            ],
+                ..fillerBayIndexes.Select(index =>
+                    RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                        index,
+                        intervalDefinition.GroundingStructureKind!.Value,
+                        SwitchState.Closed,
+                        SwitchState.Closed,
+                        SwitchState.Open))],
             _ => [intervalDefinition]
         };
 

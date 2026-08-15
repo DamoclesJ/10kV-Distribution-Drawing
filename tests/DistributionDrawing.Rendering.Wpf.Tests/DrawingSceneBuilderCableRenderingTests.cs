@@ -80,8 +80,9 @@ public sealed class DrawingSceneBuilderCableRenderingTests
             firstPole.Devices.OfType<CableTermination>());
         CableTermination secondTermination = Assert.Single(
             secondPole.Devices.OfType<CableTermination>());
+        Guid connectionId = Guid.NewGuid();
         var connection = new Connection(
-            Guid.NewGuid(),
+            connectionId,
             ConnectionType.Cable,
             firstTermination.CableSideTerminalId,
             secondTermination.CableSideTerminalId,
@@ -95,7 +96,7 @@ public sealed class DrawingSceneBuilderCableRenderingTests
             "YJV22-8.7/15kV",
             120,
             "10kV",
-            connection.Id,
+            connectionId,
             connection.StartTerminalId,
             connection.EndTerminalId);
         document.AddCableSegment(cable, connection);

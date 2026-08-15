@@ -26,13 +26,13 @@ public sealed class AddDeviceRuntimeTests
         var command = new AddRingCabinetCommand(document, runtime, cabinet, layout, selection);
 
         command.Execute();
-        Assert.Same(cabinet, Assert.Single(document.Devices));
+        Assert.Same(cabinet, Assert.Single(document.Devices.OfType<RingCabinet>()));
         Assert.Equal(cabinet.Id, selection.CurrentSelection?.TargetId);
         command.Undo();
         Assert.Empty(document.Devices);
         Assert.Null(selection.CurrentSelection);
         command.Redo();
-        Assert.Same(cabinet, Assert.Single(document.Devices));
+        Assert.Same(cabinet, Assert.Single(document.Devices.OfType<RingCabinet>()));
         Assert.Equal(cabinet.Id, selection.CurrentSelection?.TargetId);
     }
 
