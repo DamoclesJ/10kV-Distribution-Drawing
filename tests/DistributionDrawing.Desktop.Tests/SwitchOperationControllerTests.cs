@@ -17,8 +17,8 @@ public sealed class SwitchOperationControllerTests
     public void ToggleSelected_ChangesStateAndPreservesSelection()
     {
         using TestProject project = CreateProject(CreateLoadSwitchConfiguration());
-        RingCabinetInterval interval = project.GetInterval(IntervalKind.LoadSwitchInterval);
-        SwitchDevice loadSwitch = project.GetSwitch(interval, SwitchKind.LoadSwitch);
+        RingCabinetInterval interval = project.Interval;
+        SwitchDevice loadSwitch = project.GetSwitch(SwitchKind.LoadSwitch);
         var selection = new SelectionReference(
             SelectionTargetKind.Device,
             loadSwitch.Id,
@@ -49,8 +49,8 @@ public sealed class SwitchOperationControllerTests
     public void InterlockFailure_DoesNotChangeStateOrHistoryAndReturnsChineseMessage()
     {
         using TestProject project = CreateProject(CreateLoadSwitchConfiguration());
-        RingCabinetInterval interval = project.GetInterval(IntervalKind.LoadSwitchInterval);
-        SwitchDevice groundSwitch = project.GetSwitch(interval, SwitchKind.GroundSwitch);
+        RingCabinetInterval interval = project.Interval;
+        SwitchDevice groundSwitch = project.GetSwitch(SwitchKind.GroundSwitch);
         var controller = new SwitchOperationController(() => project.Session);
         project.Session.SelectionManager.Select(
             new SelectionReference(
@@ -59,7 +59,7 @@ public sealed class SwitchOperationControllerTests
                 interval.IntervalId));
 
         Assert.True(controller.ToggleSelected().IsSuccess);
-        SwitchDevice loadSwitch = project.GetSwitch(interval, SwitchKind.LoadSwitch);
+        SwitchDevice loadSwitch = project.GetSwitch(SwitchKind.LoadSwitch);
         var loadSelection = new SelectionReference(
             SelectionTargetKind.Device,
             loadSwitch.Id,
@@ -81,8 +81,8 @@ public sealed class SwitchOperationControllerTests
     public void IntegratedFeederSwitch_UsesSameOperationPath()
     {
         using TestProject project = CreateProject(CreateIntegratedFeederConfiguration());
-        RingCabinetInterval interval = project.GetInterval(IntervalKind.IntegratedFeederInterval);
-        SwitchDevice circuitBreaker = project.GetSwitch(interval, SwitchKind.CircuitBreaker);
+        RingCabinetInterval interval = project.Interval;
+        SwitchDevice circuitBreaker = project.GetSwitch(SwitchKind.CircuitBreaker);
         project.Session.SelectionManager.Select(
             new SelectionReference(
                 SelectionTargetKind.Device,
@@ -115,7 +115,9 @@ public sealed class SwitchOperationControllerTests
             new DocumentPoint(40, 40));
         session.CommandStack.ExecuteCommand(command);
         session.RebuildScene();
-        return new TestProject(workspace, session);
+        RingCabinet cabinet = Assert.Single(
+            session.PersistenceSession.Domain.Devices.OfType<RingCabinet>());
+        return new TestProject(workspace, session, cabinet.Intervals[0]);
     }
 
     private static RingCabinetCreationConfiguration CreateLoadSwitchConfiguration()
@@ -146,10 +148,14 @@ public sealed class SwitchOperationControllerTests
     {
         private readonly ProjectWorkspaceController _workspace;
 
-        public TestProject(ProjectWorkspaceController workspace, ProjectRuntimeSession session)
+        public TestProject(
+            ProjectWorkspaceController workspace,
+            ProjectRuntimeSession session,
+            RingCabinetInterval interval)
         {
             _workspace = workspace;
             Session = session;
+            Interval = interval;
             FilePath = session.PersistenceSession.FilePath;
         }
 
@@ -157,15 +163,10 @@ public sealed class SwitchOperationControllerTests
 
         private string FilePath { get; }
 
-        public RingCabinetInterval GetInterval(IntervalKind intervalKind) =>
-            Session.PersistenceSession.Domain.Devices
-                .OfType<RingCabinet>()
-                .Single()
-                .Intervals
-                .Single(interval => interval.IntervalKind == intervalKind);
+        public RingCabinetInterval Interval { get; }
 
-        public SwitchDevice GetSwitch(RingCabinetInterval interval, SwitchKind kind) =>
-            interval.SwitchDevices.Single(device => device.SwitchKind == kind);
+        public SwitchDevice GetSwitch(SwitchKind kind) =>
+            Interval.SwitchDevices.Single(device => device.SwitchKind == kind);
 
         public void Dispose()
         {
