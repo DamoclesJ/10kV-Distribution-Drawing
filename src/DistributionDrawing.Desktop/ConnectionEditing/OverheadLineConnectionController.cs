@@ -172,7 +172,9 @@ public sealed class OverheadLineConnectionController
         return TerminalAnchorIndex.Build(
             session.PersistenceSession.Domain,
             session.Layout.DrawingLayout,
-            session.Layout.RingCabinetLayouts);
+            session.Layout.RingCabinetLayouts,
+            session.PersistenceSession.Domain.Connections,
+            session.PersistenceSession.Domain.CableSegments);
     }
 
     private static TerminalAnchor PickAnchor(

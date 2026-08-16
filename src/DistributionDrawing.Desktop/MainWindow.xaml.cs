@@ -17,6 +17,7 @@ using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Desktop.ConnectionEditing;
+using DistributionDrawing.Desktop.CableConnection;
 using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.Demo;
 using DistributionDrawing.Desktop.DrawingTools;
@@ -46,6 +47,7 @@ public partial class MainWindow : Window
     private readonly OverheadLineConnectionController _overheadLineConnection;
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
     private readonly SwitchOperationController _switchOperation;
+    private readonly CableConnectionController _cableConnection;
     private readonly DrawingToolCoordinator _drawingTools;
     private MainWindowViewModel _shellViewModel = null!;
     private bool _gridVisible;
@@ -77,6 +79,8 @@ public partial class MainWindow : Window
         _placement = new PlacementController(() => _workspace.CurrentSession);
         _overheadLineConnection = new OverheadLineConnectionController(
             () => _workspace.CurrentSession);
+        _cableConnection = new CableConnectionController(
+            () => _workspace.CurrentSession);
         _cableTerminationAttachment = new CableTerminationAttachmentController(
             () => _workspace.CurrentSession);
         _switchOperation = new SwitchOperationController(
@@ -84,9 +88,12 @@ public partial class MainWindow : Window
         _drawingTools = new DrawingToolCoordinator(
             _placement,
             _overheadLineConnection,
-            _cableTerminationAttachment);
+            _cableTerminationAttachment,
+            _cableConnection);
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
+        _cableConnection.VisualChanged += OnDrawingToolVisualChanged;
+        _cableConnection.ParametersRequired += OnCableParametersRequired;
         _cableTerminationAttachment.SceneChanged += OnDrawingToolVisualChanged;
         _switchOperation.SceneChanged += OnSwitchOperationSceneChanged;
         _viewport.ViewChanged += OnViewportChanged;
@@ -174,6 +181,44 @@ public partial class MainWindow : Window
         catch (InvalidOperationException exception)
         {
             ShowCommandError("无法绘制架空线", exception.Message);
+        }
+    }
+
+    private void OnBeginCable(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            CancelDeviceDrag();
+            CancelProfessionalPicking();
+            _drawingTools.BeginCable();
+            UpdateCanvasStatus();
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("无法绘制电缆", exception.Message);
+        }
+    }
+
+    private void OnCableParametersRequired(object? sender, EventArgs e)
+    {
+        var dialog = new CableCreationDialog { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            _cableConnection.Cancel();
+            return;
+        }
+
+        try
+        {
+            _cableConnection.Complete(dialog.CableType, dialog.Length);
+        }
+        catch (ArgumentException exception)
+        {
+            ShowCommandError("电缆创建失败", exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("电缆创建失败", exception.Message);
         }
     }
 
@@ -320,6 +365,7 @@ public partial class MainWindow : Window
         UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
+        UpdateCanvasStatus();
         RenderCurrentScene();
     }
 
@@ -352,6 +398,22 @@ public partial class MainWindow : Window
             }
 
             _overheadLineConnection.Cancel();
+        }
+
+        if (_cableConnection.IsActive)
+        {
+            MessageBoxResult connectionResult = MessageBox.Show(
+                this,
+                "当前正在绘制电缆。取消本次绘制并继续吗？",
+                "未完成的电缆",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (connectionResult != MessageBoxResult.OK)
+            {
+                return false;
+            }
+
+            _cableConnection.Cancel();
         }
 
         if (!_deviceDrag.IsActive)
@@ -559,6 +621,10 @@ public partial class MainWindow : Window
             {
                 DesktopToolMode.CreateRingCabinet => "创建环网柜",
                 DesktopToolMode.CreatePole => "创建杆塔",
+                _ when _cableConnection.IsActive => _cableConnection.State ==
+                    CableConnectionToolState.PickingStartTerminal
+                        ? "绘制电缆：请选择起点"
+                        : "绘制电缆：请选择终点",
                 _ => "选择"
             });
     }
@@ -701,7 +767,7 @@ public partial class MainWindow : Window
 
     private void UpdateConnectionPointerFromCurrentMouse()
     {
-        if (!_overheadLineConnection.IsActive)
+        if (!_overheadLineConnection.IsActive && !_cableConnection.IsActive)
         {
             return;
         }
@@ -1202,6 +1268,14 @@ public partial class MainWindow : Window
         }
 
         if (_overheadLineConnection.IsActive)
+        {
+            _drawingTools.UpdatePointer(
+                _viewport.Transform.ViewToDocument(point));
+            e.Handled = true;
+            return;
+        }
+
+        if (_cableConnection.IsActive)
         {
             _drawingTools.UpdatePointer(
                 _viewport.Transform.ViewToDocument(point));
@@ -1825,7 +1899,9 @@ public partial class MainWindow : Window
         TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
             document,
             layout,
-            _activeSource.RingCabinetLayouts);
+            _activeSource.RingCabinetLayouts,
+            document.Connections,
+            document.CableSegments);
         return anchors.Anchors
             .Where(anchor =>
                 Math.Pow(anchor.Position.XMillimeters - point.XMillimeters, 2) +

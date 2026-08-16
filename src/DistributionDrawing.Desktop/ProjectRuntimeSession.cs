@@ -213,7 +213,9 @@ internal static class ProjectLayoutRuntimeMapper
         TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
             domain,
             runtime.DrawingLayout,
-            runtime.RingCabinetLayouts);
+            runtime.RingCabinetLayouts,
+            domain.Connections,
+            domain.CableSegments);
         var overheadLines = runtime.DrawingLayout.OverheadLines.Values.Select(layout =>
         {
             Connection connection = domain.Connections.SingleOrDefault(

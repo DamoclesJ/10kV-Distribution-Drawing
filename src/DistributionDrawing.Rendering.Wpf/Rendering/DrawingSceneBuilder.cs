@@ -107,7 +107,9 @@ public sealed class DrawingSceneBuilder
         TerminalAnchorIndex terminalAnchors = TerminalAnchorIndex.Build(
             document,
             layout.DrawingLayout,
-            layout.RingCabinetLayouts);
+            layout.RingCabinetLayouts,
+            document.Connections,
+            document.CableSegments);
         DrawingScene baseScene = BuildCore(
             layout.DrawingLayout,
             document.Devices.OfType<Pole>(),

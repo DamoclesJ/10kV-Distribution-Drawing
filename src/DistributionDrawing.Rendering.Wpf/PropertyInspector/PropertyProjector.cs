@@ -62,6 +62,11 @@ public sealed class PropertyProjector
             return ProjectOverheadLine(selection);
         }
 
+        if (selection.CableSegment is not null)
+        {
+            return ProjectCableSegment(selection);
+        }
+
         if (selection.PoleAttachment is not null)
         {
             return ProjectAttachment(selection);
@@ -256,6 +261,25 @@ public sealed class PropertyProjector
             RenderingSection(selection, SymbolKind.OverheadLine)
         };
         return Snapshot(selection, "架空线路", line.LineModel, sections);
+    }
+
+    private static PropertyInspectorSnapshot ProjectCableSegment(ResolvedSelection selection)
+    {
+        CableSegment cable = selection.CableSegment!;
+        return Snapshot(
+            selection,
+            "电缆",
+            cable.Name,
+            [
+                Section(
+                    "电缆属性",
+                    DomainRow("Id", "标识", cable.Id),
+                    DomainRow("CableType", "电缆型号", cable.CableType),
+                    DomainRow("Length", "长度", $"{cable.Length:0.###} m"),
+                    DomainRow("StartTerminalId", "起点端子", cable.StartTerminalId),
+                    DomainRow("EndTerminalId", "终点端子", cable.EndTerminalId),
+                    DomainRow("ConnectionId", "连接标识", cable.ConnectionId))
+            ]);
     }
 
     private static PropertyInspectorSnapshot ProjectAttachment(ResolvedSelection selection)

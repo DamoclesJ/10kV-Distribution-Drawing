@@ -32,6 +32,8 @@ public sealed class ResolvedSelection
 
     public OverheadLine? OverheadLine { get; init; }
 
+    public CableSegment? CableSegment { get; init; }
+
     public WorkScope? WorkScope { get; init; }
 
     public GroundingPoint? GroundingPoint { get; init; }

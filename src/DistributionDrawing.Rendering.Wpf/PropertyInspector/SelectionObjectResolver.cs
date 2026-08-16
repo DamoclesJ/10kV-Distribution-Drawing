@@ -30,6 +30,7 @@ public sealed class SelectionObjectResolver
             SelectionTargetKind.Device => ResolveDevice(reference),
             SelectionTargetKind.PoleAttachment => ResolveAttachment(reference),
             SelectionTargetKind.Connection => ResolveConnection(reference),
+            SelectionTargetKind.CableSegment => ResolveCableSegment(reference),
             SelectionTargetKind.GroundingPoint => ResolveGroundingPoint(reference),
             SelectionTargetKind.WorkScope => ResolveWorkScope(reference),
             SelectionTargetKind.Terminal => ResolveTerminal(reference),
@@ -54,6 +55,7 @@ public sealed class SelectionObjectResolver
             CableTermination = resolved.CableTermination,
             Connection = resolved.Connection,
             OverheadLine = resolved.OverheadLine,
+            CableSegment = resolved.CableSegment,
             WorkScope = resolved.WorkScope,
             GroundingPoint = resolved.GroundingPoint,
             Terminal = resolved.Terminal,
@@ -245,6 +247,19 @@ public sealed class SelectionObjectResolver
             OverheadLine = overheadLine,
             OverheadLineLayout = lineLayout
         };
+    }
+
+    private ResolvedSelection? ResolveCableSegment(SelectionReference reference)
+    {
+        CableSegment? cableSegment = _source.Document?.CableSegments
+            .SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
+        return cableSegment is null
+            ? null
+            : new ResolvedSelection
+            {
+                Reference = reference,
+                CableSegment = cableSegment
+            };
     }
 
     private ResolvedSelection? ResolveGroundingPoint(SelectionReference reference)

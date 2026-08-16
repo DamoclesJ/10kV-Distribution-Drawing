@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -32,7 +33,9 @@ public sealed class TerminalAnchorIndex
     public static TerminalAnchorIndex Build(
         DrawingDocument document,
         DrawingLayout drawingLayout,
-        IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts)
+        IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
+        IEnumerable<Connection>? connections = null,
+        IEnumerable<CableSegment>? cableSegments = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(drawingLayout);
@@ -133,6 +136,42 @@ public sealed class TerminalAnchorIndex
                         origin.XMillimeters + intervalLayout.WidthMillimeters / 2,
                         origin.YMillimeters + intervalLayout.HeightMillimeters);
                 Set(anchors, interval.ExternalTerminalId, terminalPosition);
+            }
+        }
+
+        if (connections is not null && cableSegments is not null)
+        {
+            Dictionary<Guid, Connection> connectionById = connections.ToDictionary(
+                connection => connection.Id);
+            HashSet<Guid> cableConnectionIds = cableSegments
+                .Select(cable => cable.ConnectionId)
+                .ToHashSet();
+            foreach (IntermediateTerminal intermediateTerminal in document.IntermediateTerminals)
+            {
+                Connection[] jointConnections = connectionById.Values
+                    .Where(connection => connection.Type == ConnectionType.Cable &&
+                        cableConnectionIds.Contains(connection.Id) &&
+                        connection.UsesTerminal(intermediateTerminal.TerminalId))
+                    .ToArray();
+                if (jointConnections.Length != 2)
+                {
+                    continue;
+                }
+
+                Guid[] outerTerminalIds = jointConnections.Select(connection =>
+                    connection.StartTerminalId == intermediateTerminal.TerminalId
+                        ? connection.EndTerminalId
+                        : connection.StartTerminalId).ToArray();
+                if (anchors.TryGetValue(outerTerminalIds[0], out TerminalAnchor first) &&
+                    anchors.TryGetValue(outerTerminalIds[1], out TerminalAnchor second))
+                {
+                    Set(
+                        anchors,
+                        intermediateTerminal.TerminalId,
+                        new DocumentPoint(
+                            (first.Position.XMillimeters + second.Position.XMillimeters) / 2,
+                            (first.Position.YMillimeters + second.Position.YMillimeters) / 2));
+                }
             }
         }
 

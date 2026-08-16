@@ -24,6 +24,7 @@
         <MenuItem Header="添加环网柜" Click="OnBeginPlaceRingCabinet" />
         <MenuItem Header="添加电缆终端" Click="OnAddCableTermination" />
         <MenuItem Header="绘制架空线" Click="OnBeginOverheadLine" />
+        <MenuItem Header="绘制电缆" Click="OnBeginCable" />
         <MenuItem Header="取消放置" Click="OnCancelPlacement" />
         <Separator />
         <MenuItem Header="删除所选对象" Command="{Binding DeleteCommand}" />
@@ -90,6 +91,9 @@
           <Button Margin="0,4"
                   Content="创建杆塔"
                   Command="{Binding Toolbox.CreatePoleModeCommand}" />
+          <Button Margin="0,4"
+                  Content="绘制电缆"
+                  Click="OnBeginCable" />
         </StackPanel>
       </Border>
 

@@ -1,4 +1,5 @@
 using DistributionDrawing.Desktop.ConnectionEditing;
+using DistributionDrawing.Desktop.CableConnection;
 using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
@@ -11,20 +12,26 @@ public sealed class DrawingToolCoordinator
     private readonly PlacementController _placement;
     private readonly OverheadLineConnectionController _overheadLine;
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
+    private readonly CableConnectionController _cableConnection;
 
     public DrawingToolCoordinator(
         PlacementController placement,
         OverheadLineConnectionController overheadLine,
-        CableTerminationAttachmentController cableTerminationAttachment)
+        CableTerminationAttachmentController cableTerminationAttachment,
+        CableConnectionController cableConnection)
     {
         _placement = placement ?? throw new ArgumentNullException(nameof(placement));
         _overheadLine = overheadLine ?? throw new ArgumentNullException(nameof(overheadLine));
         _cableTerminationAttachment = cableTerminationAttachment ??
             throw new ArgumentNullException(nameof(cableTerminationAttachment));
+        _cableConnection = cableConnection ??
+            throw new ArgumentNullException(nameof(cableConnection));
     }
 
     public bool IsActive =>
-        _placement.Mode != PlacementMode.Idle || _overheadLine.IsActive;
+        _placement.Mode != PlacementMode.Idle ||
+        _overheadLine.IsActive ||
+        _cableConnection.IsActive;
 
     public void BeginPole()
     {
@@ -41,13 +48,22 @@ public sealed class DrawingToolCoordinator
     public void BeginOverheadLine()
     {
         _placement.Cancel();
+        _cableConnection.Cancel();
         _overheadLine.Begin();
+    }
+
+    public void BeginCable()
+    {
+        _placement.Cancel();
+        _overheadLine.Cancel();
+        _cableConnection.Begin();
     }
 
     public void Cancel()
     {
         _placement.Cancel();
         _overheadLine.Cancel();
+        _cableConnection.Cancel();
     }
 
     public bool HandleClick(DocumentPoint point, double terminalToleranceMillimeters)
@@ -58,12 +74,19 @@ public sealed class DrawingToolCoordinator
             return true;
         }
 
+        if (_cableConnection.IsActive)
+        {
+            _cableConnection.Pick(point, terminalToleranceMillimeters);
+            return true;
+        }
+
         return _placement.Place(point);
     }
 
     public void UpdatePointer(DocumentPoint point)
     {
         _overheadLine.UpdatePointer(point);
+        _cableConnection.UpdatePointer(point);
     }
 
     public void RemoveSelected()
@@ -85,6 +108,8 @@ public sealed class DrawingToolCoordinator
 
     public IReadOnlyList<SceneElement> CreateTransientElements()
     {
-        return _overheadLine.CreatePreviewElements();
+        return _overheadLine.CreatePreviewElements()
+            .Concat(_cableConnection.CreatePreviewElements())
+            .ToArray();
     }
 }
