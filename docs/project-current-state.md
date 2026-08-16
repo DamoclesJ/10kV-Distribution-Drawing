@@ -4,6 +4,23 @@
 >
 > 本文是新会话交接用的当前状态摘要。仓库代码和最新设计文档始终是实现事实源，聊天历史不是事实源。
 
+## 0. Windows V1 Product Calibration Baseline (2026-08-15)
+
+以下事实已经由 Windows 环境实际验证：
+
+- `DistributionDrawing.Rendering.Wpf.Tests`：110/110 PASS；
+- `DistributionDrawing.Desktop.Tests`：20/20 PASS；
+- `win-x64` publish：PASS；
+- `artifacts/publish/desktop/win-x64/DistributionDrawing.Desktop.exe` 已成功生成；
+- EXE 可以正常启动；
+- Desktop 主窗口和 Canvas 可以正常显示。
+
+Executable smoke test passed, but V1 product/visual accuracy is not yet accepted.
+
+当前已进入 V1 产品校准阶段。上述结果只证明 Windows 构建、发布、启动和现有自动测试基线成立，不代表 Desktop 功能闭环、真实工作票图元准确性或 V1 产品验收已经完成。详细差距见 `docs/v1-product-gap-audit.md`。
+
+本文后续章节包含较早 checkpoint 的历史状态；如与本节、当前代码或最新专项审计冲突，以当前代码和最新专项审计为准。
+
 ## 1. Project Identity
 
 本项目是面向 10kV 配电专业场景的 Windows 桌面绘图软件。
