@@ -187,6 +187,8 @@ public sealed class PropertyProjector
     private static PropertyInspectorSnapshot ProjectSwitch(ResolvedSelection selection)
     {
         SwitchDevice switchDevice = selection.SwitchDevice!;
+        string switchBusinessNumber = selection.RingCabinetInterval?.GetSwitchBusinessNumber(
+            switchDevice.Id) ?? "未定义";
         var sections = new List<PropertySectionViewModel>
         {
             Section(
@@ -194,7 +196,11 @@ public sealed class PropertyProjector
                 DomainRow("Id", "标识", switchDevice.Id),
                 DomainRow("DisplayName", "名称", switchDevice.DisplayName),
                 DomainRow("SwitchKind", "开关类型", switchDevice.SwitchKind),
-                DomainRow("SwitchState", "机械状态", switchDevice.SwitchState),
+                DomainRow("BusinessNumber", "业务编号", switchBusinessNumber),
+                DomainRow(
+                    "SwitchState",
+                    "机械状态",
+                    switchDevice.SwitchState == SwitchState.Closed ? "合" : "分"),
                 DomainRow("DispatchNumber", "调度编号", switchDevice.DispatchNumber),
                 DomainRow("TerminalIds", "端子", string.Join(", ", switchDevice.TerminalIds))),
             LayoutSection(selection.RingCabinetIntervalLayout),

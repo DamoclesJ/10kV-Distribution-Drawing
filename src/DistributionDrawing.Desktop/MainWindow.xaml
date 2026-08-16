@@ -141,6 +141,18 @@
             <Button Content="应用间隔配置"
                     Click="OnApplyIntervalConfiguration" />
           </StackPanel>
+          <StackPanel x:Name="SwitchOperationPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="开关操作" />
+            <TextBlock x:Name="SwitchOperationStateText"
+                       Margin="0,4,0,4"
+                       Foreground="#666" />
+            <Button x:Name="SwitchOperationButton"
+                    Click="OnSwitchOperation" />
+          </StackPanel>
           <StackPanel x:Name="PoleNumberEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"

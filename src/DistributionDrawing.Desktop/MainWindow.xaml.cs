@@ -24,6 +24,7 @@ using DistributionDrawing.Desktop.RingCabinetCreation;
 using DistributionDrawing.Desktop.Viewport;
 using DistributionDrawing.Desktop.Services;
 using DistributionDrawing.Desktop.ViewModels;
+using DistributionDrawing.Desktop.SwitchOperation;
 
 namespace DistributionDrawing.Desktop;
 
@@ -44,6 +45,7 @@ public partial class MainWindow : Window
     private readonly PlacementController _placement;
     private readonly OverheadLineConnectionController _overheadLineConnection;
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
+    private readonly SwitchOperationController _switchOperation;
     private readonly DrawingToolCoordinator _drawingTools;
     private MainWindowViewModel _shellViewModel = null!;
     private bool _gridVisible;
@@ -77,6 +79,8 @@ public partial class MainWindow : Window
             () => _workspace.CurrentSession);
         _cableTerminationAttachment = new CableTerminationAttachmentController(
             () => _workspace.CurrentSession);
+        _switchOperation = new SwitchOperationController(
+            () => _workspace.CurrentSession);
         _drawingTools = new DrawingToolCoordinator(
             _placement,
             _overheadLineConnection,
@@ -84,6 +88,7 @@ public partial class MainWindow : Window
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
         _cableTerminationAttachment.SceneChanged += OnDrawingToolVisualChanged;
+        _switchOperation.SceneChanged += OnSwitchOperationSceneChanged;
         _viewport.ViewChanged += OnViewportChanged;
         DrawingSurface.SetViewTransform(_viewport.Transform);
         _shellViewModel = new MainWindowViewModel(
@@ -175,6 +180,31 @@ public partial class MainWindow : Window
     private void OnCancelPlacement(object sender, RoutedEventArgs e)
     {
         _drawingTools.Cancel();
+    }
+
+    private void OnSwitchOperation(object sender, RoutedEventArgs e)
+    {
+        SwitchOperationResult result = _switchOperation.ToggleSelected();
+        if (!result.IsSuccess)
+        {
+            ShowCommandError("开关操作失败", result.ErrorMessage!);
+        }
+    }
+
+    private void OnSwitchOperationSceneChanged(object? sender, EventArgs e)
+    {
+        if (_workspace.CurrentSession is not { } session)
+        {
+            return;
+        }
+
+        _currentScene = session.Scene;
+        _activeSource = session.InspectionSource;
+        _selectionResolver.SetSource(_activeSource);
+        _propertyInspector.Apply(
+            _propertyProjector.Project(
+                _selectionResolver.Resolve(_selectionManager.Selected)));
+        RenderCurrentScene();
     }
 
     private void OnRemoveSelectedDevice(object sender, RoutedEventArgs e) => OnDeleteRequested();
@@ -1108,6 +1138,26 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.ClickCount == 2)
+        {
+            SelectionReference? doubleClickTarget = _currentScene.HitTestIndex.HitTest(
+                documentPoint,
+                _viewport.Transform.ViewDistanceToDocument(4));
+            if (doubleClickTarget?.Kind == SelectionTargetKind.Device &&
+                _selectionResolver.Resolve(doubleClickTarget)?.SwitchDevice is not null)
+            {
+                _selectionManager.Select(doubleClickTarget);
+                SwitchOperationResult result = _switchOperation.ToggleSelected();
+                if (!result.IsSuccess)
+                {
+                    ShowCommandError("开关操作失败", result.ErrorMessage!);
+                }
+
+                e.Handled = true;
+                return;
+            }
+        }
+
         SelectionReference? target = _currentScene.HitTestIndex.HitTest(
             documentPoint,
             _viewport.Transform.ViewDistanceToDocument(4));
@@ -1800,6 +1850,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        UpdateSwitchOperationEditor();
+
         var elements = _currentScene.Elements.ToList();
         elements.AddRange(_drawingTools.CreateTransientElements());
         elements.AddRange(
@@ -1809,6 +1861,22 @@ public partial class MainWindow : Window
         double pixelsPerDip = VisualTreeHelper.GetDpi(DrawingSurface).PixelsPerDip;
         DrawingSurface.Show(_renderer.Render(new DrawingScene(elements), pixelsPerDip));
         DrawingSurface.SetViewTransform(_viewport.Transform);
+    }
+
+    private void UpdateSwitchOperationEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(
+            _selectionManager.Selected);
+        if (selection?.SwitchDevice is not { } switchDevice)
+        {
+            SwitchOperationPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        SwitchOperationPanel.Visibility = Visibility.Visible;
+        bool isClosed = switchDevice.SwitchState == SwitchState.Closed;
+        SwitchOperationStateText.Text = isClosed ? "当前状态：合" : "当前状态：分";
+        SwitchOperationButton.Content = isClosed ? "分闸" : "合闸";
     }
 
 }
