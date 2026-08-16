@@ -17,11 +17,12 @@ public sealed class SwitchOperationControllerTests
     public void ToggleSelected_ChangesStateAndPreservesSelection()
     {
         using TestProject project = CreateProject(CreateLoadSwitchConfiguration());
-        SwitchDevice loadSwitch = project.GetSwitch(SwitchKind.LoadSwitch);
+        RingCabinetInterval interval = project.GetInterval(IntervalKind.LoadSwitchInterval);
+        SwitchDevice loadSwitch = project.GetSwitch(interval, SwitchKind.LoadSwitch);
         var selection = new SelectionReference(
             SelectionTargetKind.Device,
             loadSwitch.Id,
-            project.Interval.IntervalId);
+            interval.IntervalId);
         project.Session.SelectionManager.Select(selection);
         var controller = new SwitchOperationController(() => project.Session);
         int sceneChanges = 0;
@@ -48,20 +49,21 @@ public sealed class SwitchOperationControllerTests
     public void InterlockFailure_DoesNotChangeStateOrHistoryAndReturnsChineseMessage()
     {
         using TestProject project = CreateProject(CreateLoadSwitchConfiguration());
-        SwitchDevice groundSwitch = project.GetSwitch(SwitchKind.GroundSwitch);
+        RingCabinetInterval interval = project.GetInterval(IntervalKind.LoadSwitchInterval);
+        SwitchDevice groundSwitch = project.GetSwitch(interval, SwitchKind.GroundSwitch);
         var controller = new SwitchOperationController(() => project.Session);
         project.Session.SelectionManager.Select(
             new SelectionReference(
                 SelectionTargetKind.Device,
                 groundSwitch.Id,
-                project.Interval.IntervalId));
+                interval.IntervalId));
 
         Assert.True(controller.ToggleSelected().IsSuccess);
-        SwitchDevice loadSwitch = project.GetSwitch(SwitchKind.LoadSwitch);
+        SwitchDevice loadSwitch = project.GetSwitch(interval, SwitchKind.LoadSwitch);
         var loadSelection = new SelectionReference(
             SelectionTargetKind.Device,
             loadSwitch.Id,
-            project.Interval.IntervalId);
+            interval.IntervalId);
         project.Session.SelectionManager.Select(loadSelection);
         int historyCount = project.Session.CommandStack.History.Count;
 
@@ -79,12 +81,13 @@ public sealed class SwitchOperationControllerTests
     public void IntegratedFeederSwitch_UsesSameOperationPath()
     {
         using TestProject project = CreateProject(CreateIntegratedFeederConfiguration());
-        SwitchDevice circuitBreaker = project.GetSwitch(SwitchKind.CircuitBreaker);
+        RingCabinetInterval interval = project.GetInterval(IntervalKind.IntegratedFeederInterval);
+        SwitchDevice circuitBreaker = project.GetSwitch(interval, SwitchKind.CircuitBreaker);
         project.Session.SelectionManager.Select(
             new SelectionReference(
                 SelectionTargetKind.Device,
                 circuitBreaker.Id,
-                project.Interval.IntervalId));
+                interval.IntervalId));
         var controller = new SwitchOperationController(() => project.Session);
 
         SwitchOperationResult result = controller.ToggleSelected();
@@ -154,15 +157,15 @@ public sealed class SwitchOperationControllerTests
 
         private string FilePath { get; }
 
-        public RingCabinetInterval Interval =>
+        public RingCabinetInterval GetInterval(IntervalKind intervalKind) =>
             Session.PersistenceSession.Domain.Devices
                 .OfType<RingCabinet>()
                 .Single()
                 .Intervals
-                .Single();
+                .Single(interval => interval.IntervalKind == intervalKind);
 
-        public SwitchDevice GetSwitch(SwitchKind kind) =>
-            Interval.SwitchDevices.Single(device => device.SwitchKind == kind);
+        public SwitchDevice GetSwitch(RingCabinetInterval interval, SwitchKind kind) =>
+            interval.SwitchDevices.Single(device => device.SwitchKind == kind);
 
         public void Dispose()
         {
