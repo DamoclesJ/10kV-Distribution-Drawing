@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Professional;
@@ -26,6 +27,10 @@ public sealed class CableConnectionController
     public CableConnectionToolOutcome LastOutcome { get; private set; }
 
     public bool IsActive => State != CableConnectionToolState.Idle;
+
+    public bool IsCableSegmentSelected =>
+        _getSession()?.SelectionManager.Selected is
+        { Kind: SelectionTargetKind.CableSegment };
 
     public bool HasPreview => State is CableConnectionToolState.PickingEndTerminal or
         CableConnectionToolState.AwaitingParameters;
@@ -162,6 +167,46 @@ public sealed class CableConnectionController
         {
             LastOutcome = CableConnectionToolOutcome.InvalidTarget;
             throw;
+        }
+    }
+
+    public void RemoveSelected()
+    {
+        ProjectRuntimeSession session = RequireSession();
+        SelectionReference selected = session.SelectionManager.Selected
+            ?? throw new InvalidOperationException("请先选择一条电缆。");
+        if (selected.Kind != SelectionTargetKind.CableSegment)
+        {
+            throw new InvalidOperationException("当前选择不是电缆。");
+        }
+
+        DrawingDocument document = session.PersistenceSession.Domain;
+        CableSegment cableSegment = document.CableSegments.SingleOrDefault(
+                candidate => candidate.Id == selected.ObjectId)
+            ?? throw new InvalidOperationException("所选电缆不存在，未执行删除。");
+        Connection connection = document.Connections.SingleOrDefault(
+                candidate => candidate.Id == cableSegment.ConnectionId)
+            ?? throw new InvalidOperationException("所选电缆的连接不存在，未执行删除。");
+
+        var command = new RemoveCableSegmentCommand(
+            document,
+            cableSegment,
+            connection);
+        try
+        {
+            session.CommandStack.ExecuteCommand(command);
+            session.SelectionManager.Clear();
+            session.RebuildScene();
+            LastOutcome = CableConnectionToolOutcome.Committed;
+            VisualChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException("电缆删除失败，工程数据未改变。", exception);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new InvalidOperationException("电缆删除失败，工程数据未改变。", exception);
         }
     }
 

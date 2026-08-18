@@ -97,6 +97,12 @@ public sealed class DrawingToolCoordinator
             return;
         }
 
+        if (_cableConnection.IsCableSegmentSelected)
+        {
+            _cableConnection.RemoveSelected();
+            return;
+        }
+
         if (_cableTerminationAttachment.IsCableTerminationAttachmentSelected)
         {
             _cableTerminationAttachment.RemoveSelected();
