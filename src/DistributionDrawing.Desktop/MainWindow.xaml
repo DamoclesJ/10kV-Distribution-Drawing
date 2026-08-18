@@ -168,6 +168,27 @@
             <Button Content="应用杆号"
                     Click="OnApplyPoleNumber" />
           </StackPanel>
+          <StackPanel x:Name="CablePropertyEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555"
+                       Text="电缆属性" />
+            <TextBlock Margin="0,4,0,0"
+                       Foreground="#555"
+                       Text="电缆型号" />
+            <TextBox x:Name="CableTypeInput"
+                     Margin="0,2,0,2" />
+            <Button Content="应用型号"
+                    Click="OnApplyCableType" />
+            <TextBlock Margin="0,4,0,0"
+                       Foreground="#555"
+                       Text="长度（m）" />
+            <TextBox x:Name="CableLengthInput"
+                     Margin="0,2,0,2" />
+            <Button Content="应用长度"
+                    Click="OnApplyCableLength" />
+          </StackPanel>
           <StackPanel x:Name="AttachmentOffsetEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"

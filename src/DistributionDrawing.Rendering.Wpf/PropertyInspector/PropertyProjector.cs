@@ -274,8 +274,14 @@ public sealed class PropertyProjector
                 Section(
                     "电缆属性",
                     DomainRow("Id", "标识", cable.Id),
-                    DomainRow("CableType", "电缆型号", cable.CableType),
-                    DomainRow("Length", "长度", $"{cable.Length:0.###} m"),
+                    EditableDomainRow(
+                        "CableSegment.CableType",
+                        "电缆型号",
+                        cable.CableType),
+                    EditableDomainRow(
+                        "CableSegment.Length",
+                        "长度（m）",
+                        $"{cable.Length:0.###}"),
                     DomainRow("StartTerminalId", "起点端子", cable.StartTerminalId),
                     DomainRow("EndTerminalId", "终点端子", cable.EndTerminalId),
                     DomainRow("ConnectionId", "连接标识", cable.ConnectionId))
@@ -395,6 +401,9 @@ public sealed class PropertyProjector
 
     private static PropertyRowViewModel DomainRow(string key, string name, object? value) =>
         new(key, name, FormatValue(value), PropertyValueSource.Domain);
+
+    private static PropertyRowViewModel EditableDomainRow(string key, string name, object? value) =>
+        new(key, name, FormatValue(value), PropertyValueSource.Domain, false);
 
     private static PropertyRowViewModel LayoutRow(string key, string name, object? value) =>
         new(key, name, FormatValue(value), PropertyValueSource.Layout);

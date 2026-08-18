@@ -25,6 +25,8 @@ public sealed class PropertyCommandFactory
     public const string WorkScopeDescriptionPropertyKey = "WorkScope.Description";
     public const string CableTerminationDisplayNamePropertyKey =
         "CableTermination.DisplayName";
+    public const string CableTypePropertyKey = EditPropertyCommand.CableTypeProperty;
+    public const string CableLengthPropertyKey = EditPropertyCommand.CableLengthProperty;
 
     public bool TryCreateIntervalTypeChange(
         ResolvedSelection selection,
@@ -125,6 +127,16 @@ public sealed class PropertyCommandFactory
                 out error);
         }
 
+        if (selection.CableSegment is not null)
+        {
+            return TryCreateCableProperty(
+                selection,
+                propertyKey,
+                input,
+                out command,
+                out error);
+        }
+
         if (propertyKey != PoleNumberPropertyKey)
         {
             error = new PropertyEditError(
@@ -164,6 +176,96 @@ public sealed class PropertyCommandFactory
             selection.Pole.PoleNumber,
             after);
         return true;
+    }
+
+    private static bool TryCreateCableProperty(
+        ResolvedSelection selection,
+        string propertyKey,
+        string input,
+        out ICommand? command,
+        out PropertyEditError? error)
+    {
+        command = null;
+        error = null;
+        if (selection.Reference.Kind != SelectionTargetKind.CableSegment ||
+            selection.CableSegment is not { } cable)
+        {
+            error = new PropertyEditError(
+                "TargetNotSupported",
+                "电缆属性编辑需要选中电缆。");
+            return false;
+        }
+
+        if (propertyKey == CableTypePropertyKey)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                error = new PropertyEditError("InputInvalid", "电缆型号不能为空。");
+                return false;
+            }
+
+            string after = input.Trim();
+            if (after == cable.CableType)
+            {
+                error = new PropertyEditError("NoChange", "电缆型号没有变化。");
+                return false;
+            }
+
+            command = new EditPropertyCommand(
+                cable,
+                CableTypePropertyKey,
+                cable.CableType,
+                after);
+            return true;
+        }
+
+        if (propertyKey == CableLengthPropertyKey)
+        {
+            if (!TryParseLength(input, out double after) || after <= 0)
+            {
+                error = new PropertyEditError(
+                    "InputInvalid",
+                    "请输入大于零的电缆长度。");
+                return false;
+            }
+
+            if (after == cable.Length)
+            {
+                error = new PropertyEditError("NoChange", "电缆长度没有变化。");
+                return false;
+            }
+
+            command = new EditPropertyCommand(
+                cable,
+                CableLengthPropertyKey,
+                cable.Length,
+                after);
+            return true;
+        }
+
+        error = new PropertyEditError(
+            "PropertyReadOnly",
+            "电缆起点、终点和连接标识为只读属性。");
+        return false;
+    }
+
+    private static bool TryParseLength(string input, out double length)
+    {
+        if (!double.TryParse(
+                input,
+                NumberStyles.Float,
+                CultureInfo.CurrentCulture,
+                out length) &&
+            !double.TryParse(
+                input,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out length))
+        {
+            return false;
+        }
+
+        return !double.IsNaN(length) && !double.IsInfinity(length);
     }
 
     public bool TryCreateGroundingPoint(

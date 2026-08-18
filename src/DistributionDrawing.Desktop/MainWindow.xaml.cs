@@ -1358,6 +1358,44 @@ public partial class MainWindow : Window
         RefreshDrawingScene();
     }
 
+    private void OnApplyCableType(object sender, RoutedEventArgs e)
+    {
+        ApplyCableProperty(
+            PropertyCommandFactory.CableTypePropertyKey,
+            CableTypeInput.Text);
+    }
+
+    private void OnApplyCableLength(object sender, RoutedEventArgs e)
+    {
+        ApplyCableProperty(
+            PropertyCommandFactory.CableLengthPropertyKey,
+            CableLengthInput.Text);
+    }
+
+    private void ApplyCableProperty(string propertyKey, string input)
+    {
+        if (_selectionManager.Selected is not
+            { Kind: SelectionTargetKind.CableSegment } target)
+        {
+            ShowCommandError("电缆属性修改失败", "请先选择一条电缆。");
+            return;
+        }
+
+        PropertyEditResult result = _propertyEditor.TryEdit(
+            target,
+            propertyKey,
+            input);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError(
+                "电缆属性修改失败",
+                result.ErrorMessage ?? "电缆属性未能应用。");
+            return;
+        }
+
+        RefreshDrawingScene();
+    }
+
     private void OnApplyAttachmentOffset(object sender, RoutedEventArgs e)
     {
         if (_workspace.CurrentSession is not { } session ||
@@ -1560,6 +1598,24 @@ public partial class MainWindow : Window
 
         PoleNumberEditorPanel.Visibility = Visibility.Visible;
         PoleNumberInput.Text = pole.PoleNumber;
+    }
+
+    private void UpdateCablePropertyEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(
+            _selectionManager.Selected);
+        if (selection?.Reference.Kind != SelectionTargetKind.CableSegment ||
+            selection.CableSegment is not { } cable)
+        {
+            CablePropertyEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        CablePropertyEditorPanel.Visibility = Visibility.Visible;
+        CableTypeInput.Text = cable.CableType;
+        CableLengthInput.Text = cable.Length.ToString(
+            "R",
+            CultureInfo.InvariantCulture);
     }
 
     private void UpdateIntervalEditor()
@@ -1927,6 +1983,7 @@ public partial class MainWindow : Window
         }
 
         UpdateSwitchOperationEditor();
+        UpdateCablePropertyEditor();
 
         var elements = _currentScene.Elements.ToList();
         elements.AddRange(_drawingTools.CreateTransientElements());
