@@ -48,6 +48,7 @@ public partial class MainWindow : Window
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
     private readonly SwitchOperationController _switchOperation;
     private readonly CableConnectionController _cableConnection;
+    private readonly CableReconnectController _cableReconnect;
     private readonly DrawingToolCoordinator _drawingTools;
     private MainWindowViewModel _shellViewModel = null!;
     private bool _gridVisible;
@@ -81,6 +82,8 @@ public partial class MainWindow : Window
             () => _workspace.CurrentSession);
         _cableConnection = new CableConnectionController(
             () => _workspace.CurrentSession);
+        _cableReconnect = new CableReconnectController(
+            () => _workspace.CurrentSession);
         _cableTerminationAttachment = new CableTerminationAttachmentController(
             () => _workspace.CurrentSession);
         _switchOperation = new SwitchOperationController(
@@ -89,10 +92,12 @@ public partial class MainWindow : Window
             _placement,
             _overheadLineConnection,
             _cableTerminationAttachment,
-            _cableConnection);
+            _cableConnection,
+            _cableReconnect);
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
         _cableConnection.VisualChanged += OnDrawingToolVisualChanged;
+        _cableReconnect.VisualChanged += OnDrawingToolVisualChanged;
         _cableConnection.ParametersRequired += OnCableParametersRequired;
         _cableTerminationAttachment.SceneChanged += OnDrawingToolVisualChanged;
         _switchOperation.SceneChanged += OnSwitchOperationSceneChanged;
@@ -625,6 +630,10 @@ public partial class MainWindow : Window
                     CableConnectionToolState.PickingStartTerminal
                         ? "绘制电缆：请选择起点"
                         : "绘制电缆：请选择终点",
+                _ when _cableReconnect.IsActive => _cableReconnect.Endpoint ==
+                    CableReconnectEndpoint.Start
+                        ? "修改电缆：请选择新的起点端子"
+                        : "修改电缆：请选择新的终点端子",
                 _ => "选择"
             });
     }
@@ -1394,6 +1403,37 @@ public partial class MainWindow : Window
         }
 
         RefreshDrawingScene();
+    }
+
+    private void OnBeginCableReconnectStart(object sender, RoutedEventArgs e)
+    {
+        BeginCableReconnect(_cableReconnect.BeginStart);
+    }
+
+    private void OnBeginCableReconnectEnd(object sender, RoutedEventArgs e)
+    {
+        BeginCableReconnect(_cableReconnect.BeginEnd);
+    }
+
+    private void OnCancelCableReconnect(object sender, RoutedEventArgs e)
+    {
+        _cableReconnect.Cancel();
+        UpdateCanvasStatus();
+    }
+
+    private void BeginCableReconnect(Action begin)
+    {
+        try
+        {
+            CancelProfessionalPicking();
+            _drawingTools.Cancel();
+            begin();
+            UpdateCanvasStatus();
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowCommandError("电缆端点修改失败", exception.Message);
+        }
     }
 
     private void OnApplyAttachmentOffset(object sender, RoutedEventArgs e)

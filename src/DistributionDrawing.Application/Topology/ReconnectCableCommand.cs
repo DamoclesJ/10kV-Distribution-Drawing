@@ -81,9 +81,8 @@ public sealed class ReconnectCableCommand
                 "Reconnect requires two different terminals.");
         }
 
-        Guid afterConnectionId = Guid.NewGuid();
         var afterConnection = new Connection(
-            afterConnectionId,
+            beforeConnection.Id,
             ConnectionType.Cable,
             _newStartTerminalId,
             _newEndTerminalId,
@@ -95,7 +94,7 @@ public sealed class ReconnectCableCommand
             beforeCableSegment.CableType,
             beforeCableSegment.Length,
             beforeCableSegment.VoltageLevel,
-            afterConnectionId,
+            beforeConnection.Id,
             _newStartTerminalId,
             _newEndTerminalId);
 

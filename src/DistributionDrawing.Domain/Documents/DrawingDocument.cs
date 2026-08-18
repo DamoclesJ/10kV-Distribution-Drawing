@@ -525,14 +525,16 @@ public sealed class DrawingDocument
                 "Reconnect must preserve the cable segment ID.");
         }
 
-        if (beforeConnection.Id == afterConnection.Id)
+        if (beforeConnection.Id != afterConnection.Id)
         {
             throw new InvalidOperationException(
-                "Reconnect must create a new connection ID.");
+                "Reconnect must preserve the connection ID.");
         }
 
         ValidateCableSegmentConnection(beforeCableSegment, beforeConnection);
         ValidateCableSegmentConnection(afterCableSegment, afterConnection);
+
+        ValidateCableReconnectConnection(afterConnection, beforeConnection.Id);
 
         CableSegment currentCableSegment = _cableSegments.SingleOrDefault(segment =>
                 segment.Id == beforeCableSegment.Id)
@@ -1353,7 +1355,7 @@ public sealed class DrawingDocument
 
     private void EnsureTerminalAcceptsConnection(Terminal terminal, Connection connection)
     {
-        if (!terminal.Allows(connection.Type))
+        if (!terminal.IsExternal || !terminal.Allows(connection.Type))
         {
             throw new InvalidOperationException(
                 $"Terminal '{terminal.Id}' does not allow connection type '{connection.Type}'.");
@@ -1370,6 +1372,80 @@ public sealed class DrawingDocument
 
         if (!terminal.AllowsMultipleConnections &&
             _connections.Any(existing => existing.UsesTerminal(terminal.Id)))
+        {
+            throw new InvalidOperationException(
+                $"Terminal '{terminal.Id}' already has a connection.");
+        }
+    }
+
+    private void ValidateCableReconnectConnection(
+        Connection connection,
+        Guid replacedConnectionId)
+    {
+        if (connection.Type != ConnectionType.Cable)
+        {
+            throw new InvalidOperationException(
+                "A cable reconnect requires a cable connection.");
+        }
+
+        Terminal start = GetTerminal(connection.StartTerminalId);
+        Terminal end = GetTerminal(connection.EndTerminalId);
+        if (connection.StartTerminalId == connection.EndTerminalId)
+        {
+            throw new InvalidOperationException(
+                "Reconnect requires two different terminals.");
+        }
+
+        if (start.OwnerType == end.OwnerType && start.OwnerId == end.OwnerId)
+        {
+            throw new InvalidOperationException(
+                "An external connection cannot connect two terminals of the same topology owner.");
+        }
+
+        if (start.ElectricalNodeId is Guid startNodeId &&
+            end.ElectricalNodeId == startNodeId)
+        {
+            throw new InvalidOperationException(
+                "An external connection cannot reconnect terminals on the same electrical node.");
+        }
+
+        if (_connections.Any(existing =>
+                existing.Id != replacedConnectionId &&
+                existing.UsesTerminal(connection.StartTerminalId) &&
+                existing.UsesTerminal(connection.EndTerminalId)))
+        {
+            throw new InvalidOperationException(
+                "A connection between the selected terminals already exists.");
+        }
+
+        EnsureTerminalAcceptsReconnect(start, connection, replacedConnectionId);
+        EnsureTerminalAcceptsReconnect(end, connection, replacedConnectionId);
+    }
+
+    private void EnsureTerminalAcceptsReconnect(
+        Terminal terminal,
+        Connection connection,
+        Guid replacedConnectionId)
+    {
+        if (!terminal.Allows(connection.Type))
+        {
+            throw new InvalidOperationException(
+                $"Terminal '{terminal.Id}' does not allow connection type '{connection.Type}'.");
+        }
+
+        if (!string.Equals(
+                terminal.VoltageLevel,
+                connection.VoltageLevel,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Terminal '{terminal.Id}' voltage level is incompatible with the connection.");
+        }
+
+        if (!terminal.AllowsMultipleConnections &&
+            _connections.Any(existing =>
+                existing.Id != replacedConnectionId &&
+                existing.UsesTerminal(terminal.Id)))
         {
             throw new InvalidOperationException(
                 $"Terminal '{terminal.Id}' already has a connection.");

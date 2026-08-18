@@ -13,12 +13,14 @@ public sealed class DrawingToolCoordinator
     private readonly OverheadLineConnectionController _overheadLine;
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
     private readonly CableConnectionController _cableConnection;
+    private readonly CableReconnectController _cableReconnect;
 
     public DrawingToolCoordinator(
         PlacementController placement,
         OverheadLineConnectionController overheadLine,
         CableTerminationAttachmentController cableTerminationAttachment,
-        CableConnectionController cableConnection)
+        CableConnectionController cableConnection,
+        CableReconnectController cableReconnect)
     {
         _placement = placement ?? throw new ArgumentNullException(nameof(placement));
         _overheadLine = overheadLine ?? throw new ArgumentNullException(nameof(overheadLine));
@@ -26,22 +28,27 @@ public sealed class DrawingToolCoordinator
             throw new ArgumentNullException(nameof(cableTerminationAttachment));
         _cableConnection = cableConnection ??
             throw new ArgumentNullException(nameof(cableConnection));
+        _cableReconnect = cableReconnect ??
+            throw new ArgumentNullException(nameof(cableReconnect));
     }
 
     public bool IsActive =>
         _placement.Mode != PlacementMode.Idle ||
         _overheadLine.IsActive ||
-        _cableConnection.IsActive;
+        _cableConnection.IsActive ||
+        _cableReconnect.IsActive;
 
     public void BeginPole()
     {
         _overheadLine.Cancel();
+        _cableReconnect.Cancel();
         _placement.BeginPole();
     }
 
     public void BeginRingCabinet(RingCabinetCreationConfiguration configuration)
     {
         _overheadLine.Cancel();
+        _cableReconnect.Cancel();
         _placement.BeginRingCabinet(configuration);
     }
 
@@ -49,6 +56,7 @@ public sealed class DrawingToolCoordinator
     {
         _placement.Cancel();
         _cableConnection.Cancel();
+        _cableReconnect.Cancel();
         _overheadLine.Begin();
     }
 
@@ -56,6 +64,7 @@ public sealed class DrawingToolCoordinator
     {
         _placement.Cancel();
         _overheadLine.Cancel();
+        _cableReconnect.Cancel();
         _cableConnection.Begin();
     }
 
@@ -64,6 +73,7 @@ public sealed class DrawingToolCoordinator
         _placement.Cancel();
         _overheadLine.Cancel();
         _cableConnection.Cancel();
+        _cableReconnect.Cancel();
     }
 
     public bool HandleClick(DocumentPoint point, double terminalToleranceMillimeters)
@@ -77,6 +87,12 @@ public sealed class DrawingToolCoordinator
         if (_cableConnection.IsActive)
         {
             _cableConnection.Pick(point, terminalToleranceMillimeters);
+            return true;
+        }
+
+        if (_cableReconnect.IsActive)
+        {
+            _cableReconnect.Pick(point, terminalToleranceMillimeters);
             return true;
         }
 

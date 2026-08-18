@@ -18,6 +18,14 @@ public sealed class CableReconnectResult
             ?? throw new ArgumentNullException(nameof(afterCableSegment));
         AfterConnection = afterConnection
             ?? throw new ArgumentNullException(nameof(afterConnection));
+        if (BeforeCableSegment.Id != AfterCableSegment.Id ||
+            BeforeConnection.Id != AfterConnection.Id ||
+            BeforeCableSegment.ConnectionId != BeforeConnection.Id ||
+            AfterCableSegment.ConnectionId != AfterConnection.Id)
+        {
+            throw new ArgumentException(
+                "Cable reconnect must preserve the segment and connection identities.");
+        }
     }
 
     public CableSegment BeforeCableSegment { get; }

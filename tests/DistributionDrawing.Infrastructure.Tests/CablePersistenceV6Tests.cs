@@ -82,7 +82,7 @@ public sealed class CablePersistenceV6Tests
     }
 
     [Fact]
-    public void ReconnectedCable_RoundTrip_PreservesSegmentAndNewConnection()
+    public void ReconnectedCable_RoundTrip_PreservesSegmentAndConnection()
     {
         DrawingDocument original = CreateDocumentWithIntermediateTerminals(3);
         IntermediateTerminal[] terminals = original.IntermediateTerminals.ToArray();
@@ -103,7 +103,7 @@ public sealed class CablePersistenceV6Tests
 
         Assert.Equal(result.AfterCableSegment.Id, restoredCable.Id);
         Assert.Equal(result.AfterConnection.Id, restoredCable.ConnectionId);
-        Assert.DoesNotContain(restored.Connections, item => item.Id == result.BeforeConnection.Id);
+        Assert.Contains(restored.Connections, item => item.Id == result.BeforeConnection.Id);
         Assert.True(query.IsConnected(terminals[0].TerminalId, terminals[2].TerminalId));
         Assert.False(query.IsConnected(terminals[1].TerminalId, terminals[2].TerminalId));
     }

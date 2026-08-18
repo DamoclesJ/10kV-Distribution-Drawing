@@ -145,6 +145,72 @@ public sealed class CableConnectionControllerTests
     }
 
     [Fact]
+    public void ReconnectEnd_UsesCableTerminalPickingAndPreservesStableIds()
+    {
+        using TestProject project = CreateProject();
+        _ = CreateCable(project);
+        CableSegment cable = Assert.Single(project.Document.CableSegments);
+        Guid cableId = cable.Id;
+        Guid connectionId = cable.ConnectionId;
+        Guid originalStart = cable.StartTerminalId;
+        Guid originalEnd = cable.EndTerminalId;
+        Guid newEnd = project.Cabinet.Intervals[1].ExternalTerminalId;
+
+        project.Session.SelectionManager.Select(
+            new SelectionReference(SelectionTargetKind.CableSegment, cable.Id));
+        var reconnect = new CableReconnectController(() => project.Session);
+        reconnect.BeginEnd();
+        reconnect.Pick(CreateAnchors(project).PositionOf(newEnd), 8);
+
+        CableSegment changed = Assert.Single(project.Document.CableSegments);
+        Assert.Equal(cableId, changed.Id);
+        Assert.Equal(connectionId, changed.ConnectionId);
+        Assert.Equal(originalStart, changed.StartTerminalId);
+        Assert.Equal(newEnd, changed.EndTerminalId);
+        Assert.Equal(
+            new SelectionReference(SelectionTargetKind.CableSegment, cableId),
+            project.Session.SelectionManager.Selected);
+
+        Assert.True(project.Session.CommandStack.Undo());
+        CableSegment undone = Assert.Single(project.Document.CableSegments);
+        Assert.Equal(originalEnd, undone.EndTerminalId);
+        Assert.Equal(connectionId, undone.ConnectionId);
+
+        Assert.True(project.Session.CommandStack.Redo());
+        CableSegment redone = Assert.Single(project.Document.CableSegments);
+        Assert.Equal(newEnd, redone.EndTerminalId);
+        Assert.Equal(connectionId, redone.ConnectionId);
+    }
+
+    [Fact]
+    public void ReconnectOverheadSide_IsRejectedAndPreservesSelectionAndHistory()
+    {
+        using TestProject project = CreateProject();
+        _ = CreateCable(project);
+        CableSegment cable = Assert.Single(project.Document.CableSegments);
+        SelectionReference selection = new(SelectionTargetKind.CableSegment, cable.Id);
+        project.Session.SelectionManager.Select(selection);
+        Guid originalEnd = cable.EndTerminalId;
+        int historyCount = project.Session.CommandStack.History.Count;
+
+        var reconnect = new CableReconnectController(() => project.Session);
+        reconnect.BeginEnd();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            reconnect.Pick(
+                CreateAnchors(project).PositionOf(
+                    project.CableTerminationOverheadSideTerminalId),
+                8));
+
+        Assert.Contains("电缆", exception.Message, StringComparison.Ordinal);
+        CableSegment unchanged = Assert.Single(project.Document.CableSegments);
+        Assert.Equal(originalEnd, unchanged.EndTerminalId);
+        Assert.Equal(selection, project.Session.SelectionManager.Selected);
+        Assert.Equal(historyCount, project.Session.CommandStack.History.Count);
+        Assert.True(reconnect.IsActive);
+    }
+
+    [Fact]
     public void OverheadSideTerminal_IsNotAValidCableEndpoint()
     {
         using TestProject project = CreateProject();
@@ -256,6 +322,21 @@ public sealed class CableConnectionControllerTests
             project.Document,
             project.Session.Layout.DrawingLayout,
             project.Session.Layout.RingCabinetLayouts);
+    }
+
+    private static CableConnectionController CreateCable(TestProject project)
+    {
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        var controller = new CableConnectionController(() => project.Session);
+        controller.Begin();
+        controller.Pick(
+            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            8);
+        controller.Pick(
+            anchors.PositionOf(project.CableTerminationCableSideTerminalId),
+            8);
+        controller.Complete("YJV22", 80);
+        return controller;
     }
 
     private sealed class TestProject : IDisposable

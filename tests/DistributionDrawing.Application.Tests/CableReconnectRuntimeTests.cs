@@ -8,7 +8,7 @@ namespace DistributionDrawing.Application.Tests;
 public sealed class CableReconnectRuntimeTests
 {
     [Fact]
-    public void Execute_ReconnectsCableAndReplacesConnection()
+    public void Execute_ReconnectsCableAndPreservesConnection()
     {
         (DrawingDocument document, CableSegment cable, Guid startId, Guid endId, Guid newEndId) =
             CreateCableScenario();
@@ -25,8 +25,8 @@ public sealed class CableReconnectRuntimeTests
         CableReconnectResult result = Assert.IsType<CableReconnectResult>(command.Result);
         Assert.Equal(originalSegmentId, Assert.Single(document.CableSegments).Id);
         Assert.Equal(originalSegmentId, result.AfterCableSegment.Id);
-        Assert.NotEqual(originalConnectionId, result.AfterConnection.Id);
-        Assert.DoesNotContain(document.Connections, connection =>
+        Assert.Equal(originalConnectionId, result.AfterConnection.Id);
+        Assert.Contains(document.Connections, connection =>
             connection.Id == originalConnectionId);
         Assert.Contains(document.Connections, connection =>
             connection.Id == result.AfterConnection.Id &&
@@ -37,7 +37,7 @@ public sealed class CableReconnectRuntimeTests
     }
 
     [Fact]
-    public void UndoAndRedo_PreserveSegmentIdAndReuseAfterConnectionId()
+    public void UndoAndRedo_PreserveSegmentAndConnectionIds()
     {
         (DrawingDocument document, CableSegment cable, Guid startId, _, Guid newEndId) =
             CreateCableScenario();
