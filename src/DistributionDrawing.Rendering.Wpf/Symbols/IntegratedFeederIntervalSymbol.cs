@@ -2,20 +2,19 @@ using System.Windows.Media;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
 namespace DistributionDrawing.Rendering.Wpf.Symbols;
 
 /// <summary>
-/// Renders the visual composition of an integrated-feeder interval.
-/// It does not evaluate operational state, grounding, or interlocks.
+/// Projects the existing integrated-feeder switch composition into professional geometry.
+/// It does not derive or mutate electrical state.
 /// </summary>
 public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
 {
-    private const double ConductorThickness = 0.6;
-    private const double TerminalWidth = 10;
-    private const double TerminalHeight = 8;
+    private readonly DrawingMetrics _metrics = DrawingMetrics.Default;
 
     public IntervalKind Kind => IntervalKind.IntegratedFeederInterval;
 
@@ -24,7 +23,8 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
         RingCabinetIntervalLayout layout,
         DocumentPoint cabinetPosition,
         SymbolLibrary symbolLibrary,
-        bool includeLabels = true)
+        bool includeLabels = true,
+        double? busbarYMillimeters = null)
     {
         ArgumentNullException.ThrowIfNull(interval);
         ArgumentNullException.ThrowIfNull(layout);
@@ -36,203 +36,99 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
                 "The integrated-feeder symbol requires an integrated-feeder interval.");
         }
 
-        if (interval.GroundingStructureKind is not GroundingStructureKind structureKind)
-        {
-            throw new InvalidOperationException(
+        GroundingStructureKind structureKind = interval.GroundingStructureKind
+            ?? throw new InvalidOperationException(
                 $"Interval '{interval.IntervalId}' has no grounding structure.");
-        }
-
         DocumentPoint origin = new(
             cabinetPosition.XMillimeters + layout.RelativePosition.XMillimeters,
             cabinetPosition.YMillimeters + layout.RelativePosition.YMillimeters);
+        double centerX = origin.XMillimeters + layout.WidthMillimeters / 2;
+        double busY = busbarYMillimeters ?? origin.YMillimeters;
         var elements = new List<SceneElement>();
 
-        elements.AddRange(
-            symbolLibrary.Create(
-                SymbolKind.RingCabinetInterval,
-                new SymbolRenderContext(
-                    origin,
-                    layout.WidthMillimeters,
-                    layout.HeightMillimeters,
-                    fill: Colors.White,
-                    thicknessMillimeters: 0.6)));
         SwitchDevice isolation = GetSingleSwitch(interval, SwitchKind.IsolationSwitch);
         SwitchDevice breaker = GetSingleSwitch(interval, SwitchKind.CircuitBreaker);
         SwitchDevice ground = GetSingleSwitch(interval, SwitchKind.GroundSwitch);
+        SwitchDevice upper = structureKind == GroundingStructureKind.LowerLowerGrounding
+            ? breaker
+            : isolation;
+        SwitchDevice lower = structureKind == GroundingStructureKind.LowerLowerGrounding
+            ? isolation
+            : breaker;
 
-        AddSwitch(elements, isolation, layout, origin, symbolLibrary);
-        AddSwitch(elements, breaker, layout, origin, symbolLibrary);
-        AddSwitch(elements, ground, layout, origin, symbolLibrary);
+        RingCabinetSwitchLayout upperLayout = GetLayout(layout, upper);
+        RingCabinetSwitchLayout lowerLayout = GetLayout(layout, lower);
+        RingCabinetSwitchLayout groundLayout = GetLayout(layout, ground);
+        (DocumentPoint upperTop, DocumentPoint upperBottom) =
+            RingCabinetProfessionalGeometry.AddVerticalSwitch(
+                elements,
+                upper,
+                upperLayout,
+                origin,
+                _metrics);
+        (DocumentPoint lowerTop, DocumentPoint lowerBottom) =
+            RingCabinetProfessionalGeometry.AddVerticalSwitch(
+                elements,
+                lower,
+                lowerLayout,
+                origin,
+                _metrics);
 
-        DocumentPoint isolationCenter = GetSwitchCenter(isolation, layout, origin);
-        DocumentPoint breakerCenter = GetSwitchCenter(breaker, layout, origin);
-        DocumentPoint groundCenter = GetSwitchCenter(ground, layout, origin);
+        elements.Add(new SceneLine(
+            new DocumentPoint(centerX, busY),
+            upperTop,
+            Colors.Black,
+            _metrics.General.ThinStrokeThickness));
+        elements.Add(new SceneLine(
+            upperBottom,
+            lowerTop,
+            Colors.Black,
+            _metrics.General.ThinStrokeThickness));
 
-        DocumentPoint upperNode;
-        DocumentPoint lowerNode;
-        DocumentPoint groundingNode;
-        switch (structureKind)
+        DocumentPoint groundingNode = structureKind switch
         {
-            case GroundingStructureKind.UpperIsolationGrounding:
-                upperNode = isolationCenter;
-                lowerNode = breakerCenter;
-                groundingNode = Midpoint(isolationCenter, breakerCenter);
-                break;
-            case GroundingStructureKind.UpperLowerGrounding:
-                upperNode = isolationCenter;
-                lowerNode = breakerCenter;
-                groundingNode = lowerNode;
-                break;
-            case GroundingStructureKind.LowerLowerGrounding:
-                upperNode = breakerCenter;
-                lowerNode = isolationCenter;
-                groundingNode = lowerNode;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(structureKind));
-        }
-
-        AddConductor(
+            GroundingStructureKind.UpperIsolationGrounding => upperBottom,
+            GroundingStructureKind.UpperLowerGrounding => lowerBottom,
+            GroundingStructureKind.LowerLowerGrounding => lowerBottom,
+            _ => throw new ArgumentOutOfRangeException(nameof(structureKind))
+        };
+        RingCabinetProfessionalGeometry.AddGroundSwitch(
             elements,
-            new DocumentPoint(upperNode.XMillimeters, origin.YMillimeters),
-            upperNode);
-        AddConductor(elements, upperNode, lowerNode);
-        AddGroundBranch(elements, groundingNode, groundCenter, symbolLibrary);
-        AddExternalTerminal(elements, lowerNode, layout, origin, symbolLibrary);
+            ground,
+            groundLayout,
+            origin,
+            groundingNode,
+            _metrics);
+
+        DocumentPoint terminalTip = new(
+            centerX,
+            origin.YMillimeters + layout.HeightMillimeters);
+        double terminalTop = terminalTip.YMillimeters -
+                             _metrics.CableTermination.TriangleHeight;
+        elements.Add(new SceneLine(
+            lowerBottom,
+            new DocumentPoint(centerX, terminalTop),
+            Colors.Black,
+            _metrics.General.ThinStrokeThickness));
+        RingCabinetProfessionalGeometry.AddCableTerminationMarker(
+            elements,
+            terminalTip,
+            _metrics);
 
         return elements;
     }
 
-    private static void AddSwitch(
-        ICollection<SceneElement> elements,
-        SwitchDevice switchDevice,
+    private static RingCabinetSwitchLayout GetLayout(
         RingCabinetIntervalLayout intervalLayout,
-        DocumentPoint intervalOrigin,
-        SymbolLibrary symbolLibrary)
-    {
-        if (!intervalLayout.SwitchLayouts.TryGetValue(
-                switchDevice.Id,
-                out RingCabinetSwitchLayout switchLayout))
-        {
-            throw new InvalidOperationException(
-                $"No layout exists for switch '{switchDevice.Id}' in interval '{intervalLayout.IntervalId}'.");
-        }
-
-        DocumentPoint switchOrigin = new(
-            intervalOrigin.XMillimeters + switchLayout.RelativePosition.XMillimeters,
-            intervalOrigin.YMillimeters + switchLayout.RelativePosition.YMillimeters);
-        foreach (SceneElement element in symbolLibrary.Create(
-                     SymbolLibrary.ResolveSwitchKind(switchDevice),
-                     new SymbolRenderContext(
-                         switchOrigin,
-                         switchLayout.WidthMillimeters,
-                         switchLayout.HeightMillimeters,
-                         labelOrigin: new DocumentPoint(
-                             switchOrigin.XMillimeters + switchLayout.LabelOffset.XMillimeters,
-                             switchOrigin.YMillimeters + switchLayout.LabelOffset.YMillimeters),
-                         state: SymbolLibrary.ResolveVisualState(switchDevice.SwitchState),
-                         fill: Colors.White)))
-        {
-            elements.Add(element);
-        }
-    }
-
-    private static DocumentPoint GetSwitchCenter(
-        SwitchDevice switchDevice,
-        RingCabinetIntervalLayout intervalLayout,
-        DocumentPoint intervalOrigin)
-    {
-        if (!intervalLayout.SwitchLayouts.TryGetValue(
-                switchDevice.Id,
-                out RingCabinetSwitchLayout switchLayout))
-        {
-            throw new InvalidOperationException(
-                $"No layout exists for switch '{switchDevice.Id}' in interval '{intervalLayout.IntervalId}'.");
-        }
-
-        return new DocumentPoint(
-            intervalOrigin.XMillimeters + switchLayout.RelativePosition.XMillimeters +
-            switchLayout.WidthMillimeters / 2,
-            intervalOrigin.YMillimeters + switchLayout.RelativePosition.YMillimeters +
-            switchLayout.HeightMillimeters / 2);
-    }
-
-    private static void AddConductor(
-        ICollection<SceneElement> elements,
-        DocumentPoint start,
-        DocumentPoint end)
-    {
-        elements.Add(new SceneLine(start, end, Colors.Black, ConductorThickness));
-    }
-
-    private static void AddGroundBranch(
-        ICollection<SceneElement> elements,
-        DocumentPoint node,
-        DocumentPoint groundSwitchCenter,
-        SymbolLibrary symbolLibrary)
-    {
-        elements.Add(
-            new SceneLine(
-                node,
-                groundSwitchCenter,
-                Colors.Black,
-                ConductorThickness));
-        DocumentPoint earth = new(
-            groundSwitchCenter.XMillimeters + 18,
-            groundSwitchCenter.YMillimeters);
-        foreach (SceneElement element in symbolLibrary.Create(
-                     SymbolKind.GroundingLine,
-                     new SymbolRenderContext(
-                         groundSwitchCenter,
-                         1,
-                         1,
-                         end: earth,
-                         thicknessMillimeters: ConductorThickness)))
-        {
-            elements.Add(element);
-        }
-    }
-
-    private static void AddExternalTerminal(
-        ICollection<SceneElement> elements,
-        DocumentPoint lowerNode,
-        RingCabinetIntervalLayout layout,
-        DocumentPoint origin,
-        SymbolLibrary symbolLibrary)
-    {
-        DocumentPoint terminalOrigin = new(
-            origin.XMillimeters + (layout.WidthMillimeters - TerminalWidth) / 2,
-            origin.YMillimeters + layout.HeightMillimeters - TerminalHeight - 4);
-        DocumentPoint terminalCenter = new(
-            terminalOrigin.XMillimeters + TerminalWidth / 2,
-            terminalOrigin.YMillimeters);
-        elements.Add(new SceneLine(lowerNode, terminalCenter, Colors.Black, ConductorThickness));
-        foreach (SceneElement element in symbolLibrary.Create(
-                     SymbolKind.CableTermination,
-                     new SymbolRenderContext(
-                         terminalOrigin,
-                         TerminalWidth,
-                         TerminalHeight,
-                         label: "外部端子",
-                         fill: Colors.White,
-                         thicknessMillimeters: ConductorThickness)))
-        {
-            elements.Add(element);
-        }
-    }
-
-    private static DocumentPoint Midpoint(DocumentPoint first, DocumentPoint second) =>
-        new(
-            (first.XMillimeters + second.XMillimeters) / 2,
-            (first.YMillimeters + second.YMillimeters) / 2);
+        SwitchDevice switchDevice) =>
+        intervalLayout.SwitchLayouts.GetValueOrDefault(switchDevice.Id)
+        ?? throw new InvalidOperationException(
+            $"No layout exists for switch '{switchDevice.Id}' in interval '{intervalLayout.IntervalId}'.");
 
     private static SwitchDevice GetSingleSwitch(
         RingCabinetInterval interval,
-        SwitchKind kind)
-    {
-        return interval.SwitchDevices.SingleOrDefault(
-                   switchDevice => switchDevice.SwitchKind == kind)
-               ?? throw new InvalidOperationException(
-                   $"Interval '{interval.IntervalId}' does not contain exactly one '{kind}'.");
-    }
+        SwitchKind kind) =>
+        interval.SwitchDevices.SingleOrDefault(device => device.SwitchKind == kind)
+        ?? throw new InvalidOperationException(
+            $"Interval '{interval.IntervalId}' does not contain exactly one '{kind}'.");
 }

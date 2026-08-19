@@ -3,6 +3,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Labels;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
@@ -10,15 +11,17 @@ namespace DistributionDrawing.Rendering.Wpf.Symbols;
 
 public sealed class RingCabinetSymbol
 {
-    private readonly SymbolLibrary _symbolLibrary;
     private readonly IntervalSymbol _intervalSymbol;
+    private readonly DrawingMetrics _metrics;
 
-    public RingCabinetSymbol(SymbolLibrary symbolLibrary)
+    public RingCabinetSymbol(
+        SymbolLibrary symbolLibrary,
+        DrawingMetrics? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(symbolLibrary);
 
-        _symbolLibrary = symbolLibrary;
         _intervalSymbol = new IntervalSymbol(symbolLibrary);
+        _metrics = metrics ?? DrawingMetrics.Default;
     }
 
     public IntervalSymbol IntervalSymbol => _intervalSymbol;
@@ -38,25 +41,31 @@ public sealed class RingCabinetSymbol
         }
 
         var elements = new List<SceneElement>();
-        elements.AddRange(
-            _symbolLibrary.Create(
-                SymbolKind.RingCabinet,
-                new SymbolRenderContext(
-                    layout.Position,
-                    layout.WidthMillimeters,
-                    layout.HeightMillimeters,
-                    fill: Colors.White,
-                    thicknessMillimeters: 1)));
+        elements.Add(new SceneLogicalBounds(new DocumentRect(
+            layout.Position.XMillimeters,
+            layout.Position.YMillimeters,
+            layout.WidthMillimeters,
+            layout.HeightMillimeters)));
 
         double busY = layout.Position.YMillimeters + layout.MainBusYMillimeters;
+        RingCabinetIntervalLayout[] orderedLayouts = cabinet.Intervals
+            .OrderBy(candidate => candidate.Sequence)
+            .Select(interval => layout.IntervalLayouts.GetValueOrDefault(interval.IntervalId)
+                ?? throw new InvalidOperationException(
+                    $"No layout exists for interval '{interval.IntervalId}'."))
+            .ToArray();
+        double busStartX = layout.Position.XMillimeters +
+                           orderedLayouts[0].RelativePosition.XMillimeters;
+        RingCabinetIntervalLayout lastLayout = orderedLayouts[^1];
+        double busEndX = layout.Position.XMillimeters +
+                         lastLayout.RelativePosition.XMillimeters +
+                         lastLayout.WidthMillimeters;
         elements.Add(
             new SceneLine(
-                new DocumentPoint(layout.Position.XMillimeters, busY),
-                new DocumentPoint(
-                    layout.Position.XMillimeters + layout.WidthMillimeters,
-                    busY),
+                new DocumentPoint(busStartX, busY),
+                new DocumentPoint(busEndX, busY),
                 Colors.Black,
-                1));
+                _metrics.RingCabinet.BusbarHeight));
 
         foreach (RingCabinetInterval interval in cabinet.Intervals.OrderBy(
                      candidate => candidate.Sequence))
@@ -74,7 +83,8 @@ public sealed class RingCabinetSymbol
                     interval,
                     intervalLayout,
                     layout.Position,
-                    includeLabels));
+                    includeLabels,
+                    busY));
         }
 
         return elements;
@@ -100,7 +110,9 @@ public sealed class RingCabinetSymbol
                 LabelTargetKind.RingCabinet,
                 cabinet.Id,
                 cabinet.DisplayName,
-                layout.Position,
+                new DocumentPoint(
+                    layout.Position.XMillimeters + layout.WidthMillimeters / 2,
+                    layout.Position.YMillimeters),
                 layout.LabelOffset,
                 priority: 100,
                 fontSizeMillimeters: 4));

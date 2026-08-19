@@ -29,6 +29,12 @@ public abstract record SceneElement
     public DocumentRect? HitTestBounds { get; init; }
 }
 
+/// <summary>
+/// Preserves a logical scene extent without producing visible geometry.
+/// Selection remains owned by <see cref="SelectionHitTestIndex"/>.
+/// </summary>
+public sealed record SceneLogicalBounds(DocumentRect Bounds) : SceneElement;
+
 public sealed record SceneLine(
     DocumentPoint Start,
     DocumentPoint End,

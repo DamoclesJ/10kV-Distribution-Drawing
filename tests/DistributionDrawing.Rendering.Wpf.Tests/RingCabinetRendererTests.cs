@@ -14,7 +14,7 @@ namespace DistributionDrawing.Rendering.Wpf.Tests;
 public sealed class RingCabinetRendererTests
 {
     [Fact]
-    public void Render_ConventionalCabinetCreatesTwoSwitchSymbolsPerInterval()
+    public void Render_ConventionalCabinetCreatesProfessionalSwitchGeometryPerInterval()
     {
         RingCabinet cabinet = BuildCabinet(
             new BayTemplate(1, new LoadSwitchConfiguration()),
@@ -28,17 +28,15 @@ public sealed class RingCabinetRendererTests
             cabinet,
             layout);
 
-        Assert.Equal(
-            6,
-            elements.OfType<SceneRectangle>().Count(rectangle =>
-                rectangle.Bounds.WidthMillimeters == 16 &&
-                rectangle.Bounds.HeightMillimeters == 10));
+        Assert.Empty(elements.OfType<SceneRectangle>());
+        Assert.Equal(12, elements.OfType<SceneEllipse>().Count());
+        Assert.Equal(3, elements.OfType<ScenePolyline>().Count(polyline => polyline.IsClosed));
         Assert.Equal(6, elements.OfType<SceneText>().Count(text =>
             text.Text is "合" or "分"));
     }
 
     [Fact]
-    public void Render_IntegratedCabinetCreatesThreeSwitchSymbolsPerInterval()
+    public void Render_IntegratedCabinetCreatesProfessionalSwitchGeometryPerInterval()
     {
         RingCabinet cabinet = BuildCabinet(
             Enumerable.Range(1, 6)
@@ -55,11 +53,9 @@ public sealed class RingCabinetRendererTests
             cabinet,
             layout);
 
-        Assert.Equal(
-            18,
-            elements.OfType<SceneRectangle>().Count(rectangle =>
-                rectangle.Bounds.WidthMillimeters == 16 &&
-                rectangle.Bounds.HeightMillimeters == 10));
+        Assert.Empty(elements.OfType<SceneRectangle>());
+        Assert.Equal(24, elements.OfType<SceneEllipse>().Count());
+        Assert.Equal(6, elements.OfType<ScenePolyline>().Count(polyline => polyline.IsClosed));
     }
 
     [Fact]

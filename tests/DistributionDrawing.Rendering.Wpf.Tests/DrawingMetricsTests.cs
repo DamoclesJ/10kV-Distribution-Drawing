@@ -18,11 +18,14 @@ public sealed class DrawingMetricsTests
         Assert.Equal(0.6, metrics.General.ThinStrokeThickness);
         Assert.Equal(4, metrics.General.StandardFontSize);
         Assert.Equal(3.5, metrics.General.SmallFontSize);
+        Assert.Equal(10, metrics.RingCabinet.CabinetPadding);
         Assert.Equal(60, metrics.RingCabinet.StandardIntervalWidth);
         Assert.Equal(125, metrics.RingCabinet.StandardIntervalHeight);
         Assert.Equal(25, metrics.RingCabinet.BusbarOffset);
         Assert.Equal(5, metrics.RingCabinet.IntervalSpacing);
+        Assert.Equal(12, metrics.RingCabinet.DeviceVerticalSpacing);
         Assert.Equal(16, metrics.Switch.StandardSwitchLength);
+        Assert.Equal(10, metrics.Switch.LogicalHitHeight);
         Assert.Equal(7, metrics.PT.CoilRadius);
         Assert.Equal(7, metrics.Pole.PoleRadius);
         Assert.Equal(10, metrics.CableTermination.TriangleWidth);

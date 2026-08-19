@@ -19,16 +19,19 @@ public sealed record DrawingMetrics(
             StandardFontSize: 4,
             SmallFontSize: 3.5),
         new RingCabinetDrawingMetrics(
+            CabinetPadding: 10,
             StandardIntervalWidth: 60,
             StandardIntervalHeight: 125,
             BusbarOffset: 25,
             BusbarHeight: 1,
             IntervalSpacing: 5,
-            CabinetNameOffset: new DocumentPoint(0, -8)),
+            CabinetNameOffset: new DocumentPoint(0, -8),
+            DeviceVerticalSpacing: 12),
         new SwitchDrawingMetrics(
             StandardSwitchLength: 16,
             GroundSwitchLength: 16,
-            ContactRadius: 1.5),
+            ContactRadius: 1.5,
+            LogicalHitHeight: 10),
         new PTDrawingMetrics(
             CoilRadius: 7,
             CoilSpacing: 6),
@@ -50,17 +53,20 @@ public sealed record GeneralDrawingMetrics(
     double SmallFontSize);
 
 public sealed record RingCabinetDrawingMetrics(
+    double CabinetPadding,
     double StandardIntervalWidth,
     double StandardIntervalHeight,
     double BusbarOffset,
     double BusbarHeight,
     double IntervalSpacing,
-    DocumentPoint CabinetNameOffset);
+    DocumentPoint CabinetNameOffset,
+    double DeviceVerticalSpacing);
 
 public sealed record SwitchDrawingMetrics(
     double StandardSwitchLength,
     double GroundSwitchLength,
-    double ContactRadius);
+    double ContactRadius,
+    double LogicalHitHeight);
 
 public sealed record PTDrawingMetrics(
     double CoilRadius,

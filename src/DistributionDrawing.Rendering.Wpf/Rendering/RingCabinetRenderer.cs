@@ -39,7 +39,11 @@ public sealed class RingCabinetRenderer
 
         var elements = symbols.ToList();
         elements.AddRange(labels.Select(result => new SceneText(
-            result.Position,
+            result.Request.TargetKind == LabelTargetKind.RingCabinet
+                ? new DocumentPoint(
+                    result.Bounds.XMillimeters,
+                    result.Position.YMillimeters)
+                : result.Position,
             result.Text,
             System.Windows.Media.Colors.Black,
             result.Request.FontSizeMillimeters)));

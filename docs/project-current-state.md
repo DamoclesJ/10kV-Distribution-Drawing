@@ -59,7 +59,7 @@ Phase E-0B 不包含图元重绘、Routing、Snap、Alignment、自动避让、C
 
 ## 0.3 Phase E-1 — Real Symbol Baseline Audit (2026-08-19)
 
-状态：**Audit Completed / Symbol Implementation Not Started**。
+状态：**Audit Completed**。图元实施状态见后续 E-1A／E-1B 小节。
 
 已完整检查《配电专业附图图元.docx》的 3 个页面、图元表、38 个嵌入图片和两张组合图，并完成 Word 视觉合同、当前 Rendering/Layout/Domain 差异、Drawing Metrics 建议以及 E-1A～E-1E 实施顺序与验收标准。
 
@@ -75,9 +75,23 @@ Phase E-0B 不包含图元重绘、Routing、Snap、Alignment、自动避让、C
 
 Drawing Metrics 是第一版工程绘图比例基线，数值来自当前项目已有视觉比例，不是 Word 或行业绝对尺寸；后续需根据 Windows 截图和用户验收调整。Metrics 和新 primitive 不进入 Domain、RuntimeLayout 或 Persistence。
 
-本阶段没有重画 RingCabinet、Interval、Switch、PT、Pole、CableTermination、Cable 或 OverheadLine；Cable 和 OverheadLine 当前仍保持 Solid。Phase E-1B 及后续尚未开始。
+E-1A 本身没有重画 RingCabinet、Interval、Switch、PT、Pole、CableTermination、Cable 或 OverheadLine；Cable 和 OverheadLine 当前仍保持 Solid。后续环网柜实施状态见 E-1B 小节。
 
 当前 macOS 已完成 Solution、Rendering.Wpf、Desktop、Rendering.Wpf.Tests build 和 Desktop.Tests build。两个 WPF 测试项目因 macOS 缺少 `Microsoft.WindowsDesktop.App 10.0.0` 无法运行 TestHost；自动测试实际执行和既有视觉无回归结论仍等待 Windows 验证。详细记录见 `docs/phase-e-1a-rendering-primitives-and-metrics.md`。
+
+## 0.5 Phase E-1B — Ring Cabinet Professional Symbol System (2026-08-19)
+
+状态：**Implemented / Pending Windows Validation**。
+
+原计划 E-1B 与 E-1C 已合并实施。普通负荷开关柜、一二次融合柜、三种 `GroundingStructureKind` 和 PT Interval 已改用专业电气几何；所有状态继续来自现有 `SwitchDevice.SwitchState` 和 Domain interlock，没有增加视觉专用 Domain 状态。
+
+RingCabinet 与 Interval 不再绘制可见外围矩形。连续母线、等宽间隔、居中柜名、刀闸／断路器／接地支路、PT 双圆线圈和向下电缆终端三角形统一使用 E-1A Scene primitive 与 Drawing Metrics。新增非渲染 `SceneLogicalBounds` 保持 Fit／Scene extent，Selection 继续使用现有 cabinet/interval/switch hit-test index。
+
+TerminalId、Connection、ElectricalNode 和 Persistence 格式没有变化；ExternalTerminal anchor 只移动到新三角形视觉端点。Phase D-1 的 SwitchOperationController → CommandStack → Domain interlock → RebuildScene 操作路径保持不变。
+
+当前实现没有涉及 Pole、PoleAttachment、独立 CableTermination 专项、Cable 虚线、OverheadLine 改造、Routing、Snap、Alignment、Avoidance、Crossing Detection 或 Line Jump。详细设计、测试与 Windows 验收清单见 `docs/phase-e-1b-ring-cabinet-professional-symbol-system.md`。
+
+macOS 已完成 solution、Rendering.Wpf、Rendering.Wpf.Tests、Desktop 和 Desktop.Tests 构建；solution 为 0 warning / 0 error。Domain 55/55、Infrastructure 50/50 通过。WPF TestHost 因缺少 `Microsoft.WindowsDesktop.App 10.0.0` 未运行测试断言，Windows 自动测试、截图与交互验收仍待完成。
 
 ## 1. Project Identity
 

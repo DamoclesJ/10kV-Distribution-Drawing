@@ -11,6 +11,9 @@ public static class DrawingSceneBoundsCalculator
         {
             switch (element)
             {
+                case SceneLogicalBounds logicalBounds:
+                    accumulator.Include(logicalBounds.Bounds, 0);
+                    break;
                 case SceneLine line:
                     double halfThickness = Math.Max(0, line.ThicknessMillimeters) / 2;
                     accumulator.Include(line.Start, halfThickness);

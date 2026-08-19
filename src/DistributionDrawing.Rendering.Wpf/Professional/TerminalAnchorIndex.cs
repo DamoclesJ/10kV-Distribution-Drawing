@@ -3,6 +3,7 @@ using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Professional;
@@ -13,9 +14,6 @@ namespace DistributionDrawing.Rendering.Wpf.Professional;
 /// </summary>
 public sealed class TerminalAnchorIndex
 {
-    private const double IntegratedTerminalWidth = 10;
-    private const double IntegratedTerminalHeight = 8;
-
     private readonly IReadOnlyDictionary<Guid, TerminalAnchor> _anchors;
 
     private TerminalAnchorIndex(IReadOnlyDictionary<Guid, TerminalAnchor> anchors)
@@ -126,15 +124,14 @@ public sealed class TerminalAnchorIndex
                 DocumentPoint origin = new(
                     cabinetLayout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters,
                     cabinetLayout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters);
-                DocumentPoint terminalPosition = interval.IntervalKind == IntervalKind.IntegratedFeederInterval
-                    ? new DocumentPoint(
-                        origin.XMillimeters + (intervalLayout.WidthMillimeters - IntegratedTerminalWidth) / 2 +
-                        IntegratedTerminalWidth / 2,
-                        origin.YMillimeters + intervalLayout.HeightMillimeters -
-                        IntegratedTerminalHeight - 4)
-                    : new DocumentPoint(
-                        origin.XMillimeters + intervalLayout.WidthMillimeters / 2,
-                        origin.YMillimeters + intervalLayout.HeightMillimeters);
+                double terminalX = interval.IntervalKind == IntervalKind.PTInterval &&
+                                   intervalLayout.PTSymbolPosition is DocumentPoint ptPosition
+                    ? origin.XMillimeters + ptPosition.XMillimeters +
+                      DrawingMetrics.Default.PT.CoilRadius
+                    : origin.XMillimeters + intervalLayout.WidthMillimeters / 2;
+                DocumentPoint terminalPosition = new(
+                    terminalX,
+                    origin.YMillimeters + intervalLayout.HeightMillimeters);
                 Set(anchors, interval.ExternalTerminalId, terminalPosition);
             }
         }

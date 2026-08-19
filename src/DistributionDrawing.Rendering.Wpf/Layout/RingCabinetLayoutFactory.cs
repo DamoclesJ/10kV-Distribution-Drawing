@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Layout;
@@ -10,16 +11,17 @@ namespace DistributionDrawing.Rendering.Wpf.Layout;
 /// </summary>
 public sealed class RingCabinetLayoutFactory
 {
-    public static DocumentPoint DefaultPTSymbolPosition { get; } = new(14, 45);
+    public static DocumentPoint DefaultPTSymbolPosition { get; } = new(
+        DrawingMetrics.Default.RingCabinet.StandardIntervalWidth / 2 -
+        DrawingMetrics.Default.PT.CoilRadius,
+        45);
 
-    private const double CabinetPadding = 10;
-    private const double IntervalGap = 5;
-    private const double IntervalWidth = 60;
-    private const double IntervalHeight = 125;
-    private const double CabinetHeight = 145;
-    private const double MainBusY = 25;
-    private const double SwitchWidth = 16;
-    private const double SwitchHeight = 10;
+    private readonly DrawingMetrics _metrics;
+
+    public RingCabinetLayoutFactory(DrawingMetrics? metrics = null)
+    {
+        _metrics = metrics ?? DrawingMetrics.Default;
+    }
 
     public RingCabinetLayout Create(RingCabinet cabinet, DocumentPoint position)
     {
@@ -28,16 +30,17 @@ public sealed class RingCabinetLayoutFactory
         RingCabinetIntervalLayout[] intervals = cabinet.Intervals
             .Select(CreateIntervalLayout)
             .ToArray();
-        double width = CabinetPadding * 2 +
-                       IntervalWidth * intervals.Length +
-                       IntervalGap * Math.Max(0, intervals.Length - 1);
+        double width = _metrics.RingCabinet.CabinetPadding * 2 +
+                       _metrics.RingCabinet.StandardIntervalWidth * intervals.Length +
+                       _metrics.RingCabinet.IntervalSpacing * Math.Max(0, intervals.Length - 1);
 
         return new RingCabinetLayout(
             cabinet.Id,
             position,
             width,
-            CabinetHeight,
-            MainBusY,
+            _metrics.RingCabinet.StandardIntervalHeight +
+            _metrics.RingCabinet.CabinetPadding * 2,
+            _metrics.RingCabinet.BusbarOffset,
             intervals);
     }
 
@@ -90,11 +93,13 @@ public sealed class RingCabinetLayoutFactory
     public static DocumentPoint? ResolvePTSymbolPosition(IntervalKind intervalKind) =>
         intervalKind == IntervalKind.PTInterval ? DefaultPTSymbolPosition : null;
 
-    private static RingCabinetIntervalLayout CreateIntervalLayout(
+    private RingCabinetIntervalLayout CreateIntervalLayout(
         RingCabinetInterval interval)
     {
-        double x = CabinetPadding +
-                   (interval.Sequence - 1) * (IntervalWidth + IntervalGap);
+        double x = _metrics.RingCabinet.CabinetPadding +
+                   (interval.Sequence - 1) *
+                   (_metrics.RingCabinet.StandardIntervalWidth +
+                    _metrics.RingCabinet.IntervalSpacing);
         IReadOnlyList<RingCabinetSwitchLayout> switches = interval.IntervalKind switch
         {
             IntervalKind.LoadSwitchInterval => CreateLoadSwitchLayouts(interval),
@@ -119,59 +124,82 @@ public sealed class RingCabinetLayoutFactory
 
         return new RingCabinetIntervalLayout(
             interval.IntervalId,
-            new DocumentPoint(x, CabinetPadding),
-            IntervalWidth,
-            IntervalHeight,
+            new DocumentPoint(x, _metrics.RingCabinet.CabinetPadding),
+            _metrics.RingCabinet.StandardIntervalWidth,
+            _metrics.RingCabinet.StandardIntervalHeight,
             switchLayouts: switches,
             ptSymbolPosition: ResolvePTSymbolPosition(interval.IntervalKind));
     }
 
-    private static IReadOnlyList<RingCabinetSwitchLayout> CreateLoadSwitchLayouts(
+    private IReadOnlyList<RingCabinetSwitchLayout> CreateLoadSwitchLayouts(
         RingCabinetInterval interval)
     {
+        double mainX = GetMainSwitchX();
+        double primaryY = GetPrimaryDeviceY();
+        double groundX = GetGroundSwitchX();
+        double groundY = GetLowerGroundSwitchY();
         return
         [
-            CreateSwitchLayout(interval, SwitchKind.LoadSwitch, new DocumentPoint(23, 35)),
-            CreateSwitchLayout(interval, SwitchKind.GroundSwitch, new DocumentPoint(23, 72))
+            CreateSwitchLayout(
+                interval,
+                SwitchKind.LoadSwitch,
+                new DocumentPoint(mainX, primaryY)),
+            CreateSwitchLayout(
+                interval,
+                SwitchKind.GroundSwitch,
+                new DocumentPoint(groundX, groundY))
         ];
     }
 
-    private static IReadOnlyList<RingCabinetSwitchLayout> CreateIntegratedFeederLayouts(
+    private IReadOnlyList<RingCabinetSwitchLayout> CreateIntegratedFeederLayouts(
         RingCabinetInterval interval)
     {
         GroundingStructureKind structure = interval.GroundingStructureKind
             ?? throw new InvalidOperationException(
                 $"Integrated-feeder interval '{interval.IntervalId}' has no grounding structure.");
-        (SwitchKind upper, SwitchKind lower, DocumentPoint groundPosition) = structure switch
+        double mainX = GetMainSwitchX();
+        double primaryY = GetPrimaryDeviceY();
+        double secondaryY = GetSecondaryDeviceY();
+        double groundX = GetGroundSwitchX();
+        (SwitchKind upper, SwitchKind lower, double groundY) = structure switch
         {
             GroundingStructureKind.UpperIsolationGrounding =>
-                (SwitchKind.IsolationSwitch, SwitchKind.CircuitBreaker, new DocumentPoint(42, 49)),
+                (SwitchKind.IsolationSwitch, SwitchKind.CircuitBreaker, GetUpperGroundSwitchY()),
             GroundingStructureKind.UpperLowerGrounding =>
-                (SwitchKind.IsolationSwitch, SwitchKind.CircuitBreaker, new DocumentPoint(42, 84)),
+                (SwitchKind.IsolationSwitch, SwitchKind.CircuitBreaker, GetLowerGroundSwitchY()),
             GroundingStructureKind.LowerLowerGrounding =>
-                (SwitchKind.CircuitBreaker, SwitchKind.IsolationSwitch, new DocumentPoint(42, 84)),
+                (SwitchKind.CircuitBreaker, SwitchKind.IsolationSwitch, GetLowerGroundSwitchY()),
             _ => throw new ArgumentOutOfRangeException(nameof(interval))
         };
 
         return
         [
-            CreateSwitchLayout(interval, upper, new DocumentPoint(18, 28)),
-            CreateSwitchLayout(interval, lower, new DocumentPoint(18, 70)),
-            CreateSwitchLayout(interval, SwitchKind.GroundSwitch, groundPosition)
+            CreateSwitchLayout(interval, upper, new DocumentPoint(mainX, primaryY)),
+            CreateSwitchLayout(interval, lower, new DocumentPoint(mainX, secondaryY)),
+            CreateSwitchLayout(
+                interval,
+                SwitchKind.GroundSwitch,
+                new DocumentPoint(groundX, groundY))
         ];
     }
 
-    private static IReadOnlyList<RingCabinetSwitchLayout> CreatePTLayouts(
+    private IReadOnlyList<RingCabinetSwitchLayout> CreatePTLayouts(
         RingCabinetInterval interval)
     {
         return
         [
-            CreateSwitchLayout(interval, SwitchKind.IsolationSwitch, new DocumentPoint(13, 24)),
-            CreateSwitchLayout(interval, SwitchKind.GroundSwitch, new DocumentPoint(13, 68))
+            CreateSwitchLayout(
+                interval,
+                SwitchKind.IsolationSwitch,
+                new DocumentPoint(GetMainSwitchX(), GetPrimaryDeviceY())),
+            CreateSwitchLayout(
+                interval,
+                SwitchKind.GroundSwitch,
+                new DocumentPoint(GetGroundSwitchX(), GetUpperGroundSwitchY()))
         ];
     }
 
-    private static RingCabinetSwitchLayout CreateSwitchLayout(
+    private RingCabinetSwitchLayout CreateSwitchLayout(
         RingCabinetInterval interval,
         SwitchKind switchKind,
         DocumentPoint position)
@@ -183,7 +211,37 @@ public sealed class RingCabinetLayoutFactory
         return new RingCabinetSwitchLayout(
             switchDevice.Id,
             position,
-            SwitchWidth,
-            SwitchHeight);
+            switchKind == SwitchKind.GroundSwitch
+                ? _metrics.Switch.GroundSwitchLength
+                : _metrics.Switch.StandardSwitchLength,
+            _metrics.Switch.LogicalHitHeight);
     }
+
+    private double GetMainSwitchX() =>
+        (_metrics.RingCabinet.StandardIntervalWidth -
+         _metrics.Switch.StandardSwitchLength) / 2;
+
+    private double GetGroundSwitchX() =>
+        _metrics.RingCabinet.StandardIntervalWidth / 2 +
+        _metrics.RingCabinet.DeviceVerticalSpacing / 2;
+
+    private double GetPrimaryDeviceY() =>
+        _metrics.RingCabinet.BusbarOffset -
+        _metrics.RingCabinet.CabinetPadding +
+        _metrics.RingCabinet.DeviceVerticalSpacing;
+
+    private double GetSecondaryDeviceY() =>
+        GetPrimaryDeviceY() +
+        _metrics.Switch.LogicalHitHeight +
+        _metrics.RingCabinet.DeviceVerticalSpacing * 2;
+
+    private double GetUpperGroundSwitchY() =>
+        GetPrimaryDeviceY() +
+        _metrics.Switch.LogicalHitHeight +
+        _metrics.RingCabinet.DeviceVerticalSpacing;
+
+    private double GetLowerGroundSwitchY() =>
+        GetSecondaryDeviceY() +
+        _metrics.Switch.LogicalHitHeight +
+        _metrics.RingCabinet.DeviceVerticalSpacing;
 }
