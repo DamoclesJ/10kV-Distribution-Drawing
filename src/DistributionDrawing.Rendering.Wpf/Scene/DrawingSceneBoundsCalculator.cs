@@ -16,6 +16,14 @@ public static class DrawingSceneBoundsCalculator
                     accumulator.Include(line.Start, halfThickness);
                     accumulator.Include(line.End, halfThickness);
                     break;
+                case SceneEllipse ellipse:
+                    double ellipsePadding = Math.Max(0, ellipse.ThicknessMillimeters) / 2;
+                    accumulator.Include(ellipse.Bounds, ellipsePadding);
+                    break;
+                case ScenePolyline polyline:
+                    double polylinePadding = Math.Max(0, polyline.ThicknessMillimeters) / 2;
+                    accumulator.Include(polyline.Bounds, polylinePadding);
+                    break;
                 case SceneRectangle rectangle:
                     double rectanglePadding = Math.Max(0, rectangle.ThicknessMillimeters) / 2;
                     accumulator.Include(rectangle.Bounds, rectanglePadding);

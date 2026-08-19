@@ -67,6 +67,18 @@ Phase E-0B 不包含图元重绘、Routing、Snap、Alignment、自动避让、C
 
 本轮只新增审计文档，没有实施任何真实图元重绘。详细结论见 `docs/phase-e-1-real-symbol-baseline-audit.md`。
 
+## 0.4 Phase E-1A — Rendering Primitives & Drawing Metrics (2026-08-19)
+
+状态：**Implemented / Pending Windows Validation**。
+
+已新增毫米文档坐标的 `SceneEllipse`、open/closed `ScenePolyline`、`SceneStrokeStyle.Solid/Dashed` 和集中式 `DrawingMetrics.Default`。`DrawingSceneRenderer` 已统一映射 Line、Rectangle、Text、Ellipse、Polyline 及 Solid/Dashed Pen，`DrawingSceneBoundsCalculator` 和现有 bounds-based HitTest 已覆盖新 primitive。
+
+Drawing Metrics 是第一版工程绘图比例基线，数值来自当前项目已有视觉比例，不是 Word 或行业绝对尺寸；后续需根据 Windows 截图和用户验收调整。Metrics 和新 primitive 不进入 Domain、RuntimeLayout 或 Persistence。
+
+本阶段没有重画 RingCabinet、Interval、Switch、PT、Pole、CableTermination、Cable 或 OverheadLine；Cable 和 OverheadLine 当前仍保持 Solid。Phase E-1B 及后续尚未开始。
+
+当前 macOS 已完成 Solution、Rendering.Wpf、Desktop、Rendering.Wpf.Tests build 和 Desktop.Tests build。两个 WPF 测试项目因 macOS 缺少 `Microsoft.WindowsDesktop.App 10.0.0` 无法运行 TestHost；自动测试实际执行和既有视觉无回归结论仍等待 Windows 验证。详细记录见 `docs/phase-e-1a-rendering-primitives-and-metrics.md`。
+
 ## 1. Project Identity
 
 本项目是面向 10kV 配电专业场景的 Windows 桌面绘图软件。

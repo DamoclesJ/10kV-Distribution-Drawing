@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Rendering;
@@ -8,10 +9,14 @@ namespace DistributionDrawing.Rendering.Wpf.Rendering;
 public sealed class DrawingSceneRenderer
 {
     private readonly DocumentCoordinateSystem _coordinates;
+    private readonly DrawingMetrics _metrics;
 
-    public DrawingSceneRenderer(DocumentCoordinateSystem? coordinates = null)
+    public DrawingSceneRenderer(
+        DocumentCoordinateSystem? coordinates = null,
+        DrawingMetrics? metrics = null)
     {
         _coordinates = coordinates ?? new DocumentCoordinateSystem();
+        _metrics = metrics ?? DrawingMetrics.Default;
     }
 
     public DrawingVisual Render(DrawingScene scene, double pixelsPerDip)
@@ -26,6 +31,12 @@ public sealed class DrawingSceneRenderer
             {
                 case SceneLine line:
                     DrawLine(context, line);
+                    break;
+                case SceneEllipse ellipse:
+                    DrawEllipse(context, ellipse);
+                    break;
+                case ScenePolyline polyline:
+                    DrawPolyline(context, polyline);
                     break;
                 case SceneRectangle rectangle:
                     DrawRectangle(context, rectangle);
@@ -50,7 +61,44 @@ public sealed class DrawingSceneRenderer
         }
 
         geometry.Freeze();
-        context.DrawGeometry(null, CreatePen(line.Stroke, line.ThicknessMillimeters), geometry);
+        context.DrawGeometry(
+            null,
+            CreatePen(line.Stroke, line.ThicknessMillimeters, line.StrokeStyle),
+            geometry);
+    }
+
+    private void DrawEllipse(DrawingContext context, SceneEllipse ellipse)
+    {
+        Geometry geometry = new EllipseGeometry(_coordinates.ToRect(ellipse.Bounds));
+        geometry.Freeze();
+
+        context.DrawGeometry(
+            CreateOptionalBrush(ellipse.Fill),
+            CreatePen(ellipse.Stroke, ellipse.ThicknessMillimeters, ellipse.StrokeStyle),
+            geometry);
+    }
+
+    private void DrawPolyline(DrawingContext context, ScenePolyline polyline)
+    {
+        var geometry = new StreamGeometry();
+
+        using (StreamGeometryContext geometryContext = geometry.Open())
+        {
+            geometryContext.BeginFigure(
+                _coordinates.ToPoint(polyline.Points[0]),
+                polyline.Fill is not null,
+                polyline.IsClosed);
+            foreach (DocumentPoint point in polyline.Points.Skip(1))
+            {
+                geometryContext.LineTo(_coordinates.ToPoint(point), true, false);
+            }
+        }
+
+        geometry.Freeze();
+        context.DrawGeometry(
+            CreateOptionalBrush(polyline.Fill),
+            CreatePen(polyline.Stroke, polyline.ThicknessMillimeters, polyline.StrokeStyle),
+            geometry);
     }
 
     private void DrawRectangle(DrawingContext context, SceneRectangle rectangle)
@@ -58,13 +106,12 @@ public sealed class DrawingSceneRenderer
         Geometry geometry = new RectangleGeometry(_coordinates.ToRect(rectangle.Bounds));
         geometry.Freeze();
 
-        Brush? fill = rectangle.Fill is Color fillColor
-            ? CreateBrush(fillColor)
-            : null;
-
         context.DrawGeometry(
-            fill,
-            CreatePen(rectangle.Stroke, rectangle.ThicknessMillimeters),
+            CreateOptionalBrush(rectangle.Fill),
+            CreatePen(
+                rectangle.Stroke,
+                rectangle.ThicknessMillimeters,
+                rectangle.StrokeStyle),
             geometry);
     }
 
@@ -82,13 +129,31 @@ public sealed class DrawingSceneRenderer
         context.DrawText(formattedText, _coordinates.ToPoint(text.Origin));
     }
 
-    private Pen CreatePen(Color color, double thicknessMillimeters)
+    private Pen CreatePen(
+        Color color,
+        double thicknessMillimeters,
+        SceneStrokeStyle strokeStyle)
     {
         var pen = new Pen(
             CreateBrush(color),
             _coordinates.MillimetersToDip(thicknessMillimeters));
+        if (strokeStyle == SceneStrokeStyle.Dashed)
+        {
+            pen.DashStyle = new DashStyle(
+                [
+                    _metrics.Line.CableDashLength / thicknessMillimeters,
+                    _metrics.Line.CableDashGap / thicknessMillimeters
+                ],
+                0);
+        }
+
         pen.Freeze();
         return pen;
+    }
+
+    private static Brush? CreateOptionalBrush(Color? color)
+    {
+        return color is Color fillColor ? CreateBrush(fillColor) : null;
     }
 
     private static Brush CreateBrush(Color color)

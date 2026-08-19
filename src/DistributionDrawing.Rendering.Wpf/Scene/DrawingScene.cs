@@ -33,13 +33,15 @@ public sealed record SceneLine(
     DocumentPoint Start,
     DocumentPoint End,
     Color Stroke,
-    double ThicknessMillimeters) : SceneElement;
+    double ThicknessMillimeters,
+    SceneStrokeStyle StrokeStyle = SceneStrokeStyle.Solid) : SceneElement;
 
 public sealed record SceneRectangle(
     DocumentRect Bounds,
     Color Stroke,
     double ThicknessMillimeters,
-    Color? Fill = null) : SceneElement;
+    Color? Fill = null,
+    SceneStrokeStyle StrokeStyle = SceneStrokeStyle.Solid) : SceneElement;
 
 public sealed record SceneText(
     DocumentPoint Origin,

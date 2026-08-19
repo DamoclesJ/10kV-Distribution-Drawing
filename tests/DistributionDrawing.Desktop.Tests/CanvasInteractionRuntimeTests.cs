@@ -5,6 +5,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Canvas;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
 
@@ -66,6 +67,29 @@ public sealed class CanvasInteractionRuntimeTests
         AssertDoesNotExposeViewTransform(typeof(ProjectLayoutSnapshot));
     }
 
+    [Fact]
+    public void RenderingPrimitivesAndMetrics_AreNotPersistenceOrDomainContracts()
+    {
+        Type[] renderingTypes =
+        [
+            typeof(DrawingMetrics),
+            typeof(SceneStrokeStyle),
+            typeof(SceneEllipse),
+            typeof(ScenePolyline)
+        ];
+        Type[] persistenceTypes = typeof(ProjectLayoutDto).Assembly.GetTypes()
+            .Where(type => type.Namespace == typeof(ProjectLayoutDto).Namespace)
+            .ToArray();
+
+        AssertContractsDoNotExpose(
+            typeof(DrawingDocument).Assembly.GetTypes(),
+            renderingTypes);
+        AssertContractsDoNotExpose(
+            [typeof(RuntimeLayoutDocument)],
+            renderingTypes);
+        AssertContractsDoNotExpose(persistenceTypes, renderingTypes);
+    }
+
     private static void AssertDoesNotExposeViewTransform(Type contractType)
     {
         Assert.DoesNotContain(
@@ -75,6 +99,34 @@ public sealed class CanvasInteractionRuntimeTests
             contractType.GetConstructors().SelectMany(constructor =>
                 constructor.GetParameters()),
             parameter => parameter.ParameterType == typeof(CanvasViewTransform));
+    }
+
+    private static void AssertContractsDoNotExpose(
+        IEnumerable<Type> contractTypes,
+        IReadOnlyCollection<Type> forbiddenTypes)
+    {
+        Assert.DoesNotContain(
+            contractTypes.SelectMany(type => type.GetProperties()),
+            property => ContainsAny(property.PropertyType, forbiddenTypes));
+        Assert.DoesNotContain(
+            contractTypes.SelectMany(type => type.GetConstructors())
+                .SelectMany(constructor => constructor.GetParameters()),
+            parameter => ContainsAny(parameter.ParameterType, forbiddenTypes));
+    }
+
+    private static bool ContainsAny(
+        Type contractType,
+        IReadOnlyCollection<Type> forbiddenTypes)
+    {
+        if (forbiddenTypes.Contains(contractType))
+        {
+            return true;
+        }
+
+        return contractType.IsArray
+            ? ContainsAny(contractType.GetElementType()!, forbiddenTypes)
+            : contractType.IsGenericType && contractType.GetGenericArguments()
+                .Any(argument => ContainsAny(argument, forbiddenTypes));
     }
 
     private static void RunOnSta(Action action)
