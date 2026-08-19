@@ -1,28 +1,18 @@
-using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 
 public sealed class RingCabinetCreationConfiguration
 {
-    private readonly IReadOnlyList<RingCabinetIntervalCreationConfiguration> _intervals;
-
     public RingCabinetCreationConfiguration(
         string displayName,
-        IEnumerable<RingCabinetIntervalCreationConfiguration> intervals)
+        RingCabinetTemplate template)
     {
         DisplayName = displayName;
-        RingCabinetIntervalCreationConfiguration[] values = intervals?.ToArray()
-            ?? throw new ArgumentNullException(nameof(intervals));
-        _intervals = Array.AsReadOnly(values);
+        Template = template ?? throw new ArgumentNullException(nameof(template));
     }
 
     public string DisplayName { get; }
 
-    public IReadOnlyList<RingCabinetIntervalCreationConfiguration> Intervals => _intervals;
+    public RingCabinetTemplate Template { get; }
 }
-
-public sealed record RingCabinetIntervalCreationConfiguration(
-    int BayIndex,
-    string DisplayName,
-    IntervalKind IntervalKind,
-    GroundingStructureKind? GroundingStructureKind);

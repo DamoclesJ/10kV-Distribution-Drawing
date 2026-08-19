@@ -93,6 +93,7 @@ public sealed class RingCabinetTemplate
             {
                 LoadSwitchConfiguration => TemplateCapability.LoadSwitchBay,
                 IntegratedFeederConfiguration => TemplateCapability.IntegratedFeederBay,
+                PTConfiguration => TemplateCapability.PTInterval,
                 _ => throw new InvalidOperationException(
                     $"Unsupported equipment configuration '{bay.EquipmentConfiguration.GetType().Name}'.")
             });

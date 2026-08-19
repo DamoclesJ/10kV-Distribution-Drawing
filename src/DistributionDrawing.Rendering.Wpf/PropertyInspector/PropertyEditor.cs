@@ -9,10 +9,12 @@ public sealed class PropertyEditor
     private readonly SelectionObjectResolver _resolver;
     private readonly PropertyCommandFactory _commandFactory;
     private readonly CommandStack _commandStack;
+    private readonly RuntimeLayoutDocument? _runtimeLayout;
 
     public PropertyEditor(
         SelectionObjectResolver resolver,
         CommandStack commandStack,
+        RuntimeLayoutDocument? runtimeLayout = null,
         PropertyCommandFactory? commandFactory = null)
     {
         ArgumentNullException.ThrowIfNull(resolver);
@@ -21,6 +23,7 @@ public sealed class PropertyEditor
         _resolver = resolver;
         _commandFactory = commandFactory ?? new PropertyCommandFactory();
         _commandStack = commandStack;
+        _runtimeLayout = runtimeLayout;
     }
 
     public PropertyEditResult TryEdit(
@@ -78,8 +81,16 @@ public sealed class PropertyEditor
             return PropertyEditResult.Failure("TargetNotFound", "The selected interval no longer exists.");
         }
 
+        if (_runtimeLayout is null)
+        {
+            return PropertyEditResult.Failure(
+                "LayoutUnavailable",
+                "The ring-cabinet runtime layout is unavailable.");
+        }
+
         if (!_commandFactory.TryCreateIntervalTypeChange(
                 selection,
+                _runtimeLayout,
                 intervalKind,
                 groundingStructureKind,
                 out ICommand? command,

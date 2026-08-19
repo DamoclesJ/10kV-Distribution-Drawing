@@ -166,7 +166,10 @@ public sealed class PropertyProjector
             DomainRow("Sequence", "序号", interval.Sequence),
             DomainRow("BayIndex", "业务位置", interval.BayIndex),
             DomainRow("BusinessNumber", "业务编号", interval.BusinessNumber),
-            DomainRow("DisplayName", "名称", interval.DisplayName),
+            EditableDomainRow(
+                PropertyCommandFactory.IntervalDisplayNamePropertyKey,
+                "名称",
+                interval.DisplayName),
             DomainRow("IntervalKind", "间隔类型", interval.IntervalKind),
             DomainRow("GroundingStructureKind", "接地结构", interval.GroundingStructureKind),
             DomainRow("ExternalTerminalId", "外部端子", interval.ExternalTerminalId),

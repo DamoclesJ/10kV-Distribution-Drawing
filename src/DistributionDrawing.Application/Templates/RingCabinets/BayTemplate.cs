@@ -4,7 +4,8 @@ public sealed class BayTemplate
 {
     public BayTemplate(
         int index,
-        BayEquipmentConfiguration equipmentConfiguration)
+        BayEquipmentConfiguration equipmentConfiguration,
+        string? displayName = null)
     {
         if (index < 1)
         {
@@ -14,9 +15,14 @@ public sealed class BayTemplate
         Index = index;
         EquipmentConfiguration = equipmentConfiguration ??
             throw new ArgumentNullException(nameof(equipmentConfiguration));
+        DisplayName = string.IsNullOrWhiteSpace(displayName)
+            ? null
+            : displayName.Trim();
     }
 
     public int Index { get; }
 
     public BayEquipmentConfiguration EquipmentConfiguration { get; }
+
+    public string? DisplayName { get; }
 }

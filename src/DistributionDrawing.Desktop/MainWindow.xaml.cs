@@ -484,7 +484,7 @@ public partial class MainWindow : Window
         _selectionResolver = session.SelectionResolver;
         _propertyProjector = session.PropertyProjector;
         _propertyInspector = session.PropertyInspector;
-        _propertyEditor = new(_selectionResolver, _commandStack);
+        _propertyEditor = new(_selectionResolver, _commandStack, session.Layout);
         _currentScene = session.Scene;
         _activeSource = session.InspectionSource;
         _selectionManager.SelectionChanged += OnSelectionChanged;
@@ -754,6 +754,28 @@ public partial class MainWindow : Window
         if (!result.IsSuccess)
         {
             ShowCommandError("间隔修改失败", result.ErrorMessage ?? "间隔配置未能应用。");
+            return;
+        }
+
+        RefreshDrawingScene();
+    }
+
+    private void OnApplyIntervalDisplayName(object sender, RoutedEventArgs e)
+    {
+        if (_selectionManager.Selected is not
+            { Kind: SelectionTargetKind.RingCabinetInterval } target)
+        {
+            ShowCommandError("间隔修改失败", "请先选择一个环网柜间隔。");
+            return;
+        }
+
+        PropertyEditResult result = _propertyEditor.TryEdit(
+            target,
+            PropertyCommandFactory.IntervalDisplayNamePropertyKey,
+            IntervalDisplayNameInput.Text);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError("间隔修改失败", result.ErrorMessage ?? "间隔名称未能应用。");
             return;
         }
 
@@ -1669,6 +1691,7 @@ public partial class MainWindow : Window
         }
 
         IntervalEditorPanel.Visibility = Visibility.Visible;
+        IntervalDisplayNameInput.Text = interval.DisplayName;
         IntervalTypeInput.ItemsSource = SupportedIntervalKinds;
         IntervalGroundingStructureInput.ItemsSource = SupportedGroundingStructures;
         IntervalTypeInput.SelectedItem = interval.IntervalKind;

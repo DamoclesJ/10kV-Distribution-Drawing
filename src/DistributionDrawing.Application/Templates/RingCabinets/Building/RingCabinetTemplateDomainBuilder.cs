@@ -12,6 +12,7 @@ public sealed class RingCabinetTemplateDomainBuilder
             TemplateCapability.BasicRingCabinet,
             TemplateCapability.LoadSwitchBay,
             TemplateCapability.IntegratedFeederBay,
+            TemplateCapability.PTInterval,
             // Layout is handled by the later RuntimeLayout builder stage.
             TemplateCapability.RingCabinetLayout
         };
@@ -89,14 +90,21 @@ public sealed class RingCabinetTemplateDomainBuilder
             LoadSwitchConfiguration => RingCabinetIntervalDefinition.CreateLoadSwitch(
                 bay.Index,
                 SwitchState.Open,
-                SwitchState.Open),
+                SwitchState.Open,
+                bay.DisplayName),
             IntegratedFeederConfiguration integratedFeeder =>
                 RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                     bay.Index,
                     integratedFeeder.GroundingStructureKind,
                     SwitchState.Open,
                     SwitchState.Open,
-                    SwitchState.Open),
+                    SwitchState.Open,
+                    bay.DisplayName),
+            PTConfiguration => RingCabinetIntervalDefinition.CreatePT(
+                bay.Index,
+                SwitchState.Open,
+                SwitchState.Open,
+                bay.DisplayName),
             _ => throw new ArgumentException(
                 $"Unsupported equipment configuration '{bay.EquipmentConfiguration.GetType().Name}'.",
                 nameof(bay))

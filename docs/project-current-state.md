@@ -21,6 +21,26 @@ Executable smoke test passed, but V1 product/visual accuracy is not yet accepted
 
 本文后续章节包含较早 checkpoint 的历史状态；如与本节、当前代码或最新专项审计冲突，以当前代码和最新专项审计为准。
 
+## 0.1 Phase E-0A — RingCabinet Template Creation & PT Closure (2026-08-19)
+
+Phase E 已进入 E-0A，当前实现事实如下：
+
+- Desktop 环网柜主要创建入口已由逐行手工配置改为“柜名 + 柜型 + 业务间隔数量”的 Template 创建流程；
+- 普通负荷开关柜支持 3/4/5/6 个业务间隔；
+- 一二次融合柜支持 4/6 个业务间隔；
+- 业务间隔按 Template 顺序自动命名为 `负1`～`负N`，并可通过 Property/CommandStack 修改；
+- PT 已通过正式 `PTConfiguration`、`RingCabinetTemplateDomainBuilder` 和 `RingCabinetIntervalDefinition.CreatePT(...)` 接入正常 Desktop 创建链路；
+- PT 创建入口不创建 DTU，也不冻结最终 PT/DTU 组合与位置规则；
+- RingCabinet 创建仍由单个 `AddRingCabinetCommand` 原子加入 Domain + RuntimeLayout，Undo/Redo 保持相同 Stable IDs；
+- Interval Type Change 已同步维护 Domain + RuntimeLayout，失败、Undo、Redo 均恢复一致状态；
+- `PTSymbolPosition` 被确认是标准布局的确定性派生值，不扩展 Persistence 格式；加载时由统一 `RingCabinetLayoutFactory` 规则重建。
+
+详细设计与范围见 `docs/phase-e-0a-ring-cabinet-template-and-pt-closure.md`。
+
+Phase E-0A 不包含真实 Word 图元重绘、DTU、正交 Routing、Snap、Alignment、自动避让、Crossing Detection、Line Jump 或 viewport clipping。上述内容仍属于后续 Phase E 子阶段。
+
+本轮 macOS 最终 solution/test/WPF 构建受环境异常阻断：构建进程约等待 5 分钟后以“0 个错误”退出失败，没有产生可归因到源码的编译诊断。未修改 Windows WPF TargetFramework 规避该问题；Phase E-0A 的最终编译、自动测试和运行验收仍需在 Windows 实机完成。静态 `git diff --check` 已通过。
+
 ## 1. Project Identity
 
 本项目是面向 10kV 配电专业场景的 Windows 桌面绘图软件。
@@ -269,23 +289,23 @@ P0-6-D-2 已完成，包含：
 以下决策已经确认：
 
 - RingCabinet 允许普通负荷开关间隔与断路器/融合类间隔混合存在。
-- 用户决定间隔数量，并逐个选择当前 Domain 支持的合法间隔类型。
+- Desktop 主要创建入口由用户选择柜型和业务间隔数量，并通过 Template 一次性生成合法间隔；创建后可再使用属性系统修改名称和支持的间隔类型。
 - 六间隔“前四个负荷开关、后两个断路器”是常见实例，不是固定业务规则。
-- 常用组合将来可以成为模板/快捷配置，但模板不能限制 Domain。
+- 常用组合已进入参数化 Template 创建入口；Template 只约束当前产品入口，不限制 Domain 表达能力。
 - 创建柜体时不要求用户一次性配置最终开关状态。
 - 长期希望在图上点击具体开关，并经过 Domain/联锁规则校验后改变状态。
 - 开关操作顺序和完整联锁不能由实现自行假设，应独立设计。
 - 第一版不建立 Incoming、Outgoing、Tie、Transformer、Spare 等 Interval Usage 枚举。
-- DTU 柜术语已确认，但其具体模型仍未设计。
-- PT 间隔具体模型仍未设计。
-- “负1～负7”、上刀/下刀/上接地/下接地等命名规则尚未冻结。
+- DTU 柜术语已确认，但其具体模型仍未实现。
+- PTInterval 已完成 Domain、Layout、Rendering、Persistence 重建和 Desktop Template 创建闭环；最终 PT/DTU 组合位置仍未冻结。
+- 新建 Template 的业务间隔默认名称已冻结为 `负1`～`负N`；上刀/下刀/上接地/下接地等更细命名规则仍未冻结。
 
 当前 `RingCabinetDefinition.Create` 已能组合现有 `LoadSwitchInterval` 和 `IntegratedFeederInterval`；缺口主要在 Desktop 配置入口、按实际结构生成 Layout 和原子 Command。
 
 ## 8. Professional Decisions Still Required
 
-- PT 间隔的 Domain、Layout、Rendering 表达。
 - DTU 柜的 Domain、Layout、Rendering、Persistence 表达。
+- PT/DTU 最终组合与左右位置规则。
 - Switch 操作顺序、完整 Interlock 和图形操作边界。
 - 设备编号/命名建议规则及人工确认方式。
 - 首批 PoleAttachment 设备范围。
@@ -317,7 +337,7 @@ Add RingCabinet
 → Save/Reload
 ```
 
-不包含 Switch Interlock、PT/DTU 新模型、Interval Usage、自动命名、Cable 或模板系统。创建时 Domain 工厂要求的开关初始值只能作为合法技术初始化值，不代表用户最终运行状态。
+该历史阶段当时不包含 Switch Interlock、PT/DTU 新模型、Interval Usage、自动命名、Cable 或模板系统；其中 Switch、Cable、参数化 Template、自动命名和 PTInterval 已由后续阶段完成。创建时 Domain 工厂要求的开关初始值仍只代表合法技术初始化值，不代表用户最终运行状态。
 
 ### P0-6-C：CableTermination + PoleAttachment 完整闭环
 

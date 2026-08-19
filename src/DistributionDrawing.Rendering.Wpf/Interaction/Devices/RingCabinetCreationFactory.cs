@@ -1,74 +1,35 @@
-using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Application.Templates.RingCabinets.Building;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 
 public sealed class RingCabinetCreationFactory
 {
+    private readonly RingCabinetTemplateDomainBuilder _domainBuilder;
+
+    public RingCabinetCreationFactory(
+        RingCabinetTemplateDomainBuilder? domainBuilder = null)
+    {
+        _domainBuilder = domainBuilder ?? new RingCabinetTemplateDomainBuilder();
+    }
+
     public RingCabinet Create(RingCabinetCreationConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        if (string.IsNullOrWhiteSpace(configuration.DisplayName))
+        RingCabinetDomainBuildOutcome outcome = _domainBuilder.Build(
+            configuration.Template,
+            configuration.DisplayName);
+        if (outcome.Result is { } result)
         {
-            throw new ArgumentException("Ring cabinet display name is required.", nameof(configuration));
+            return result.Cabinet;
         }
 
-        if (configuration.Intervals.Count == 0)
-        {
-            throw new ArgumentException(
-                "A ring cabinet requires at least one interval.",
-                nameof(configuration));
-        }
-
-        RingCabinetIntervalDefinition[] definitions = configuration.Intervals
-            .Select(CreateIntervalDefinition)
-            .ToArray();
-
-        return RingCabinet.Create(
-            RingCabinetDefinition.Create(
-                Guid.NewGuid(),
-                configuration.DisplayName.Trim(),
-                definitions));
-    }
-
-    private static RingCabinetIntervalDefinition CreateIntervalDefinition(
-        RingCabinetIntervalCreationConfiguration configuration)
-    {
-        if (string.IsNullOrWhiteSpace(configuration.DisplayName))
-        {
-            throw new ArgumentException("Interval display name is required.", nameof(configuration));
-        }
-
-        string displayName = configuration.DisplayName.Trim();
-        // Open is only the legal technical initialization required by the
-        // current Domain factories. It is not a user-confirmed operating state.
-        return configuration.IntervalKind switch
-        {
-            IntervalKind.LoadSwitchInterval when configuration.GroundingStructureKind is null =>
-                RingCabinetIntervalDefinition.CreateLoadSwitch(
-                    configuration.BayIndex,
-                    SwitchState.Open,
-                    SwitchState.Open,
-                    displayName),
-            IntervalKind.LoadSwitchInterval => throw new ArgumentException(
-                "A load-switch interval cannot specify a grounding structure.",
-                nameof(configuration)),
-            IntervalKind.IntegratedFeederInterval when
-                configuration.GroundingStructureKind is GroundingStructureKind structure =>
-                RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                    configuration.BayIndex,
-                    structure,
-                    SwitchState.Open,
-                    SwitchState.Open,
-                    SwitchState.Open,
-                    displayName),
-            IntervalKind.IntegratedFeederInterval => throw new ArgumentException(
-                "An integrated-feeder interval requires a grounding structure.",
-                nameof(configuration)),
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(configuration),
-                $"Unsupported interval kind '{configuration.IntervalKind}'.")
-        };
+        RingCabinetDomainBuildFailure failure = outcome.Failure ??
+            throw new InvalidOperationException("The template build failed without an error.");
+        throw new ArgumentException(
+            failure.Cause?.Message ?? failure.Message,
+            nameof(configuration),
+            failure.Cause);
     }
 }

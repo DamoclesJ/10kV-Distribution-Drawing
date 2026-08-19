@@ -27,15 +27,18 @@ public sealed class PropertyCommandFactory
         "CableTermination.DisplayName";
     public const string CableTypePropertyKey = EditPropertyCommand.CableTypeProperty;
     public const string CableLengthPropertyKey = EditPropertyCommand.CableLengthProperty;
+    public const string IntervalDisplayNamePropertyKey = "Interval.DisplayName";
 
     public bool TryCreateIntervalTypeChange(
         ResolvedSelection selection,
+        RuntimeLayoutDocument runtimeLayout,
         IntervalKind targetIntervalKind,
         GroundingStructureKind? targetGroundingStructureKind,
         out ICommand? command,
         out PropertyEditError? error)
     {
         ArgumentNullException.ThrowIfNull(selection);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
         command = null;
         error = null;
 
@@ -81,6 +84,7 @@ public sealed class PropertyCommandFactory
 
         command = new ChangeIntervalTypeCommand(
             selection.RingCabinet,
+            runtimeLayout,
             selection.RingCabinetInterval.IntervalId,
             targetIntervalKind,
             targetGroundingStructureKind);
@@ -98,6 +102,31 @@ public sealed class PropertyCommandFactory
 
         command = null;
         error = null;
+
+        if (selection.RingCabinet is not null &&
+            selection.RingCabinetInterval is not null &&
+            selection.Reference.Kind == SelectionTargetKind.RingCabinetInterval)
+        {
+            if (propertyKey != IntervalDisplayNamePropertyKey)
+            {
+                error = new PropertyEditError(
+                    "PropertyReadOnly",
+                    $"Property '{propertyKey}' is not editable in this MVP.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                error = new PropertyEditError("InputInvalid", "Interval name cannot be empty.");
+                return false;
+            }
+
+            command = new RenameRingCabinetIntervalCommand(
+                selection.RingCabinet,
+                selection.RingCabinetInterval.IntervalId,
+                input);
+            return true;
+        }
 
         if (selection.GroundingPoint is not null)
         {

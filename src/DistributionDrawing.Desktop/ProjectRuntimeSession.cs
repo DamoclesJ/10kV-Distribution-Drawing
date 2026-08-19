@@ -294,9 +294,13 @@ internal static class ProjectLayoutRuntimeMapper
         var cabinetLayouts = new Dictionary<Guid, RingCabinetLayout>();
         foreach (ProjectRingCabinetLayoutDto dto in snapshot.RingCabinets)
         {
+            RingCabinet cabinet = domain.Devices.OfType<RingCabinet>()
+                .Single(candidate => candidate.Id == dto.CabinetId);
             var intervals = new List<RingCabinetIntervalLayout>();
             foreach (ProjectRingCabinetIntervalLayoutDto intervalDto in dto.Intervals)
             {
+                RingCabinetInterval interval = cabinet.Intervals.Single(
+                    candidate => candidate.IntervalId == intervalDto.IntervalId);
                 var switches = intervalDto.Switches
                     .Select(switchDto => new RingCabinetSwitchLayout(
                         switchDto.SwitchDeviceId,
@@ -312,7 +316,9 @@ internal static class ProjectLayoutRuntimeMapper
                     intervalDto.HeightMillimeters,
                     Point(intervalDto.SequenceLabelOffset),
                     Point(intervalDto.NameLabelOffset),
-                    switches));
+                    switches,
+                    RingCabinetLayoutFactory.ResolvePTSymbolPosition(
+                        interval.IntervalKind)));
             }
 
             cabinetLayouts.Add(

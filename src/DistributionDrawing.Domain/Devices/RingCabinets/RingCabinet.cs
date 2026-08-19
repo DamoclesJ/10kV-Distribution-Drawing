@@ -133,6 +133,46 @@ public sealed class RingCabinet : Device
         CompositionKind = candidate.CompositionKind;
     }
 
+    public void RenameInterval(Guid intervalId, string displayName)
+    {
+        if (intervalId == Guid.Empty)
+        {
+            throw new ArgumentException("Interval ID cannot be empty.", nameof(intervalId));
+        }
+
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            throw new ArgumentException("Interval display name is required.", nameof(displayName));
+        }
+
+        RingCabinetInterval current = _intervals.SingleOrDefault(interval =>
+                interval.IntervalId == intervalId)
+            ?? throw new InvalidOperationException(
+                $"Interval '{intervalId}' does not belong to cabinet '{Id}'.");
+        string normalized = displayName.Trim();
+        if (string.Equals(current.DisplayName, normalized, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        RingCabinetIntervalRestoreDefinition[] definitions = _intervals
+            .Select(interval =>
+            {
+                RingCabinetIntervalRestoreDefinition definition =
+                    CreateRestoreDefinition(interval);
+                return interval.IntervalId == intervalId
+                    ? definition with { DisplayName = normalized }
+                    : definition;
+            })
+            .ToArray();
+        RestoreState(new RingCabinetRestoreDefinition(
+            Id,
+            DisplayName ?? throw new InvalidOperationException(
+                "A ring cabinet must have a display name."),
+            MainBusNodeId,
+            definitions));
+    }
+
     internal IEnumerable<SwitchDevice> InternalSwitchDevices =>
         _intervals.SelectMany(interval => interval.SwitchDevices);
 

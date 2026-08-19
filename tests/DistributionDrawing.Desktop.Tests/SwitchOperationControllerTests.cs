@@ -1,4 +1,6 @@
 using System.IO;
+using DistributionDrawing.Application.Templates.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.SwitchOperation;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Domain.Devices;
@@ -124,24 +126,18 @@ public sealed class SwitchOperationControllerTests
     {
         return new RingCabinetCreationConfiguration(
             "负荷开关柜",
-            Enumerable.Range(1, 3).Select(index =>
-                new RingCabinetIntervalCreationConfiguration(
-                    index,
-                    $"间隔 {index}",
-                    IntervalKind.LoadSwitchInterval,
-                    null)));
+            new RingCabinetCreationTemplateFactory().Create(
+                RingCabinetTemplateType.Conventional,
+                3));
     }
 
     private static RingCabinetCreationConfiguration CreateIntegratedFeederConfiguration()
     {
         return new RingCabinetCreationConfiguration(
             "融合柜",
-            Enumerable.Range(1, 4).Select(index =>
-                new RingCabinetIntervalCreationConfiguration(
-                    index,
-                    $"间隔 {index}",
-                    IntervalKind.IntegratedFeederInterval,
-                    GroundingStructureKind.UpperIsolationGrounding)));
+            new RingCabinetCreationTemplateFactory().Create(
+                RingCabinetTemplateType.PrimarySecondaryIntegrated,
+                4));
     }
 
     private sealed class TestProject : IDisposable

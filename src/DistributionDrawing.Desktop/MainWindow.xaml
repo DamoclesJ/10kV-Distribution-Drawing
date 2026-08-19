@@ -135,6 +135,13 @@
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
             <TextBlock Foreground="#555"
+                       Text="间隔名称" />
+            <TextBox x:Name="IntervalDisplayNameInput"
+                     Margin="0,4,0,4" />
+            <Button Margin="0,0,0,8"
+                    Content="应用间隔名称"
+                    Click="OnApplyIntervalDisplayName" />
+            <TextBlock Foreground="#555"
                        Text="间隔类型" />
             <ComboBox x:Name="IntervalTypeInput"
                       Margin="0,4,0,4" />

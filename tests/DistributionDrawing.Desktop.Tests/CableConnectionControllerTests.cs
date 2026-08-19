@@ -1,4 +1,6 @@
 using System.IO;
+using DistributionDrawing.Application.Templates.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.CableConnection;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Domain.Devices;
@@ -283,12 +285,9 @@ public sealed class CableConnectionControllerTests
             session.Layout,
             new RingCabinetCreationConfiguration(
                 "环网柜",
-                Enumerable.Range(1, 3).Select(index =>
-                    new RingCabinetIntervalCreationConfiguration(
-                        index,
-                        $"间隔 {index}",
-                        IntervalKind.LoadSwitchInterval,
-                        null))),
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
             new DocumentPoint(40, 40));
         cabinetCommand.Execute();
         AddPoleCommand poleCommand = factory.CreateAddPole(

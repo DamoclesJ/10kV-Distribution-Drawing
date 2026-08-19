@@ -1,7 +1,13 @@
 using System.IO;
+using DistributionDrawing.Application.Templates.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.Workspace;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Rendering;
+using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -49,6 +55,72 @@ public sealed class ProjectWorkflowRuntimeTests
         Assert.NotSame(originalSession, controller.CurrentSession);
         Assert.NotNull(controller.CurrentSession!.Scene);
         Assert.False(controller.IsDirty);
+    }
+
+    [Fact]
+    public void PTTemplateCreation_IsAtomicSelectableAndRoundTripsDeterministicLayout()
+    {
+        using var files = new TemporaryProjectFiles();
+        string path = files.Next();
+        var dialogs = new TestDialogs
+        {
+            NewRequest = new NewProjectRequest(path, "PT 模板工程", null)
+        };
+        var controller = CreateController(dialogs);
+        Assert.True(controller.NewProject());
+        ProjectRuntimeSession session = controller.CurrentSession!;
+        RingCabinetTemplate template = new RingCabinetCreationTemplateFactory().Create(
+            RingCabinetTemplateType.PrimarySecondaryIntegrated,
+            4,
+            includePTInterval: true);
+        AddRingCabinetCommand command = new DeviceCommandFactory().CreateAddRingCabinet(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new RingCabinetCreationConfiguration("用户 PT 柜", template),
+            new DocumentPoint(35, 45));
+        Guid cabinetId = command.Cabinet.Id;
+        Guid[] intervalIds = command.Cabinet.Intervals
+            .Select(interval => interval.IntervalId)
+            .ToArray();
+
+        session.CommandStack.ExecuteCommand(command);
+        session.RebuildScene();
+        RingCabinetInterval pt = Assert.Single(command.Cabinet.Intervals.Where(interval =>
+            interval.IntervalKind == IntervalKind.PTInterval));
+        Assert.Contains(session.Scene.Elements.OfType<SceneText>(), text => text.Text == "PT");
+        Assert.Contains(session.Scene.HitTestIndex.Entries, entry =>
+            entry.Target.Kind == SelectionTargetKind.RingCabinetInterval &&
+            entry.Target.ObjectId == pt.IntervalId);
+
+        Assert.True(session.CommandStack.Undo());
+        Assert.DoesNotContain(session.PersistenceSession.Domain.Devices, device => device.Id == cabinetId);
+        Assert.False(session.Layout.RingCabinetLayouts.ContainsKey(cabinetId));
+        Assert.True(session.CommandStack.Redo());
+        RingCabinet redone = Assert.Single(
+            session.PersistenceSession.Domain.Devices.OfType<RingCabinet>());
+        Assert.Equal(intervalIds, redone.Intervals.Select(interval => interval.IntervalId));
+
+        session.RebuildScene();
+        Assert.True(controller.SaveProject());
+        DocumentPoint before = session.Layout.RingCabinetLayouts[cabinetId]
+            .IntervalLayouts[pt.IntervalId]
+            .PTSymbolPosition!.Value;
+        dialogs.OpenPath = path;
+        Assert.True(controller.OpenProject());
+        ProjectRuntimeSession reopened = controller.CurrentSession!;
+        RingCabinet restored = Assert.Single(
+            reopened.PersistenceSession.Domain.Devices.OfType<RingCabinet>());
+        RingCabinetInterval restoredPT = Assert.Single(restored.Intervals.Where(interval =>
+            interval.IntervalKind == IntervalKind.PTInterval));
+
+        Assert.Equal("用户 PT 柜", restored.DisplayName);
+        Assert.Equal(intervalIds, restored.Intervals.Select(interval => interval.IntervalId));
+        Assert.Equal(
+            before,
+            reopened.Layout.RingCabinetLayouts[cabinetId]
+                .IntervalLayouts[restoredPT.IntervalId]
+                .PTSymbolPosition);
+        Assert.Contains(reopened.Scene.Elements.OfType<SceneText>(), text => text.Text == "PT");
     }
 
     [Fact]

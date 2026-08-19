@@ -76,6 +76,30 @@ public sealed class RingCabinetTemplateDomainBuilderTests
     }
 
     [Fact]
+    public void Build_CreatesFormalPTDefinitionAndPreservesTemplateNames()
+    {
+        RingCabinetTemplate template = CreateTemplate(
+            RingCabinetTemplateType.Mixed,
+            new BayTemplate(
+                1,
+                new IntegratedFeederConfiguration(
+                    GroundingStructureKind.UpperIsolationGrounding),
+                "负1"),
+            new BayTemplate(2, new PTConfiguration(), "PT"));
+
+        RingCabinetDomainBuildResult result = BuildSuccessfully(template);
+
+        Assert.Equal(new[] { "负1", "PT" },
+            result.Definition.IntervalDefinitions.Select(definition => definition.DisplayName));
+        RingCabinetInterval pt = Assert.Single(result.Cabinet.Intervals.Where(interval =>
+            interval.IntervalKind == IntervalKind.PTInterval));
+        Assert.Equal("PT", pt.DisplayName);
+        Assert.Equal(
+            new[] { SwitchKind.IsolationSwitch, SwitchKind.GroundSwitch },
+            pt.SwitchDevices.Select(device => device.SwitchKind));
+    }
+
+    [Fact]
     public void Build_CreatesMixedCabinet()
     {
         RingCabinetTemplate template = CreateTemplate(

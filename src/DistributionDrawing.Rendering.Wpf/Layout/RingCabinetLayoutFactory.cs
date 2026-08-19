@@ -10,6 +10,8 @@ namespace DistributionDrawing.Rendering.Wpf.Layout;
 /// </summary>
 public sealed class RingCabinetLayoutFactory
 {
+    public static DocumentPoint DefaultPTSymbolPosition { get; } = new(14, 45);
+
     private const double CabinetPadding = 10;
     private const double IntervalGap = 5;
     private const double IntervalWidth = 60;
@@ -38,6 +40,55 @@ public sealed class RingCabinetLayoutFactory
             MainBusY,
             intervals);
     }
+
+    public RingCabinetLayout RebuildInterval(
+        RingCabinet cabinet,
+        RingCabinetLayout currentLayout,
+        Guid intervalId)
+    {
+        ArgumentNullException.ThrowIfNull(cabinet);
+        ArgumentNullException.ThrowIfNull(currentLayout);
+        if (cabinet.Id != currentLayout.CabinetId)
+        {
+            throw new ArgumentException(
+                "Ring cabinet and layout IDs must match.",
+                nameof(currentLayout));
+        }
+
+        RingCabinetInterval interval = cabinet.Intervals.SingleOrDefault(
+                candidate => candidate.IntervalId == intervalId)
+            ?? throw new InvalidOperationException(
+                $"Interval '{intervalId}' does not belong to cabinet '{cabinet.Id}'.");
+        RingCabinetIntervalLayout currentInterval = currentLayout.IntervalLayouts
+            .GetValueOrDefault(intervalId)
+            ?? throw new InvalidOperationException(
+                $"No layout exists for interval '{intervalId}'.");
+        RingCabinetIntervalLayout standard = CreateIntervalLayout(interval);
+        var replacement = new RingCabinetIntervalLayout(
+            intervalId,
+            currentInterval.RelativePosition,
+            currentInterval.WidthMillimeters,
+            currentInterval.HeightMillimeters,
+            currentInterval.SequenceLabelOffset,
+            currentInterval.NameLabelOffset,
+            standard.SwitchLayouts.Values,
+            standard.PTSymbolPosition);
+        RingCabinetIntervalLayout[] intervals = currentLayout.IntervalLayouts.Values
+            .Select(layout => layout.IntervalId == intervalId ? replacement : layout)
+            .ToArray();
+
+        return new RingCabinetLayout(
+            currentLayout.CabinetId,
+            currentLayout.Position,
+            currentLayout.WidthMillimeters,
+            currentLayout.HeightMillimeters,
+            currentLayout.MainBusYMillimeters,
+            intervals,
+            currentLayout.LabelOffset);
+    }
+
+    public static DocumentPoint? ResolvePTSymbolPosition(IntervalKind intervalKind) =>
+        intervalKind == IntervalKind.PTInterval ? DefaultPTSymbolPosition : null;
 
     private static RingCabinetIntervalLayout CreateIntervalLayout(
         RingCabinetInterval interval)
@@ -72,9 +123,7 @@ public sealed class RingCabinetLayoutFactory
             IntervalWidth,
             IntervalHeight,
             switchLayouts: switches,
-            ptSymbolPosition: interval.IntervalKind == IntervalKind.PTInterval
-                ? new DocumentPoint(14, 45)
-                : null);
+            ptSymbolPosition: ResolvePTSymbolPosition(interval.IntervalKind));
     }
 
     private static IReadOnlyList<RingCabinetSwitchLayout> CreateLoadSwitchLayouts(

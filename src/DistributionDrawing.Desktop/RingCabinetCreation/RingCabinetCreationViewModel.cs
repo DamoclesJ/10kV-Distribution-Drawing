@@ -1,7 +1,7 @@
-using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Globalization;
 using System.Runtime.CompilerServices;
+using DistributionDrawing.Application.Templates.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 
@@ -9,15 +9,25 @@ namespace DistributionDrawing.Desktop.RingCabinetCreation;
 
 public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
 {
+    private static readonly IReadOnlyList<RingCabinetTemplateType> CabinetTypes =
+    [
+        RingCabinetTemplateType.Conventional,
+        RingCabinetTemplateType.PrimarySecondaryIntegrated
+    ];
+    private static readonly IReadOnlyList<GroundingStructureKind> GroundingStructures =
+        Array.AsReadOnly(Enum.GetValues<GroundingStructureKind>());
+    private readonly RingCabinetCreationTemplateFactory _templateFactory;
     private string _displayName = string.Empty;
+    private RingCabinetTemplateType _cabinetType = RingCabinetTemplateType.Conventional;
+    private int _businessIntervalCount = 3;
+    private GroundingStructureKind _integratedGroundingStructureKind =
+        GroundingStructureKind.UpperIsolationGrounding;
+    private bool _includePTInterval;
 
-    public RingCabinetCreationViewModel()
+    public RingCabinetCreationViewModel(
+        RingCabinetCreationTemplateFactory? templateFactory = null)
     {
-        Intervals.CollectionChanged += (_, _) =>
-        {
-            UpdateSequences();
-            OnPropertyChanged(nameof(IntervalCount));
-        };
+        _templateFactory = templateFactory ?? new RingCabinetCreationTemplateFactory();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -25,41 +35,92 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
     public string DisplayName
     {
         get => _displayName;
+        set => SetField(ref _displayName, value);
+    }
+
+    public IReadOnlyList<RingCabinetTemplateType> SupportedCabinetTypes => CabinetTypes;
+
+    public RingCabinetTemplateType CabinetType
+    {
+        get => _cabinetType;
         set
         {
-            if (_displayName == value)
+            if (!SetField(ref _cabinetType, value))
             {
                 return;
             }
 
-            _displayName = value;
-            OnPropertyChanged();
+            int[] supported = SupportedBusinessIntervalCounts.ToArray();
+            if (!supported.Contains(BusinessIntervalCount))
+            {
+                BusinessIntervalCount = supported[0];
+            }
+
+            if (!IsPrimarySecondaryIntegrated)
+            {
+                IncludePTInterval = false;
+            }
+
+            OnPropertyChanged(nameof(SupportedBusinessIntervalCounts));
+            OnPropertyChanged(nameof(IsPrimarySecondaryIntegrated));
+            OnPropertyChanged(nameof(GeneratedIntervalNames));
         }
     }
 
-    public ObservableCollection<RingCabinetIntervalCreationRowViewModel> Intervals { get; } = [];
+    public IReadOnlyList<int> SupportedBusinessIntervalCounts =>
+        CabinetType == RingCabinetTemplateType.Conventional
+            ? [3, 4, 5, 6]
+            : [4, 6];
 
-    public int IntervalCount => Intervals.Count;
-
-    public void AddInterval()
+    public int BusinessIntervalCount
     {
-        Intervals.Add(new RingCabinetIntervalCreationRowViewModel());
+        get => _businessIntervalCount;
+        set
+        {
+            if (SetField(ref _businessIntervalCount, value))
+            {
+                OnPropertyChanged(nameof(GeneratedIntervalNames));
+            }
+        }
     }
 
-    public void RemoveInterval(RingCabinetIntervalCreationRowViewModel row)
+    public IReadOnlyList<GroundingStructureKind> SupportedGroundingStructures =>
+        GroundingStructures;
+
+    public GroundingStructureKind IntegratedGroundingStructureKind
     {
-        ArgumentNullException.ThrowIfNull(row);
-        Intervals.Remove(row);
+        get => _integratedGroundingStructureKind;
+        set => SetField(ref _integratedGroundingStructureKind, value);
     }
 
-    public void MoveUp(RingCabinetIntervalCreationRowViewModel row)
+    public bool IsPrimarySecondaryIntegrated =>
+        CabinetType == RingCabinetTemplateType.PrimarySecondaryIntegrated;
+
+    public bool IncludePTInterval
     {
-        Move(row, -1);
+        get => _includePTInterval;
+        set
+        {
+            if (SetField(ref _includePTInterval, value))
+            {
+                OnPropertyChanged(nameof(GeneratedIntervalNames));
+            }
+        }
     }
 
-    public void MoveDown(RingCabinetIntervalCreationRowViewModel row)
+    public string GeneratedIntervalNames
     {
-        Move(row, 1);
+        get
+        {
+            IEnumerable<string> names = Enumerable.Range(1, BusinessIntervalCount)
+                .Select(index => $"负{index}");
+            if (IncludePTInterval)
+            {
+                names = names.Append("PT");
+            }
+
+            return string.Join("、", names);
+        }
     }
 
     public bool TryCreateConfiguration(
@@ -73,218 +134,37 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
             return false;
         }
 
-        if (Intervals.Count == 0)
+        try
         {
-            errorMessage = "请至少添加一个间隔。";
+            RingCabinetTemplate template = _templateFactory.Create(
+                CabinetType,
+                BusinessIntervalCount,
+                IntegratedGroundingStructureKind,
+                IncludePTInterval);
+            configuration = new RingCabinetCreationConfiguration(
+                DisplayName.Trim(),
+                template);
+            errorMessage = string.Empty;
+            return true;
+        }
+        catch (ArgumentException exception)
+        {
+            errorMessage = exception.Message;
+            return false;
+        }
+    }
+
+    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+        {
             return false;
         }
 
-        var bayIndexes = new HashSet<int>();
-        foreach (RingCabinetIntervalCreationRowViewModel row in Intervals)
-        {
-            if (!int.TryParse(
-                    row.BayIndexText,
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out int bayIndex) ||
-                bayIndex < 1)
-            {
-                errorMessage = $"请输入第 {row.Sequence} 个间隔的正整数业务编号。";
-                return false;
-            }
-
-            if (!bayIndexes.Add(bayIndex))
-            {
-                errorMessage = $"间隔业务编号 {bayIndex} 重复。";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(row.DisplayName))
-            {
-                errorMessage = $"请输入第 {row.Sequence} 个间隔的名称。";
-                return false;
-            }
-
-            if (!Enum.IsDefined(row.IntervalKind))
-            {
-                errorMessage = $"第 {row.Sequence} 个间隔的类型无效。";
-                return false;
-            }
-
-            if (row.IntervalKind == IntervalKind.IntegratedFeederInterval)
-            {
-                if (row.GroundingStructureKind is not GroundingStructureKind structure ||
-                    !Enum.IsDefined(structure))
-                {
-                    errorMessage = $"请选择第 {row.Sequence} 个融合间隔的接地结构。";
-                    return false;
-                }
-            }
-            else if (row.GroundingStructureKind is not null)
-            {
-                errorMessage = $"第 {row.Sequence} 个负荷开关间隔不能设置接地结构。";
-                return false;
-            }
-        }
-
-        bool loadSwitchOnly = Intervals.All(
-            row => row.IntervalKind == IntervalKind.LoadSwitchInterval);
-        if (loadSwitchOnly && Intervals.Count is < 3 or > 6)
-        {
-            errorMessage = "纯负荷开关柜必须包含 3、4、5 或 6 个间隔。";
-            return false;
-        }
-
-        bool integratedFeederOnly = Intervals.All(
-            row => row.IntervalKind == IntervalKind.IntegratedFeederInterval);
-        if (integratedFeederOnly && Intervals.Count is not (4 or 6))
-        {
-            errorMessage = "纯一二次融合柜必须包含 4 或 6 个间隔。";
-            return false;
-        }
-
-        configuration = new RingCabinetCreationConfiguration(
-            DisplayName.Trim(),
-            Intervals.Select(row => new RingCabinetIntervalCreationConfiguration(
-                int.Parse(row.BayIndexText, NumberStyles.Integer, CultureInfo.InvariantCulture),
-                row.DisplayName.Trim(),
-                row.IntervalKind,
-                row.IntervalKind == IntervalKind.IntegratedFeederInterval
-                    ? row.GroundingStructureKind
-                    : null)));
-        errorMessage = string.Empty;
+        field = value;
+        OnPropertyChanged(name);
         return true;
     }
-
-    private void Move(RingCabinetIntervalCreationRowViewModel row, int offset)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-        int oldIndex = Intervals.IndexOf(row);
-        int newIndex = oldIndex + offset;
-        if (oldIndex < 0 || newIndex < 0 || newIndex >= Intervals.Count)
-        {
-            return;
-        }
-
-        Intervals.Move(oldIndex, newIndex);
-        UpdateSequences();
-    }
-
-    private void UpdateSequences()
-    {
-        for (int index = 0; index < Intervals.Count; index++)
-        {
-            Intervals[index].Sequence = index + 1;
-        }
-    }
-
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
-}
-
-public sealed class RingCabinetIntervalCreationRowViewModel : INotifyPropertyChanged
-{
-    private static readonly IReadOnlyList<IntervalKind> SupportedIntervalKinds =
-        Array.AsReadOnly(Enum.GetValues<IntervalKind>());
-    private static readonly IReadOnlyList<GroundingStructureKind> SupportedGroundingStructures =
-        Array.AsReadOnly(Enum.GetValues<GroundingStructureKind>());
-    private int _sequence;
-    private string _bayIndexText = string.Empty;
-    private string _displayName = string.Empty;
-    private IntervalKind _intervalKind = IntervalKind.LoadSwitchInterval;
-    private GroundingStructureKind? _groundingStructureKind;
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    public int Sequence
-    {
-        get => _sequence;
-        internal set
-        {
-            if (_sequence == value)
-            {
-                return;
-            }
-
-            _sequence = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public string BayIndexText
-    {
-        get => _bayIndexText;
-        set
-        {
-            if (_bayIndexText == value)
-            {
-                return;
-            }
-
-            _bayIndexText = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public string DisplayName
-    {
-        get => _displayName;
-        set
-        {
-            if (_displayName == value)
-            {
-                return;
-            }
-
-            _displayName = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public IntervalKind IntervalKind
-    {
-        get => _intervalKind;
-        set
-        {
-            if (_intervalKind == value)
-            {
-                return;
-            }
-
-            _intervalKind = value;
-            if (!IsIntegratedFeeder)
-            {
-                GroundingStructureKind = null;
-            }
-
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(IsIntegratedFeeder));
-        }
-    }
-
-    public GroundingStructureKind? GroundingStructureKind
-    {
-        get => _groundingStructureKind;
-        set
-        {
-            if (_groundingStructureKind == value)
-            {
-                return;
-            }
-
-            _groundingStructureKind = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public bool IsIntegratedFeeder => IntervalKind == IntervalKind.IntegratedFeederInterval;
-
-    public IReadOnlyList<IntervalKind> IntervalKinds => SupportedIntervalKinds;
-
-    public IReadOnlyList<GroundingStructureKind> GroundingStructureKinds =>
-        SupportedGroundingStructures;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
