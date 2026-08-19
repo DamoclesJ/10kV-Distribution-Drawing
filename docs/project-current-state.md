@@ -55,7 +55,17 @@ Phase E-0A 不包含真实 Word 图元重绘、DTU、正交 Routing、Snap、Ali
 
 当前 macOS 验证中，Solution 仅完成 Domain 后即在 Windows/WPF 阶段无诊断等待并失败；Rendering.Wpf/Desktop 独立 build 同样无法完成，两个 WPF 测试项目则因缺少本地 restore 资产返回 `NETSDK1004`。这些结果不代表源码编译失败或通过；`git diff --check` 已通过，最终结论等待 Windows。
 
-Phase E-0B 不包含图元重绘、Routing、Snap、Alignment、自动避让、Crossing Detection 或 Line Jump；Phase E-1 尚未开始。
+Phase E-0B 不包含图元重绘、Routing、Snap、Alignment、自动避让、Crossing Detection 或 Line Jump；Phase E-1 图元实现尚未开始。
+
+## 0.3 Phase E-1 — Real Symbol Baseline Audit (2026-08-19)
+
+状态：**Audit Completed / Symbol Implementation Not Started**。
+
+已完整检查《配电专业附图图元.docx》的 3 个页面、图元表、38 个嵌入图片和两张组合图，并完成 Word 视觉合同、当前 Rendering/Layout/Domain 差异、Drawing Metrics 建议以及 E-1A～E-1E 实施顺序与验收标准。
+
+审计确认：已有 MVP 对象的主要缺口位于 Rendering Geometry、Layout 和 Scene primitive；普通开关与现有三工位组合所需的 Domain 状态基本足够。架空变压器、运行／检修位置、在运／拆除及当前 MVP 外独立站内设备仍是 Domain／产品范围缺口，不在本轮实现。
+
+本轮只新增审计文档，没有实施任何真实图元重绘。详细结论见 `docs/phase-e-1-real-symbol-baseline-audit.md`。
 
 ## 1. Project Identity
 
