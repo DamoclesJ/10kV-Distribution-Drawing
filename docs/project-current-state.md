@@ -23,6 +23,8 @@ Executable smoke test passed, but V1 product/visual accuracy is not yet accepted
 
 ## 0.1 Phase E-0A — RingCabinet Template Creation & PT Closure (2026-08-19)
 
+状态：**Implemented / Pending Windows Validation**。
+
 Phase E 已进入 E-0A，当前实现事实如下：
 
 - Desktop 环网柜主要创建入口已由逐行手工配置改为“柜名 + 柜型 + 业务间隔数量”的 Template 创建流程；
@@ -40,6 +42,20 @@ Phase E 已进入 E-0A，当前实现事实如下：
 Phase E-0A 不包含真实 Word 图元重绘、DTU、正交 Routing、Snap、Alignment、自动避让、Crossing Detection、Line Jump 或 viewport clipping。上述内容仍属于后续 Phase E 子阶段。
 
 本轮 macOS 最终 solution/test/WPF 构建受环境异常阻断：构建进程约等待 5 分钟后以“0 个错误”退出失败，没有产生可归因到源码的编译诊断。未修改 Windows WPF TargetFramework 规避该问题；Phase E-0A 的最终编译、自动测试和运行验收仍需在 Windows 实机完成。静态 `git diff --check` 已通过。
+
+## 0.2 Phase E-0B — Canvas Viewport Clipping (2026-08-19)
+
+状态：**Implemented / Pending Windows Validation**。
+
+中央 `DrawingVisualHost` 已建立严格 WPF viewport：启用 `ClipToBounds`，并在每次 `RenderSize` 变化时把 `RectangleGeometry Clip` 更新为实际中央绘图区尺寸。
+
+该修改只属于 View 层：Zoom/Pan/Fit、Document ↔ View 坐标、Domain、RuntimeLayout、Persistence、TerminalAnchor、Cable/OverheadLine topology 均未改变。正式 Scene、Selection overlay、Device drag preview、Cable/OverheadLine transient preview 继续合成为同一个 DrawingVisual，因此统一受 Host Clip 约束；Cable reconnect picking 行为未改变。
+
+已增加 ClipToBounds、RenderSize/Resize、Zoom/Pan 裁剪合同和 ViewTransform 架构边界测试。Windows 实机仍需验证左右 UI、Menu/StatusBar 不被覆盖，以及窗口缩放和全部既有交互回归。详细记录见 `docs/phase-e-0b-canvas-viewport-clipping.md`。
+
+当前 macOS 验证中，Solution 仅完成 Domain 后即在 Windows/WPF 阶段无诊断等待并失败；Rendering.Wpf/Desktop 独立 build 同样无法完成，两个 WPF 测试项目则因缺少本地 restore 资产返回 `NETSDK1004`。这些结果不代表源码编译失败或通过；`git diff --check` 已通过，最终结论等待 Windows。
+
+Phase E-0B 不包含图元重绘、Routing、Snap、Alignment、自动避让、Crossing Detection 或 Line Jump；Phase E-1 尚未开始。
 
 ## 1. Project Identity
 

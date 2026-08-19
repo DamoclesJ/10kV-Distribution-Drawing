@@ -13,6 +13,7 @@ public sealed class DrawingVisualHost : FrameworkElement
 
     public DrawingVisualHost()
     {
+        ClipToBounds = true;
         _visuals = new VisualCollection(this);
     }
 
@@ -64,6 +65,15 @@ public sealed class DrawingVisualHost : FrameworkElement
         {
             DrawGrid(drawingContext, _viewTransform);
         }
+    }
+
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+
+        var clip = new RectangleGeometry(new Rect(RenderSize));
+        clip.Freeze();
+        Clip = clip;
     }
 
     private void DrawGrid(DrawingContext drawingContext, CanvasViewTransform transform)

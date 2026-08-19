@@ -1,7 +1,10 @@
 using System.Windows;
 using System.Runtime.ExceptionServices;
 using DistributionDrawing.Desktop.Viewport;
+using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Canvas;
+using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
 
@@ -52,6 +55,26 @@ public sealed class CanvasInteractionRuntimeTests
             host.ShowGrid = false;
             Assert.False(host.ShowGrid);
         });
+    }
+
+    [Fact]
+    public void ViewTransform_IsNotExposedByDomainRuntimeLayoutOrPersistenceContracts()
+    {
+        AssertDoesNotExposeViewTransform(typeof(DrawingDocument));
+        AssertDoesNotExposeViewTransform(typeof(RuntimeLayoutDocument));
+        AssertDoesNotExposeViewTransform(typeof(ProjectLayoutDto));
+        AssertDoesNotExposeViewTransform(typeof(ProjectLayoutSnapshot));
+    }
+
+    private static void AssertDoesNotExposeViewTransform(Type contractType)
+    {
+        Assert.DoesNotContain(
+            contractType.GetProperties(),
+            property => property.PropertyType == typeof(CanvasViewTransform));
+        Assert.DoesNotContain(
+            contractType.GetConstructors().SelectMany(constructor =>
+                constructor.GetParameters()),
+            parameter => parameter.ParameterType == typeof(CanvasViewTransform));
     }
 
     private static void RunOnSta(Action action)
