@@ -22,7 +22,8 @@ public sealed class PoleRendererTests
             result.Pole,
             layout);
 
-        Assert.NotEmpty(elements.OfType<SceneLine>());
+        SceneEllipse pole = Assert.Single(elements.OfType<SceneEllipse>());
+        Assert.Equal(pole.Bounds.WidthMillimeters, pole.Bounds.HeightMillimeters);
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "P-001");
     }
 
@@ -50,8 +51,9 @@ public sealed class PoleRendererTests
             [new PoleAttachmentRenderInput(attachment, cableTermination, attachmentLayout)]);
 
         Assert.NotEmpty(elements.OfType<SceneLine>());
-        Assert.Contains(elements.OfType<SceneRectangle>(), rectangle =>
-            rectangle.Bounds.WidthMillimeters == attachmentLayout.WidthMillimeters);
+        Assert.Single(elements.OfType<SceneEllipse>());
+        Assert.Single(elements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
+        Assert.Empty(elements.OfType<SceneRectangle>());
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "电缆终端");
     }
 

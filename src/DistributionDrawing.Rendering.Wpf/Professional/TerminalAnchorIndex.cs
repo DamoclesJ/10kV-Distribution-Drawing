@@ -5,6 +5,7 @@ using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
 namespace DistributionDrawing.Rendering.Wpf.Professional;
 
@@ -48,9 +49,7 @@ public sealed class TerminalAnchorIndex
                 continue;
             }
 
-            DocumentPoint poleAnchor = new(
-                poleLayout.Position.XMillimeters + poleLayout.WidthMillimeters / 2,
-                poleLayout.Position.YMillimeters);
+            DocumentPoint poleAnchor = PoleProfessionalGeometry.GetPoleCenter(poleLayout);
             foreach (Guid terminalId in pole.OverheadAnchorTerminalIds)
             {
                 Set(anchors, terminalId, poleAnchor);
@@ -74,34 +73,21 @@ public sealed class TerminalAnchorIndex
                 continue;
             }
 
-            DocumentPoint attachmentOrigin = new(
-                poleLayout.Position.XMillimeters + attachmentLayout.Offset.XMillimeters,
-                poleLayout.Position.YMillimeters + attachmentLayout.Offset.YMillimeters);
-            DocumentPoint attachmentAnchor = new(
-                attachmentOrigin.XMillimeters + attachmentLayout.WidthMillimeters / 2,
-                attachmentOrigin.YMillimeters + attachmentLayout.HeightMillimeters / 2);
+            SymbolKind symbolKind = SymbolLibrary.ResolveAttachmentKind(attachedDevice);
+            PoleAttachmentGeometry geometry = PoleProfessionalGeometry.GetAttachmentGeometry(
+                poleLayout,
+                attachmentLayout,
+                symbolKind);
 
             if (attachedDevice is CableTermination cableTermination)
             {
-                Set(
-                    anchors,
-                    cableTermination.CableSideTerminalId,
-                    new DocumentPoint(
-                        attachmentOrigin.XMillimeters,
-                        attachmentAnchor.YMillimeters));
-                Set(
-                    anchors,
-                    cableTermination.OverheadSideTerminalId,
-                    new DocumentPoint(
-                        attachmentOrigin.XMillimeters + attachmentLayout.WidthMillimeters,
-                        attachmentAnchor.YMillimeters));
+                Set(anchors, cableTermination.CableSideTerminalId, geometry.FirstTerminal);
+                Set(anchors, cableTermination.OverheadSideTerminalId, geometry.SecondTerminal);
             }
-            else
+            else if (attachedDevice is SwitchDevice switchDevice)
             {
-                foreach (Guid terminalId in GetTerminalIds(attachedDevice))
-                {
-                    Set(anchors, terminalId, attachmentAnchor);
-                }
+                Set(anchors, switchDevice.TerminalIds[0], geometry.FirstTerminal);
+                Set(anchors, switchDevice.TerminalIds[1], geometry.SecondTerminal);
             }
         }
 
@@ -174,16 +160,6 @@ public sealed class TerminalAnchorIndex
 
         return new TerminalAnchorIndex(
             new Dictionary<Guid, TerminalAnchor>(anchors));
-    }
-
-    private static IReadOnlyList<Guid> GetTerminalIds(Device device)
-    {
-        return device switch
-        {
-            CableTermination termination => termination.TerminalIds,
-            SwitchDevice switchDevice => switchDevice.TerminalIds,
-            _ => []
-        };
     }
 
     private static void Set(

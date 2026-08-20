@@ -459,14 +459,11 @@ public sealed class DrawingSceneBuilder
                 poleLayout,
                 switchInputs,
                 cableTerminationInputs));
+            DocumentRect poleBounds = PoleProfessionalGeometry.GetPoleBounds(poleLayout);
             hitTestEntries.Add(
                 new SelectionHitTestEntry(
                     new SelectionReference(SelectionTargetKind.Device, pole.Id),
-                    new DocumentRect(
-                        poleLayout.Position.XMillimeters,
-                        poleLayout.Position.YMillimeters,
-                        poleLayout.WidthMillimeters,
-                        poleLayout.HeightMillimeters),
+                    poleBounds,
                     20));
         }
 
@@ -494,18 +491,31 @@ public sealed class DrawingSceneBuilder
                     $"No layout exists for attachment '{attachment.AttachmentId}'.");
             }
 
+            Device attachedDevice = deviceById[attachment.AttachedDeviceId];
+            SymbolKind symbolKind = SymbolLibrary.ResolveAttachmentKind(attachedDevice);
+            PoleAttachmentGeometry geometry = PoleProfessionalGeometry.GetAttachmentGeometry(
+                poleLayout,
+                attachmentLayout,
+                symbolKind);
             hitTestEntries.Add(
                 new SelectionHitTestEntry(
                     new SelectionReference(
                         SelectionTargetKind.PoleAttachment,
                         attachment.AttachmentId,
                         attachment.PoleId),
-                    new DocumentRect(
-                        poleLayout.Position.XMillimeters + attachmentLayout.Offset.XMillimeters,
-                        poleLayout.Position.YMillimeters + attachmentLayout.Offset.YMillimeters,
-                        attachmentLayout.WidthMillimeters,
-                        attachmentLayout.HeightMillimeters),
+                    geometry.LogicalBounds,
                     40));
+            if (attachedDevice is SwitchDevice switchDevice)
+            {
+                hitTestEntries.Add(
+                    new SelectionHitTestEntry(
+                        new SelectionReference(
+                            SelectionTargetKind.Device,
+                            switchDevice.Id,
+                            attachment.AttachmentId),
+                        geometry.LogicalBounds,
+                        45));
+            }
         }
 
         return new DrawingScene(elements, new SelectionHitTestIndex(hitTestEntries));

@@ -49,8 +49,12 @@ public sealed class MixedPoleRendererTests
 
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "柱上隔离开关");
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "电缆终端");
-        Assert.Equal(2, elements.OfType<SceneRectangle>().Count(rectangle =>
-            rectangle.Bounds.WidthMillimeters == 18));
+        Assert.Single(elements.OfType<SceneEllipse>(), ellipse =>
+            ellipse.Bounds.WidthMillimeters == 14);
+        Assert.Single(elements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
+        Assert.DoesNotContain(elements.OfType<SceneRectangle>(), rectangle =>
+            rectangle.Bounds.WidthMillimeters == cableLayout.WidthMillimeters &&
+            rectangle.Bounds.HeightMillimeters == cableLayout.HeightMillimeters);
     }
 
     [Fact]

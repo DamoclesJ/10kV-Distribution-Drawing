@@ -8,6 +8,7 @@ public sealed record DrawingMetrics(
     SwitchDrawingMetrics Switch,
     PTDrawingMetrics PT,
     PoleDrawingMetrics Pole,
+    PoleAttachmentDrawingMetrics PoleAttachment,
     CableTerminationDrawingMetrics CableTermination,
     LineDrawingMetrics Line,
     LineJumpDrawingMetrics LineJump)
@@ -35,10 +36,27 @@ public sealed record DrawingMetrics(
         new PTDrawingMetrics(
             CoilRadius: 7,
             CoilSpacing: 6),
-        new PoleDrawingMetrics(PoleRadius: 7),
+        new PoleDrawingMetrics(
+            PoleRadius: 7,
+            LabelOffset: new DocumentPoint(16, -4)),
+        new PoleAttachmentDrawingMetrics(
+            SymbolWidth: 18,
+            SymbolHeight: 10,
+            LabelOffset: new DocumentPoint(0, -4),
+            InternalInset: 3,
+            ContactMarkerLength: 4,
+            ContactCrossSize: 3,
+            IsolationBladeStartRatio: 0.28,
+            IsolationContactRatio: 0.72,
+            OpenBladeTopRatio: 0.18,
+            FuseTubeWidth: 2.4,
+            FuseTubeInset: 2,
+            FuseOpenOffset: 4.5,
+            OperationArrowLength: 5),
         new CableTerminationDrawingMetrics(
             TriangleWidth: 10,
-            TriangleHeight: 8),
+            TriangleHeight: 8,
+            LogicalHitPadding: 2),
         new LineDrawingMetrics(
             ConnectionThickness: 0.8,
             CableDashLength: 4,
@@ -72,11 +90,29 @@ public sealed record PTDrawingMetrics(
     double CoilRadius,
     double CoilSpacing);
 
-public sealed record PoleDrawingMetrics(double PoleRadius);
+public sealed record PoleDrawingMetrics(
+    double PoleRadius,
+    DocumentPoint LabelOffset);
+
+public sealed record PoleAttachmentDrawingMetrics(
+    double SymbolWidth,
+    double SymbolHeight,
+    DocumentPoint LabelOffset,
+    double InternalInset,
+    double ContactMarkerLength,
+    double ContactCrossSize,
+    double IsolationBladeStartRatio,
+    double IsolationContactRatio,
+    double OpenBladeTopRatio,
+    double FuseTubeWidth,
+    double FuseTubeInset,
+    double FuseOpenOffset,
+    double OperationArrowLength);
 
 public sealed record CableTerminationDrawingMetrics(
     double TriangleWidth,
-    double TriangleHeight);
+    double TriangleHeight,
+    double LogicalHitPadding);
 
 public sealed record LineDrawingMetrics(
     double ConnectionThickness,

@@ -13,6 +13,8 @@ public sealed class SwitchAttachmentRendererTests
     [Theory]
     [InlineData(SwitchKind.IsolationSwitch)]
     [InlineData(SwitchKind.CircuitBreaker)]
+    [InlineData(SwitchKind.LoadSwitch)]
+    [InlineData(SwitchKind.DropoutFuse)]
     public void RenderPoleSwitchAttachment_ProducesPoleAndSwitchSymbol(SwitchKind switchKind)
     {
         PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
@@ -35,8 +37,10 @@ public sealed class SwitchAttachmentRendererTests
             [new SwitchAttachmentRenderInput(attachment, switchDevice, attachmentLayout)]);
 
         Assert.NotEmpty(elements.OfType<SceneLine>());
-        Assert.Contains(elements.OfType<SceneRectangle>(), rectangle =>
-            rectangle.Bounds.WidthMillimeters == attachmentLayout.WidthMillimeters);
+        Assert.Single(elements.OfType<SceneEllipse>(), ellipse =>
+            ellipse.Bounds.WidthMillimeters == ellipse.Bounds.HeightMillimeters &&
+            ellipse.Bounds.WidthMillimeters == 14);
+        Assert.True(elements.OfType<SceneLine>().Any() || elements.OfType<ScenePolyline>().Any());
     }
 
     [Fact]
@@ -120,8 +124,7 @@ public sealed class SwitchAttachmentRendererTests
 
         Assert.Contains(switchElements.OfType<SceneRectangle>(), rectangle =>
             rectangle.Bounds.WidthMillimeters == 18);
-        Assert.Contains(cableElements.OfType<SceneRectangle>(), rectangle =>
-            rectangle.Bounds.WidthMillimeters == 18);
+        Assert.Contains(cableElements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
         Assert.Equal(SwitchState.Open, switchDevice.SwitchState);
         Assert.Equal(cableTermination.Id, cableAttachment.AttachedDeviceId);
     }

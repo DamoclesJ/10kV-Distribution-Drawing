@@ -57,8 +57,7 @@ public sealed class MixedPoleRenderer
                     $"Switch '{input.SwitchDevice.Id}' is not a pole-installed switch.");
             }
 
-            if (input.SwitchDevice.SwitchKind is not SwitchKind.IsolationSwitch and
-                not SwitchKind.CircuitBreaker)
+            if (!IsSupportedPoleSwitch(input.SwitchDevice.SwitchKind))
             {
                 throw new NotSupportedException(
                     $"Mixed pole rendering does not support '{input.SwitchDevice.SwitchKind}'.");
@@ -117,4 +116,10 @@ public sealed class MixedPoleRenderer
                 $"Attachment '{attachment.AttachmentId}' does not reference device '{attachedDeviceId}'.");
         }
     }
+
+    private static bool IsSupportedPoleSwitch(SwitchKind kind) =>
+        kind is SwitchKind.CircuitBreaker or
+            SwitchKind.LoadSwitch or
+            SwitchKind.IsolationSwitch or
+            SwitchKind.DropoutFuse;
 }

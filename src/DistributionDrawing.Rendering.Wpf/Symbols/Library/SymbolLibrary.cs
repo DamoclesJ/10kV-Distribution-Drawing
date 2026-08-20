@@ -2,6 +2,8 @@ using System.Windows.Media;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library.Definitions;
@@ -11,19 +13,21 @@ namespace DistributionDrawing.Rendering.Wpf.Symbols.Library;
 public sealed class SymbolLibrary
 {
     private readonly Dictionary<SymbolKind, ISymbolDefinition> _definitions = [];
+    private readonly DrawingMetrics _metrics;
 
-    public SymbolLibrary()
+    public SymbolLibrary(DrawingMetrics? metrics = null)
     {
-        Register(new PoleSymbolDefinition());
+        _metrics = metrics ?? DrawingMetrics.Default;
+        Register(new PoleSymbolDefinition(_metrics));
         Register(new LineSymbolDefinition(SymbolKind.OverheadLine));
         Register(new LineSymbolDefinition(SymbolKind.CableLine));
         Register(new LineSymbolDefinition(SymbolKind.GroundingLine));
-        Register(new SwitchSymbolDefinition(SymbolKind.CircuitBreaker));
-        Register(new SwitchSymbolDefinition(SymbolKind.LoadSwitch));
-        Register(new SwitchSymbolDefinition(SymbolKind.IsolationSwitch));
-        Register(new SwitchSymbolDefinition(SymbolKind.GroundSwitch));
-        Register(new SwitchSymbolDefinition(SymbolKind.DropoutFuse));
-        Register(new CableTerminationSymbolDefinition());
+        Register(new SwitchSymbolDefinition(SymbolKind.CircuitBreaker, _metrics));
+        Register(new SwitchSymbolDefinition(SymbolKind.LoadSwitch, _metrics));
+        Register(new SwitchSymbolDefinition(SymbolKind.IsolationSwitch, _metrics));
+        Register(new SwitchSymbolDefinition(SymbolKind.GroundSwitch, _metrics));
+        Register(new SwitchSymbolDefinition(SymbolKind.DropoutFuse, _metrics));
+        Register(new CableTerminationSymbolDefinition(_metrics));
         Register(new JointSymbolDefinition());
         Register(new FrameSymbolDefinition(SymbolKind.RingCabinet));
         Register(new FrameSymbolDefinition(SymbolKind.RingCabinetInterval));
@@ -72,7 +76,7 @@ public sealed class SymbolLibrary
                     layout.Position.XMillimeters + layout.LabelOffset.XMillimeters,
                     layout.Position.YMillimeters + layout.LabelOffset.YMillimeters),
                 label: pole.PoleNumber,
-                thicknessMillimeters: 1,
+                thicknessMillimeters: _metrics.General.StandardStrokeThickness,
                 includeLabel: includeLabel));
     }
 
@@ -98,19 +102,26 @@ public sealed class SymbolLibrary
         DocumentPoint origin = new(
             poleLayout.Position.XMillimeters + layout.Offset.XMillimeters,
             poleLayout.Position.YMillimeters + layout.Offset.YMillimeters);
-        double poleCenterX = poleLayout.Position.XMillimeters + poleLayout.WidthMillimeters / 2;
+        PoleAttachmentGeometry geometry = PoleProfessionalGeometry.GetAttachmentGeometry(
+            poleLayout,
+            layout,
+            kind,
+            _metrics);
+        DocumentPoint attachmentConnector = kind is SymbolKind.CableTermination or SymbolKind.DropoutFuse
+            ? geometry.SecondTerminal
+            : geometry.FirstTerminal;
+        DocumentPoint poleConnector = PoleProfessionalGeometry.GetPoleEdgeTowards(
+            poleLayout,
+            attachmentConnector,
+            _metrics);
 
         var elements = new List<SceneElement>
         {
             new SceneLine(
-                new DocumentPoint(
-                    poleCenterX,
-                    origin.YMillimeters + layout.HeightMillimeters / 2),
-                new DocumentPoint(
-                    origin.XMillimeters,
-                    origin.YMillimeters + layout.HeightMillimeters / 2),
+                poleConnector,
+                attachmentConnector,
                 Colors.Black,
-                0.7)
+                _metrics.General.ThinStrokeThickness)
         };
 
         elements.AddRange(

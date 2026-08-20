@@ -1,4 +1,5 @@
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 
 namespace DistributionDrawing.Rendering.Wpf.Layout;
 
@@ -7,10 +8,13 @@ public sealed record PoleLayout
     public PoleLayout(
         Guid poleId,
         DocumentPoint position,
-        double widthMillimeters = 4,
-        double heightMillimeters = 42,
+        double? widthMillimeters = null,
+        double? heightMillimeters = null,
         DocumentPoint? labelOffset = null)
     {
+        DrawingMetrics metrics = DrawingMetrics.Default;
+        widthMillimeters ??= metrics.Pole.PoleRadius * 2;
+        heightMillimeters ??= metrics.Pole.PoleRadius * 2;
         if (poleId == Guid.Empty)
         {
             throw new ArgumentException("Pole ID cannot be empty.", nameof(poleId));
@@ -25,9 +29,9 @@ public sealed record PoleLayout
 
         PoleId = poleId;
         Position = position;
-        WidthMillimeters = widthMillimeters;
-        HeightMillimeters = heightMillimeters;
-        LabelOffset = labelOffset ?? new DocumentPoint(5, -5);
+        WidthMillimeters = widthMillimeters.Value;
+        HeightMillimeters = heightMillimeters.Value;
+        LabelOffset = labelOffset ?? metrics.Pole.LabelOffset;
     }
 
     public Guid PoleId { get; }

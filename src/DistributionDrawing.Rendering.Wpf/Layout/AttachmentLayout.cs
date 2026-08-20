@@ -1,4 +1,5 @@
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 
 namespace DistributionDrawing.Rendering.Wpf.Layout;
 
@@ -7,10 +8,13 @@ public sealed record AttachmentLayout
     public AttachmentLayout(
         Guid attachmentId,
         DocumentPoint offset,
-        double widthMillimeters = 18,
-        double heightMillimeters = 10,
+        double? widthMillimeters = null,
+        double? heightMillimeters = null,
         DocumentPoint? labelOffset = null)
     {
+        DrawingMetrics metrics = DrawingMetrics.Default;
+        widthMillimeters ??= metrics.PoleAttachment.SymbolWidth;
+        heightMillimeters ??= metrics.PoleAttachment.SymbolHeight;
         if (attachmentId == Guid.Empty)
         {
             throw new ArgumentException(
@@ -18,8 +22,8 @@ public sealed record AttachmentLayout
                 nameof(attachmentId));
         }
 
-        if (!double.IsFinite(widthMillimeters) || widthMillimeters <= 0 ||
-            !double.IsFinite(heightMillimeters) || heightMillimeters <= 0)
+        if (!double.IsFinite(widthMillimeters.Value) || widthMillimeters <= 0 ||
+            !double.IsFinite(heightMillimeters.Value) || heightMillimeters <= 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(heightMillimeters),
@@ -36,9 +40,9 @@ public sealed record AttachmentLayout
 
         AttachmentId = attachmentId;
         Offset = offset;
-        WidthMillimeters = widthMillimeters;
-        HeightMillimeters = heightMillimeters;
-        LabelOffset = labelOffset ?? new DocumentPoint(0, -4);
+        WidthMillimeters = widthMillimeters.Value;
+        HeightMillimeters = heightMillimeters.Value;
+        LabelOffset = labelOffset ?? metrics.PoleAttachment.LabelOffset;
     }
 
     public Guid AttachmentId { get; }

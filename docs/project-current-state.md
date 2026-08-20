@@ -93,6 +93,18 @@ TerminalId、Connection、ElectricalNode 和 Persistence 格式没有变化；Ex
 
 macOS 已完成 solution、Rendering.Wpf、Rendering.Wpf.Tests、Desktop 和 Desktop.Tests 构建；solution 为 0 warning / 0 error。Domain 55/55、Infrastructure 50/50 通过。WPF TestHost 因缺少 `Microsoft.WindowsDesktop.App 10.0.0` 未运行测试断言，Windows 自动测试、截图与交互验收仍待完成。
 
+## 0.6 Phase E-1D — Pole / PoleAttachment / CableTermination Professional Symbols (2026-08-19)
+
+状态：**Implemented / Pending Windows Validation**。
+
+水泥杆已由旧“竖线 + 顶部横线”替换为空心圆；柱上 CircuitBreaker、LoadSwitch、IsolationSwitch 和 DropoutFuse 已按《配电专业附图图元.docx》分别实现独立 Open/Closed 专业几何，不复用 E-1B 环网柜内部 Switch 图元。CableTermination 已由矩形占位符替换为闭合三角形，Pole + CableTermination 形成相互独立身份的“圆圈 + 三角形”组合。
+
+DrawingMetrics 已补充 PoleAttachment 和 CableTermination 所需工程比例，PoleLayout/AttachmentLayout 默认值由 Metrics 派生。TerminalAnchorIndex 继续是唯一锚点索引：Pole overhead 对齐圆心，柱上 Switch 两端分离到线路入口/出口，CableTermination CableSide/OverheadSide 分别对齐三角形外侧和 Pole 侧。Selection/HitTest、Label Runtime、Stable ID、Domain、CommandStack 和 Persistence 格式保持。
+
+本阶段没有修改 Cable/OverheadLine 线型，没有开始 E-1E、Routing、Snap、Alignment、Avoidance、Crossing Detection、Line Jump 或 DTU。Word 中的架空变压器 R45304 等对象仍缺少当前 Domain 模型，不在 E-1D 范围。绝对尺寸仍是项目工程比例基线，不是行业标准。
+
+详细实现和 Windows 验收清单见 `docs/phase-e-1d-pole-and-cable-termination-professional-symbols.md`。
+
 ## 1. Project Identity
 
 本项目是面向 10kV 配电专业场景的 Windows 桌面绘图软件。

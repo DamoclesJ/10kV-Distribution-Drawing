@@ -75,8 +75,15 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
         Assert.Equal(1, labels.Count(text => text.Text == "柱上隔离开关"));
         Assert.Equal(1, labels.Count(text => text.Text == "电缆终端"));
         Assert.Equal(1, labels.Count(text => text.Text == "分"));
+        Assert.Single(scene.Elements.OfType<SceneEllipse>(), ellipse =>
+            ellipse.Bounds.WidthMillimeters == ellipse.Bounds.HeightMillimeters &&
+            ellipse.Bounds.WidthMillimeters == 14);
+        Assert.Single(scene.Elements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
         Assert.Contains(scene.HitTestIndex.Entries, entry =>
             entry.Target.ObjectId == poleId);
+        Assert.Contains(scene.HitTestIndex.Entries, entry =>
+            entry.Target.Kind == DistributionDrawing.Rendering.Wpf.Interaction.SelectionTargetKind.Device &&
+            entry.Target.ObjectId == switchId);
         Assert.Contains(scene.HitTestIndex.Entries, entry =>
             entry.Target.ObjectId == switchAttachment.AttachmentId);
         Assert.Contains(scene.HitTestIndex.Entries, entry =>

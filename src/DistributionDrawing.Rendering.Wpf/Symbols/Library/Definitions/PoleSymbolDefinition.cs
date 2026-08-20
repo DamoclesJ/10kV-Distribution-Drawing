@@ -1,31 +1,38 @@
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Symbols.Library.Definitions;
 
 public sealed class PoleSymbolDefinition : ISymbolDefinition
 {
+    private readonly DrawingMetrics _metrics;
+
+    public PoleSymbolDefinition(DrawingMetrics? metrics = null)
+    {
+        _metrics = metrics ?? DrawingMetrics.Default;
+    }
+
     public SymbolKind Kind => SymbolKind.Pole;
 
     public IReadOnlyList<SceneElement> Create(SymbolRenderContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        double centerX = context.Origin.XMillimeters + context.WidthMillimeters / 2;
-        double topY = context.Origin.YMillimeters;
-        double bottomY = topY + context.HeightMillimeters;
+        double diameter = _metrics.Pole.PoleRadius * 2;
+        DocumentRect bounds = new(
+            context.Origin.XMillimeters,
+            context.Origin.YMillimeters,
+            diameter,
+            diameter);
 
         var elements = new List<SceneElement>
         {
-            new SceneLine(
-                new DocumentPoint(centerX, topY),
-                new DocumentPoint(centerX, bottomY),
+            new SceneLogicalBounds(bounds),
+            new SceneEllipse(
+                bounds,
                 context.Stroke,
-                context.ThicknessMillimeters),
-            new SceneLine(
-                new DocumentPoint(centerX - 7, topY + 5),
-                new DocumentPoint(centerX + 7, topY + 5),
-                context.Stroke,
-                context.ThicknessMillimeters * 0.7)
+                context.ThicknessMillimeters,
+                context.Fill)
         };
 
         if (context.IncludeLabel && context.Label is not null)
@@ -35,7 +42,7 @@ public sealed class PoleSymbolDefinition : ISymbolDefinition
                     context.LabelOrigin,
                     context.Label,
                     context.Stroke,
-                    4));
+                    _metrics.General.StandardFontSize));
         }
 
         return elements;
