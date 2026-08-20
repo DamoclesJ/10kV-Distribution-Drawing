@@ -28,7 +28,7 @@ public sealed record CableLayout
 
         CableSegmentId = cableSegmentId;
         Path = points;
-        LabelPosition = labelPosition ?? Midpoint(points[0], points[^1]);
+        LabelPosition = labelPosition ?? PathMidpoint(points);
     }
 
     public Guid CableSegmentId { get; }
@@ -41,10 +41,35 @@ public sealed record CableLayout
 
     public DocumentPoint LabelPosition { get; }
 
-    private static DocumentPoint Midpoint(DocumentPoint start, DocumentPoint end)
+    private static DocumentPoint PathMidpoint(IReadOnlyList<DocumentPoint> path)
     {
-        return new DocumentPoint(
-            (start.XMillimeters + end.XMillimeters) / 2,
-            (start.YMillimeters + end.YMillimeters) / 2);
+        double totalLength = 0;
+        for (var index = 1; index < path.Count; index++)
+        {
+            totalLength += Distance(path[index - 1], path[index]);
+        }
+
+        double remaining = totalLength / 2;
+        for (var index = 1; index < path.Count; index++)
+        {
+            DocumentPoint start = path[index - 1];
+            DocumentPoint end = path[index];
+            double length = Distance(start, end);
+            if (remaining <= length)
+            {
+                double ratio = length == 0 ? 0 : remaining / length;
+                return new DocumentPoint(
+                    start.XMillimeters + (end.XMillimeters - start.XMillimeters) * ratio,
+                    start.YMillimeters + (end.YMillimeters - start.YMillimeters) * ratio);
+            }
+
+            remaining -= length;
+        }
+
+        return path[^1];
     }
+
+    private static double Distance(DocumentPoint start, DocumentPoint end) =>
+        Math.Abs(end.XMillimeters - start.XMillimeters) +
+        Math.Abs(end.YMillimeters - start.YMillimeters);
 }

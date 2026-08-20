@@ -92,6 +92,24 @@ public sealed class CableRendererTests
     }
 
     [Fact]
+    public void DefaultLabelAnchorUsesAccumulatedPathLengthMidpoint()
+    {
+        CableSegment cable = CreateCable();
+        CableLayout layout = new(
+            cable.Id,
+            [
+                new DocumentPoint(0, 0),
+                new DocumentPoint(100, 0),
+                new DocumentPoint(100, 20)
+            ]);
+
+        SceneText label = Assert.Single(new CableRenderer().Render(cable, layout).OfType<SceneText>());
+
+        Assert.Equal(new DocumentPoint(60, 0), layout.LabelPosition);
+        Assert.Equal(layout.LabelPosition, label.Origin);
+    }
+
+    [Fact]
     public void RenderBatchUsesLabelEngineToAvoidInitialCableLabelCollision()
     {
         CableSegment firstCable = CreateCable();

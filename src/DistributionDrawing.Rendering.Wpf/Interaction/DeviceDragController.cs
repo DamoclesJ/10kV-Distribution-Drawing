@@ -9,7 +9,13 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction;
 /// </summary>
 public sealed class DeviceDragController
 {
+    private readonly LayoutSnapService _snapService;
     private DragState? _drag;
+
+    public DeviceDragController(LayoutSnapService? snapService = null)
+    {
+        _snapService = snapService ?? new LayoutSnapService();
+    }
 
     public bool IsActive => _drag is not null;
 
@@ -63,6 +69,7 @@ public sealed class DeviceDragController
                 pointer.XMillimeters - drag.StartPointer.XMillimeters,
             drag.StartPosition.YMillimeters +
                 pointer.YMillimeters - drag.StartPointer.YMillimeters);
+        position = _snapService.Snap(drag.Target, position, drag.Layout);
         if (position == drag.CurrentPosition)
         {
             return false;

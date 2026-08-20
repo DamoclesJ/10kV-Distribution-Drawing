@@ -66,6 +66,23 @@ public sealed class TopologySceneIntegrationTests
         Assert.Equal(fixture.Joint.Id, fixture.Document.FindIntermediateTerminal(fixture.Joint.Id)?.Id);
     }
 
+    [Fact]
+    public void RingCabinetMove_ReroutesCableAndRestoringLayoutRestoresRoute()
+    {
+        TopologyFixture fixture = CreateFixture();
+        RingCabinet cabinet = Assert.Single(fixture.Document.Devices.OfType<RingCabinet>());
+        RingCabinetLayout before = fixture.Layout.RingCabinetLayouts[cabinet.Id];
+        string initial = CableGeometryKey(fixture.Builder.Build(fixture.Document, fixture.Layout));
+
+        fixture.Layout.ReplaceRingCabinet(before.MoveTo(new DocumentPoint(70, 90)));
+        string moved = CableGeometryKey(fixture.Builder.Build(fixture.Document, fixture.Layout));
+        fixture.Layout.ReplaceRingCabinet(before);
+        string restored = CableGeometryKey(fixture.Builder.Build(fixture.Document, fixture.Layout));
+
+        Assert.NotEqual(initial, moved);
+        Assert.Equal(initial, restored);
+    }
+
     private static TopologyFixture CreateFixture()
     {
         var document = new DrawingDocument(Guid.NewGuid(), "Topology scene integration test");
@@ -188,6 +205,16 @@ public sealed class TopologySceneIntegrationTests
         {
             document.AddPoleAttachment(attachment);
         }
+    }
+
+    private static string CableGeometryKey(DrawingScene scene)
+    {
+        return string.Join(';', scene.Elements.OfType<SceneLine>()
+            .Where(line => line.TargetKind ==
+                DistributionDrawing.Application.Interaction.SelectionTargetKind.CableSegment)
+            .Select(line =>
+                $"{line.TargetId}:{line.Start.XMillimeters:R},{line.Start.YMillimeters:R}-" +
+                $"{line.End.XMillimeters:R},{line.End.YMillimeters:R}"));
     }
 
     private sealed record TopologyFixture(

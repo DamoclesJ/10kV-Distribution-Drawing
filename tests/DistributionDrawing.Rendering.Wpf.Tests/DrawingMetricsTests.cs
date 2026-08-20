@@ -34,7 +34,11 @@ public sealed class DrawingMetricsTests
         Assert.Equal(10, metrics.CableTermination.TriangleWidth);
         Assert.Equal(8, metrics.CableTermination.TriangleHeight);
         Assert.Equal(0.8, metrics.Line.ConnectionThickness);
+        Assert.Equal(8, metrics.Routing.PortStubLength);
+        Assert.Equal(4, metrics.Routing.ObstacleClearance);
+        Assert.Equal(4, metrics.Alignment.SnapTolerance);
         Assert.Equal(4, metrics.LineJump.Radius);
+        Assert.Equal(2, metrics.LineJump.EndpointClearance);
     }
 
     [Fact]

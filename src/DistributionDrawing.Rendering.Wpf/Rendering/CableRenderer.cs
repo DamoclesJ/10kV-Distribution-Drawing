@@ -5,6 +5,8 @@ using DistributionDrawing.Rendering.Wpf.Labels;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
+using DistributionDrawing.Rendering.Wpf.Routing;
+using System.Windows.Media;
 
 namespace DistributionDrawing.Rendering.Wpf.Rendering;
 
@@ -16,6 +18,7 @@ public sealed class CableRenderer
     private readonly CableSymbol _cableSymbol;
     private readonly CableLabel _cableLabel;
     private readonly LabelLayoutEngine _labelLayoutEngine;
+    private readonly LineJumpDecorator _lineJumpDecorator;
 
     public CableRenderer(
         SymbolLibrary? symbolLibrary = null,
@@ -25,6 +28,7 @@ public sealed class CableRenderer
         _cableSymbol = new CableSymbol(library);
         _cableLabel = new CableLabel();
         _labelLayoutEngine = labelLayoutEngine ?? new LabelLayoutEngine();
+        _lineJumpDecorator = new LineJumpDecorator();
     }
 
     public IReadOnlyList<SceneElement> Render(
@@ -35,7 +39,8 @@ public sealed class CableRenderer
     }
 
     public IReadOnlyList<SceneElement> Render(
-        IEnumerable<(CableSegment CableSegment, CableLayout Layout)> cables)
+        IEnumerable<(CableSegment CableSegment, CableLayout Layout)> cables,
+        IReadOnlyList<RouteIntersection>? intersections = null)
     {
         ArgumentNullException.ThrowIfNull(cables);
 
@@ -46,37 +51,61 @@ public sealed class CableRenderer
             ArgumentNullException.ThrowIfNull(layout);
         }
 
-        LabelLayoutResult[] labelResults = _labelLayoutEngine
-            .Layout(inputs.Select(input => _cableLabel.CreateRequest(input.CableSegment, input.Layout)))
-            .ToArray();
-        Dictionary<Guid, LabelLayoutResult> labelsByCableId = labelResults
-            .ToDictionary(result => result.TargetId);
+        Dictionary<Guid, SceneText> labelsByCableId = RenderLabels(inputs)
+            .ToDictionary(label => label.TargetId!.Value);
 
         var elements = new List<SceneElement>();
         foreach ((CableSegment cableSegment, CableLayout layout) in inputs)
         {
-            DocumentRect hitTestBounds = CreateBounds(layout.Start, layout.End, 2);
-            elements.AddRange(_cableSymbol.CreateElements(layout).Select(element => element with
+            DocumentRect hitTestBounds = CreateBounds(layout.Path, 2);
+            IReadOnlyList<SceneElement> routeElements = intersections is null
+                ? _cableSymbol.CreateElements(layout)
+                : _lineJumpDecorator.Project(
+                    new OrthogonalRoute(
+                        cableSegment.ConnectionId,
+                        ConnectionType.Cable,
+                        cableSegment.StartTerminalId,
+                        cableSegment.EndTerminalId,
+                        layout.Path),
+                    intersections,
+                    Colors.Black,
+                    SceneStrokeStyle.Dashed);
+            elements.AddRange(routeElements.Select(element => element with
             {
                 TargetKind = SelectionTargetKind.CableSegment,
                 TargetId = cableSegment.Id,
                 HitTestBounds = hitTestBounds
             }));
-            elements.Add(_cableLabel.CreateElement(labelsByCableId[cableSegment.Id]));
+            elements.Add(labelsByCableId[cableSegment.Id]);
         }
 
         return elements;
     }
 
+    public IReadOnlyList<SceneText> RenderLabels(
+        IEnumerable<(CableSegment CableSegment, CableLayout Layout)> cables)
+    {
+        ArgumentNullException.ThrowIfNull(cables);
+        (CableSegment CableSegment, CableLayout Layout)[] inputs = cables.ToArray();
+        return _labelLayoutEngine
+            .Layout(inputs.Select(input =>
+                _cableLabel.CreateRequest(input.CableSegment, input.Layout)))
+            .Select(result => _cableLabel.CreateElement(result) with
+            {
+                TargetKind = SelectionTargetKind.CableSegment,
+                TargetId = result.TargetId
+            })
+            .ToArray();
+    }
+
     private static DocumentRect CreateBounds(
-        DocumentPoint first,
-        DocumentPoint second,
+        IReadOnlyList<DocumentPoint> path,
         double paddingMillimeters)
     {
-        double minX = Math.Min(first.XMillimeters, second.XMillimeters) - paddingMillimeters;
-        double minY = Math.Min(first.YMillimeters, second.YMillimeters) - paddingMillimeters;
-        double maxX = Math.Max(first.XMillimeters, second.XMillimeters) + paddingMillimeters;
-        double maxY = Math.Max(first.YMillimeters, second.YMillimeters) + paddingMillimeters;
+        double minX = path.Min(point => point.XMillimeters) - paddingMillimeters;
+        double minY = path.Min(point => point.YMillimeters) - paddingMillimeters;
+        double maxX = path.Max(point => point.XMillimeters) + paddingMillimeters;
+        double maxY = path.Max(point => point.YMillimeters) + paddingMillimeters;
         return new DocumentRect(minX, minY, maxX - minX, maxY - minY);
     }
 }

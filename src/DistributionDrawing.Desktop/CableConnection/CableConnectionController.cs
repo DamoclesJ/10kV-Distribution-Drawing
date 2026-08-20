@@ -6,6 +6,7 @@ using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
+using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Desktop.CableConnection;
@@ -14,6 +15,7 @@ public sealed class CableConnectionController
 {
     private readonly Func<ProjectRuntimeSession?> _getSession;
     private readonly CableSegmentCreationFactory _creationFactory = new();
+    private readonly OrthogonalRouter _previewRouter = new();
     private Guid? _startTerminalId;
     private Guid? _endTerminalId;
     private DocumentPoint? _previewEnd;
@@ -222,14 +224,19 @@ public sealed class CableConnectionController
         }
 
         TerminalAnchorIndex anchors = BuildAnchors(session);
-        return anchors.TryGet(startTerminalId, out TerminalAnchor startAnchor)
-            ? [new SceneLine(
-                startAnchor.Position,
-                previewEnd,
+        if (!anchors.TryGet(startTerminalId, out TerminalAnchor startAnchor))
+        {
+            return [];
+        }
+
+        IReadOnlyList<DocumentPoint> path = _previewRouter.CreatePreview(startAnchor, previewEnd);
+        return path.Zip(path.Skip(1), (start, end) => (SceneElement)new SceneLine(
+                start,
+                end,
                 Colors.DarkOrange,
                 DrawingMetrics.Default.Line.ConnectionThickness,
-                SceneStrokeStyle.Dashed)]
-            : [];
+                SceneStrokeStyle.Dashed))
+            .ToArray();
     }
 
     private static TerminalAnchorIndex BuildAnchors(ProjectRuntimeSession session)

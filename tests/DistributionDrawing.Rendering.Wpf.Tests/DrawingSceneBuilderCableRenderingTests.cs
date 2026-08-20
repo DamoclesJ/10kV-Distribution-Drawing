@@ -19,10 +19,21 @@ public sealed class DrawingSceneBuilderCableRenderingTests
         CableSceneFixture fixture = CreateFixture();
         DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
-        SceneLine cableLine = Assert.Single(
-            scene.Elements.OfType<SceneLine>(),
-            line => line.TargetKind == SelectionTargetKind.CableSegment);
-        Assert.Equal(SceneStrokeStyle.Dashed, cableLine.StrokeStyle);
+        SceneLine[] cableLines = scene.Elements.OfType<SceneLine>()
+            .Where(line => line.TargetKind == SelectionTargetKind.CableSegment)
+            .ToArray();
+        Assert.True(cableLines.Length >= 2);
+        Assert.All(cableLines, line =>
+        {
+            Assert.Equal(SceneStrokeStyle.Dashed, line.StrokeStyle);
+            Assert.True(
+                line.Start.XMillimeters == line.End.XMillimeters ||
+                line.Start.YMillimeters == line.End.YMillimeters);
+            Assert.Equal(fixture.Cable.Id, line.TargetId);
+        });
+        Assert.True(scene.HitTestIndex.FindAll(new(
+            DistributionDrawing.Rendering.Wpf.Interaction.SelectionTargetKind.CableSegment,
+            fixture.Cable.Id)).Count >= 2);
         Assert.Single(
             scene.Elements.OfType<SceneText>(),
             text => text.Text == "YJV22-8.7/15kV 120m");
@@ -58,6 +69,31 @@ public sealed class DrawingSceneBuilderCableRenderingTests
         DrawingScene second = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
         Assert.Equal(first.Elements, second.Elements);
+    }
+
+    [Fact]
+    public void PoleMove_ReroutesCableAndUndoRedoRestoreDeterministicRoute()
+    {
+        CableSceneFixture fixture = CreateFixture();
+        PoleLayout before = fixture.Layout.DrawingLayout.Poles.Values.Single(
+            pole => pole.Position == new DocumentPoint(100, 70));
+        PoleLayout after = before.MoveTo(new DocumentPoint(130, 95));
+        string initial = CableGeometryKey(fixture.Builder.Build(fixture.Document, fixture.Layout));
+        var command = new DistributionDrawing.Rendering.Wpf.Interaction.MoveCommand(
+            fixture.Layout.DrawingLayout,
+            before,
+            after);
+
+        command.Execute();
+        string moved = CableGeometryKey(fixture.Builder.Build(fixture.Document, fixture.Layout));
+        command.Undo();
+        string undone = CableGeometryKey(fixture.Builder.Build(fixture.Document, fixture.Layout));
+        command.Redo();
+        string redone = CableGeometryKey(fixture.Builder.Build(fixture.Document, fixture.Layout));
+
+        Assert.NotEqual(initial, moved);
+        Assert.Equal(initial, undone);
+        Assert.Equal(moved, redone);
     }
 
     private static CableSceneFixture CreateFixture()
@@ -105,7 +141,7 @@ public sealed class DrawingSceneBuilderCableRenderingTests
 
         var drawingLayout = new DrawingLayout();
         drawingLayout.Add(new PoleLayout(firstPole.Pole.Id, new DocumentPoint(10, 20)));
-        drawingLayout.Add(new PoleLayout(secondPole.Pole.Id, new DocumentPoint(100, 20)));
+        drawingLayout.Add(new PoleLayout(secondPole.Pole.Id, new DocumentPoint(100, 70)));
         foreach (PoleAttachment attachment in firstPole.Attachments.Concat(secondPole.Attachments))
         {
             drawingLayout.Add(new AttachmentLayout(
@@ -146,6 +182,15 @@ public sealed class DrawingSceneBuilderCableRenderingTests
         {
             document.AddPoleAttachment(attachment);
         }
+    }
+
+    private static string CableGeometryKey(DrawingScene scene)
+    {
+        return string.Join(';', scene.Elements.OfType<SceneLine>()
+            .Where(line => line.TargetKind == SelectionTargetKind.CableSegment)
+            .Select(line =>
+                $"{line.Start.XMillimeters:R},{line.Start.YMillimeters:R}-" +
+                $"{line.End.XMillimeters:R},{line.End.YMillimeters:R}"));
     }
 
     private sealed record CableSceneFixture(

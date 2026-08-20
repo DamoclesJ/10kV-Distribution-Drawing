@@ -310,6 +310,7 @@ public sealed class RingCabinetProfessionalSymbolTests
                 layout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters +
                 intervalLayout.HeightMillimeters,
                 anchor.Position.YMillimeters);
+            Assert.Equal(TerminalAnchorDirection.Down, anchor.Direction);
         }
 
         Assert.Equal(stableIds, cabinet.Intervals.Select(interval => interval.ExternalTerminalId));

@@ -169,12 +169,17 @@ public sealed class PoleProfessionalSymbolTests
             new Dictionary<Guid, RingCabinetLayout>());
         Assert.True(first.TryGet(poleTerminal.Id, out TerminalAnchor poleAnchor));
         Assert.Equal(new DocumentPoint(27, 37), poleAnchor.Position);
+        Assert.Equal(TerminalAnchorDirection.Auto, poleAnchor.Direction);
         Assert.True(first.TryGet(switchDevice.TerminalIds[0], out TerminalAnchor firstSwitch));
         Assert.True(first.TryGet(switchDevice.TerminalIds[1], out TerminalAnchor secondSwitch));
         Assert.NotEqual(firstSwitch.Position, secondSwitch.Position);
+        Assert.Equal(TerminalAnchorDirection.Left, firstSwitch.Direction);
+        Assert.Equal(TerminalAnchorDirection.Right, secondSwitch.Direction);
         Assert.True(first.TryGet(termination.CableSideTerminalId, out TerminalAnchor cableSide));
         Assert.True(first.TryGet(termination.OverheadSideTerminalId, out TerminalAnchor overheadSide));
         Assert.NotEqual(cableSide.Position, overheadSide.Position);
+        Assert.Equal(TerminalAnchorDirection.Up, cableSide.Direction);
+        Assert.Equal(TerminalAnchorDirection.Down, overheadSide.Direction);
 
         var movedLayout = new DrawingLayout();
         movedLayout.Add(new PoleLayout(result.Pole.Id, new DocumentPoint(60, 70)));
@@ -218,11 +223,15 @@ public sealed class PoleProfessionalSymbolTests
         Assert.NotEqual(first.Position, second.Position);
         if (kind == SwitchKind.DropoutFuse)
         {
+            Assert.Equal(TerminalAnchorDirection.Up, first.Direction);
+            Assert.Equal(TerminalAnchorDirection.Down, second.Direction);
             Assert.Equal(first.Position.XMillimeters, second.Position.XMillimeters);
             Assert.NotEqual(first.Position.YMillimeters, second.Position.YMillimeters);
         }
         else
         {
+            Assert.Equal(TerminalAnchorDirection.Left, first.Direction);
+            Assert.Equal(TerminalAnchorDirection.Right, second.Direction);
             Assert.NotEqual(first.Position.XMillimeters, second.Position.XMillimeters);
             Assert.Equal(first.Position.YMillimeters, second.Position.YMillimeters);
         }

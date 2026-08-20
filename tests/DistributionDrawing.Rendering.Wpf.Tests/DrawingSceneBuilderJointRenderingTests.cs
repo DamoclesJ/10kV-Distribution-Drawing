@@ -20,8 +20,13 @@ public sealed class DrawingSceneBuilderJointRenderingTests
 
         DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
-        Assert.Equal(2, scene.Elements.OfType<SceneLine>().Count(line =>
-            line.TargetKind == SelectionTargetKind.CableSegment));
+        SceneLine[] cableLines = scene.Elements.OfType<SceneLine>()
+            .Where(line => line.TargetKind == SelectionTargetKind.CableSegment)
+            .ToArray();
+        Assert.Equal(2, cableLines.Select(line => line.TargetId).Distinct().Count());
+        Assert.All(cableLines, line => Assert.True(
+            line.Start.XMillimeters == line.End.XMillimeters ||
+            line.Start.YMillimeters == line.End.YMillimeters));
         Assert.Single(
             scene.Elements.OfType<SceneRectangle>(),
             rectangle => rectangle.TargetKind == SelectionTargetKind.IntermediateTerminal);

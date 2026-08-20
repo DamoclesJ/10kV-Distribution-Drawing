@@ -115,6 +115,16 @@ DrawingMetrics 已补充 PoleAttachment 和 CableTermination 所需工程比例�
 
 详细范围和 Windows 验收清单见 `docs/phase-e-1e-line-visual-semantics.md`。
 
+## 0.8 Phase E-2 — Orthogonal Routing & Diagram Layout (2026-08-20)
+
+状态：**Implemented / Pending Windows Validation**。
+
+Cable 与 OverheadLine 已进入同一个确定性 `OrthogonalRoutePlanner`，正式线路与 transient Preview 均只生成水平／垂直 segment。Directional TerminalAnchor、专业 logical obstacle、固定候选评分、parallel overlap penalty、逐 segment HitTest 和 Cable arc-length midpoint label 已接入 DrawingSceneBuilder 主链路。
+
+独立线路交叉由 rendering-only `RouteCrossingDetector + LineJumpDecorator + SceneArc` 表达；较大 ConnectionId 负责 jump，共享 Terminal 不画 jump，视觉交叉不创建或修改任何 topology。Pole／RingCabinet drag 已接入 document-mm center alignment snap，提交的 snapped position 继续由现有 Move Command 支持 Undo/Redo，移动后 Route 自动重建。
+
+Route 是 transient derived state，不进入 Domain、RuntimeLayout、CommandStack 或 Persistence。CurrentVersion 保持 V6，没有 Route／Waypoint／Bend／Jump DTO；`SupportPoleIds` 未被解释为 waypoint。详细实现和 Windows 验收清单见 `docs/phase-e-2-orthogonal-routing-and-diagram-layout.md`。
+
 ## 1. Project Identity
 
 本项目是面向 10kV 配电专业场景的 Windows 桌面绘图软件。

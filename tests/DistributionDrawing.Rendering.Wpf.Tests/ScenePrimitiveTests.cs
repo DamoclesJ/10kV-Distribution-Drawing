@@ -124,6 +124,34 @@ public sealed class ScenePrimitiveTests
     }
 
     [Fact]
+    public void Arc_PreservesStyleMetadataAndParticipatesInSceneBounds()
+    {
+        Guid targetId = Guid.NewGuid();
+        var arc = new SceneArc(
+            new DocumentPoint(20, 30),
+            4,
+            180,
+            180,
+            Colors.Black,
+            2,
+            SceneStrokeStyle.Dashed)
+        {
+            TargetKind = ApplicationSelectionTargetKind.CableSegment,
+            TargetId = targetId
+        };
+
+        bool calculated = DrawingSceneBoundsCalculator.TryCalculate(
+            new DrawingScene([arc]),
+            out DocumentRect bounds);
+
+        Assert.True(calculated);
+        Assert.Equal(new DocumentRect(16, 26, 8, 8), arc.Bounds);
+        Assert.Equal(new DocumentRect(15, 25, 10, 10), bounds);
+        Assert.Equal(SceneStrokeStyle.Dashed, arc.StrokeStyle);
+        Assert.Equal(targetId, arc.TargetId);
+    }
+
+    [Fact]
     public void ExistingLineAndOverheadLineRemainSolidByDefault()
     {
         var line = new SceneLine(

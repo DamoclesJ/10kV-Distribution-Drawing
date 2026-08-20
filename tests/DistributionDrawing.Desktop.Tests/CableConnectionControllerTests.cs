@@ -2,6 +2,7 @@ using System.IO;
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.CableConnection;
+using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
@@ -19,6 +20,53 @@ namespace DistributionDrawing.Desktop.Tests;
 
 public sealed class CableConnectionControllerTests
 {
+    [Fact]
+    public void CablePreview_UsesOnlyOrthogonalDashedSegments()
+    {
+        using TestProject project = CreateProject();
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        Guid startTerminalId = project.Cabinet.Intervals[0].ExternalTerminalId;
+        var controller = new CableConnectionController(() => project.Session);
+        controller.Begin();
+        controller.Pick(anchors.PositionOf(startTerminalId), 8);
+        controller.UpdatePointer(new DocumentPoint(180, 115));
+
+        SceneLine[] preview = controller.CreatePreviewElements().OfType<SceneLine>().ToArray();
+
+        Assert.True(preview.Length >= 2);
+        Assert.All(preview, line =>
+        {
+            Assert.Equal(SceneStrokeStyle.Dashed, line.StrokeStyle);
+            Assert.True(
+                line.Start.XMillimeters == line.End.XMillimeters ||
+                line.Start.YMillimeters == line.End.YMillimeters);
+        });
+    }
+
+    [Fact]
+    public void OverheadPreview_UsesOnlyOrthogonalSolidSegments()
+    {
+        using TestProject project = CreateProject();
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        Pole pole = Assert.Single(project.Document.Devices.OfType<Pole>());
+        Guid startTerminalId = Assert.Single(pole.OverheadAnchorTerminalIds);
+        var controller = new OverheadLineConnectionController(() => project.Session);
+        controller.Begin();
+        controller.Pick(anchors.PositionOf(startTerminalId), 8);
+        controller.UpdatePointer(new DocumentPoint(170, 105));
+
+        SceneLine[] preview = controller.CreatePreviewElements().OfType<SceneLine>().ToArray();
+
+        Assert.True(preview.Length >= 2);
+        Assert.All(preview, line =>
+        {
+            Assert.Equal(SceneStrokeStyle.Solid, line.StrokeStyle);
+            Assert.True(
+                line.Start.XMillimeters == line.End.XMillimeters ||
+                line.Start.YMillimeters == line.End.YMillimeters);
+        });
+    }
+
     [Fact]
     public void PickAndComplete_CreatesCableConnectionAndSelectsCable()
     {
@@ -245,6 +293,7 @@ public sealed class CableConnectionControllerTests
             8);
         controller.Complete("YJV22", 65);
         CableSegment cable = Assert.Single(project.Document.CableSegments);
+        string routeBeforeSave = CableGeometryKey(project.Session.Scene, cable.Id);
 
         Assert.True(project.Workspace.SaveProject());
         var dialogs = new TestDialogs { OpenPath = project.FilePath };
@@ -264,6 +313,7 @@ public sealed class CableConnectionControllerTests
         Assert.Equal(cable.Length, restored.Length);
         Assert.Equal(cable.StartTerminalId, restoredConnection.StartTerminalId);
         Assert.Equal(cable.EndTerminalId, restoredConnection.EndTerminalId);
+        Assert.Equal(routeBeforeSave, CableGeometryKey(reopened.Scene, restored.Id));
     }
 
     private static TestProject CreateProject()
@@ -336,6 +386,15 @@ public sealed class CableConnectionControllerTests
             8);
         controller.Complete("YJV22", 80);
         return controller;
+    }
+
+    private static string CableGeometryKey(DrawingScene scene, Guid cableId)
+    {
+        return string.Join(';', scene.Elements.OfType<SceneLine>()
+            .Where(line => line.TargetId == cableId)
+            .Select(line =>
+                $"{line.Start.XMillimeters:R},{line.Start.YMillimeters:R}-" +
+                $"{line.End.XMillimeters:R},{line.End.YMillimeters:R}"));
     }
 
     private sealed class TestProject : IDisposable

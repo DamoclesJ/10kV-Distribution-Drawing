@@ -8,6 +8,10 @@ using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
+using DistributionDrawing.Rendering.Wpf.Routing;
+using DistributionDrawing.Rendering.Wpf.Metrics;
+using System.Windows.Media;
+using SceneSelectionTargetKind = DistributionDrawing.Application.Interaction.SelectionTargetKind;
 
 namespace DistributionDrawing.Rendering.Wpf.Rendering;
 
@@ -19,6 +23,11 @@ public sealed class DrawingSceneBuilder
     private readonly CableRenderer _cableRenderer;
     private readonly JointRenderer _jointRenderer;
     private readonly ProfessionalSceneBuilder _professionalSceneBuilder;
+    private readonly OrthogonalRoutePlanner _routePlanner;
+    private readonly RoutingObstacleBuilder _obstacleBuilder;
+    private readonly RouteCrossingDetector _crossingDetector;
+    private readonly LineJumpDecorator _lineJumpDecorator;
+    private readonly DrawingMetrics _metrics;
 
     public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
     {
@@ -28,6 +37,11 @@ public sealed class DrawingSceneBuilder
         _cableRenderer = new CableRenderer(_symbolLibrary);
         _jointRenderer = new JointRenderer(_symbolLibrary);
         _professionalSceneBuilder = new ProfessionalSceneBuilder(_symbolLibrary);
+        _metrics = DrawingMetrics.Default;
+        _routePlanner = new OrthogonalRoutePlanner(new OrthogonalRouter(_metrics));
+        _obstacleBuilder = new RoutingObstacleBuilder();
+        _crossingDetector = new RouteCrossingDetector(_metrics);
+        _lineJumpDecorator = new LineJumpDecorator(_metrics);
     }
 
     public DrawingScene Build(
@@ -119,7 +133,8 @@ public sealed class DrawingSceneBuilder
             document.IntermediateTerminals,
             document.Connections,
             document.OverheadLines,
-            terminalAnchors);
+            terminalAnchors,
+            layout.RingCabinetLayouts);
 
         var elements = baseScene.Elements.ToList();
         var hitTestEntries = baseScene.HitTestIndex.Entries.ToList();
@@ -162,7 +177,8 @@ public sealed class DrawingSceneBuilder
             intermediateTerminals: null,
             connections: null,
             overheadLines: overheadLines,
-            terminalAnchors: null);
+            terminalAnchors: null,
+            ringCabinetLayouts: null);
     }
 
     public DrawingScene Build(
@@ -184,7 +200,8 @@ public sealed class DrawingSceneBuilder
             intermediateTerminals: null,
             connections,
             overheadLines,
-            terminalAnchors: null);
+            terminalAnchors: null,
+            ringCabinetLayouts: null);
     }
 
     private DrawingScene BuildCore(
@@ -196,7 +213,8 @@ public sealed class DrawingSceneBuilder
         IEnumerable<IntermediateTerminal>? intermediateTerminals,
         IEnumerable<Connection>? connections,
         IEnumerable<OverheadLine> overheadLines,
-        TerminalAnchorIndex? terminalAnchors)
+        TerminalAnchorIndex? terminalAnchors,
+        IReadOnlyDictionary<Guid, RingCabinetLayout>? ringCabinetLayouts)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(poles);
@@ -209,6 +227,7 @@ public sealed class DrawingSceneBuilder
         var poleById = poles.ToDictionary(pole => pole.Id);
         PoleAttachment[] poleAttachments = attachments.ToArray();
         var deviceById = devices.ToDictionary(device => device.Id);
+        OverheadLine[] overheadLinesArray = overheadLines.ToArray();
         CableSegment[] cableSegmentsArray = cableSegments?.ToArray() ?? [];
         IntermediateTerminal[] intermediateTerminalsArray =
             intermediateTerminals?.ToArray() ?? [];
@@ -216,8 +235,10 @@ public sealed class DrawingSceneBuilder
             .Select(cableSegment => cableSegment.ConnectionId)
             .ToHashSet();
         var connectionById = connections?.ToDictionary(connection => connection.Id);
-        Dictionary<Guid, DocumentPoint> terminalPositions = terminalAnchors?.Anchors
-            .ToDictionary(anchor => anchor.TerminalId, anchor => anchor.Position) ?? [];
+        Dictionary<Guid, TerminalAnchor> terminalAnchorById = terminalAnchors?.Anchors
+            .ToDictionary(anchor => anchor.TerminalId) ?? [];
+        Dictionary<Guid, DocumentPoint> terminalPositions = terminalAnchorById
+            .ToDictionary(pair => pair.Key, pair => pair.Value.Position);
         var jointInputs = new List<(IntermediateTerminal IntermediateTerminal, JointLayout Layout)>();
 
         foreach (IntermediateTerminal intermediateTerminal in intermediateTerminalsArray)
@@ -263,12 +284,18 @@ public sealed class DrawingSceneBuilder
                 .ToArray();
             DocumentPoint jointPosition = Midpoint(outerPositions[0], outerPositions[1]);
             terminalPositions[intermediateTerminal.TerminalId] = jointPosition;
+            terminalAnchorById[intermediateTerminal.TerminalId] = new TerminalAnchor(
+                intermediateTerminal.TerminalId,
+                jointPosition,
+                TerminalAnchorDirection.Auto);
             jointInputs.Add(
                 (intermediateTerminal,
                     new JointLayout(intermediateTerminal.Id, jointPosition)));
         }
 
-        if (cableSegmentsArray.Length > 0)
+        var cableByConnectionId = new Dictionary<Guid, CableSegment>();
+        var routeRequests = new List<ConnectionRouteRequest>();
+        foreach (CableSegment cableSegment in cableSegmentsArray)
         {
             if (connectionById is null || terminalAnchors is null)
             {
@@ -276,54 +303,166 @@ public sealed class DrawingSceneBuilder
                     "Cable rendering requires Connections and terminal anchors.");
             }
 
-            var cableInputs = new List<(CableSegment CableSegment, CableLayout Layout)>();
-            foreach (CableSegment cableSegment in cableSegmentsArray)
+            if (!connectionById.TryGetValue(
+                    cableSegment.ConnectionId,
+                    out Connection? connection))
+            {
+                throw new InvalidOperationException(
+                    $"No connection exists for cable segment '{cableSegment.Id}'.");
+            }
+
+            if (connection.StartTerminalId != cableSegment.StartTerminalId ||
+                connection.EndTerminalId != cableSegment.EndTerminalId)
+            {
+                throw new InvalidOperationException(
+                    $"Cable segment '{cableSegment.Id}' does not match its connection endpoints.");
+            }
+
+            routeRequests.Add(CreateRouteRequest(connection, terminalAnchorById));
+            cableByConnectionId.Add(cableSegment.ConnectionId, cableSegment);
+        }
+
+        var overheadByConnectionId = new Dictionary<Guid, (OverheadLine Line, OverheadLineLayout Layout)>();
+        foreach (OverheadLine overheadLine in overheadLinesArray)
+        {
+            if (!layout.OverheadLines.TryGetValue(
+                    overheadLine.ConnectionId,
+                    out OverheadLineLayout lineLayout))
+            {
+                throw new InvalidOperationException(
+                    $"No layout exists for overhead line '{overheadLine.ConnectionId}'.");
+            }
+
+            if (connectionById is not null)
             {
                 if (!connectionById.TryGetValue(
-                        cableSegment.ConnectionId,
+                        overheadLine.ConnectionId,
                         out Connection? connection))
                 {
                     throw new InvalidOperationException(
-                        $"No connection exists for cable segment '{cableSegment.Id}'.");
+                        $"No connection exists for overhead line '{overheadLine.ConnectionId}'.");
                 }
 
-                if (connection.StartTerminalId != cableSegment.StartTerminalId ||
-                    connection.EndTerminalId != cableSegment.EndTerminalId)
+                overheadLine.ValidateAgainst(connection);
+                if (terminalAnchors is not null)
                 {
-                    throw new InvalidOperationException(
-                        $"Cable segment '{cableSegment.Id}' does not match its connection endpoints.");
+                    routeRequests.Add(CreateRouteRequest(connection, terminalAnchorById));
                 }
-
-                if (!terminalPositions.TryGetValue(
-                        connection.StartTerminalId,
-                        out DocumentPoint startPosition) ||
-                    !terminalPositions.TryGetValue(
-                        connection.EndTerminalId,
-                        out DocumentPoint endPosition))
-                {
-                    throw new InvalidOperationException(
-                        $"No terminal anchors exist for cable segment '{cableSegment.Id}'.");
-                }
-
-                cableInputs.Add(
-                    (cableSegment,
-                        new CableLayout(
-                            cableSegment.Id,
-                            [startPosition, endPosition])));
             }
 
-            elements.AddRange(_cableRenderer.Render(cableInputs));
-            foreach ((CableSegment cableSegment, CableLayout cableLayout) in cableInputs)
+            overheadByConnectionId.Add(overheadLine.ConnectionId, (overheadLine, lineLayout));
+        }
+
+        IReadOnlyList<RoutingObstacle> obstacles = _obstacleBuilder.Build(
+            deviceById.Values,
+            poleAttachments,
+            layout,
+            ringCabinetLayouts,
+            jointInputs.Select(input => input.Layout));
+        IReadOnlyList<OrthogonalRoute> routes = _routePlanner.Plan(routeRequests, obstacles);
+        IReadOnlyList<RouteIntersection> intersections = _crossingDetector.Detect(routes);
+        var cableInputs = new List<(CableSegment CableSegment, CableLayout Layout)>();
+        foreach (OrthogonalRoute route in routes)
+        {
+            bool isCable = cableByConnectionId.TryGetValue(route.ConnectionId, out CableSegment? cable);
+            SceneStrokeStyle strokeStyle = isCable
+                ? SceneStrokeStyle.Dashed
+                : SceneStrokeStyle.Solid;
+            IReadOnlyList<SceneElement> routeElements = _lineJumpDecorator.Project(
+                route,
+                intersections,
+                Colors.Black,
+                strokeStyle,
+                _metrics.Line.ConnectionThickness);
+            SelectionTargetKind targetKind = isCable
+                ? SelectionTargetKind.CableSegment
+                : SelectionTargetKind.Connection;
+            SceneSelectionTargetKind? sceneTargetKind = isCable
+                ? SceneSelectionTargetKind.CableSegment
+                : null;
+            Guid targetId = isCable ? cable!.Id : route.ConnectionId;
+            DocumentRect routeBounds = ExpandBounds(route.Bounds, isCable ? 2 : 3);
+            elements.AddRange(routeElements.Select(element => element with
             {
-                hitTestEntries.Add(
-                    new SelectionHitTestEntry(
-                        new SelectionReference(
-                            SelectionTargetKind.CableSegment,
-                            cableSegment.Id),
-                        CreateBounds(cableLayout.Start, cableLayout.End, 2),
-                        30,
-                        cableLayout.Start,
-                        cableLayout.End));
+                TargetKind = sceneTargetKind,
+                TargetId = targetId,
+                HitTestBounds = routeBounds
+            }));
+            foreach (OrthogonalRouteSegment segment in route.Segments)
+            {
+                hitTestEntries.Add(new SelectionHitTestEntry(
+                    new SelectionReference(targetKind, targetId),
+                    ExpandBounds(CreateBounds(segment.Start, segment.End, 0), isCable ? 2 : 3),
+                    isCable ? 30 : 10,
+                    segment.Start,
+                    segment.End));
+            }
+
+            if (isCable)
+            {
+                cableInputs.Add((cable!, new CableLayout(cable!.Id, route.Points)));
+            }
+            else if (overheadByConnectionId.TryGetValue(
+                         route.ConnectionId,
+                         out (OverheadLine Line, OverheadLineLayout Layout) overhead) &&
+                     overhead.Layout.IsContinued)
+            {
+                DocumentPoint end = route.Points[^1];
+                DocumentPoint continuationEnd = new(
+                    end.XMillimeters + overhead.Layout.ContinuationOffset.XMillimeters,
+                    end.YMillimeters + overhead.Layout.ContinuationOffset.YMillimeters);
+                foreach ((DocumentPoint start, DocumentPoint finish) in
+                         CreateOrthogonalSegments(end, continuationEnd))
+                {
+                    elements.Add(new SceneLine(
+                        start,
+                        finish,
+                        Colors.Black,
+                        _metrics.Line.ConnectionThickness)
+                    {
+                        TargetId = route.ConnectionId,
+                        HitTestBounds = ExpandBounds(CreateBounds(start, finish, 0), 3)
+                    });
+                }
+            }
+        }
+
+        elements.AddRange(_cableRenderer.RenderLabels(cableInputs));
+
+        // Compatibility overloads without Connection/Terminal data retain their
+        // layout-defined endpoints, while the document scene always uses routes.
+        foreach ((OverheadLine overheadLine, OverheadLineLayout lineLayout) in
+                 overheadByConnectionId.Values.Where(value =>
+                     routes.All(route => route.ConnectionId != value.Line.ConnectionId)))
+        {
+            var legacySegments = CreateOrthogonalSegments(lineLayout.Start, lineLayout.End).ToList();
+            if (lineLayout.IsContinued)
+            {
+                DocumentPoint continuationEnd = new(
+                    lineLayout.End.XMillimeters + lineLayout.ContinuationOffset.XMillimeters,
+                    lineLayout.End.YMillimeters + lineLayout.ContinuationOffset.YMillimeters);
+                legacySegments.AddRange(CreateOrthogonalSegments(lineLayout.End, continuationEnd));
+            }
+
+            foreach ((DocumentPoint start, DocumentPoint end) in legacySegments)
+            {
+                elements.Add(new SceneLine(
+                    start,
+                    end,
+                    Colors.Black,
+                    _metrics.Line.ConnectionThickness)
+                {
+                    TargetId = overheadLine.ConnectionId,
+                    HitTestBounds = ExpandBounds(CreateBounds(start, end, 0), 3)
+                });
+                hitTestEntries.Add(new SelectionHitTestEntry(
+                    new SelectionReference(
+                        SelectionTargetKind.Connection,
+                        overheadLine.ConnectionId),
+                    ExpandBounds(CreateBounds(start, end, 0), 3),
+                    10,
+                    start,
+                    end));
             }
         }
 
@@ -344,64 +483,6 @@ public sealed class DrawingSceneBuilder
                             jointLayout.SizeMillimeters),
                         50));
             }
-        }
-
-        foreach (OverheadLine overheadLine in overheadLines)
-        {
-            if (!layout.OverheadLines.TryGetValue(
-                    overheadLine.ConnectionId,
-                    out OverheadLineLayout lineLayout))
-            {
-                throw new InvalidOperationException(
-                    $"No layout exists for overhead line '{overheadLine.ConnectionId}'.");
-            }
-
-            OverheadLineLayout effectiveLayout = lineLayout;
-            if (connectionById is not null)
-            {
-                if (!connectionById.TryGetValue(
-                        overheadLine.ConnectionId,
-                        out Connection connection))
-                {
-                    throw new InvalidOperationException(
-                        $"No connection exists for overhead line '{overheadLine.ConnectionId}'.");
-                }
-
-                overheadLine.ValidateAgainst(connection);
-                if (terminalAnchors is not null)
-                {
-                    if (!terminalAnchors.TryGet(
-                            connection.StartTerminalId,
-                            out TerminalAnchor startAnchor) ||
-                        !terminalAnchors.TryGet(
-                            connection.EndTerminalId,
-                            out TerminalAnchor endAnchor))
-                    {
-                        throw new InvalidOperationException(
-                            $"No terminal anchor exists for overhead line '{overheadLine.ConnectionId}'.");
-                    }
-
-                    effectiveLayout = new OverheadLineLayout(
-                        lineLayout.ConnectionId,
-                        startAnchor.Position,
-                        endAnchor.Position,
-                        lineLayout.IsContinued,
-                        lineLayout.ContinuationOffset);
-                }
-            }
-
-            elements.AddRange(
-                _symbolLibrary.CreateOverheadLineSegment(
-                    OverheadLineSegment.From(overheadLine, effectiveLayout)));
-            hitTestEntries.Add(
-                new SelectionHitTestEntry(
-                    new SelectionReference(
-                        SelectionTargetKind.Connection,
-                        overheadLine.ConnectionId),
-                    CreateBounds(effectiveLayout.Start, effectiveLayout.End, 3),
-                    10,
-                    effectiveLayout.Start,
-                    effectiveLayout.End));
         }
 
         foreach (Pole pole in poleById.Values)
@@ -531,6 +612,49 @@ public sealed class DrawingSceneBuilder
         double maxX = Math.Max(first.XMillimeters, second.XMillimeters) + paddingMillimeters;
         double maxY = Math.Max(first.YMillimeters, second.YMillimeters) + paddingMillimeters;
         return new DocumentRect(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    private static ConnectionRouteRequest CreateRouteRequest(
+        Connection connection,
+        IReadOnlyDictionary<Guid, TerminalAnchor> anchors)
+    {
+        if (!anchors.TryGetValue(connection.StartTerminalId, out TerminalAnchor start) ||
+            !anchors.TryGetValue(connection.EndTerminalId, out TerminalAnchor end))
+        {
+            throw new InvalidOperationException(
+                $"No terminal anchors exist for connection '{connection.Id}'.");
+        }
+
+        return new ConnectionRouteRequest(
+            connection.Id,
+            connection.Type,
+            connection.StartTerminalId,
+            connection.EndTerminalId,
+            start,
+            end);
+    }
+
+    private static DocumentRect ExpandBounds(DocumentRect bounds, double paddingMillimeters)
+    {
+        return new DocumentRect(
+            bounds.XMillimeters - paddingMillimeters,
+            bounds.YMillimeters - paddingMillimeters,
+            Math.Max(bounds.WidthMillimeters + paddingMillimeters * 2, paddingMillimeters * 2),
+            Math.Max(bounds.HeightMillimeters + paddingMillimeters * 2, paddingMillimeters * 2));
+    }
+
+    private static IReadOnlyList<(DocumentPoint Start, DocumentPoint End)> CreateOrthogonalSegments(
+        DocumentPoint start,
+        DocumentPoint end)
+    {
+        if (start.XMillimeters == end.XMillimeters ||
+            start.YMillimeters == end.YMillimeters)
+        {
+            return [(start, end)];
+        }
+
+        DocumentPoint corner = new(end.XMillimeters, start.YMillimeters);
+        return [(start, corner), (corner, end)];
     }
 
     private static DocumentPoint Midpoint(DocumentPoint first, DocumentPoint second)

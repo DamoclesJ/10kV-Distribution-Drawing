@@ -11,6 +11,8 @@ public sealed record DrawingMetrics(
     PoleAttachmentDrawingMetrics PoleAttachment,
     CableTerminationDrawingMetrics CableTermination,
     LineDrawingMetrics Line,
+    RoutingDrawingMetrics Routing,
+    AlignmentDrawingMetrics Alignment,
     LineJumpDrawingMetrics LineJump)
 {
     public static DrawingMetrics Default { get; } = new(
@@ -61,7 +63,16 @@ public sealed record DrawingMetrics(
             ConnectionThickness: 0.8,
             CableDashLength: 4,
             CableDashGap: 3),
-        new LineJumpDrawingMetrics(Radius: 4));
+        new RoutingDrawingMetrics(
+            PortStubLength: 8,
+            ObstacleClearance: 4,
+            ParallelSpacing: 6,
+            MinimumDoglegLength: 10,
+            CrossingTolerance: 0.001),
+        new AlignmentDrawingMetrics(SnapTolerance: 4),
+        new LineJumpDrawingMetrics(
+            Radius: 4,
+            EndpointClearance: 2));
 }
 
 public sealed record GeneralDrawingMetrics(
@@ -119,4 +130,15 @@ public sealed record LineDrawingMetrics(
     double CableDashLength,
     double CableDashGap);
 
-public sealed record LineJumpDrawingMetrics(double Radius);
+public sealed record RoutingDrawingMetrics(
+    double PortStubLength,
+    double ObstacleClearance,
+    double ParallelSpacing,
+    double MinimumDoglegLength,
+    double CrossingTolerance);
+
+public sealed record AlignmentDrawingMetrics(double SnapTolerance);
+
+public sealed record LineJumpDrawingMetrics(
+    double Radius,
+    double EndpointClearance);

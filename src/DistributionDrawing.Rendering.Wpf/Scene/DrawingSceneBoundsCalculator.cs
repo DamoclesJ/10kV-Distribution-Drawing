@@ -27,6 +27,10 @@ public static class DrawingSceneBoundsCalculator
                     double polylinePadding = Math.Max(0, polyline.ThicknessMillimeters) / 2;
                     accumulator.Include(polyline.Bounds, polylinePadding);
                     break;
+                case SceneArc arc:
+                    double arcPadding = Math.Max(0, arc.ThicknessMillimeters) / 2;
+                    accumulator.Include(arc.Bounds, arcPadding);
+                    break;
                 case SceneRectangle rectangle:
                     double rectanglePadding = Math.Max(0, rectangle.ThicknessMillimeters) / 2;
                     accumulator.Include(rectangle.Bounds, rectanglePadding);

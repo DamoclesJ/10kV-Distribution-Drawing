@@ -38,6 +38,9 @@ public sealed class DrawingSceneRenderer
                 case ScenePolyline polyline:
                     DrawPolyline(context, polyline);
                     break;
+                case SceneArc arc:
+                    DrawArc(context, arc);
+                    break;
                 case SceneRectangle rectangle:
                     DrawRectangle(context, rectangle);
                     break;
@@ -98,6 +101,42 @@ public sealed class DrawingSceneRenderer
         context.DrawGeometry(
             CreateOptionalBrush(polyline.Fill),
             CreatePen(polyline.Stroke, polyline.ThicknessMillimeters, polyline.StrokeStyle),
+            geometry);
+    }
+
+    private void DrawArc(DrawingContext context, SceneArc arc)
+    {
+        double startRadians = arc.StartAngleDegrees * Math.PI / 180;
+        double endRadians =
+            (arc.StartAngleDegrees + arc.SweepAngleDegrees) * Math.PI / 180;
+        DocumentPoint start = new(
+            arc.Center.XMillimeters + Math.Cos(startRadians) * arc.RadiusMillimeters,
+            arc.Center.YMillimeters + Math.Sin(startRadians) * arc.RadiusMillimeters);
+        DocumentPoint end = new(
+            arc.Center.XMillimeters + Math.Cos(endRadians) * arc.RadiusMillimeters,
+            arc.Center.YMillimeters + Math.Sin(endRadians) * arc.RadiusMillimeters);
+        var figure = new PathFigure
+        {
+            StartPoint = _coordinates.ToPoint(start),
+            IsClosed = false,
+            IsFilled = false
+        };
+        figure.Segments.Add(new ArcSegment(
+            _coordinates.ToPoint(end),
+            new Size(
+                _coordinates.MillimetersToDip(arc.RadiusMillimeters),
+                _coordinates.MillimetersToDip(arc.RadiusMillimeters)),
+            0,
+            Math.Abs(arc.SweepAngleDegrees) > 180,
+            arc.SweepAngleDegrees > 0
+                ? SweepDirection.Clockwise
+                : SweepDirection.Counterclockwise,
+            true));
+        Geometry geometry = new PathGeometry([figure]);
+        geometry.Freeze();
+        context.DrawGeometry(
+            null,
+            CreatePen(arc.Stroke, arc.ThicknessMillimeters, arc.StrokeStyle),
             geometry);
     }
 

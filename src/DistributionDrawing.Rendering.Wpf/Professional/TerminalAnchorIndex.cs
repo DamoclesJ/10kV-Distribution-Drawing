@@ -52,7 +52,7 @@ public sealed class TerminalAnchorIndex
             DocumentPoint poleAnchor = PoleProfessionalGeometry.GetPoleCenter(poleLayout);
             foreach (Guid terminalId in pole.OverheadAnchorTerminalIds)
             {
-                Set(anchors, terminalId, poleAnchor);
+                Set(anchors, terminalId, poleAnchor, TerminalAnchorDirection.Auto);
             }
         }
 
@@ -81,13 +81,30 @@ public sealed class TerminalAnchorIndex
 
             if (attachedDevice is CableTermination cableTermination)
             {
-                Set(anchors, cableTermination.CableSideTerminalId, geometry.FirstTerminal);
-                Set(anchors, cableTermination.OverheadSideTerminalId, geometry.SecondTerminal);
+                Set(
+                    anchors,
+                    cableTermination.CableSideTerminalId,
+                    geometry.FirstTerminal,
+                    TerminalAnchorDirection.Up);
+                Set(
+                    anchors,
+                    cableTermination.OverheadSideTerminalId,
+                    geometry.SecondTerminal,
+                    TerminalAnchorDirection.Down);
             }
             else if (attachedDevice is SwitchDevice switchDevice)
             {
-                Set(anchors, switchDevice.TerminalIds[0], geometry.FirstTerminal);
-                Set(anchors, switchDevice.TerminalIds[1], geometry.SecondTerminal);
+                bool vertical = symbolKind == SymbolKind.DropoutFuse;
+                Set(
+                    anchors,
+                    switchDevice.TerminalIds[0],
+                    geometry.FirstTerminal,
+                    vertical ? TerminalAnchorDirection.Up : TerminalAnchorDirection.Left);
+                Set(
+                    anchors,
+                    switchDevice.TerminalIds[1],
+                    geometry.SecondTerminal,
+                    vertical ? TerminalAnchorDirection.Down : TerminalAnchorDirection.Right);
             }
         }
 
@@ -118,7 +135,11 @@ public sealed class TerminalAnchorIndex
                 DocumentPoint terminalPosition = new(
                     terminalX,
                     origin.YMillimeters + intervalLayout.HeightMillimeters);
-                Set(anchors, interval.ExternalTerminalId, terminalPosition);
+                Set(
+                    anchors,
+                    interval.ExternalTerminalId,
+                    terminalPosition,
+                    TerminalAnchorDirection.Down);
             }
         }
 
@@ -153,7 +174,8 @@ public sealed class TerminalAnchorIndex
                         intermediateTerminal.TerminalId,
                         new DocumentPoint(
                             (first.Position.XMillimeters + second.Position.XMillimeters) / 2,
-                            (first.Position.YMillimeters + second.Position.YMillimeters) / 2));
+                            (first.Position.YMillimeters + second.Position.YMillimeters) / 2),
+                        TerminalAnchorDirection.Auto);
                 }
             }
         }
@@ -165,11 +187,12 @@ public sealed class TerminalAnchorIndex
     private static void Set(
         IDictionary<Guid, TerminalAnchor> anchors,
         Guid terminalId,
-        DocumentPoint position)
+        DocumentPoint position,
+        TerminalAnchorDirection direction)
     {
         if (terminalId != Guid.Empty)
         {
-            anchors[terminalId] = new TerminalAnchor(terminalId, position);
+            anchors[terminalId] = new TerminalAnchor(terminalId, position, direction);
         }
     }
 }

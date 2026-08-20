@@ -104,6 +104,30 @@ public sealed class DrawingSceneRendererPrimitiveTests
         });
     }
 
+    [Fact]
+    public void Renderer_CreatesArcGeometryWithRequestedStrokeStyle()
+    {
+        RunOnSta(() =>
+        {
+            var arc = new SceneArc(
+                new DocumentPoint(10, 10),
+                4,
+                180,
+                180,
+                Colors.Black,
+                0.8,
+                SceneStrokeStyle.Dashed);
+
+            DrawingGroup drawing = new DrawingSceneRenderer()
+                .Render(new DrawingScene([arc]), 1)
+                .Drawing;
+            GeometryDrawing geometry = Assert.IsType<GeometryDrawing>(Assert.Single(drawing.Children));
+
+            Assert.IsType<PathGeometry>(geometry.Geometry);
+            Assert.NotEmpty(geometry.Pen!.DashStyle.Dashes);
+        });
+    }
+
     private static void RunOnSta(Action action)
     {
         Exception? exception = null;
