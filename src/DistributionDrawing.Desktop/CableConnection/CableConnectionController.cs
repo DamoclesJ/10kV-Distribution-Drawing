@@ -4,6 +4,7 @@ using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -222,7 +223,12 @@ public sealed class CableConnectionController
 
         TerminalAnchorIndex anchors = BuildAnchors(session);
         return anchors.TryGet(startTerminalId, out TerminalAnchor startAnchor)
-            ? [new SceneLine(startAnchor.Position, previewEnd, Colors.DarkOrange, 0.8)]
+            ? [new SceneLine(
+                startAnchor.Position,
+                previewEnd,
+                Colors.DarkOrange,
+                DrawingMetrics.Default.Line.ConnectionThickness,
+                SceneStrokeStyle.Dashed)]
             : [];
     }
 

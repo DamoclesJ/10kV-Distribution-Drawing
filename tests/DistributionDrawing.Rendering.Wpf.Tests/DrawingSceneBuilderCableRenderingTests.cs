@@ -19,9 +19,10 @@ public sealed class DrawingSceneBuilderCableRenderingTests
         CableSceneFixture fixture = CreateFixture();
         DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
-        Assert.Single(
+        SceneLine cableLine = Assert.Single(
             scene.Elements.OfType<SceneLine>(),
             line => line.TargetKind == SelectionTargetKind.CableSegment);
+        Assert.Equal(SceneStrokeStyle.Dashed, cableLine.StrokeStyle);
         Assert.Single(
             scene.Elements.OfType<SceneText>(),
             text => text.Text == "YJV22-8.7/15kV 120m");

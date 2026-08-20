@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
@@ -17,7 +18,8 @@ public sealed record OverheadLineSegment(
 {
     public static OverheadLineSegment From(
         OverheadLine overheadLine,
-        OverheadLineLayout layout)
+        OverheadLineLayout layout,
+        DrawingMetrics? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(overheadLine);
         ArgumentNullException.ThrowIfNull(layout);
@@ -33,7 +35,7 @@ public sealed record OverheadLineSegment(
             layout.Start,
             layout.End,
             Colors.Black,
-            0.8,
+            (metrics ?? DrawingMetrics.Default).Line.ConnectionThickness,
             layout.IsContinued,
             layout.ContinuationOffset);
     }

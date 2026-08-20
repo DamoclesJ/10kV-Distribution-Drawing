@@ -2,6 +2,7 @@ using System.Windows.Media;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -163,7 +164,12 @@ public sealed class OverheadLineConnectionController
 
         TerminalAnchorIndex anchors = BuildAnchors(session);
         return anchors.TryGet(startTerminalId, out TerminalAnchor startAnchor)
-            ? [new SceneLine(startAnchor.Position, previewEnd, Colors.DodgerBlue, 0.6)]
+            ? [new SceneLine(
+                startAnchor.Position,
+                previewEnd,
+                Colors.DodgerBlue,
+                DrawingMetrics.Default.Line.ConnectionThickness,
+                SceneStrokeStyle.Solid)]
             : [];
     }
 

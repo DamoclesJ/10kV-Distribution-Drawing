@@ -105,6 +105,16 @@ DrawingMetrics 已补充 PoleAttachment 和 CableTermination 所需工程比例�
 
 详细实现和 Windows 验收清单见 `docs/phase-e-1d-pole-and-cable-termination-professional-symbols.md`。
 
+## 0.7 Phase E-1E — OverheadLine / Cable Line Visual Semantics (2026-08-20)
+
+状态：**Implemented / Pending Windows Validation**。
+
+线路视觉语义已完成最小切片：OverheadLine 使用 `SceneStrokeStyle.Solid`，Cable 使用 `SceneStrokeStyle.Dashed`。两者继续使用相同的 `DrawingMetrics.Line.ConnectionThickness`；Cable DashLength/Gap 由 `DrawingSceneRenderer` 从 Line Metrics 映射到 WPF Pen。正式 Scene 与 Desktop Preview 均遵循同一语义。
+
+本阶段没有修改 TerminalAnchorIndex、Domain topology、Connection、TerminalId、CableSegment/OverheadLine Stable ID、CableType、Length、Persistence、CommandStack 或现有编辑流程。Cable 和 OverheadLine 仍是直线 Start → End；Orthogonal Routing、Snap、Alignment、Avoidance、Crossing Detection、Line Jump 和 Path Editing 尚未开始。
+
+详细范围和 Windows 验收清单见 `docs/phase-e-1e-line-visual-semantics.md`。
+
 ## 1. Project Identity
 
 本项目是面向 10kV 配电专业场景的 Windows 桌面绘图软件。

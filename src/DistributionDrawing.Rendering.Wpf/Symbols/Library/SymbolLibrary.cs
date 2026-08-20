@@ -157,7 +157,8 @@ public sealed class SymbolLibrary
                 1,
                 1,
                 end: layout.End,
-                label: overheadLine.LineModel));
+                label: overheadLine.LineModel,
+                thicknessMillimeters: _metrics.Line.ConnectionThickness));
     }
 
     public IReadOnlyList<SceneElement> CreateCableLine(
@@ -172,7 +173,8 @@ public sealed class SymbolLibrary
                 1,
                 1,
                 end: end,
-                label: label));
+                label: label,
+                thicknessMillimeters: _metrics.Line.ConnectionThickness));
     }
 
     public IReadOnlyList<SceneElement> CreateJoint(

@@ -21,7 +21,7 @@ public sealed class CableRendererTests
         Assert.Single(elements.OfType<SceneLine>());
         Assert.All(
             elements.OfType<SceneLine>(),
-            line => Assert.Equal(SceneStrokeStyle.Solid, line.StrokeStyle));
+            line => Assert.Equal(SceneStrokeStyle.Dashed, line.StrokeStyle));
         Assert.Contains(elements.OfType<SceneText>(), text =>
             text.Text.Contains(cable.CableType, StringComparison.Ordinal) &&
             text.Text.Contains("120", StringComparison.Ordinal));

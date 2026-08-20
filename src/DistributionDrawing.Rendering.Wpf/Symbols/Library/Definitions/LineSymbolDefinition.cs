@@ -35,7 +35,10 @@ public sealed class LineSymbolDefinition : ISymbolDefinition
                 context.Origin,
                 end,
                 context.Stroke,
-                context.ThicknessMillimeters)
+                context.ThicknessMillimeters,
+                Kind == SymbolKind.CableLine
+                    ? SceneStrokeStyle.Dashed
+                    : SceneStrokeStyle.Solid)
         };
 
         if (context.Label is not null)
