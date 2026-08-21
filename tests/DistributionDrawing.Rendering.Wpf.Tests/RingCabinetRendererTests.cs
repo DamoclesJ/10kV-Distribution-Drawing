@@ -29,9 +29,22 @@ public sealed class RingCabinetRendererTests
             layout);
 
         Assert.Empty(elements.OfType<SceneRectangle>());
-        Assert.Equal(12, elements.OfType<SceneEllipse>().Count());
+        foreach (RingCabinetInterval interval in cabinet.Intervals)
+        {
+            SwitchDevice loadSwitch = interval.SwitchDevices.Single(device =>
+                device.SwitchKind == SwitchKind.LoadSwitch);
+            Assert.Equal(
+                2,
+                CountEllipsesInSwitchBounds(elements, layout, interval, loadSwitch));
+
+            SwitchDevice groundSwitch = interval.SwitchDevices.Single(device =>
+                device.SwitchKind == SwitchKind.GroundSwitch);
+            Assert.True(HasSwitchGeometry(elements, layout, interval, groundSwitch));
+        }
+
         Assert.Equal(3, elements.OfType<ScenePolyline>().Count(polyline => polyline.IsClosed));
-        Assert.Equal(6, elements.OfType<SceneText>().Count(text =>
+        Assert.Equal(cabinet.Intervals.Sum(interval => interval.SwitchDevices.Count),
+            elements.OfType<SceneText>().Count(text =>
             text.Text is "合" or "分"));
     }
 
@@ -54,9 +67,71 @@ public sealed class RingCabinetRendererTests
             layout);
 
         Assert.Empty(elements.OfType<SceneRectangle>());
-        Assert.Equal(24, elements.OfType<SceneEllipse>().Count());
+        foreach (RingCabinetInterval interval in cabinet.Intervals)
+        {
+            foreach (SwitchDevice switchDevice in interval.SwitchDevices)
+            {
+                Assert.True(HasSwitchGeometry(elements, layout, interval, switchDevice));
+            }
+        }
+
         Assert.Equal(6, elements.OfType<ScenePolyline>().Count(polyline => polyline.IsClosed));
+        Assert.Equal(cabinet.Intervals.Sum(interval => interval.SwitchDevices.Count),
+            elements.OfType<SceneText>().Count(text =>
+                text.Text is "合" or "分"));
     }
+
+    private static int CountEllipsesInSwitchBounds(
+        IReadOnlyList<SceneElement> elements,
+        RingCabinetLayout cabinetLayout,
+        RingCabinetInterval interval,
+        SwitchDevice switchDevice)
+    {
+        DocumentRect bounds = GetSwitchBounds(cabinetLayout, interval, switchDevice);
+        return elements.OfType<SceneEllipse>().Count(ellipse =>
+            Contains(bounds, new DocumentPoint(
+                ellipse.Bounds.XMillimeters + ellipse.Bounds.WidthMillimeters / 2,
+                ellipse.Bounds.YMillimeters + ellipse.Bounds.HeightMillimeters / 2)));
+    }
+
+    private static bool HasSwitchGeometry(
+        IReadOnlyList<SceneElement> elements,
+        RingCabinetLayout cabinetLayout,
+        RingCabinetInterval interval,
+        SwitchDevice switchDevice)
+    {
+        DocumentRect bounds = GetSwitchBounds(cabinetLayout, interval, switchDevice);
+        return elements.OfType<SceneLine>().Any(line =>
+            Contains(bounds, Midpoint(line.Start, line.End)));
+    }
+
+    private static DocumentRect GetSwitchBounds(
+        RingCabinetLayout cabinetLayout,
+        RingCabinetInterval interval,
+        SwitchDevice switchDevice)
+    {
+        RingCabinetIntervalLayout intervalLayout = cabinetLayout.IntervalLayouts[interval.IntervalId];
+        RingCabinetSwitchLayout switchLayout = intervalLayout.SwitchLayouts[switchDevice.Id];
+        DocumentPoint origin = new(
+            cabinetLayout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters,
+            cabinetLayout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters);
+        return new DocumentRect(
+            origin.XMillimeters + switchLayout.RelativePosition.XMillimeters,
+            origin.YMillimeters + switchLayout.RelativePosition.YMillimeters,
+            switchLayout.WidthMillimeters,
+            switchLayout.HeightMillimeters);
+    }
+
+    private static DocumentPoint Midpoint(DocumentPoint first, DocumentPoint second) =>
+        new(
+            (first.XMillimeters + second.XMillimeters) / 2,
+            (first.YMillimeters + second.YMillimeters) / 2);
+
+    private static bool Contains(DocumentRect bounds, DocumentPoint point) =>
+        point.XMillimeters >= bounds.XMillimeters &&
+        point.XMillimeters <= bounds.XMillimeters + bounds.WidthMillimeters &&
+        point.YMillimeters >= bounds.YMillimeters &&
+        point.YMillimeters <= bounds.YMillimeters + bounds.HeightMillimeters;
 
     [Fact]
     public void Render_ReflectsSwitchStateChanges()
