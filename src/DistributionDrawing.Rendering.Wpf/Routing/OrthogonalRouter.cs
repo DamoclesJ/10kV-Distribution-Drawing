@@ -55,6 +55,8 @@ public sealed class OrthogonalRouter
                 endStub,
                 request.End.Position,
                 priority))
+            .Where(candidate => request.Start.Direction == TerminalAnchorDirection.Auto ||
+                StartsInDirection(candidate.Route, startDirection))
             .GroupBy(candidate => string.Join(
                 ";",
                 candidate.Route.Points.Select(point =>
@@ -87,6 +89,25 @@ public sealed class OrthogonalRouter
             .ThenBy(candidate => candidate.Key, StringComparer.Ordinal)
             .Select(candidate => candidate.Route)
             .First();
+    }
+
+    private static bool StartsInDirection(
+        OrthogonalRoute route,
+        TerminalAnchorDirection direction)
+    {
+        OrthogonalRouteSegment first = route.Segments[0];
+        return direction switch
+        {
+            TerminalAnchorDirection.Left => first.IsHorizontal &&
+                first.End.XMillimeters < first.Start.XMillimeters,
+            TerminalAnchorDirection.Right => first.IsHorizontal &&
+                first.End.XMillimeters > first.Start.XMillimeters,
+            TerminalAnchorDirection.Up => first.IsVertical &&
+                first.End.YMillimeters < first.Start.YMillimeters,
+            TerminalAnchorDirection.Down => first.IsVertical &&
+                first.End.YMillimeters > first.Start.YMillimeters,
+            _ => true
+        };
     }
 
     public IReadOnlyList<DocumentPoint> CreatePreview(

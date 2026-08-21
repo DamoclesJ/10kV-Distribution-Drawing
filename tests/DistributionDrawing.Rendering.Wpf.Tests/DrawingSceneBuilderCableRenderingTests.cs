@@ -68,7 +68,7 @@ public sealed class DrawingSceneBuilderCableRenderingTests
         DrawingScene first = fixture.Builder.Build(fixture.Document, fixture.Layout);
         DrawingScene second = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
-        Assert.Equal(first.Elements, second.Elements);
+        SceneElementAssertions.Equal(first.Elements, second.Elements);
     }
 
     [Fact]

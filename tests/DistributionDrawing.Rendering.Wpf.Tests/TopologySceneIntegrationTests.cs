@@ -60,7 +60,7 @@ public sealed class TopologySceneIntegrationTests
         DrawingScene first = fixture.Builder.Build(fixture.Document, fixture.Layout);
         DrawingScene second = fixture.Builder.Build(fixture.Document, fixture.Layout);
 
-        Assert.Equal(first.Elements, second.Elements);
+        SceneElementAssertions.Equal(first.Elements, second.Elements);
         Assert.Equal(connectionIds, fixture.Document.Connections.Select(connection => connection.Id));
         Assert.Equal(terminalIds, fixture.Document.Terminals.Select(terminal => terminal.Id));
         Assert.Equal(fixture.Joint.Id, fixture.Document.FindIntermediateTerminal(fixture.Joint.Id)?.Id);

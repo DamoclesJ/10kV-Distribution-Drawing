@@ -264,13 +264,13 @@ public sealed class CableConnectionController
 
         var terminals = session.PersistenceSession.Domain.Terminals.ToDictionary(item => item.Id);
         var candidates = anchors.Anchors
-            .Where(anchor => terminals.TryGetValue(anchor.TerminalId, out Terminal? terminal) &&
-                IsAvailable(session, terminal))
+            .Where(anchor => terminals.ContainsKey(anchor.TerminalId))
             .Select(anchor => (Anchor: anchor, Distance: Distance(anchor.Position, pointer)))
             .Where(candidate => candidate.Distance <= toleranceMillimeters)
             .OrderBy(candidate => candidate.Distance)
             .ToArray();
-        if (candidates.Length == 0)
+        if (candidates.Length == 0 ||
+            !IsAvailable(session, terminals[candidates[0].Anchor.TerminalId]))
         {
             throw new InvalidOperationException("点击位置没有可连接电缆的端子。");
         }

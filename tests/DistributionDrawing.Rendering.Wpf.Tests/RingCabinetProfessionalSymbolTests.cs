@@ -365,7 +365,7 @@ public sealed class RingCabinetProfessionalSymbolTests
         string name = "Load switch cabinet") =>
         CreateCabinet(
             name,
-            Enumerable.Range(1, intervalCount)
+            Enumerable.Range(1, Math.Max(intervalCount, 3))
                 .Select(index => RingCabinetIntervalDefinition.CreateLoadSwitch(
                     index,
                     SwitchState.Open,
@@ -377,7 +377,7 @@ public sealed class RingCabinetProfessionalSymbolTests
         GroundingStructureKind structure) =>
         CreateCabinet(
             "Integrated cabinet",
-            Enumerable.Range(1, intervalCount)
+            Enumerable.Range(1, Math.Max(intervalCount, 4))
                 .Select(index => RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                     index,
                     structure,

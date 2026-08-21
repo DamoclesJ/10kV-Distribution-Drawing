@@ -141,13 +141,13 @@ public sealed class CableReconnectController
         var terminals = document.Terminals.ToDictionary(terminal => terminal.Id);
         var candidates = anchors.Anchors
             .Where(anchor => anchor.TerminalId != otherTerminalId)
-            .Where(anchor => terminals.TryGetValue(anchor.TerminalId, out Terminal? terminal) &&
-                IsAvailable(document, terminal, cable.ConnectionId))
+            .Where(anchor => terminals.ContainsKey(anchor.TerminalId))
             .Select(anchor => (Anchor: anchor, Distance: Distance(anchor.Position, pointer)))
             .Where(candidate => candidate.Distance <= toleranceMillimeters)
             .OrderBy(candidate => candidate.Distance)
             .ToArray();
-        if (candidates.Length == 0)
+        if (candidates.Length == 0 ||
+            !IsAvailable(document, terminals[candidates[0].Anchor.TerminalId], cable.ConnectionId))
         {
             throw new InvalidOperationException("点击位置没有可连接电缆的端子。");
         }
