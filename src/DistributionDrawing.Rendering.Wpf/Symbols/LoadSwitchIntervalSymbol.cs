@@ -38,11 +38,13 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
         RingCabinetSwitchLayout loadLayout = GetLayout(layout, loadSwitch);
         RingCabinetSwitchLayout groundLayout = GetLayout(layout, groundSwitch);
 
-        (DocumentPoint loadTop, DocumentPoint loadBottom) =
-            RingCabinetProfessionalGeometry.AddVerticalSwitch(
+        (DocumentPoint loadTop, DocumentPoint common) =
+            RingCabinetProfessionalGeometry.AddThreePositionSwitch(
                 elements,
                 loadSwitch,
+                groundSwitch,
                 loadLayout,
+                groundLayout,
                 origin,
                 _metrics);
         elements.Add(new SceneLine(
@@ -51,32 +53,13 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             Colors.Black,
             _metrics.General.StandardStrokeThickness));
 
-        DocumentRect groundBounds = RingCabinetProfessionalGeometry.GetBounds(
-            groundLayout,
-            origin);
-        DocumentPoint groundNode = new(
-            centerX,
-            groundBounds.YMillimeters + groundBounds.HeightMillimeters / 2);
-        elements.Add(new SceneLine(
-            loadBottom,
-            groundNode,
-            Colors.Black,
-            _metrics.General.StandardStrokeThickness));
-        RingCabinetProfessionalGeometry.AddGroundSwitch(
-            elements,
-            groundSwitch,
-            groundLayout,
-            origin,
-            groundNode,
-            _metrics);
-
         DocumentPoint terminalTip = new(
             centerX,
             origin.YMillimeters + layout.HeightMillimeters);
         double terminalTop = terminalTip.YMillimeters -
                              _metrics.CableTermination.TriangleHeight;
         elements.Add(new SceneLine(
-            groundNode,
+            common,
             new DocumentPoint(centerX, terminalTop),
             Colors.Black,
             _metrics.General.StandardStrokeThickness));

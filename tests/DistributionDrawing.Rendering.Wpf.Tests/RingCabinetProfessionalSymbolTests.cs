@@ -361,13 +361,13 @@ public sealed class RingCabinetProfessionalSymbolTests
                 .Select(index => index == 1
                     ? RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                         index,
-                        GroundingStructureKind.UpperLowerGrounding,
+                        GroundingStructureKind.UpperIsolationGrounding,
                         isolation,
                         breaker,
                         ground)
                     : RingCabinetIntervalDefinition.CreateIntegratedFeeder(
                         index,
-                        GroundingStructureKind.UpperLowerGrounding,
+                        GroundingStructureKind.UpperIsolationGrounding,
                         SwitchState.Open,
                         SwitchState.Open,
                         SwitchState.Open))

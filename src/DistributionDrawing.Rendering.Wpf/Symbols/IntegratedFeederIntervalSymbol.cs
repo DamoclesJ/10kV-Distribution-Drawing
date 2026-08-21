@@ -59,20 +59,68 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
         RingCabinetSwitchLayout upperLayout = GetLayout(layout, upper);
         RingCabinetSwitchLayout lowerLayout = GetLayout(layout, lower);
         RingCabinetSwitchLayout groundLayout = GetLayout(layout, ground);
-        (DocumentPoint upperTop, DocumentPoint upperBottom) =
-            RingCabinetProfessionalGeometry.AddVerticalSwitch(
-                elements,
-                upper,
-                upperLayout,
-                origin,
-                _metrics);
-        (DocumentPoint lowerTop, DocumentPoint lowerBottom) =
-            RingCabinetProfessionalGeometry.AddVerticalSwitch(
-                elements,
-                lower,
-                lowerLayout,
-                origin,
-                _metrics);
+        bool usesCombinedThreePositionSwitch =
+            structureKind != GroundingStructureKind.UpperLowerGrounding;
+        DocumentPoint upperTop;
+        DocumentPoint upperBottom;
+        DocumentPoint lowerTop;
+        DocumentPoint lowerBottom;
+
+        if (structureKind == GroundingStructureKind.UpperIsolationGrounding)
+        {
+            (upperTop, upperBottom) =
+                RingCabinetProfessionalGeometry.AddThreePositionSwitch(
+                    elements,
+                    isolation,
+                    ground,
+                    upperLayout,
+                    groundLayout,
+                    origin,
+                    _metrics);
+            (lowerTop, lowerBottom) =
+                RingCabinetProfessionalGeometry.AddVerticalSwitch(
+                    elements,
+                    breaker,
+                    lowerLayout,
+                    origin,
+                    _metrics);
+        }
+        else if (structureKind == GroundingStructureKind.LowerLowerGrounding)
+        {
+            (upperTop, upperBottom) =
+                RingCabinetProfessionalGeometry.AddVerticalSwitch(
+                    elements,
+                    breaker,
+                    upperLayout,
+                    origin,
+                    _metrics);
+            (lowerTop, lowerBottom) =
+                RingCabinetProfessionalGeometry.AddThreePositionSwitch(
+                    elements,
+                    isolation,
+                    ground,
+                    lowerLayout,
+                    groundLayout,
+                    origin,
+                    _metrics);
+        }
+        else
+        {
+            (upperTop, upperBottom) =
+                RingCabinetProfessionalGeometry.AddVerticalSwitch(
+                    elements,
+                    isolation,
+                    upperLayout,
+                    origin,
+                    _metrics);
+            (lowerTop, lowerBottom) =
+                RingCabinetProfessionalGeometry.AddVerticalSwitch(
+                    elements,
+                    breaker,
+                    lowerLayout,
+                    origin,
+                    _metrics);
+        }
 
         elements.Add(new SceneLine(
             new DocumentPoint(centerX, busY),
@@ -85,20 +133,16 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
             Colors.Black,
             _metrics.General.StandardStrokeThickness));
 
-        DocumentPoint groundingNode = structureKind switch
+        if (!usesCombinedThreePositionSwitch)
         {
-            GroundingStructureKind.UpperIsolationGrounding => upperBottom,
-            GroundingStructureKind.UpperLowerGrounding => lowerBottom,
-            GroundingStructureKind.LowerLowerGrounding => lowerBottom,
-            _ => throw new ArgumentOutOfRangeException(nameof(structureKind))
-        };
-        RingCabinetProfessionalGeometry.AddGroundSwitch(
-            elements,
-            ground,
-            groundLayout,
-            origin,
-            groundingNode,
-            _metrics);
+            RingCabinetProfessionalGeometry.AddGroundSwitch(
+                elements,
+                ground,
+                groundLayout,
+                origin,
+                lowerBottom,
+                _metrics);
+        }
 
         DocumentPoint terminalTip = new(
             centerX,

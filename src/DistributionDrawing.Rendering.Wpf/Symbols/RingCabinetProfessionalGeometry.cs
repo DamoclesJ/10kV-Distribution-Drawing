@@ -85,11 +85,110 @@ internal static class RingCabinetProfessionalGeometry
         return (left, right);
     }
 
+    public static (DocumentPoint Top, DocumentPoint Common) AddThreePositionSwitch(
+        ICollection<SceneElement> elements,
+        SwitchDevice mainSwitch,
+        SwitchDevice groundSwitch,
+        RingCabinetSwitchLayout mainLayout,
+        RingCabinetSwitchLayout groundLayout,
+        DocumentPoint intervalOrigin,
+        DrawingMetrics metrics)
+    {
+        if (mainSwitch.SwitchKind is not (
+                SwitchKind.IsolationSwitch or SwitchKind.LoadSwitch) ||
+            groundSwitch.SwitchKind != SwitchKind.GroundSwitch)
+        {
+            throw new ArgumentException(
+                "The three-position symbol requires a main switch and grounding switch.");
+        }
+
+        if (mainSwitch.SwitchState == SwitchState.Closed &&
+            groundSwitch.SwitchState == SwitchState.Closed)
+        {
+            throw new InvalidOperationException(
+                "Isolation and grounding switches cannot both be closed.");
+        }
+
+        DocumentRect mainBounds = GetBounds(mainLayout, intervalOrigin);
+        double centerX = mainBounds.XMillimeters +
+                         mainBounds.WidthMillimeters / 2;
+        double verticalInset = Math.Max(
+            metrics.Switch.ContactRadius,
+            Math.Min(
+                mainBounds.HeightMillimeters / 4,
+                metrics.Switch.StandardSwitchLength / 4));
+        DocumentPoint top = new(
+            centerX,
+            mainBounds.YMillimeters + verticalInset);
+        DocumentPoint common = new(
+            centerX,
+            mainBounds.YMillimeters +
+            mainBounds.HeightMillimeters -
+            verticalInset);
+
+        DocumentRect groundBounds = GetBounds(groundLayout, intervalOrigin);
+        double horizontalInset = Math.Max(
+            metrics.Switch.ContactRadius,
+            Math.Min(
+                groundBounds.WidthMillimeters / 4,
+                metrics.Switch.GroundSwitchLength / 4));
+        DocumentPoint groundContact = new(
+            groundBounds.XMillimeters +
+            groundBounds.WidthMillimeters -
+            horizontalInset,
+            common.YMillimeters);
+
+        if (mainSwitch.SwitchKind == SwitchKind.LoadSwitch)
+        {
+            AddLoadSwitchFixedContact(elements, top, metrics);
+        }
+        else
+        {
+            AddFixedContact(elements, top, horizontalBlade: false, metrics);
+        }
+        AddFixedContact(elements, groundContact, horizontalBlade: true, metrics);
+        AddLeftFacingEarth(elements, groundContact, metrics);
+
+        DocumentPoint bladeEnd;
+        if (mainSwitch.SwitchState == SwitchState.Closed)
+        {
+            bladeEnd = top;
+        }
+        else if (groundSwitch.SwitchState == SwitchState.Closed)
+        {
+            bladeEnd = groundContact;
+        }
+        else
+        {
+            double bladeLength = Math.Max(
+                metrics.Switch.ContactRadius * 2,
+                common.YMillimeters - top.YMillimeters);
+            double diagonal = bladeLength / Math.Sqrt(2);
+            bladeEnd = new DocumentPoint(
+                common.XMillimeters - diagonal,
+                common.YMillimeters - diagonal);
+        }
+
+        elements.Add(Line(common, bladeEnd, metrics));
+        AddStateLabel(elements, mainSwitch, mainBounds, metrics);
+        AddStateLabel(elements, groundSwitch, groundBounds, metrics);
+        return (top, common);
+    }
+
     private static void AddLoadSwitch(
         ICollection<SceneElement> elements,
         DocumentPoint top,
         DocumentPoint bottom,
         SwitchDevice switchDevice,
+        DrawingMetrics metrics)
+    {
+        AddLoadSwitchFixedContact(elements, top, metrics);
+        AddKnifeSwitch(elements, top, bottom, switchDevice, metrics);
+    }
+
+    private static void AddLoadSwitchFixedContact(
+        ICollection<SceneElement> elements,
+        DocumentPoint top,
         DrawingMetrics metrics)
     {
         double contactRadius = metrics.Switch.ContactRadius / 2;
@@ -110,7 +209,6 @@ internal static class RingCabinetProfessionalGeometry
                 top.XMillimeters + metrics.Switch.ContactRadius,
                 top.YMillimeters),
             metrics));
-        AddKnifeSwitch(elements, top, bottom, switchDevice, metrics);
     }
 
     public static void AddCableTerminationMarker(
