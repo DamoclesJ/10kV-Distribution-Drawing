@@ -141,17 +141,6 @@ public sealed class RingCabinetSymbol
                 intervalLayout.SequenceLabelOffset,
                 priority: 80));
 
-            if (!string.IsNullOrWhiteSpace(interval.DisplayName))
-            {
-                requests.Add(new LabelRequest(
-                    LabelTargetKind.Interval,
-                    interval.IntervalId,
-                    interval.DisplayName,
-                    origin,
-                    intervalLayout.NameLabelOffset,
-                    priority: 70));
-            }
-
             foreach (SwitchDevice switchDevice in interval.SwitchDevices)
             {
                 if (!intervalLayout.SwitchLayouts.TryGetValue(
@@ -170,25 +159,18 @@ public sealed class RingCabinetSymbol
 
                 if (!string.IsNullOrWhiteSpace(switchBusinessNumber))
                 {
+                    DocumentPoint labelOffset = switchDevice.SwitchKind == SwitchKind.GroundSwitch
+                        ? new DocumentPoint(0, -6)
+                        : new DocumentPoint(switchLayout.WidthMillimeters + 3, -2);
                     requests.Add(new LabelRequest(
                         LabelTargetKind.SwitchDevice,
                         switchDevice.Id,
                         switchBusinessNumber,
                         switchOrigin,
-                        switchLayout.LabelOffset,
+                        labelOffset,
                         priority: 70));
                 }
 
-                if (!string.IsNullOrWhiteSpace(switchDevice.DisplayName))
-                {
-                    requests.Add(new LabelRequest(
-                        LabelTargetKind.SwitchDevice,
-                        switchDevice.Id,
-                        switchDevice.DisplayName,
-                        switchOrigin,
-                        switchLayout.LabelOffset,
-                        priority: 60));
-                }
             }
         }
 
