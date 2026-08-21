@@ -122,8 +122,8 @@ public sealed class SwitchAttachmentRendererTests
                 cableTermination,
                 new AttachmentLayout(cableAttachment.AttachmentId, new DocumentPoint(-22, 14)))]);
 
-        Assert.Contains(switchElements.OfType<SceneRectangle>(), rectangle =>
-            rectangle.Bounds.WidthMillimeters == 18);
+        Assert.NotEmpty(switchElements.OfType<SceneLine>());
+        Assert.Contains(switchElements.OfType<SceneText>(), text => text.Text == "分");
         Assert.Contains(cableElements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
         Assert.Equal(SwitchState.Open, switchDevice.SwitchState);
         Assert.Equal(cableTermination.Id, cableAttachment.AttachedDeviceId);

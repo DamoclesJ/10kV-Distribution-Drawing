@@ -115,7 +115,8 @@ public sealed class RingCabinetProfessionalSymbolTests
         SwitchKind switchKind)
     {
         RingCabinet cabinet = CreateLoadSwitchCabinet(1);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(
+            candidate => candidate.BayIndex == 1);
         SwitchDevice switchDevice = interval.SwitchDevices.Single(device =>
             device.SwitchKind == switchKind);
         RingCabinetLayout layout = CreateLayout(cabinet);
@@ -132,7 +133,8 @@ public sealed class RingCabinetProfessionalSymbolTests
     public void LoadSwitchInterlock_RejectedOperationLeavesSceneGeometryUnchanged()
     {
         RingCabinet cabinet = CreateLoadSwitchCabinet(1);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(
+            candidate => candidate.BayIndex == 1);
         SwitchDevice loadSwitch = interval.SwitchDevices.Single(device =>
             device.SwitchKind == SwitchKind.LoadSwitch);
         SwitchDevice groundSwitch = interval.SwitchDevices.Single(device =>
@@ -158,7 +160,8 @@ public sealed class RingCabinetProfessionalSymbolTests
         RingCabinet cabinet = CreateIntegratedCabinet(
             1,
             GroundingStructureKind.UpperLowerGrounding);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(
+            candidate => candidate.BayIndex == 1);
         SwitchDevice switchDevice = interval.SwitchDevices.Single(device =>
             device.SwitchKind == switchKind);
         RingCabinetLayout layout = CreateLayout(cabinet);
@@ -180,7 +183,8 @@ public sealed class RingCabinetProfessionalSymbolTests
         bool breakerIsUpper)
     {
         RingCabinet cabinet = CreateIntegratedCabinet(1, structure);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(
+            candidate => candidate.BayIndex == 1);
         RingCabinetIntervalLayout layout = CreateLayout(cabinet)
             .IntervalLayouts[interval.IntervalId];
         SwitchDevice isolation = interval.SwitchDevices.Single(device =>
@@ -245,7 +249,8 @@ public sealed class RingCabinetProfessionalSymbolTests
         RingCabinet cabinet = CreateIntegratedCabinet(
             1,
             GroundingStructureKind.LowerLowerGrounding);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(
+            candidate => candidate.BayIndex == 1);
         DrawingScene scene = new DrawingSceneBuilder().Build(cabinet, CreateLayout(cabinet));
 
         Assert.Contains(scene.HitTestIndex.Entries, entry =>
@@ -322,7 +327,8 @@ public sealed class RingCabinetProfessionalSymbolTests
         RingCabinet cabinet = CreateLoadSwitchCabinet(1);
         var document = new DrawingDocument(Guid.NewGuid(), "Switch geometry command");
         document.AddDevice(cabinet);
-        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetInterval interval = cabinet.Intervals.Single(
+            candidate => candidate.BayIndex == 1);
         SwitchDevice loadSwitch = interval.SwitchDevices.Single(device =>
             device.SwitchKind == SwitchKind.LoadSwitch);
         Guid stableId = loadSwitch.Id;
@@ -351,12 +357,21 @@ public sealed class RingCabinetProfessionalSymbolTests
     {
         RingCabinet cabinet = CreateCabinet(
             "Integrated state",
-            RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                1,
-                GroundingStructureKind.UpperLowerGrounding,
-                isolation,
-                breaker,
-                ground));
+            Enumerable.Range(1, 4)
+                .Select(index => index == 1
+                    ? RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                        index,
+                        GroundingStructureKind.UpperLowerGrounding,
+                        isolation,
+                        breaker,
+                        ground)
+                    : RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                        index,
+                        GroundingStructureKind.UpperLowerGrounding,
+                        SwitchState.Open,
+                        SwitchState.Open,
+                        SwitchState.Open))
+                .ToArray());
         return new RingCabinetRenderer().Render(cabinet, CreateLayout(cabinet));
     }
 
@@ -374,16 +389,26 @@ public sealed class RingCabinetProfessionalSymbolTests
 
     private static RingCabinet CreateIntegratedCabinet(
         int intervalCount,
-        GroundingStructureKind structure) =>
+        GroundingStructureKind structure,
+        SwitchState isolation = SwitchState.Open,
+        SwitchState breaker = SwitchState.Open,
+        SwitchState ground = SwitchState.Open) =>
         CreateCabinet(
             "Integrated cabinet",
             Enumerable.Range(1, Math.Max(intervalCount, 4))
-                .Select(index => RingCabinetIntervalDefinition.CreateIntegratedFeeder(
-                    index,
-                    structure,
-                    SwitchState.Open,
-                    SwitchState.Open,
-                    SwitchState.Open))
+                .Select(index => index == 1
+                    ? RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                        index,
+                        structure,
+                        isolation,
+                        breaker,
+                        ground)
+                    : RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                        index,
+                        structure,
+                        SwitchState.Open,
+                        SwitchState.Open,
+                        SwitchState.Open))
                 .ToArray());
 
     private static RingCabinet CreatePTCabinet() =>
