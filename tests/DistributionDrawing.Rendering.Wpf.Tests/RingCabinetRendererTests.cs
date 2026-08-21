@@ -33,9 +33,8 @@ public sealed class RingCabinetRendererTests
         {
             SwitchDevice loadSwitch = interval.SwitchDevices.Single(device =>
                 device.SwitchKind == SwitchKind.LoadSwitch);
-            Assert.Equal(
-                2,
-                CountEllipsesInSwitchBounds(elements, layout, interval, loadSwitch));
+            Assert.DoesNotContain(elements.OfType<SceneEllipse>(), ellipse =>
+                IsInsideSwitchBounds(layout, interval, loadSwitch, ellipse));
 
             SwitchDevice groundSwitch = interval.SwitchDevices.Single(device =>
                 device.SwitchKind == SwitchKind.GroundSwitch);
@@ -81,18 +80,16 @@ public sealed class RingCabinetRendererTests
                 text.Text is "合" or "分"));
     }
 
-    private static int CountEllipsesInSwitchBounds(
-        IReadOnlyList<SceneElement> elements,
+    private static bool IsInsideSwitchBounds(
         RingCabinetLayout cabinetLayout,
         RingCabinetInterval interval,
-        SwitchDevice switchDevice)
-    {
-        DocumentRect bounds = GetSwitchBounds(cabinetLayout, interval, switchDevice);
-        return elements.OfType<SceneEllipse>().Count(ellipse =>
-            Contains(bounds, new DocumentPoint(
+        SwitchDevice switchDevice,
+        SceneEllipse ellipse) =>
+        Contains(
+            GetSwitchBounds(cabinetLayout, interval, switchDevice),
+            new DocumentPoint(
                 ellipse.Bounds.XMillimeters + ellipse.Bounds.WidthMillimeters / 2,
-                ellipse.Bounds.YMillimeters + ellipse.Bounds.HeightMillimeters / 2)));
-    }
+                ellipse.Bounds.YMillimeters + ellipse.Bounds.HeightMillimeters / 2));
 
     private static bool HasSwitchGeometry(
         IReadOnlyList<SceneElement> elements,
@@ -100,6 +97,22 @@ public sealed class RingCabinetRendererTests
         RingCabinetInterval interval,
         SwitchDevice switchDevice)
     {
+        if (switchDevice.SwitchKind == SwitchKind.GroundSwitch)
+        {
+            RingCabinetIntervalLayout intervalLayout =
+                cabinetLayout.IntervalLayouts[interval.IntervalId];
+            DocumentPoint origin = new(
+                cabinetLayout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters,
+                cabinetLayout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters);
+            double right = origin.XMillimeters + intervalLayout.WidthMillimeters;
+            return elements.OfType<SceneLine>().Any(line =>
+                Math.Abs(line.Start.YMillimeters - line.End.YMillimeters) < 0.001 &&
+                line.Start.YMillimeters > cabinetLayout.Position.YMillimeters +
+                    cabinetLayout.MainBusYMillimeters &&
+                Math.Min(line.Start.XMillimeters, line.End.XMillimeters) >= origin.XMillimeters &&
+                Math.Max(line.Start.XMillimeters, line.End.XMillimeters) <= right);
+        }
+
         DocumentRect bounds = GetSwitchBounds(cabinetLayout, interval, switchDevice);
         return elements.OfType<SceneLine>().Any(line =>
             Contains(bounds, Midpoint(line.Start, line.End)));
