@@ -9,7 +9,8 @@ namespace DistributionDrawing.Rendering.Wpf.Professional;
 public readonly record struct TerminalAnchor(
     Guid TerminalId,
     DocumentPoint Position,
-    TerminalAnchorDirection Direction = TerminalAnchorDirection.Auto);
+    TerminalAnchorDirection Direction = TerminalAnchorDirection.Auto,
+    double MinimumStubLength = 0);
 
 public enum TerminalAnchorDirection
 {

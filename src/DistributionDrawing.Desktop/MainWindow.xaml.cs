@@ -19,6 +19,7 @@ using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.CableConnection;
 using DistributionDrawing.Desktop.CableTerminationCreation;
+using DistributionDrawing.Desktop.PoleSwitchCreation;
 using DistributionDrawing.Desktop.Demo;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.RingCabinetCreation;
@@ -46,6 +47,7 @@ public partial class MainWindow : Window
     private readonly PlacementController _placement;
     private readonly OverheadLineConnectionController _overheadLineConnection;
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
+    private readonly PoleSwitchAttachmentController _poleSwitchAttachment;
     private readonly SwitchOperationController _switchOperation;
     private readonly CableConnectionController _cableConnection;
     private readonly CableReconnectController _cableReconnect;
@@ -86,6 +88,8 @@ public partial class MainWindow : Window
             () => _workspace.CurrentSession);
         _cableTerminationAttachment = new CableTerminationAttachmentController(
             () => _workspace.CurrentSession);
+        _poleSwitchAttachment = new PoleSwitchAttachmentController(
+            () => _workspace.CurrentSession);
         _switchOperation = new SwitchOperationController(
             () => _workspace.CurrentSession);
         _drawingTools = new DrawingToolCoordinator(
@@ -93,7 +97,8 @@ public partial class MainWindow : Window
             _overheadLineConnection,
             _cableTerminationAttachment,
             _cableConnection,
-            _cableReconnect);
+            _cableReconnect,
+            _poleSwitchAttachment);
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
         _cableConnection.VisualChanged += OnDrawingToolVisualChanged;
@@ -172,6 +177,24 @@ public partial class MainWindow : Window
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
             ShowCommandError("无法添加电缆终端", exception.Message);
+        }
+    }
+
+    private void OnAddPoleSwitch(object sender, RoutedEventArgs e)
+    {
+        var dialog = new PoleSwitchCreationDialog { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            _drawingTools.AddSwitchAttachment(dialog.SwitchKind);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ShowCommandError("无法添加柱上开关", exception.Message);
         }
     }
 

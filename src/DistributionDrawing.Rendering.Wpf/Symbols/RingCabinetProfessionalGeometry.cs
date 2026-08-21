@@ -31,7 +31,13 @@ internal static class RingCabinetProfessionalGeometry
         }
         else
         {
-            AddKnifeSwitch(elements, top, bottom, switchDevice, metrics);
+            AddKnifeSwitch(
+                elements,
+                top,
+                bottom,
+                switchDevice,
+                metrics,
+                circularContacts: switchDevice.SwitchKind == SwitchKind.LoadSwitch);
         }
 
         AddStateLabel(elements, switchDevice, bounds, metrics);
@@ -61,7 +67,14 @@ internal static class RingCabinetProfessionalGeometry
             left,
             Colors.Black,
             metrics.General.ThinStrokeThickness));
-        AddKnifeSwitch(elements, left, right, switchDevice, metrics, horizontal: true);
+        AddKnifeSwitch(
+            elements,
+            left,
+            right,
+            switchDevice,
+            metrics,
+            horizontal: true,
+            circularContacts: false);
         AddEarth(elements, right, metrics);
         AddStateLabel(elements, switchDevice, bounds, metrics);
         return (left, right);
@@ -101,10 +114,19 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint second,
         SwitchDevice switchDevice,
         DrawingMetrics metrics,
-        bool horizontal = false)
+        bool horizontal = false,
+        bool circularContacts = false)
     {
-        AddContact(elements, first, metrics);
-        AddContact(elements, second, metrics);
+        if (circularContacts)
+        {
+            AddContact(elements, first, metrics);
+            AddContact(elements, second, metrics);
+        }
+        else
+        {
+            AddBarContact(elements, first, horizontal, metrics);
+            AddBarContact(elements, second, horizontal, metrics);
+        }
 
         DocumentPoint bladeEnd = switchDevice.SwitchState == SwitchState.Closed
             ? second
@@ -130,30 +152,45 @@ internal static class RingCabinetProfessionalGeometry
         SwitchDevice switchDevice,
         DrawingMetrics metrics)
     {
-        double halfBar = Math.Max(
-            metrics.Switch.ContactRadius * 1.5,
-            Math.Min(availableWidth / 3, metrics.Switch.StandardSwitchLength / 4));
-        elements.Add(new SceneLine(
-            new DocumentPoint(top.XMillimeters - halfBar, top.YMillimeters),
-            new DocumentPoint(top.XMillimeters + halfBar, top.YMillimeters),
-            Colors.Black,
-            metrics.General.StandardStrokeThickness));
-        elements.Add(new SceneLine(
-            new DocumentPoint(bottom.XMillimeters - halfBar, bottom.YMillimeters),
-            new DocumentPoint(bottom.XMillimeters + halfBar, bottom.YMillimeters),
-            Colors.Black,
-            metrics.General.StandardStrokeThickness));
+        double crossHalf = Math.Max(
+            metrics.Switch.ContactRadius,
+            Math.Min(availableWidth / 4, metrics.PoleAttachment.ContactCrossSize / 2));
+        AddBarContact(elements, top, horizontal: true, metrics);
+        elements.Add(Line(
+            new DocumentPoint(top.XMillimeters - crossHalf, top.YMillimeters - crossHalf),
+            new DocumentPoint(top.XMillimeters + crossHalf, top.YMillimeters + crossHalf),
+            metrics));
+        elements.Add(Line(
+            new DocumentPoint(top.XMillimeters - crossHalf, top.YMillimeters + crossHalf),
+            new DocumentPoint(top.XMillimeters + crossHalf, top.YMillimeters - crossHalf),
+            metrics));
 
         DocumentPoint end = switchDevice.SwitchState == SwitchState.Closed
             ? bottom
             : new DocumentPoint(
                 bottom.XMillimeters + Math.Max(3, metrics.Switch.ContactRadius * 2),
-                bottom.YMillimeters);
+                bottom.YMillimeters - Math.Max(3, metrics.Switch.ContactRadius * 2));
         elements.Add(new SceneLine(
             top,
             end,
             Colors.Black,
             metrics.General.StandardStrokeThickness));
+    }
+
+    private static void AddBarContact(
+        ICollection<SceneElement> elements,
+        DocumentPoint center,
+        bool horizontal,
+        DrawingMetrics metrics)
+    {
+        double half = metrics.PoleAttachment.ContactMarkerLength / 2;
+        DocumentPoint start = horizontal
+            ? new DocumentPoint(center.XMillimeters, center.YMillimeters - half)
+            : new DocumentPoint(center.XMillimeters - half, center.YMillimeters);
+        DocumentPoint end = horizontal
+            ? new DocumentPoint(center.XMillimeters, center.YMillimeters + half)
+            : new DocumentPoint(center.XMillimeters + half, center.YMillimeters);
+        elements.Add(Line(start, end, metrics));
     }
 
     private static void AddContact(
@@ -172,6 +209,12 @@ internal static class RingCabinetProfessionalGeometry
             metrics.General.ThinStrokeThickness,
             Colors.White));
     }
+
+    private static SceneLine Line(
+        DocumentPoint start,
+        DocumentPoint end,
+        DrawingMetrics metrics) =>
+        new(start, end, Colors.Black, metrics.General.StandardStrokeThickness);
 
     private static void AddEarth(
         ICollection<SceneElement> elements,

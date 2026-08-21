@@ -1,7 +1,9 @@
 using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.CableConnection;
 using DistributionDrawing.Desktop.CableTerminationCreation;
+using DistributionDrawing.Desktop.PoleSwitchCreation;
 using DistributionDrawing.Desktop.Placement;
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -14,13 +16,15 @@ public sealed class DrawingToolCoordinator
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
     private readonly CableConnectionController _cableConnection;
     private readonly CableReconnectController _cableReconnect;
+    private readonly PoleSwitchAttachmentController _poleSwitchAttachment;
 
     public DrawingToolCoordinator(
         PlacementController placement,
         OverheadLineConnectionController overheadLine,
         CableTerminationAttachmentController cableTerminationAttachment,
         CableConnectionController cableConnection,
-        CableReconnectController cableReconnect)
+        CableReconnectController cableReconnect,
+        PoleSwitchAttachmentController poleSwitchAttachment)
     {
         _placement = placement ?? throw new ArgumentNullException(nameof(placement));
         _overheadLine = overheadLine ?? throw new ArgumentNullException(nameof(overheadLine));
@@ -30,6 +34,13 @@ public sealed class DrawingToolCoordinator
             throw new ArgumentNullException(nameof(cableConnection));
         _cableReconnect = cableReconnect ??
             throw new ArgumentNullException(nameof(cableReconnect));
+        _poleSwitchAttachment = poleSwitchAttachment ??
+            throw new ArgumentNullException(nameof(poleSwitchAttachment));
+    }
+
+    public void AddSwitchAttachment(SwitchKind switchKind)
+    {
+        _poleSwitchAttachment.AddToSelectedPole(switchKind);
     }
 
     public bool IsActive =>

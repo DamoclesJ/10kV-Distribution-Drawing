@@ -205,15 +205,15 @@ public sealed class OverheadLineConnectionController
 
         var terminals = session.PersistenceSession.Domain.Terminals.ToDictionary(item => item.Id);
         TerminalAnchor[] candidates = anchors.Anchors
-            .Where(anchor => terminals.TryGetValue(anchor.TerminalId, out Terminal? terminal) &&
-                IsAvailable(session, terminal))
+            .Where(anchor => terminals.ContainsKey(anchor.TerminalId))
             .Where(anchor => Distance(anchor.Position, pointer) <= toleranceMillimeters)
             .OrderBy(anchor => Distance(anchor.Position, pointer))
+            .ThenBy(anchor => anchor.TerminalId)
             .ToArray();
         if (candidates.Length == 0)
         {
             throw new InvalidOperationException(
-                "No available overhead-line terminal exists at the selected position.");
+                "未找到架空线端子，请点击有效的架空线连接点。");
         }
 
         if (candidates.Length > 1 &&
@@ -223,7 +223,15 @@ public sealed class OverheadLineConnectionController
                 "Multiple available terminals overlap at the selected position.");
         }
 
-        return candidates[0];
+        TerminalAnchor selected = candidates[0];
+        Terminal terminal = terminals[selected.TerminalId];
+        if (!IsAvailable(session, terminal))
+        {
+            throw new InvalidOperationException(
+                "所选端子不能连接架空线，或已被其他连接占用。");
+        }
+
+        return selected;
     }
 
     private static bool IsAvailable(ProjectRuntimeSession session, Terminal terminal)

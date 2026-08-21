@@ -281,6 +281,34 @@ public sealed class OrthogonalRoutingTests
         });
     }
 
+    [Fact]
+    public void Route_RespectsMinimumTerminalStubLength()
+    {
+        Guid startId = Guid.NewGuid();
+        Guid endId = Guid.NewGuid();
+        ConnectionRouteRequest request = new(
+            Guid.Parse("00000000-0000-0000-0000-000000000013"),
+            ConnectionType.Cable,
+            startId,
+            endId,
+            new TerminalAnchor(
+                startId,
+                new DocumentPoint(0, 0),
+                TerminalAnchorDirection.Down,
+                MinimumStubLength: 50),
+            new TerminalAnchor(
+                endId,
+                new DocumentPoint(80, 100),
+                TerminalAnchorDirection.Auto));
+
+        OrthogonalRoute route = new OrthogonalRouter().Route(request, []);
+
+        Assert.True(route.Segments[0].IsVertical);
+        Assert.True(route.Segments[0].End.YMillimeters >= 50);
+        Assert.All(route.Segments, segment =>
+            Assert.True(segment.IsHorizontal || segment.IsVertical));
+    }
+
     private static ConnectionRouteRequest CreateRequest(
         string connectionId,
         DocumentPoint start,

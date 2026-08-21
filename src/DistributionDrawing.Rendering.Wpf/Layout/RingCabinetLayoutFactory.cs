@@ -14,7 +14,7 @@ public sealed class RingCabinetLayoutFactory
     public static DocumentPoint DefaultPTSymbolPosition { get; } = new(
         DrawingMetrics.Default.RingCabinet.StandardIntervalWidth / 2 -
         DrawingMetrics.Default.PT.CoilRadius,
-        45);
+        DrawingMetrics.Default.RingCabinet.StandardIntervalHeight + 8);
 
     private readonly DrawingMetrics _metrics;
 

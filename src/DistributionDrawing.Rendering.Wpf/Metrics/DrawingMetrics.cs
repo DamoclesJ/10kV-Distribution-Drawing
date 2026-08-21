@@ -58,7 +58,8 @@ public sealed record DrawingMetrics(
         new CableTerminationDrawingMetrics(
             TriangleWidth: 10,
             TriangleHeight: 8,
-            LogicalHitPadding: 2),
+            LogicalHitPadding: 2,
+            CableTerminalExitMinimumStubLength: 50),
         new LineDrawingMetrics(
             ConnectionThickness: 0.8,
             CableDashLength: 4,
@@ -123,7 +124,8 @@ public sealed record PoleAttachmentDrawingMetrics(
 public sealed record CableTerminationDrawingMetrics(
     double TriangleWidth,
     double TriangleHeight,
-    double LogicalHitPadding);
+    double LogicalHitPadding,
+    double CableTerminalExitMinimumStubLength);
 
 public sealed record LineDrawingMetrics(
     double ConnectionThickness,

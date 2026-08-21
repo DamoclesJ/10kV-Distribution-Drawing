@@ -139,7 +139,9 @@ public sealed class TerminalAnchorIndex
                     anchors,
                     interval.ExternalTerminalId,
                     terminalPosition,
-                    TerminalAnchorDirection.Down);
+                    TerminalAnchorDirection.Down,
+                    DrawingMetrics.Default.CableTermination
+                        .CableTerminalExitMinimumStubLength);
             }
         }
 
@@ -188,11 +190,16 @@ public sealed class TerminalAnchorIndex
         IDictionary<Guid, TerminalAnchor> anchors,
         Guid terminalId,
         DocumentPoint position,
-        TerminalAnchorDirection direction)
+        TerminalAnchorDirection direction,
+        double minimumStubLength = 0)
     {
         if (terminalId != Guid.Empty)
         {
-            anchors[terminalId] = new TerminalAnchor(terminalId, position, direction);
+            anchors[terminalId] = new TerminalAnchor(
+                terminalId,
+                position,
+                direction,
+                minimumStubLength);
         }
     }
 }

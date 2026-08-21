@@ -40,11 +40,15 @@ public sealed class OrthogonalRouter
         DocumentPoint startStub = Move(
             request.Start.Position,
             startDirection,
-            _metrics.Routing.PortStubLength);
+            Math.Max(
+                _metrics.Routing.PortStubLength,
+                request.Start.MinimumStubLength));
         DocumentPoint endStub = Move(
             request.End.Position,
             endDirection,
-            _metrics.Routing.PortStubLength);
+            Math.Max(
+                _metrics.Routing.PortStubLength,
+                request.End.MinimumStubLength));
 
         Candidate[] candidates = CreateCandidates(startStub, endStub, expandedObstacles)
             .Select((core, priority) => CreateCandidate(
@@ -126,7 +130,9 @@ public sealed class OrthogonalRouter
         DocumentPoint stub = Move(
             start.Position,
             direction,
-            _metrics.Routing.PortStubLength);
+            Math.Max(
+                _metrics.Routing.PortStubLength,
+                start.MinimumStubLength));
         DocumentPoint corner = Math.Abs(end.XMillimeters - stub.XMillimeters) >=
                                Math.Abs(end.YMillimeters - stub.YMillimeters)
             ? new DocumentPoint(end.XMillimeters, stub.YMillimeters)

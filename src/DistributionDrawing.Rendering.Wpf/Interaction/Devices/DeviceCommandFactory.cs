@@ -13,6 +13,7 @@ public sealed class DeviceCommandFactory
     private readonly RingCabinetLayoutFactory _ringCabinetLayoutFactory;
     private readonly CableTerminationAttachmentCreationFactory
         _cableTerminationAttachmentCreationFactory;
+    private readonly PoleSwitchAttachmentCreationFactory _poleSwitchAttachmentCreationFactory;
 
     public DeviceCommandFactory(
         RingCabinetCreationFactory? ringCabinetCreationFactory = null,
@@ -25,6 +26,7 @@ public sealed class DeviceCommandFactory
         _cableTerminationAttachmentCreationFactory =
             cableTerminationAttachmentCreationFactory ??
             new CableTerminationAttachmentCreationFactory();
+        _poleSwitchAttachmentCreationFactory = new PoleSwitchAttachmentCreationFactory();
     }
 
     public AddPoleCommand CreateAddPole(
@@ -101,6 +103,27 @@ public sealed class DeviceCommandFactory
             document,
             runtimeLayout,
             creation);
+    }
+
+    public AddPoleSwitchAttachmentCommand CreateAddPoleSwitchAttachment(
+        DrawingDocument document,
+        RuntimeLayoutDocument runtimeLayout,
+        Guid poleId,
+        SwitchKind switchKind,
+        DocumentPoint attachmentOffset)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+        if (document.Devices.SingleOrDefault(device => device.Id == poleId) is not Pole)
+        {
+            throw new InvalidOperationException("请选择一个杆塔后再添加柱上开关。");
+        }
+
+        PoleSwitchAttachmentCreation creation = _poleSwitchAttachmentCreationFactory.Create(
+            poleId,
+            switchKind,
+            attachmentOffset);
+        return new AddPoleSwitchAttachmentCommand(document, runtimeLayout, creation);
     }
 
     public RemoveCableTerminationAttachmentCommand CreateRemoveCableTerminationAttachment(
