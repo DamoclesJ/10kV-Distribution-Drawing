@@ -147,7 +147,7 @@ public sealed class RingCabinetProfessionalSymbolTests
         Assert.Throws<InvalidOperationException>(() =>
             interval.SwitchAssembly.ChangeSwitchState(groundSwitch.Id, SwitchState.Closed));
 
-        Assert.Equal(before, renderer.Render(cabinet, layout));
+        SceneElementAssertions.Equal(before, renderer.Render(cabinet, layout));
     }
 
     [Theory]
