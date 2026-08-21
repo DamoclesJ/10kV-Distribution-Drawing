@@ -66,7 +66,7 @@ internal static class RingCabinetProfessionalGeometry
             circuitNode,
             left,
             Colors.Black,
-            metrics.General.ThinStrokeThickness));
+            metrics.General.StandardStrokeThickness));
         AddKnifeSwitch(
             elements,
             left,
@@ -206,7 +206,7 @@ internal static class RingCabinetProfessionalGeometry
                 radius * 2,
                 radius * 2),
             Colors.Black,
-            metrics.General.ThinStrokeThickness,
+            metrics.General.StandardStrokeThickness,
             Colors.White));
     }
 
@@ -227,12 +227,12 @@ internal static class RingCabinetProfessionalGeometry
             connection,
             basePoint,
             Colors.Black,
-            metrics.General.ThinStrokeThickness));
+            metrics.General.StandardStrokeThickness));
         elements.Add(new SceneLine(
             basePoint,
             new DocumentPoint(basePoint.XMillimeters, basePoint.YMillimeters + lead),
             Colors.Black,
-            metrics.General.ThinStrokeThickness));
+            metrics.General.StandardStrokeThickness));
 
         for (int index = 0; index < 3; index++)
         {
@@ -242,7 +242,7 @@ internal static class RingCabinetProfessionalGeometry
                 new DocumentPoint(basePoint.XMillimeters - halfWidth, y),
                 new DocumentPoint(basePoint.XMillimeters + halfWidth, y),
                 Colors.Black,
-                metrics.General.ThinStrokeThickness));
+                metrics.General.StandardStrokeThickness));
         }
     }
 

@@ -78,12 +78,12 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
             new DocumentPoint(centerX, busY),
             upperTop,
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
         elements.Add(new SceneLine(
             upperBottom,
             lowerTop,
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
 
         DocumentPoint groundingNode = structureKind switch
         {
@@ -109,7 +109,7 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
             lowerBottom,
             new DocumentPoint(centerX, terminalTop),
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
         RingCabinetProfessionalGeometry.AddCableTerminationMarker(
             elements,
             terminalTip,

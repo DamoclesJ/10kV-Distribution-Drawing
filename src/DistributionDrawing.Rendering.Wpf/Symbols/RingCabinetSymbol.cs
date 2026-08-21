@@ -133,13 +133,17 @@ public sealed class RingCabinetSymbol
             DocumentPoint origin = new(
                 layout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters,
                 layout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters);
+
+            (DocumentPoint intervalNumberAnchor, DocumentPoint intervalNumberOffset) =
+                GetIntervalNumberPlacement(interval, intervalLayout, origin);
             requests.Add(new LabelRequest(
                 LabelTargetKind.Interval,
                 interval.IntervalId,
                 interval.BusinessNumber,
-                origin,
-                intervalLayout.SequenceLabelOffset,
-                priority: 80));
+                intervalNumberAnchor,
+                intervalNumberOffset,
+                priority: 80,
+                fontSizeMillimeters: _metrics.General.SmallFontSize));
 
             foreach (SwitchDevice switchDevice in interval.SwitchDevices)
             {
@@ -157,23 +161,60 @@ public sealed class RingCabinetSymbol
                     origin.XMillimeters + switchLayout.RelativePosition.XMillimeters,
                     origin.YMillimeters + switchLayout.RelativePosition.YMillimeters);
 
-                if (!string.IsNullOrWhiteSpace(switchBusinessNumber))
+                if (!string.IsNullOrWhiteSpace(switchBusinessNumber) &&
+                    !string.Equals(
+                        switchBusinessNumber,
+                        interval.BusinessNumber,
+                        StringComparison.Ordinal))
                 {
+                    double labelGap = _metrics.Switch.ContactRadius + 1;
                     DocumentPoint labelOffset = switchDevice.SwitchKind == SwitchKind.GroundSwitch
-                        ? new DocumentPoint(0, -6)
-                        : new DocumentPoint(switchLayout.WidthMillimeters + 3, -2);
+                        ? new DocumentPoint(0, switchLayout.HeightMillimeters + labelGap)
+                        : new DocumentPoint(switchLayout.WidthMillimeters + labelGap, -labelGap);
                     requests.Add(new LabelRequest(
                         LabelTargetKind.SwitchDevice,
                         switchDevice.Id,
                         switchBusinessNumber,
                         switchOrigin,
                         labelOffset,
-                        priority: 70));
+                        priority: 70,
+                        fontSizeMillimeters: _metrics.General.SmallFontSize));
                 }
 
             }
         }
 
         return requests;
+    }
+
+    private static (DocumentPoint Anchor, DocumentPoint Offset) GetIntervalNumberPlacement(
+        RingCabinetInterval interval,
+        RingCabinetIntervalLayout intervalLayout,
+        DocumentPoint origin)
+    {
+        SwitchDevice? primarySwitch = interval.SwitchDevices.FirstOrDefault(device =>
+            device.SwitchKind is SwitchKind.CircuitBreaker or SwitchKind.LoadSwitch);
+
+        if (primarySwitch is not null &&
+            intervalLayout.SwitchLayouts.TryGetValue(primarySwitch.Id, out RingCabinetSwitchLayout? primaryLayout) &&
+            primaryLayout is not null)
+        {
+            DocumentPoint anchor = new(
+                origin.XMillimeters + primaryLayout.RelativePosition.XMillimeters,
+                origin.YMillimeters + primaryLayout.RelativePosition.YMillimeters);
+            return (anchor, new DocumentPoint(primaryLayout.WidthMillimeters + 3, -2));
+        }
+
+        if (interval.IntervalKind == IntervalKind.PTInterval &&
+            intervalLayout.PTSymbolPosition is DocumentPoint ptPosition)
+        {
+            return (
+                new DocumentPoint(
+                    origin.XMillimeters + ptPosition.XMillimeters,
+                    origin.YMillimeters + ptPosition.YMillimeters),
+                new DocumentPoint(16, 0));
+        }
+
+        return (origin, intervalLayout.SequenceLabelOffset);
     }
 }

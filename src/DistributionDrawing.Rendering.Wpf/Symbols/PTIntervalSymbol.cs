@@ -58,14 +58,14 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
             new DocumentPoint(isolationTop.XMillimeters, busY),
             isolationTop,
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
 
         AddPTCoils(elements, ptOrigin, out DocumentPoint coilTop, out DocumentPoint coilBottom);
         elements.Add(new SceneLine(
             isolationBottom,
             coilTop,
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
         RingCabinetProfessionalGeometry.AddGroundSwitch(
             elements,
             ground,
@@ -83,7 +83,7 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
             coilBottom,
             new DocumentPoint(terminalTip.XMillimeters, terminalTop),
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
         RingCabinetProfessionalGeometry.AddCableTerminationMarker(
             elements,
             terminalTip,

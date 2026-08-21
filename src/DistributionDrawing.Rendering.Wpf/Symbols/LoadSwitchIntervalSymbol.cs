@@ -49,7 +49,7 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             new DocumentPoint(centerX, busY),
             loadTop,
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
 
         DocumentRect groundBounds = RingCabinetProfessionalGeometry.GetBounds(
             groundLayout,
@@ -61,7 +61,7 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             loadBottom,
             groundNode,
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
         RingCabinetProfessionalGeometry.AddGroundSwitch(
             elements,
             groundSwitch,
@@ -79,7 +79,7 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             groundNode,
             new DocumentPoint(centerX, terminalTop),
             Colors.Black,
-            _metrics.General.ThinStrokeThickness));
+            _metrics.General.StandardStrokeThickness));
         RingCabinetProfessionalGeometry.AddCableTerminationMarker(
             elements,
             terminalTip,
