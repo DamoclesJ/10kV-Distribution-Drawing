@@ -29,8 +29,13 @@ internal static class RingCabinetProfessionalGeometry
         {
             AddCircuitBreaker(elements, top, bottom, bounds.WidthMillimeters, switchDevice, metrics);
         }
+        else if (switchDevice.SwitchKind == SwitchKind.LoadSwitch)
+        {
+            AddLoadSwitch(elements, top, bottom, switchDevice, metrics);
+        }
         else
         {
+            AddFixedContact(elements, top, horizontalBlade: false, metrics);
             AddKnifeSwitch(
                 elements,
                 top,
@@ -66,19 +71,46 @@ internal static class RingCabinetProfessionalGeometry
 
         elements.Add(new SceneLine(
             circuitNode,
-            left,
+            right,
             Colors.Black,
             metrics.General.StandardStrokeThickness));
-        AddKnifeSwitch(
-            elements,
-            left,
-            right,
-            switchDevice,
-            metrics,
-            horizontal: true);
-        AddEarth(elements, right, metrics);
+        AddFixedContact(elements, left, horizontalBlade: true, metrics);
+        double openOffset = Math.Max(3, metrics.Switch.ContactRadius * 2);
+        DocumentPoint bladeEnd = switchDevice.SwitchState == SwitchState.Closed
+            ? left
+            : new DocumentPoint(left.XMillimeters, left.YMillimeters - openOffset);
+        elements.Add(Line(right, bladeEnd, metrics));
+        AddLeftFacingEarth(elements, left, metrics);
         AddStateLabel(elements, switchDevice, bounds, metrics);
         return (left, right);
+    }
+
+    private static void AddLoadSwitch(
+        ICollection<SceneElement> elements,
+        DocumentPoint top,
+        DocumentPoint bottom,
+        SwitchDevice switchDevice,
+        DrawingMetrics metrics)
+    {
+        double contactRadius = metrics.Switch.ContactRadius / 2;
+        elements.Add(new SceneEllipse(
+            new DocumentRect(
+                top.XMillimeters - contactRadius,
+                top.YMillimeters - contactRadius,
+                contactRadius * 2,
+                contactRadius * 2),
+            Colors.Black,
+            metrics.General.StandardStrokeThickness,
+            Colors.White));
+        elements.Add(Line(
+            new DocumentPoint(
+                top.XMillimeters - metrics.Switch.ContactRadius,
+                top.YMillimeters),
+            new DocumentPoint(
+                top.XMillimeters + metrics.Switch.ContactRadius,
+                top.YMillimeters),
+            metrics));
+        AddKnifeSwitch(elements, top, bottom, switchDevice, metrics);
     }
 
     public static void AddCableTerminationMarker(
@@ -114,23 +146,37 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint first,
         DocumentPoint second,
         SwitchDevice switchDevice,
-        DrawingMetrics metrics,
-        bool horizontal = false)
+        DrawingMetrics metrics)
     {
         DocumentPoint bladeEnd = switchDevice.SwitchState == SwitchState.Closed
             ? second
-            : horizontal
-                ? new DocumentPoint(
-                    second.XMillimeters,
-                    second.YMillimeters - Math.Max(3, metrics.Switch.ContactRadius * 2))
-                : new DocumentPoint(
-                    second.XMillimeters + Math.Max(3, metrics.Switch.ContactRadius * 2),
-                    second.YMillimeters);
+            : new DocumentPoint(
+                first.XMillimeters + Math.Max(3, metrics.Switch.ContactRadius * 2),
+                first.YMillimeters);
+        DocumentPoint bladeStart = switchDevice.SwitchState == SwitchState.Closed
+            ? first
+            : second;
         elements.Add(new SceneLine(
-            first,
+            bladeStart,
             bladeEnd,
             Colors.Black,
             metrics.General.StandardStrokeThickness));
+    }
+
+    private static void AddFixedContact(
+        ICollection<SceneElement> elements,
+        DocumentPoint center,
+        bool horizontalBlade,
+        DrawingMetrics metrics)
+    {
+        double halfLength = metrics.Switch.ContactRadius;
+        DocumentPoint start = horizontalBlade
+            ? new DocumentPoint(center.XMillimeters, center.YMillimeters - halfLength)
+            : new DocumentPoint(center.XMillimeters - halfLength, center.YMillimeters);
+        DocumentPoint end = horizontalBlade
+            ? new DocumentPoint(center.XMillimeters, center.YMillimeters + halfLength)
+            : new DocumentPoint(center.XMillimeters + halfLength, center.YMillimeters);
+        elements.Add(Line(start, end, metrics));
     }
 
     private static void AddCircuitBreaker(
@@ -156,10 +202,13 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint end = switchDevice.SwitchState == SwitchState.Closed
             ? bottom
             : new DocumentPoint(
-                bottom.XMillimeters + Math.Max(3, metrics.Switch.ContactRadius * 2),
-                bottom.YMillimeters - Math.Max(3, metrics.Switch.ContactRadius * 2));
+                top.XMillimeters + Math.Max(3, metrics.Switch.ContactRadius * 2),
+                top.YMillimeters);
+        DocumentPoint start = switchDevice.SwitchState == SwitchState.Closed
+            ? top
+            : bottom;
         elements.Add(new SceneLine(
-            top,
+            start,
             end,
             Colors.Black,
             metrics.General.StandardStrokeThickness));
@@ -171,31 +220,26 @@ internal static class RingCabinetProfessionalGeometry
         DrawingMetrics metrics) =>
         new(start, end, Colors.Black, metrics.General.StandardStrokeThickness);
 
-    private static void AddEarth(
+    private static void AddLeftFacingEarth(
         ICollection<SceneElement> elements,
         DocumentPoint connection,
         DrawingMetrics metrics)
     {
         double lead = metrics.Switch.ContactRadius * 3;
-        DocumentPoint basePoint = new(connection.XMillimeters + lead, connection.YMillimeters);
+        DocumentPoint basePoint = new(connection.XMillimeters - lead, connection.YMillimeters);
         elements.Add(new SceneLine(
             connection,
             basePoint,
             Colors.Black,
             metrics.General.StandardStrokeThickness));
-        elements.Add(new SceneLine(
-            basePoint,
-            new DocumentPoint(basePoint.XMillimeters, basePoint.YMillimeters + lead),
-            Colors.Black,
-            metrics.General.StandardStrokeThickness));
 
         for (int index = 0; index < 3; index++)
         {
-            double halfWidth = (3 - index) * metrics.Switch.ContactRadius;
-            double y = basePoint.YMillimeters + lead + index * metrics.Switch.ContactRadius;
+            double halfHeight = (3 - index) * metrics.Switch.ContactRadius;
+            double x = basePoint.XMillimeters - index * metrics.Switch.ContactRadius;
             elements.Add(new SceneLine(
-                new DocumentPoint(basePoint.XMillimeters - halfWidth, y),
-                new DocumentPoint(basePoint.XMillimeters + halfWidth, y),
+                new DocumentPoint(x, basePoint.YMillimeters - halfHeight),
+                new DocumentPoint(x, basePoint.YMillimeters + halfHeight),
                 Colors.Black,
                 metrics.General.StandardStrokeThickness));
         }

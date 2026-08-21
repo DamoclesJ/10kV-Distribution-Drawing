@@ -137,7 +137,7 @@ public sealed class RingCabinetLayoutFactory
         double mainX = GetMainSwitchX();
         double primaryY = GetPrimaryDeviceY();
         double groundX = GetGroundSwitchX();
-        double groundY = GetLowerGroundSwitchY();
+        double groundY = GetGroundSwitchYForNode(primaryY);
         return
         [
             CreateSwitchLayout(
@@ -161,16 +161,17 @@ public sealed class RingCabinetLayoutFactory
         double primaryY = GetPrimaryDeviceY();
         double secondaryY = GetSecondaryDeviceY();
         double groundX = GetGroundSwitchX();
-        (SwitchKind upper, SwitchKind lower, double groundY) = structure switch
+        (SwitchKind upper, SwitchKind lower, double connectedDeviceY) = structure switch
         {
             GroundingStructureKind.UpperIsolationGrounding =>
-                (SwitchKind.IsolationSwitch, SwitchKind.CircuitBreaker, GetUpperGroundSwitchY()),
+                (SwitchKind.IsolationSwitch, SwitchKind.CircuitBreaker, primaryY),
             GroundingStructureKind.UpperLowerGrounding =>
-                (SwitchKind.IsolationSwitch, SwitchKind.CircuitBreaker, GetLowerGroundSwitchY()),
+                (SwitchKind.IsolationSwitch, SwitchKind.CircuitBreaker, secondaryY),
             GroundingStructureKind.LowerLowerGrounding =>
-                (SwitchKind.CircuitBreaker, SwitchKind.IsolationSwitch, GetLowerGroundSwitchY()),
+                (SwitchKind.CircuitBreaker, SwitchKind.IsolationSwitch, secondaryY),
             _ => throw new ArgumentOutOfRangeException(nameof(interval))
         };
+        double groundY = GetGroundSwitchYForNode(connectedDeviceY);
 
         return
         [
@@ -195,7 +196,9 @@ public sealed class RingCabinetLayoutFactory
             CreateSwitchLayout(
                 interval,
                 SwitchKind.GroundSwitch,
-                new DocumentPoint(GetGroundSwitchX(), GetUpperGroundSwitchY()))
+                new DocumentPoint(
+                    GetGroundSwitchX(),
+                    GetGroundSwitchYForNode(GetPrimaryDeviceY())))
         ];
     }
 
@@ -222,8 +225,9 @@ public sealed class RingCabinetLayoutFactory
          _metrics.Switch.StandardSwitchLength) / 2;
 
     private double GetGroundSwitchX() =>
-        _metrics.RingCabinet.StandardIntervalWidth / 2 +
-        _metrics.RingCabinet.DeviceVerticalSpacing / 2;
+        _metrics.RingCabinet.StandardIntervalWidth / 2 -
+        _metrics.RingCabinet.DeviceVerticalSpacing / 2 -
+        _metrics.Switch.GroundSwitchLength;
 
     private double GetPrimaryDeviceY() =>
         _metrics.RingCabinet.BusbarOffset -
@@ -235,13 +239,15 @@ public sealed class RingCabinetLayoutFactory
         _metrics.Switch.LogicalHitHeight +
         _metrics.RingCabinet.DeviceVerticalSpacing * 2;
 
-    private double GetUpperGroundSwitchY() =>
-        GetPrimaryDeviceY() +
-        _metrics.Switch.LogicalHitHeight +
-        _metrics.RingCabinet.DeviceVerticalSpacing;
-
-    private double GetLowerGroundSwitchY() =>
-        GetSecondaryDeviceY() +
-        _metrics.Switch.LogicalHitHeight +
-        _metrics.RingCabinet.DeviceVerticalSpacing;
+    private double GetGroundSwitchYForNode(double connectedDeviceY)
+    {
+        double contactInset = Math.Max(
+            _metrics.Switch.ContactRadius,
+            Math.Min(
+                _metrics.Switch.LogicalHitHeight / 4,
+                _metrics.Switch.StandardSwitchLength / 4));
+        return connectedDeviceY +
+               _metrics.Switch.LogicalHitHeight / 2 -
+               contactInset;
+    }
 }

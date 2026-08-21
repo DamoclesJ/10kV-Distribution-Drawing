@@ -33,11 +33,13 @@ public sealed class RingCabinetRendererTests
         {
             SwitchDevice loadSwitch = interval.SwitchDevices.Single(device =>
                 device.SwitchKind == SwitchKind.LoadSwitch);
-            Assert.DoesNotContain(elements.OfType<SceneEllipse>(), ellipse =>
+            Assert.Single(elements.OfType<SceneEllipse>(), ellipse =>
                 IsInsideSwitchBounds(layout, interval, loadSwitch, ellipse));
 
             SwitchDevice groundSwitch = interval.SwitchDevices.Single(device =>
                 device.SwitchKind == SwitchKind.GroundSwitch);
+            Assert.DoesNotContain(elements.OfType<SceneEllipse>(), ellipse =>
+                IsInsideSwitchBounds(layout, interval, groundSwitch, ellipse));
             Assert.True(HasSwitchGeometry(elements, layout, interval, groundSwitch));
         }
 
