@@ -36,8 +36,7 @@ internal static class RingCabinetProfessionalGeometry
                 top,
                 bottom,
                 switchDevice,
-                metrics,
-                circularContacts: switchDevice.SwitchKind == SwitchKind.LoadSwitch);
+                metrics);
         }
 
         AddStateLabel(elements, switchDevice, bounds, metrics);
@@ -53,7 +52,10 @@ internal static class RingCabinetProfessionalGeometry
         DrawingMetrics metrics)
     {
         DocumentRect bounds = GetBounds(layout, intervalOrigin);
-        double centerY = bounds.YMillimeters + bounds.HeightMillimeters / 2;
+        // The grounding blade is a side branch from the actual electrical
+        // node. Align its branch with that node instead of using an
+        // independent layout center, which would create an unintended slope.
+        double centerY = circuitNode.YMillimeters;
         double contactInset = Math.Max(
             metrics.Switch.ContactRadius,
             Math.Min(bounds.WidthMillimeters / 4, metrics.Switch.GroundSwitchLength / 4));
@@ -73,8 +75,7 @@ internal static class RingCabinetProfessionalGeometry
             right,
             switchDevice,
             metrics,
-            horizontal: true,
-            circularContacts: false);
+            horizontal: true);
         AddEarth(elements, right, metrics);
         AddStateLabel(elements, switchDevice, bounds, metrics);
         return (left, right);
@@ -114,20 +115,8 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint second,
         SwitchDevice switchDevice,
         DrawingMetrics metrics,
-        bool horizontal = false,
-        bool circularContacts = false)
+        bool horizontal = false)
     {
-        if (circularContacts)
-        {
-            AddContact(elements, first, metrics);
-            AddContact(elements, second, metrics);
-        }
-        else
-        {
-            AddBarContact(elements, first, horizontal, metrics);
-            AddBarContact(elements, second, horizontal, metrics);
-        }
-
         DocumentPoint bladeEnd = switchDevice.SwitchState == SwitchState.Closed
             ? second
             : horizontal
@@ -155,7 +144,6 @@ internal static class RingCabinetProfessionalGeometry
         double crossHalf = Math.Max(
             metrics.Switch.ContactRadius,
             Math.Min(availableWidth / 4, metrics.PoleAttachment.ContactCrossSize / 2));
-        AddBarContact(elements, top, horizontal: true, metrics);
         elements.Add(Line(
             new DocumentPoint(top.XMillimeters - crossHalf, top.YMillimeters - crossHalf),
             new DocumentPoint(top.XMillimeters + crossHalf, top.YMillimeters + crossHalf),
@@ -175,39 +163,6 @@ internal static class RingCabinetProfessionalGeometry
             end,
             Colors.Black,
             metrics.General.StandardStrokeThickness));
-    }
-
-    private static void AddBarContact(
-        ICollection<SceneElement> elements,
-        DocumentPoint center,
-        bool horizontal,
-        DrawingMetrics metrics)
-    {
-        double half = metrics.PoleAttachment.ContactMarkerLength / 2;
-        DocumentPoint start = horizontal
-            ? new DocumentPoint(center.XMillimeters, center.YMillimeters - half)
-            : new DocumentPoint(center.XMillimeters - half, center.YMillimeters);
-        DocumentPoint end = horizontal
-            ? new DocumentPoint(center.XMillimeters, center.YMillimeters + half)
-            : new DocumentPoint(center.XMillimeters + half, center.YMillimeters);
-        elements.Add(Line(start, end, metrics));
-    }
-
-    private static void AddContact(
-        ICollection<SceneElement> elements,
-        DocumentPoint center,
-        DrawingMetrics metrics)
-    {
-        double radius = metrics.Switch.ContactRadius;
-        elements.Add(new SceneEllipse(
-            new DocumentRect(
-                center.XMillimeters - radius,
-                center.YMillimeters - radius,
-                radius * 2,
-                radius * 2),
-            Colors.Black,
-            metrics.General.StandardStrokeThickness,
-            Colors.White));
     }
 
     private static SceneLine Line(
