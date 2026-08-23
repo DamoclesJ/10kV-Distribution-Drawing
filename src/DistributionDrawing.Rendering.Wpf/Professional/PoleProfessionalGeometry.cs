@@ -1,3 +1,4 @@
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -17,6 +18,20 @@ public sealed record PoleAttachmentGeometry(
 /// </summary>
 public static class PoleProfessionalGeometry
 {
+    public static DocumentPoint GetDefaultAttachmentOffset(
+        SwitchKind kind,
+        DrawingMetrics? metrics = null)
+    {
+        DrawingMetrics effectiveMetrics = metrics ?? DrawingMetrics.Default;
+        double poleDiameter = effectiveMetrics.Pole.PoleRadius * 2;
+        double width = effectiveMetrics.PoleAttachment.SymbolWidth;
+        double height = effectiveMetrics.PoleAttachment.SymbolHeight;
+
+        return kind == SwitchKind.DropoutFuse
+            ? new DocumentPoint((poleDiameter - width) / 2, -height)
+            : new DocumentPoint(poleDiameter, (poleDiameter - height) / 2);
+    }
+
     public static DocumentRect GetPoleBounds(
         PoleLayout layout,
         DrawingMetrics? metrics = null)

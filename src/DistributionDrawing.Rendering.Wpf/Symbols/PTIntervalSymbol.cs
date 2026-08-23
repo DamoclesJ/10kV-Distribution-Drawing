@@ -47,11 +47,13 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
         SwitchDevice ground = GetSingleSwitch(interval, SwitchKind.GroundSwitch);
         RingCabinetSwitchLayout isolationLayout = GetLayout(layout, isolation);
         RingCabinetSwitchLayout groundLayout = GetLayout(layout, ground);
-        (DocumentPoint isolationTop, DocumentPoint isolationBottom) =
-            RingCabinetProfessionalGeometry.AddVerticalSwitch(
+        (DocumentPoint isolationTop, DocumentPoint common) =
+            RingCabinetProfessionalGeometry.AddThreePositionSwitch(
                 elements,
                 isolation,
+                ground,
                 isolationLayout,
+                groundLayout,
                 origin,
                 _metrics);
         elements.Add(new SceneLine(
@@ -62,17 +64,10 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
 
         AddPTCoils(elements, ptOrigin, out DocumentPoint coilTop, out DocumentPoint coilBottom);
         elements.Add(new SceneLine(
-            isolationBottom,
+            common,
             coilTop,
             Colors.Black,
             _metrics.General.StandardStrokeThickness));
-        RingCabinetProfessionalGeometry.AddGroundSwitch(
-            elements,
-            ground,
-            groundLayout,
-            origin,
-            isolationBottom,
-            _metrics);
 
         DocumentPoint terminalTip = new(
             coilBottom.XMillimeters,

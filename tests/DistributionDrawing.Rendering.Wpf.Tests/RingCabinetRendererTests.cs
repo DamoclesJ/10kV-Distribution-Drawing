@@ -286,6 +286,9 @@ public sealed class RingCabinetRendererTests
         interval.SwitchAssembly.ChangeSwitchState(ground.Id, SwitchState.Closed);
         IReadOnlyList<SceneElement> grounded = renderer.Render(cabinet, layout);
 
+        Assert.NotEqual(
+            initial.OfType<SceneLine>().ToArray(),
+            grounded.OfType<SceneLine>().ToArray());
         Assert.Contains(initial.OfType<SceneText>(), text => text.Text == "合");
         Assert.Contains(initial.OfType<SceneText>(), text => text.Text == "分");
         Assert.Equal(1, grounded.OfType<SceneText>().Count(text => text.Text == "合"));

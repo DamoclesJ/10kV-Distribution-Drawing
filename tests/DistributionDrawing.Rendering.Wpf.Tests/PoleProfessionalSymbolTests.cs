@@ -80,8 +80,23 @@ public sealed class PoleProfessionalSymbolTests
         Assert.Contains(geometries[0], element => element is SceneRectangle);
         Assert.Contains(geometries[1], element => element is SceneEllipse ellipse &&
             ellipse.Bounds.WidthMillimeters < 14);
-        Assert.DoesNotContain(geometries[2], element => element is SceneRectangle);
+        Assert.Contains(geometries[2], element => element is SceneRectangle);
+        Assert.NotEqual(geometries[0], geometries[2]);
         Assert.Contains(geometries[3], element => element is ScenePolyline polyline && polyline.IsClosed);
+    }
+
+    [Theory]
+    [InlineData(SwitchKind.IsolationSwitch, false)]
+    [InlineData(SwitchKind.CircuitBreaker, false)]
+    [InlineData(SwitchKind.DropoutFuse, true)]
+    public void PoleSwitch_DefaultPlacementMatchesReferenceOrientation(
+        SwitchKind kind,
+        bool abovePole)
+    {
+        DocumentPoint offset = PoleProfessionalGeometry.GetDefaultAttachmentOffset(kind);
+
+        Assert.Equal(abovePole, offset.YMillimeters < 0);
+        Assert.Equal(abovePole, offset.XMillimeters < 0);
     }
 
     [Fact]

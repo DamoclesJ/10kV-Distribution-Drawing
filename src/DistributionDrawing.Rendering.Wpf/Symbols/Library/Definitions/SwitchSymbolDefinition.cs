@@ -111,6 +111,11 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
         double centerY = y + height / 2;
         double contactX = x + width * _metrics.PoleAttachment.IsolationContactRatio;
         DocumentPoint bladeStart = new(x + width * _metrics.PoleAttachment.IsolationBladeStartRatio, centerY);
+        elements.Add(new SceneRectangle(
+            new DocumentRect(x, y, width, height),
+            context.Stroke,
+            context.ThicknessMillimeters,
+            context.Fill));
         elements.Add(Line(context, new DocumentPoint(x, centerY), bladeStart));
         elements.Add(Line(context, new DocumentPoint(contactX, centerY), new DocumentPoint(x + width, centerY)));
         elements.Add(Line(context, bladeStart, context.State == SymbolVisualState.Open

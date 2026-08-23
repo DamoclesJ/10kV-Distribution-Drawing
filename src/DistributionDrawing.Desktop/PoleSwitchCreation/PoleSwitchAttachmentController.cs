@@ -1,6 +1,7 @@
 using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Domain.Devices;
 
@@ -39,7 +40,7 @@ public sealed class PoleSwitchAttachmentController
             session.Layout,
             pole.Id,
             switchKind,
-            new DocumentPoint(0, 0));
+            PoleProfessionalGeometry.GetDefaultAttachmentOffset(switchKind));
         session.CommandStack.ExecuteCommand(command);
         session.RebuildScene();
         session.SelectionManager.Select(new SelectionReference(
