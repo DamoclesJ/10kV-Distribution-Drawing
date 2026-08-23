@@ -81,16 +81,19 @@ public sealed class TerminalAnchorIndex
 
             if (attachedDevice is CableTermination cableTermination)
             {
+                TerminalAnchorDirection outward = ResolveDirection(
+                    geometry.SecondTerminal,
+                    geometry.FirstTerminal);
                 Set(
                     anchors,
                     cableTermination.CableSideTerminalId,
                     geometry.FirstTerminal,
-                    TerminalAnchorDirection.Up);
+                    outward);
                 Set(
                     anchors,
                     cableTermination.OverheadSideTerminalId,
                     geometry.SecondTerminal,
-                    TerminalAnchorDirection.Down);
+                    Opposite(outward));
             }
             else if (attachedDevice is SwitchDevice switchDevice)
             {
@@ -185,6 +188,30 @@ public sealed class TerminalAnchorIndex
         return new TerminalAnchorIndex(
             new Dictionary<Guid, TerminalAnchor>(anchors));
     }
+
+    private static TerminalAnchorDirection ResolveDirection(
+        DocumentPoint from,
+        DocumentPoint to)
+    {
+        double deltaX = to.XMillimeters - from.XMillimeters;
+        double deltaY = to.YMillimeters - from.YMillimeters;
+        if (Math.Abs(deltaX) >= Math.Abs(deltaY))
+        {
+            return deltaX >= 0 ? TerminalAnchorDirection.Right : TerminalAnchorDirection.Left;
+        }
+
+        return deltaY >= 0 ? TerminalAnchorDirection.Down : TerminalAnchorDirection.Up;
+    }
+
+    private static TerminalAnchorDirection Opposite(TerminalAnchorDirection direction) =>
+        direction switch
+        {
+            TerminalAnchorDirection.Left => TerminalAnchorDirection.Right,
+            TerminalAnchorDirection.Right => TerminalAnchorDirection.Left,
+            TerminalAnchorDirection.Up => TerminalAnchorDirection.Down,
+            TerminalAnchorDirection.Down => TerminalAnchorDirection.Up,
+            _ => TerminalAnchorDirection.Auto
+        };
 
     private static void Set(
         IDictionary<Guid, TerminalAnchor> anchors,

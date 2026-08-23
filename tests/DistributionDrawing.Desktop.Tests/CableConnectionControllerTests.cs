@@ -11,6 +11,7 @@ using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -92,6 +93,30 @@ public sealed class CableConnectionControllerTests
             new SelectionReference(SelectionTargetKind.CableSegment, cable.Id),
             project.Session.SelectionManager.Selected);
         Assert.Equal(CableConnectionToolState.Idle, controller.State);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CompletedCableRoute_KeepsCabinetFiftyMillimeterStubForEitherEndpointOrder(
+        bool cabinetIsEnd)
+    {
+        using TestProject project = CreateProject();
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        Guid cabinetTerminalId = project.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid poleTerminalId = project.CableTerminationCableSideTerminalId;
+        var controller = new CableConnectionController(() => project.Session);
+        controller.Begin();
+        controller.Pick(
+            anchors.PositionOf(cabinetIsEnd ? poleTerminalId : cabinetTerminalId),
+            8);
+        controller.Pick(
+            anchors.PositionOf(cabinetIsEnd ? cabinetTerminalId : poleTerminalId),
+            8);
+        controller.Complete("YJV22", 80);
+
+        CableSegment cable = Assert.Single(project.Document.CableSegments);
+        AssertCabinetStub(project, cable, cabinetTerminalId);
     }
 
     [Fact]
@@ -233,6 +258,64 @@ public sealed class CableConnectionControllerTests
     }
 
     [Fact]
+    public void ReconnectAndDeviceMoves_KeepCabinetStubAcrossUndoRedo()
+    {
+        using TestProject project = CreateProject();
+        _ = CreateCable(project);
+        CableSegment cable = Assert.Single(project.Document.CableSegments);
+        Guid cableId = cable.Id;
+        Guid connectionId = cable.ConnectionId;
+        Guid newStart = project.Cabinet.Intervals[1].ExternalTerminalId;
+        project.Session.SelectionManager.Select(
+            new SelectionReference(SelectionTargetKind.CableSegment, cable.Id));
+        var reconnect = new CableReconnectController(() => project.Session);
+        reconnect.BeginStart();
+        reconnect.Pick(CreateAnchors(project).PositionOf(newStart), 8);
+        cable = Assert.Single(project.Document.CableSegments);
+        AssertCabinetStub(project, cable, newStart);
+
+        RingCabinetLayout cabinetBefore = project.Session.Layout.RingCabinetLayouts[
+            project.Cabinet.Id];
+        var moveCabinet = new MoveRingCabinetCommand(
+            project.Session.Layout,
+            project.Cabinet.Id,
+            cabinetBefore.Position,
+            new DocumentPoint(
+                cabinetBefore.Position.XMillimeters + 30,
+                cabinetBefore.Position.YMillimeters + 20));
+        project.Session.CommandStack.ExecuteCommand(moveCabinet);
+        project.Session.RebuildScene();
+        AssertCabinetStub(project, cable, newStart);
+        Assert.True(project.Session.CommandStack.Undo());
+        project.Session.RebuildScene();
+        AssertCabinetStub(project, cable, newStart);
+        Assert.True(project.Session.CommandStack.Redo());
+        project.Session.RebuildScene();
+        AssertCabinetStub(project, cable, newStart);
+
+        PoleLayout poleBefore = Assert.Single(project.Session.Layout.DrawingLayout.Poles.Values);
+        var movePole = new MoveCommand(
+            project.Session.Layout.DrawingLayout,
+            poleBefore,
+            poleBefore.MoveTo(new DocumentPoint(
+                poleBefore.Position.XMillimeters + 40,
+                poleBefore.Position.YMillimeters + 25)));
+        project.Session.CommandStack.ExecuteCommand(movePole);
+        project.Session.RebuildScene();
+        AssertCabinetStub(project, cable, newStart);
+        Assert.True(project.Session.CommandStack.Undo());
+        project.Session.RebuildScene();
+        AssertCabinetStub(project, cable, newStart);
+        Assert.True(project.Session.CommandStack.Redo());
+        project.Session.RebuildScene();
+        AssertCabinetStub(project, cable, newStart);
+
+        CableSegment current = Assert.Single(project.Document.CableSegments);
+        Assert.Equal(cableId, current.Id);
+        Assert.Equal(connectionId, current.ConnectionId);
+    }
+
+    [Fact]
     public void ReconnectOverheadSide_IsRejectedAndPreservesSelectionAndHistory()
     {
         using TestProject project = CreateProject();
@@ -293,7 +376,32 @@ public sealed class CableConnectionControllerTests
             8);
         controller.Complete("YJV22", 65);
         CableSegment cable = Assert.Single(project.Document.CableSegments);
+        CableTermination termination = Assert.Single(
+            project.Document.Devices.OfType<CableTermination>());
+        PoleAttachment attachment = Assert.Single(
+            project.Document.PoleAttachments,
+            item => item.AttachedDeviceId == termination.Id);
+        PoleLayout pole = Assert.Single(project.Session.Layout.DrawingLayout.Poles.Values);
+        AttachmentLayout beforeLayout = project.Session.Layout.DrawingLayout.Attachments[
+            attachment.AttachmentId];
+        DocumentPoint poleCenter = PoleProfessionalGeometry.GetPoleCenter(pole);
+        DocumentPoint afterOffset = PoleProfessionalGeometry.GetCableTerminationOffset(
+            pole,
+            beforeLayout,
+            new DocumentPoint(poleCenter.XMillimeters, poleCenter.YMillimeters + 50));
+        project.Session.CommandStack.ExecuteCommand(new MoveAttachmentCommand(
+            project.Session.Layout.DrawingLayout,
+            attachment.AttachmentId,
+            beforeLayout.Offset,
+            afterOffset));
+        project.Session.RebuildScene();
+        DocumentPoint anchorBeforeSave = CreateAnchors(project).PositionOf(
+            termination.CableSideTerminalId);
         string routeBeforeSave = CableGeometryKey(project.Session.Scene, cable.Id);
+        AssertCabinetStub(
+            project,
+            cable,
+            project.Cabinet.Intervals[0].ExternalTerminalId);
 
         Assert.True(project.Workspace.SaveProject());
         var dialogs = new TestDialogs { OpenPath = project.FilePath };
@@ -314,6 +422,28 @@ public sealed class CableConnectionControllerTests
         Assert.Equal(cable.StartTerminalId, restoredConnection.StartTerminalId);
         Assert.Equal(cable.EndTerminalId, restoredConnection.EndTerminalId);
         Assert.Equal(routeBeforeSave, CableGeometryKey(reopened.Scene, restored.Id));
+        Assert.Equal(afterOffset, reopened.Layout.DrawingLayout.Attachments[
+            attachment.AttachmentId].Offset);
+        TerminalAnchorIndex reopenedAnchors = TerminalAnchorIndex.Build(
+            reopened.PersistenceSession.Domain,
+            reopened.Layout.DrawingLayout,
+            reopened.Layout.RingCabinetLayouts,
+            reopened.PersistenceSession.Domain.Connections,
+            reopened.PersistenceSession.Domain.CableSegments);
+        Assert.Equal(
+            anchorBeforeSave,
+            reopenedAnchors.PositionOf(termination.CableSideTerminalId));
+        PoleAttachmentGeometry restoredGeometry = PoleProfessionalGeometry.GetAttachmentGeometry(
+            reopened.Layout.DrawingLayout.Poles[attachment.PoleId],
+            reopened.Layout.DrawingLayout.Attachments[attachment.AttachmentId],
+            DistributionDrawing.Rendering.Wpf.Symbols.Library.SymbolKind.CableTermination);
+        Assert.Equal(
+            restoredGeometry.FirstTerminal,
+            reopenedAnchors.PositionOf(termination.CableSideTerminalId));
+        AssertCabinetStub(
+            reopened,
+            restored,
+            project.Cabinet.Intervals[0].ExternalTerminalId);
     }
 
     private static TestProject CreateProject()
@@ -370,7 +500,9 @@ public sealed class CableConnectionControllerTests
         return TerminalAnchorIndex.Build(
             project.Document,
             project.Session.Layout.DrawingLayout,
-            project.Session.Layout.RingCabinetLayouts);
+            project.Session.Layout.RingCabinetLayouts,
+            project.Document.Connections,
+            project.Document.CableSegments);
     }
 
     private static CableConnectionController CreateCable(TestProject project)
@@ -395,6 +527,35 @@ public sealed class CableConnectionControllerTests
             .Select(line =>
                 $"{line.Start.XMillimeters:R},{line.Start.YMillimeters:R}-" +
                 $"{line.End.XMillimeters:R},{line.End.YMillimeters:R}"));
+    }
+
+    private static void AssertCabinetStub(
+        TestProject project,
+        CableSegment cable,
+        Guid cabinetTerminalId) =>
+        AssertCabinetStub(project.Session, cable, cabinetTerminalId);
+
+    private static void AssertCabinetStub(
+        ProjectRuntimeSession session,
+        CableSegment cable,
+        Guid cabinetTerminalId)
+    {
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            session.PersistenceSession.Domain,
+            session.Layout.DrawingLayout,
+            session.Layout.RingCabinetLayouts,
+            session.PersistenceSession.Domain.Connections,
+            session.PersistenceSession.Domain.CableSegments);
+        DocumentPoint terminal = anchors.PositionOf(cabinetTerminalId);
+        SceneLine line = Assert.Single(
+            session.Scene.Elements.OfType<SceneLine>(),
+            candidate => candidate.TargetId == cable.Id &&
+                (candidate.Start == terminal || candidate.End == terminal));
+        DocumentPoint away = line.Start == terminal ? line.End : line.Start;
+        Assert.Equal(terminal.XMillimeters, away.XMillimeters);
+        Assert.True(
+            away.YMillimeters - terminal.YMillimeters >=
+            DrawingMetrics.Default.CableTermination.CableTerminalExitMinimumStubLength);
     }
 
     private sealed class TestProject : IDisposable

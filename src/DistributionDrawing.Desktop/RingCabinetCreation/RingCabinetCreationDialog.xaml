@@ -3,12 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="添加环网柜"
         Width="560"
-        Height="430"
+        Height="470"
         MinWidth="520"
         MinHeight="400"
         WindowStartupLocation="CenterOwner">
   <Grid Margin="20">
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
@@ -25,32 +26,35 @@
     <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,6,12,12" Text="环网柜名称" />
     <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,12"
              Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" />
-    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,6,12,12" Text="环网柜类型" />
-    <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,12"
+    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,6,12,12" Text="线路名称" />
+    <TextBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,12"
+             Text="{Binding LineName, UpdateSourceTrigger=PropertyChanged}" />
+    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,6,12,12" Text="环网柜类型" />
+    <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,0,0,12"
               ItemsSource="{Binding SupportedCabinetTypes}"
               SelectedItem="{Binding CabinetType}" />
-    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,6,12,12" Text="业务间隔数量" />
-    <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,0,0,12"
+    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,6,12,12" Text="业务间隔数量" />
+    <ComboBox Grid.Row="3" Grid.Column="1" Margin="0,0,0,12"
               ItemsSource="{Binding SupportedBusinessIntervalCounts}"
               SelectedItem="{Binding BusinessIntervalCount}" />
-    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,6,12,12" Text="融合间隔接地结构" />
-    <ComboBox Grid.Row="3" Grid.Column="1" Margin="0,0,0,12"
+    <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,6,12,12" Text="融合间隔接地结构" />
+    <ComboBox Grid.Row="4" Grid.Column="1" Margin="0,0,0,12"
               IsEnabled="{Binding IsPrimarySecondaryIntegrated}"
               ItemsSource="{Binding SupportedGroundingStructures}"
               SelectedItem="{Binding IntegratedGroundingStructureKind}" />
-    <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,4,12,12" Text="PT 间隔" />
-    <CheckBox Grid.Row="4" Grid.Column="1" Margin="0,4,0,12"
+    <TextBlock Grid.Row="5" Grid.Column="0" Margin="0,4,12,12" Text="PT 间隔" />
+    <CheckBox Grid.Row="5" Grid.Column="1" Margin="0,4,0,12"
               IsEnabled="{Binding IsPrimarySecondaryIntegrated}"
               IsChecked="{Binding IncludePTInterval}"
               Content="包含 PT 间隔（不包含 DTU）" />
-    <Border Grid.Row="5" Grid.ColumnSpan="2" Margin="0,4,0,16"
+    <Border Grid.Row="6" Grid.ColumnSpan="2" Margin="0,4,0,16"
             Padding="12" Background="#F5F5F5" BorderBrush="#D0D0D0" BorderThickness="1">
       <StackPanel>
         <TextBlock FontWeight="SemiBold" Text="自动生成的间隔名称" />
         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding GeneratedIntervalNames}" />
       </StackPanel>
     </Border>
-    <StackPanel Grid.Row="6" Grid.ColumnSpan="2" HorizontalAlignment="Right" Orientation="Horizontal">
+    <StackPanel Grid.Row="7" Grid.ColumnSpan="2" HorizontalAlignment="Right" Orientation="Horizontal">
       <Button Width="80" Content="确定" IsDefault="True" Click="OnConfirm" />
       <Button Width="80" Margin="8,0,0,0" Content="取消" IsCancel="True" />
     </StackPanel>

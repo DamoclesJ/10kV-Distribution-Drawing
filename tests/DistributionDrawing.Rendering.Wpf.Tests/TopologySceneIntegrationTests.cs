@@ -6,6 +6,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
@@ -81,6 +82,30 @@ public sealed class TopologySceneIntegrationTests
 
         Assert.NotEqual(initial, moved);
         Assert.Equal(initial, restored);
+    }
+
+    [Fact]
+    public void CompletedCableRoute_KeepsFiftyMillimeterDownwardCabinetExit()
+    {
+        TopologyFixture fixture = CreateFixture();
+        RingCabinet cabinet = Assert.Single(fixture.Document.Devices.OfType<RingCabinet>());
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            fixture.Document,
+            fixture.Layout.DrawingLayout,
+            fixture.Layout.RingCabinetLayouts,
+            fixture.Document.Connections,
+            fixture.Document.CableSegments);
+        Assert.True(anchors.TryGet(
+            cabinet.Intervals[0].ExternalTerminalId,
+            out TerminalAnchor terminal));
+
+        SceneLine exit = Assert.Single(
+            fixture.Builder.Build(fixture.Document, fixture.Layout).Elements.OfType<SceneLine>(),
+            line => line.TargetId == fixture.FirstCable.Id &&
+                    line.Start == terminal.Position);
+
+        Assert.Equal(exit.Start.XMillimeters, exit.End.XMillimeters);
+        Assert.True(exit.End.YMillimeters - exit.Start.YMillimeters >= 50);
     }
 
     private static TopologyFixture CreateFixture()

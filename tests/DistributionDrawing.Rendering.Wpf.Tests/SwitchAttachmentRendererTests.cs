@@ -82,8 +82,8 @@ public sealed class SwitchAttachmentRendererTests
             poleLayout,
             [input]);
 
-        Assert.Contains(open.OfType<SceneText>(), text => text.Text == "分");
-        Assert.Contains(closed.OfType<SceneText>(), text => text.Text == "合");
+        Assert.DoesNotContain(open.OfType<SceneText>(), text => text.Text is "合" or "分");
+        Assert.DoesNotContain(closed.OfType<SceneText>(), text => text.Text is "合" or "分");
         Assert.Equal(SwitchState.Closed, switchDevice.SwitchState);
         Assert.Equal(attachment.AttachmentId, input.Attachment.AttachmentId);
     }
@@ -123,7 +123,8 @@ public sealed class SwitchAttachmentRendererTests
                 new AttachmentLayout(cableAttachment.AttachmentId, new DocumentPoint(-22, 14)))]);
 
         Assert.NotEmpty(switchElements.OfType<SceneLine>());
-        Assert.Contains(switchElements.OfType<SceneText>(), text => text.Text == "分");
+        Assert.DoesNotContain(switchElements.OfType<SceneText>(), text =>
+            text.Text is "合" or "分");
         Assert.Contains(cableElements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
         Assert.Equal(SwitchState.Open, switchDevice.SwitchState);
         Assert.Equal(cableTermination.Id, cableAttachment.AttachedDeviceId);

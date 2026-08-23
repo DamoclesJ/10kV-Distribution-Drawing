@@ -28,6 +28,10 @@ public sealed class PropertyCommandFactory
     public const string CableTypePropertyKey = EditPropertyCommand.CableTypeProperty;
     public const string CableLengthPropertyKey = EditPropertyCommand.CableLengthProperty;
     public const string IntervalDisplayNamePropertyKey = "Interval.DisplayName";
+    public const string RingCabinetDisplayNamePropertyKey =
+        EditPropertyCommand.RingCabinetDisplayNameProperty;
+    public const string RingCabinetLineNamePropertyKey =
+        EditPropertyCommand.RingCabinetLineNameProperty;
 
     public bool TryCreateIntervalTypeChange(
         ResolvedSelection selection,
@@ -102,6 +106,47 @@ public sealed class PropertyCommandFactory
 
         command = null;
         error = null;
+
+        if (selection.RingCabinet is not null &&
+            selection.RingCabinetInterval is null &&
+            selection.Reference.Kind == SelectionTargetKind.RingCabinet)
+        {
+            if (propertyKey is not (RingCabinetDisplayNamePropertyKey or
+                RingCabinetLineNamePropertyKey))
+            {
+                error = new PropertyEditError(
+                    "PropertyReadOnly",
+                    $"Property '{propertyKey}' is not editable.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                error = new PropertyEditError(
+                    "InputInvalid",
+                    propertyKey == RingCabinetDisplayNamePropertyKey
+                        ? "环网柜名称不能为空。"
+                        : "线路名称不能为空。");
+                return false;
+            }
+
+            string cabinetAfter = input.Trim();
+            string before = propertyKey == RingCabinetDisplayNamePropertyKey
+                ? selection.RingCabinet.DisplayName ?? string.Empty
+                : selection.RingCabinet.LineName;
+            if (cabinetAfter == before)
+            {
+                error = new PropertyEditError("NoChange", "名称没有变化。");
+                return false;
+            }
+
+            command = new EditPropertyCommand(
+                selection.RingCabinet,
+                propertyKey,
+                before,
+                cabinetAfter);
+            return true;
+        }
 
         if (selection.RingCabinet is not null &&
             selection.RingCabinetInterval is not null &&

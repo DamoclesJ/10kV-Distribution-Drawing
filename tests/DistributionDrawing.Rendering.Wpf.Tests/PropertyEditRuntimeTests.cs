@@ -25,15 +25,43 @@ public sealed class PropertyEditRuntimeTests
             EditPropertyCommand.RingCabinetNameProperty,
             "Before",
             "After");
+        var stack = new CommandStack();
 
-        command.Execute();
+        stack.ExecuteCommand(command);
         Assert.Equal("After", cabinet.DisplayName);
         Assert.Equal(target, selection.CurrentSelection);
-        command.Undo();
+        Assert.True(stack.Undo());
         Assert.Equal("Before", cabinet.DisplayName);
-        command.Redo();
+        Assert.True(stack.Redo());
         Assert.Equal("After", cabinet.DisplayName);
         Assert.Equal(cabinet.Id, target.TargetId);
+    }
+
+    [Fact]
+    public void EditRingCabinetLineName_UndoRedo_PreservesCabinetIdentity()
+    {
+        RingCabinet cabinet = CreateCabinet("NK1991");
+        cabinet.RenameLineName("线路 A");
+        Guid cabinetId = cabinet.Id;
+        SelectionService selection = new();
+        SelectionTarget target = new(ApplicationSelectionTargetKind.RingCabinet, cabinet.Id);
+        selection.Select(target);
+        var command = new EditPropertyCommand(
+            cabinet,
+            EditPropertyCommand.RingCabinetLineNameProperty,
+            "线路 A",
+            "线路 B");
+        var stack = new CommandStack();
+
+        stack.ExecuteCommand(command);
+        Assert.Equal("线路 B", cabinet.LineName);
+        Assert.Equal(target, selection.CurrentSelection);
+        Assert.True(stack.Undo());
+        Assert.Equal("线路 A", cabinet.LineName);
+        Assert.True(stack.Redo());
+        Assert.Equal("线路 B", cabinet.LineName);
+        Assert.Equal(cabinetId, cabinet.Id);
+        Assert.Equal(target, selection.CurrentSelection);
     }
 
     [Fact]

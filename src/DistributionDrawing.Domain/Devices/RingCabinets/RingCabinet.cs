@@ -26,13 +26,15 @@ public sealed class RingCabinet : Device
         Guid mainBusNodeId,
         IEnumerable<RingCabinetInterval> intervals,
         IEnumerable<ElectricalNode> electricalNodes,
-        IEnumerable<Terminal> terminals)
+        IEnumerable<Terminal> terminals,
+        string? lineName = null)
         : base(id, DeviceType.RingCabinet, displayName, TenKilovolts)
     {
         MainBusNodeId = mainBusNodeId;
         _intervals = Array.AsReadOnly(intervals.ToArray());
         _electricalNodes = Array.AsReadOnly(electricalNodes.ToArray());
         _terminals = Array.AsReadOnly(terminals.ToArray());
+        LineName = lineName?.Trim() ?? string.Empty;
         CompositionKind = DetermineCompositionKind(_intervals);
     }
 
@@ -46,6 +48,18 @@ public sealed class RingCabinet : Device
 
     public IReadOnlyList<Terminal> Terminals => _terminals;
 
+    public string LineName { get; private set; }
+
+    public void RenameLineName(string lineName)
+    {
+        if (string.IsNullOrWhiteSpace(lineName))
+        {
+            throw new ArgumentException("Line name is required.", nameof(lineName));
+        }
+
+        LineName = lineName.Trim();
+    }
+
     public RingCabinetRestoreDefinition CaptureRestoreDefinition()
     {
         return new RingCabinetRestoreDefinition(
@@ -53,7 +67,8 @@ public sealed class RingCabinet : Device
             DisplayName ?? throw new InvalidOperationException(
                 "A ring cabinet must have a display name."),
             MainBusNodeId,
-            _intervals.Select(CreateRestoreDefinition).ToArray());
+            _intervals.Select(CreateRestoreDefinition).ToArray(),
+            LineName);
     }
 
     public void RestoreState(RingCabinetRestoreDefinition definition)
@@ -77,6 +92,7 @@ public sealed class RingCabinet : Device
         _intervals = candidate._intervals;
         _electricalNodes = candidate._electricalNodes;
         _terminals = candidate._terminals;
+        LineName = candidate.LineName;
         CompositionKind = candidate.CompositionKind;
     }
 
@@ -125,7 +141,8 @@ public sealed class RingCabinet : Device
             DisplayName ?? throw new InvalidOperationException(
                 "A ring cabinet must have a display name."),
             MainBusNodeId,
-            definitions));
+            definitions,
+            LineName));
 
         _intervals = candidate._intervals;
         _electricalNodes = candidate._electricalNodes;
@@ -170,7 +187,8 @@ public sealed class RingCabinet : Device
             DisplayName ?? throw new InvalidOperationException(
                 "A ring cabinet must have a display name."),
             MainBusNodeId,
-            definitions));
+            definitions,
+            LineName));
     }
 
     internal IEnumerable<SwitchDevice> InternalSwitchDevices =>
@@ -239,7 +257,8 @@ public sealed class RingCabinet : Device
             mainBusNodeId,
             intervals,
             electricalNodes,
-            terminals);
+            terminals,
+            lineName: null);
 
         cabinet.ValidateStructure();
         return cabinet;
@@ -327,7 +346,8 @@ public sealed class RingCabinet : Device
             definition.MainBusNodeId,
             intervals,
             electricalNodes,
-            terminals);
+            terminals,
+            definition.LineName);
 
         cabinet.ValidateStructure();
         return cabinet;

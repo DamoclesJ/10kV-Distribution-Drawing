@@ -309,6 +309,35 @@ public sealed class OrthogonalRoutingTests
             Assert.True(segment.IsHorizontal || segment.IsVertical));
     }
 
+    [Fact]
+    public void Route_RespectsMinimumStubWhenConstrainedTerminalIsConnectionEnd()
+    {
+        Guid startId = Guid.NewGuid();
+        Guid endId = Guid.NewGuid();
+        DocumentPoint terminal = new(80, 100);
+        ConnectionRouteRequest request = new(
+            Guid.Parse("00000000-0000-0000-0000-000000000014"),
+            ConnectionType.Cable,
+            startId,
+            endId,
+            new TerminalAnchor(
+                startId,
+                new DocumentPoint(0, 0),
+                TerminalAnchorDirection.Auto),
+            new TerminalAnchor(
+                endId,
+                terminal,
+                TerminalAnchorDirection.Down,
+                MinimumStubLength: 50));
+
+        OrthogonalRoute route = new OrthogonalRouter().Route(request, []);
+
+        OrthogonalRouteSegment last = route.Segments[^1];
+        Assert.True(last.IsVertical);
+        Assert.Equal(terminal, last.End);
+        Assert.True(last.Start.YMillimeters - last.End.YMillimeters >= 50);
+    }
+
     private static ConnectionRouteRequest CreateRequest(
         string connectionId,
         DocumentPoint start,

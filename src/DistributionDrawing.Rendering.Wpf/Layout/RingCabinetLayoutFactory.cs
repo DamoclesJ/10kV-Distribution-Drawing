@@ -215,19 +215,19 @@ public sealed class RingCabinetLayoutFactory
             switchDevice.Id,
             position,
             switchKind == SwitchKind.GroundSwitch
-                ? _metrics.Switch.GroundSwitchLength
-                : _metrics.Switch.StandardSwitchLength,
-            _metrics.Switch.LogicalHitHeight);
+                ? _metrics.Switch.GroundSwitchLength * _metrics.RingCabinet.SwitchSymbolScale
+                : _metrics.Switch.StandardSwitchLength * _metrics.RingCabinet.SwitchSymbolScale,
+            _metrics.Switch.LogicalHitHeight * _metrics.RingCabinet.SwitchSymbolScale);
     }
 
     private double GetMainSwitchX() =>
         (_metrics.RingCabinet.StandardIntervalWidth -
-         _metrics.Switch.StandardSwitchLength) / 2;
+         _metrics.Switch.StandardSwitchLength * _metrics.RingCabinet.SwitchSymbolScale) / 2;
 
     private double GetGroundSwitchX() =>
         _metrics.RingCabinet.StandardIntervalWidth / 2 -
         _metrics.RingCabinet.DeviceVerticalSpacing / 2 -
-        _metrics.Switch.GroundSwitchLength;
+        _metrics.Switch.GroundSwitchLength * _metrics.RingCabinet.SwitchSymbolScale;
 
     private double GetPrimaryDeviceY() =>
         _metrics.RingCabinet.BusbarOffset -
@@ -236,18 +236,18 @@ public sealed class RingCabinetLayoutFactory
 
     private double GetSecondaryDeviceY() =>
         GetPrimaryDeviceY() +
-        _metrics.Switch.LogicalHitHeight +
-        _metrics.RingCabinet.DeviceVerticalSpacing * 2;
+        _metrics.Switch.LogicalHitHeight * _metrics.RingCabinet.SwitchSymbolScale +
+        _metrics.RingCabinet.DeviceVerticalSpacing;
 
     private double GetGroundSwitchYForNode(double connectedDeviceY)
     {
         double contactInset = Math.Max(
             _metrics.Switch.ContactRadius,
             Math.Min(
-                _metrics.Switch.LogicalHitHeight / 4,
-                _metrics.Switch.StandardSwitchLength / 4));
+                _metrics.Switch.LogicalHitHeight * _metrics.RingCabinet.SwitchSymbolScale / 4,
+                _metrics.Switch.StandardSwitchLength * _metrics.RingCabinet.SwitchSymbolScale / 4));
         return connectedDeviceY +
-               _metrics.Switch.LogicalHitHeight / 2 -
+               _metrics.Switch.LogicalHitHeight * _metrics.RingCabinet.SwitchSymbolScale / 2 -
                contactInset;
     }
 }

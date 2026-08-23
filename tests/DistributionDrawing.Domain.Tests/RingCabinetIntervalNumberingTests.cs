@@ -7,9 +7,9 @@ namespace DistributionDrawing.Domain.Tests;
 public sealed class RingCabinetIntervalNumberingTests
 {
     [Theory]
-    [InlineData(1, "-1")]
-    [InlineData(3, "-3")]
-    [InlineData(7, "-7")]
+    [InlineData(1, "负1")]
+    [InlineData(3, "负3")]
+    [InlineData(7, "负7")]
     public void BusinessNumber_UsesBayIndex(int bayIndex, string expected)
     {
         RingCabinetInterval interval = CreateCabinet(
@@ -24,9 +24,9 @@ public sealed class RingCabinetIntervalNumberingTests
     }
 
     [Theory]
-    [InlineData(GroundingStructureKind.UpperIsolationGrounding, "-3", "-3-4", "-3-47")]
-    [InlineData(GroundingStructureKind.UpperLowerGrounding, "-3", "-3-4", "-3-7")]
-    [InlineData(GroundingStructureKind.LowerLowerGrounding, "-3", "-3-2", "-3-7")]
+    [InlineData(GroundingStructureKind.UpperIsolationGrounding, "负3", "负3-4", "负3-47")]
+    [InlineData(GroundingStructureKind.UpperLowerGrounding, "负3", "负3-4", "负3-7")]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding, "负3", "负3-2", "负3-7")]
     public void IntegratedFeeder_ReturnsStructureSpecificNumbers(
         GroundingStructureKind structure,
         string circuitBreakerNumber,
@@ -41,7 +41,7 @@ public sealed class RingCabinetIntervalNumberingTests
                 SwitchState.Open,
                 SwitchState.Open)).Intervals.Single(item => item.BayIndex == 3);
 
-        Assert.Equal("-3", interval.BusinessNumber);
+        Assert.Equal("负3", interval.BusinessNumber);
         Assert.Equal(circuitBreakerNumber, NumberFor(interval, SwitchKind.CircuitBreaker));
         Assert.Equal(isolationNumber, NumberFor(interval, SwitchKind.IsolationSwitch));
         Assert.Equal(groundNumber, NumberFor(interval, SwitchKind.GroundSwitch));
@@ -59,9 +59,9 @@ public sealed class RingCabinetIntervalNumberingTests
                 SwitchState.Open,
                 SwitchState.Open)).Intervals.Single(item => item.BayIndex == bayIndex);
 
-        Assert.Equal($"-{bayIndex}", interval.BusinessNumber);
-        Assert.Equal($"-{bayIndex}-2", NumberFor(interval, SwitchKind.IsolationSwitch));
-        Assert.Equal($"-{bayIndex}-7", NumberFor(interval, SwitchKind.GroundSwitch));
+        Assert.Equal($"负{bayIndex}", interval.BusinessNumber);
+        Assert.Equal($"负{bayIndex}-2", NumberFor(interval, SwitchKind.IsolationSwitch));
+        Assert.Equal($"负{bayIndex}-7", NumberFor(interval, SwitchKind.GroundSwitch));
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class RingCabinetIntervalNumberingTests
                 SwitchState.Open,
                 SwitchState.Open)).Intervals.Single(item => item.BayIndex == 5);
 
-        Assert.Equal("-5-7", NumberFor(interval, SwitchKind.GroundSwitch));
+        Assert.Equal("负5-7", NumberFor(interval, SwitchKind.GroundSwitch));
         Assert.Null(NumberFor(interval, SwitchKind.LoadSwitch));
     }
 

@@ -18,7 +18,7 @@ public sealed class RingCabinetRealScenarioTests
                 SwitchState.Closed,
                 SwitchState.Open,
                 "负3负荷开关"),
-            "-3-7"];
+            "负3-7"];
         yield return [
             "UpperIsolationGrounding",
             RingCabinetIntervalDefinition.CreateIntegratedFeeder(
@@ -27,7 +27,7 @@ public sealed class RingCabinetRealScenarioTests
                 SwitchState.Closed,
                 SwitchState.Closed,
                 SwitchState.Open),
-            "-3-47"];
+            "负3-47"];
         yield return [
             "UpperLowerGrounding",
             RingCabinetIntervalDefinition.CreateIntegratedFeeder(
@@ -36,7 +36,7 @@ public sealed class RingCabinetRealScenarioTests
                 SwitchState.Closed,
                 SwitchState.Closed,
                 SwitchState.Open),
-            "-3-7"];
+            "负3-7"];
         yield return [
             "LowerLowerGrounding",
             RingCabinetIntervalDefinition.CreateIntegratedFeeder(
@@ -45,7 +45,7 @@ public sealed class RingCabinetRealScenarioTests
                 SwitchState.Closed,
                 SwitchState.Closed,
                 SwitchState.Open),
-            "-3-7"];
+            "负3-7"];
     }
 
     public static IEnumerable<object[]> PTScenarios()
@@ -102,18 +102,18 @@ public sealed class RingCabinetRealScenarioTests
         RingCabinetInterval interval = cabinet.Intervals[0];
         IReadOnlyList<SceneText> labels = Render(cabinet);
 
-        Assert.Equal($"-{bayIndex}", interval.BusinessNumber);
-        Assert.Contains(labels, label => label.Text == $"-{bayIndex}");
+        Assert.Equal($"负{bayIndex}", interval.BusinessNumber);
+        Assert.Contains(labels, label => label.Text == $"负{bayIndex}");
         Assert.Equal(
-            $"-{bayIndex}-2",
+            $"负{bayIndex}-2",
             interval.GetSwitchBusinessNumber(interval.SwitchDevices.Single(device =>
                 device.SwitchKind == SwitchKind.IsolationSwitch).Id));
         Assert.Equal(
-            $"-{bayIndex}-7",
+            $"负{bayIndex}-7",
             interval.GetSwitchBusinessNumber(interval.SwitchDevices.Single(device =>
                 device.SwitchKind == SwitchKind.GroundSwitch).Id));
-        Assert.Contains(labels, label => label.Text == $"-{bayIndex}-2");
-        Assert.Contains(labels, label => label.Text == $"-{bayIndex}-7");
+        Assert.Contains(labels, label => label.Text == $"负{bayIndex}-2");
+        Assert.Contains(labels, label => label.Text == $"负{bayIndex}-7");
     }
 
     [Fact]

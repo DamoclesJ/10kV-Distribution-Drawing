@@ -54,6 +54,40 @@ public sealed class ProjectPersistenceRoundTripTests
         }
     }
 
+    [Fact]
+    public void Version6ArchiveWithoutLineName_OpensWithEmptyLineName()
+    {
+        DrawingDocument document = CreateDocumentWithRingCabinet();
+        RingCabinet original = GetCabinet(document);
+        original.RenameLineName("10kV 测试线路");
+        string filePath = CreateTemporaryPath("v6-missing-line-name");
+
+        try
+        {
+            var container = new ProjectFileContainer();
+            container.Save(filePath, CreateFileDocument(document));
+            MutateArchive(filePath, (_, payload) =>
+            {
+                JsonObject domain = Assert.IsType<JsonObject>(payload["domain"]);
+                JsonArray cabinets = Assert.IsType<JsonArray>(domain["ringCabinets"]);
+                JsonObject cabinet = Assert.IsType<JsonObject>(Assert.Single(cabinets));
+                Assert.True(cabinet.Remove("lineName"));
+            });
+
+            ProjectFileDocument opened = container.Open(filePath);
+            RingCabinet restored = GetCabinet(
+                ProjectDomainMapper.ToDomain(opened.Domain!));
+
+            Assert.Equal(ProjectFileFormat.Version6, opened.Manifest.FormatVersion);
+            Assert.Equal(string.Empty, restored.LineName);
+            AssertStableIds(original, restored);
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
     [Theory]
     [InlineData(ProjectFileFormat.Version1)]
     [InlineData(ProjectFileFormat.Version2)]

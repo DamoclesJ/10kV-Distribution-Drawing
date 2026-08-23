@@ -87,7 +87,14 @@ public sealed class PropertyProjector
             Section(
                 "基本信息",
                 DomainRow("Id", "标识", cabinet.Id),
-                DomainRow("DisplayName", "名称", cabinet.DisplayName),
+                EditableDomainRow(
+                    PropertyCommandFactory.RingCabinetDisplayNamePropertyKey,
+                    "环网柜名称",
+                    cabinet.DisplayName),
+                EditableDomainRow(
+                    PropertyCommandFactory.RingCabinetLineNamePropertyKey,
+                    "线路名称",
+                    cabinet.LineName),
                 DomainRow("CompositionKind", "组成类型", cabinet.CompositionKind),
                 DomainRow("MainBusNodeId", "主母线节点", cabinet.MainBusNodeId),
                 DomainRow("IntervalCount", "间隔数量", cabinet.Intervals.Count)),

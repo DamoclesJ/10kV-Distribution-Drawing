@@ -41,6 +41,9 @@
                   Click="OnBeginAddWorkScope" />
       </MenuItem>
       <MenuItem Header="视图">
+        <MenuItem Header="图面字号设置"
+                  Click="OnDrawingTypographySettings" />
+        <Separator />
         <MenuItem Header="放大"
                   Click="OnZoomIn" />
         <MenuItem Header="缩小"
@@ -131,6 +134,19 @@
                      Foreground="#666"
                      Text="{Binding ObjectTitle}"
                      TextWrapping="Wrap" />
+          <StackPanel x:Name="RingCabinetEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555" Text="环网柜名称" />
+            <TextBox x:Name="RingCabinetDisplayNameInput" Margin="0,4,0,4" />
+            <Button Content="应用环网柜名称"
+                    Click="OnApplyRingCabinetDisplayName" />
+            <TextBlock Margin="0,8,0,0" Foreground="#555" Text="线路名称" />
+            <TextBox x:Name="RingCabinetLineNameInput" Margin="0,4,0,4" />
+            <Button Content="应用线路名称"
+                    Click="OnApplyRingCabinetLineName" />
+          </StackPanel>
           <StackPanel x:Name="IntervalEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"

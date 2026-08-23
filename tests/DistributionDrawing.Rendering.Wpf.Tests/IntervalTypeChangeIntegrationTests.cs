@@ -101,7 +101,7 @@ public sealed class IntervalTypeChangeIntegrationTests
 
         Assert.Equal(interval.IntervalId, snapshot.Selection!.ObjectId);
         Assert.Contains(rows, row => row is { PropertyKey: "BayIndex", DisplayValue: "1" });
-        Assert.Contains(rows, row => row is { PropertyKey: "BusinessNumber", DisplayValue: "-1" });
+        Assert.Contains(rows, row => row is { PropertyKey: "BusinessNumber", DisplayValue: "负1" });
         Assert.Contains(rows, row => row is { PropertyKey: "Sequence", IsReadOnly: true });
     }
 

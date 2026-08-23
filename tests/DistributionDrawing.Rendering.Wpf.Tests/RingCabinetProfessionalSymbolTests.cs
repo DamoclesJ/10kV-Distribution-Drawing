@@ -32,6 +32,67 @@ public sealed class RingCabinetProfessionalSymbolTests
             interval => Assert.Equal(
                 DrawingMetrics.Default.RingCabinet.StandardIntervalWidth,
                 interval.WidthMillimeters));
+        Assert.All(
+            layout.IntervalLayouts.Values.SelectMany(interval => interval.SwitchLayouts.Values),
+            switchLayout => Assert.Equal(
+                DrawingMetrics.Default.Switch.LogicalHitHeight *
+                DrawingMetrics.Default.RingCabinet.SwitchSymbolScale,
+                switchLayout.HeightMillimeters));
+    }
+
+    [Fact]
+    public void RingCabinetTypography_IsAdjustedByCategoryFromOneMetricsEntry()
+    {
+        var metrics = new RingCabinetDrawingMetrics(
+            10,
+            60,
+            125,
+            25,
+            1,
+            5,
+            new DocumentPoint(0, -8),
+            12,
+            2,
+            16,
+            8,
+            10.5,
+            7);
+
+        metrics.UpdateTypography(18, 9, 12, 8);
+
+        Assert.Equal(18, metrics.CabinetNameFontSize);
+        Assert.Equal(9, metrics.LineNameFontSize);
+        Assert.Equal(12, metrics.IntervalNumberFontSize);
+        Assert.Equal(8, metrics.SwitchNumberFontSize);
+    }
+
+    [Fact]
+    public void SwitchScale_DoesNotChangeCabinetOrIntervalBounds()
+    {
+        RingCabinet cabinet = CreateLoadSwitchCabinet(3);
+        RingCabinetLayout baseline = new RingCabinetLayoutFactory(
+            WithSwitchScale(1)).Create(cabinet, new DocumentPoint(10, 20));
+        RingCabinetLayout enlarged = new RingCabinetLayoutFactory(
+            WithSwitchScale(2)).Create(cabinet, new DocumentPoint(10, 20));
+
+        Assert.Equal(baseline.Position, enlarged.Position);
+        Assert.Equal(baseline.WidthMillimeters, enlarged.WidthMillimeters);
+        Assert.Equal(baseline.HeightMillimeters, enlarged.HeightMillimeters);
+        Assert.Equal(
+            baseline.IntervalLayouts.Values.Select(layout =>
+                (layout.RelativePosition, layout.WidthMillimeters, layout.HeightMillimeters)),
+            enlarged.IntervalLayouts.Values.Select(layout =>
+                (layout.RelativePosition, layout.WidthMillimeters, layout.HeightMillimeters)));
+        Assert.All(enlarged.IntervalLayouts.Values, enlargedInterval =>
+        {
+            RingCabinetIntervalLayout baselineInterval = baseline.IntervalLayouts[
+                enlargedInterval.IntervalId];
+            Assert.All(enlargedInterval.SwitchLayouts.Values, enlargedSwitch =>
+                Assert.Equal(
+                    baselineInterval.SwitchLayouts[enlargedSwitch.SwitchDeviceId]
+                        .HeightMillimeters * 2,
+                    enlargedSwitch.HeightMillimeters));
+        });
     }
 
     [Theory]
@@ -426,4 +487,26 @@ public sealed class RingCabinetProfessionalSymbolTests
 
     private static RingCabinetLayout CreateLayout(RingCabinet cabinet) =>
         new RingCabinetLayoutFactory().Create(cabinet, new DocumentPoint(20, 30));
+
+    private static DrawingMetrics WithSwitchScale(double scale)
+    {
+        RingCabinetDrawingMetrics source = DrawingMetrics.Default.RingCabinet;
+        return DrawingMetrics.Default with
+        {
+            RingCabinet = new RingCabinetDrawingMetrics(
+                source.CabinetPadding,
+                source.StandardIntervalWidth,
+                source.StandardIntervalHeight,
+                source.BusbarOffset,
+                source.BusbarHeight,
+                source.IntervalSpacing,
+                source.CabinetNameOffset,
+                source.DeviceVerticalSpacing,
+                scale,
+                source.CabinetNameFontSize,
+                source.LineNameFontSize,
+                source.IntervalNumberFontSize,
+                source.SwitchNumberFontSize)
+        };
+    }
 }

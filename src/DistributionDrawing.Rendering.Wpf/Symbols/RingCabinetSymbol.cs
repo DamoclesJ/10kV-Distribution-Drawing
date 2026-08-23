@@ -115,7 +115,21 @@ public sealed class RingCabinetSymbol
                     layout.Position.YMillimeters),
                 layout.LabelOffset,
                 priority: 100,
-                fontSizeMillimeters: 4));
+                fontSizeMillimeters: _metrics.RingCabinet.CabinetNameFontSize));
+        }
+
+        if (!string.IsNullOrWhiteSpace(cabinet.LineName))
+        {
+            requests.Add(new LabelRequest(
+                LabelTargetKind.RingCabinet,
+                cabinet.Id,
+                cabinet.LineName,
+                new DocumentPoint(
+                    layout.Position.XMillimeters + layout.WidthMillimeters / 2,
+                    layout.Position.YMillimeters + layout.MainBusYMillimeters),
+                new DocumentPoint(0, -_metrics.RingCabinet.LineNameFontSize - 2),
+                priority: 95,
+                fontSizeMillimeters: _metrics.RingCabinet.LineNameFontSize));
         }
 
         foreach (RingCabinetInterval interval in cabinet.Intervals.OrderBy(
@@ -143,7 +157,7 @@ public sealed class RingCabinetSymbol
                 intervalNumberAnchor,
                 intervalNumberOffset,
                 priority: 80,
-                fontSizeMillimeters: _metrics.General.SmallFontSize));
+                fontSizeMillimeters: _metrics.RingCabinet.IntervalNumberFontSize));
 
             foreach (SwitchDevice switchDevice in interval.SwitchDevices)
             {
@@ -178,7 +192,7 @@ public sealed class RingCabinetSymbol
                         switchOrigin,
                         labelOffset,
                         priority: 70,
-                        fontSizeMillimeters: _metrics.General.SmallFontSize));
+                        fontSizeMillimeters: _metrics.RingCabinet.SwitchNumberFontSize));
                 }
 
             }

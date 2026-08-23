@@ -3,6 +3,7 @@ using DistributionDrawing.Application.Templates.RingCabinets.Building;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols;
@@ -13,6 +14,37 @@ namespace DistributionDrawing.Rendering.Wpf.Tests;
 
 public sealed class RingCabinetRendererTests
 {
+    [Fact]
+    public void Render_UsesEditableCabinetAndLineNamesWithCategoryFontSizes()
+    {
+        RingCabinet cabinet = BuildCabinet(
+            new BayTemplate(1, new LoadSwitchConfiguration()),
+            new BayTemplate(2, new LoadSwitchConfiguration()),
+            new BayTemplate(3, new LoadSwitchConfiguration()));
+        cabinet.Rename("NK1991");
+        cabinet.RenameLineName("10kV 奥东783线路");
+        RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(
+            cabinet,
+            new DocumentPoint(0, 0));
+
+        SceneText[] labels = new RingCabinetRenderer().Render(cabinet, layout)
+            .OfType<SceneText>()
+            .ToArray();
+
+        Assert.Contains(labels, label =>
+            label.Text == "NK1991" &&
+            label.FontSizeMillimeters ==
+            DrawingMetrics.Default.RingCabinet.CabinetNameFontSize);
+        Assert.Contains(labels, label =>
+            label.Text == "10kV 奥东783线路" &&
+            label.FontSizeMillimeters ==
+            DrawingMetrics.Default.RingCabinet.LineNameFontSize);
+        Assert.Contains(labels, label =>
+            label.Text == "负1" &&
+            label.FontSizeMillimeters ==
+            DrawingMetrics.Default.RingCabinet.IntervalNumberFontSize);
+    }
+
     [Fact]
     public void Render_ConventionalCabinetCreatesProfessionalSwitchGeometryPerInterval()
     {
@@ -44,9 +76,8 @@ public sealed class RingCabinetRendererTests
         }
 
         Assert.Equal(3, elements.OfType<ScenePolyline>().Count(polyline => polyline.IsClosed));
-        Assert.Equal(cabinet.Intervals.Sum(interval => interval.SwitchDevices.Count),
-            elements.OfType<SceneText>().Count(text =>
-            text.Text is "合" or "分"));
+        Assert.DoesNotContain(elements.OfType<SceneText>(), text =>
+            text.Text is "合" or "分");
     }
 
     [Fact]
@@ -77,9 +108,8 @@ public sealed class RingCabinetRendererTests
         }
 
         Assert.Equal(6, elements.OfType<ScenePolyline>().Count(polyline => polyline.IsClosed));
-        Assert.Equal(cabinet.Intervals.Sum(interval => interval.SwitchDevices.Count),
-            elements.OfType<SceneText>().Count(text =>
-                text.Text is "合" or "分"));
+        Assert.DoesNotContain(elements.OfType<SceneText>(), text =>
+            text.Text is "合" or "分");
     }
 
     private static bool IsInsideSwitchBounds(
@@ -170,12 +200,11 @@ public sealed class RingCabinetRendererTests
 
         IReadOnlyList<SceneElement> running = renderer.Render(cabinet, layout);
         RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
-        Assert.Contains(running.OfType<SceneText>(), text => text.Text == "合");
-
         interval.SwitchAssembly.ChangeSwitchState(loadSwitch.Id, SwitchState.Open);
         IReadOnlyList<SceneElement> open = renderer.Render(cabinet, layout);
 
-        Assert.Contains(open.OfType<SceneText>(), text => text.Text == "分");
+        Assert.DoesNotContain(open.OfType<SceneText>(), text =>
+            text.Text is "合" or "分");
         Assert.NotEqual(
             running.OfType<SceneLine>().ToArray(),
             open.OfType<SceneLine>().ToArray());
@@ -200,10 +229,35 @@ public sealed class RingCabinetRendererTests
         IReadOnlyList<SceneElement> elements = new RingCabinetRenderer().Render(cabinet, layout);
 
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "PT");
-        Assert.Equal(2, elements.OfType<SceneText>().Count(text => text.Text is "合" or "分"));
+        Assert.DoesNotContain(elements.OfType<SceneText>(), text =>
+            text.Text is "合" or "分");
         Assert.Equal(
             [SwitchState.Closed, SwitchState.Open],
             cabinet.Intervals.Single().SwitchDevices.Select(device => device.SwitchState));
+
+        SceneEllipse topCoil = elements.OfType<SceneEllipse>()
+            .OrderBy(ellipse => ellipse.Bounds.YMillimeters)
+            .First(ellipse => ellipse.Bounds.WidthMillimeters ==
+                DrawingMetrics.Default.PT.CoilRadius * 2);
+        double coilCenterX = topCoil.Bounds.XMillimeters +
+                             topCoil.Bounds.WidthMillimeters / 2;
+        Assert.DoesNotContain(elements.OfType<SceneLine>(), line =>
+            line.Start.XMillimeters == coilCenterX &&
+            line.End.XMillimeters == coilCenterX &&
+            Math.Max(line.Start.YMillimeters, line.End.YMillimeters) >
+                topCoil.Bounds.YMillimeters &&
+            Math.Min(line.Start.YMillimeters, line.End.YMillimeters) <
+                topCoil.Bounds.YMillimeters + topCoil.Bounds.HeightMillimeters);
+        ScenePolyline terminal = Assert.Single(elements.OfType<ScenePolyline>(), polyline =>
+            polyline.IsClosed && polyline.Points.Count == 3);
+        Assert.Equal(
+            DrawingMetrics.Default.CableTermination.TriangleWidth,
+            terminal.Points.Max(point => point.XMillimeters) -
+            terminal.Points.Min(point => point.XMillimeters));
+        Assert.Equal(
+            DrawingMetrics.Default.CableTermination.TriangleHeight,
+            terminal.Points.Max(point => point.YMillimeters) -
+            terminal.Points.Min(point => point.YMillimeters));
     }
 
     [Fact]
@@ -257,7 +311,8 @@ public sealed class RingCabinetRendererTests
         IReadOnlyList<SceneElement> elements = new RingCabinetRenderer().Render(cabinet, layout);
 
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "PT");
-        Assert.Equal(20, elements.OfType<SceneText>().Count(text => text.Text is "合" or "分"));
+        Assert.DoesNotContain(elements.OfType<SceneText>(), text =>
+            text.Text is "合" or "分");
     }
 
     [Fact]
@@ -289,10 +344,10 @@ public sealed class RingCabinetRendererTests
         Assert.NotEqual(
             initial.OfType<SceneLine>().ToArray(),
             grounded.OfType<SceneLine>().ToArray());
-        Assert.Contains(initial.OfType<SceneText>(), text => text.Text == "合");
-        Assert.Contains(initial.OfType<SceneText>(), text => text.Text == "分");
-        Assert.Equal(1, grounded.OfType<SceneText>().Count(text => text.Text == "合"));
-        Assert.Equal(1, grounded.OfType<SceneText>().Count(text => text.Text == "分"));
+        Assert.DoesNotContain(initial.OfType<SceneText>(), text =>
+            text.Text is "合" or "分");
+        Assert.DoesNotContain(grounded.OfType<SceneText>(), text =>
+            text.Text is "合" or "分");
     }
 
     [Fact]
@@ -313,8 +368,8 @@ public sealed class RingCabinetRendererTests
 
         Assert.Contains(labels, label => label.Text == "Rendering Test Cabinet");
         Assert.Equal(1, labels.Count(label => label.Text == "Rendering Test Cabinet"));
-        Assert.Contains(labels, label => label.Text == "-1");
-        Assert.Contains(labels, label => label.Text == "-2");
+        Assert.Contains(labels, label => label.Text == "负1");
+        Assert.Contains(labels, label => label.Text == "负2");
         Assert.DoesNotContain(labels, label => label.Text is "1#" or "2#");
     }
 
@@ -354,7 +409,7 @@ public sealed class RingCabinetRendererTests
         Assert.DoesNotContain(
             labels,
             label => interval.SwitchDevices.Any(device => device.DisplayName == label.Text));
-        Assert.Contains(labels, label => label.Text is "合" or "分");
+        Assert.DoesNotContain(labels, label => label.Text is "合" or "分");
     }
 
     [Fact]
@@ -418,7 +473,7 @@ public sealed class RingCabinetRendererTests
             Assert.DoesNotContain(
                 labels,
                 label => interval.SwitchDevices.Any(device => device.DisplayName == label.Text));
-            Assert.Contains(labels, label => label.Text is "合" or "分");
+            Assert.DoesNotContain(labels, label => label.Text is "合" or "分");
         }
     }
 
@@ -445,7 +500,7 @@ public sealed class RingCabinetRendererTests
                 .OfType<SceneText>()
                 .Select(label => label.Text)
                 .ToArray();
-            string intervalNumber = $"-{bayIndex}";
+            string intervalNumber = $"负{bayIndex}";
 
             Assert.Contains(intervalNumber, labels);
             Assert.Contains($"{intervalNumber}-2", labels);
@@ -481,13 +536,13 @@ public sealed class RingCabinetRendererTests
                 .Select(label => label.Text)
                 .ToArray();
             string isolationNumber = structureKind == GroundingStructureKind.LowerLowerGrounding
-                ? "-3-2"
-                : "-3-4";
+                ? "负3-2"
+                : "负3-4";
             string groundNumber = structureKind == GroundingStructureKind.UpperIsolationGrounding
-                ? "-3-47"
-                : "-3-7";
+                ? "负3-47"
+                : "负3-7";
 
-            Assert.Contains("-3", labels);
+            Assert.Contains("负3", labels);
             Assert.Contains(isolationNumber, labels);
             Assert.Contains(groundNumber, labels);
         }
@@ -510,9 +565,9 @@ public sealed class RingCabinetRendererTests
             .Select(label => label.Text)
             .ToArray();
 
-        Assert.Equal(1, labels.Count(label => label == "-3"));
-        Assert.Contains("-3-7", labels);
-        Assert.DoesNotContain(labels, label => label is "-3-2" or "-3-4" or "-3-47");
+        Assert.Equal(1, labels.Count(label => label == "负3"));
+        Assert.Contains("负3-7", labels);
+        Assert.DoesNotContain(labels, label => label is "负3-2" or "负3-4" or "负3-47");
     }
 
     [Fact]

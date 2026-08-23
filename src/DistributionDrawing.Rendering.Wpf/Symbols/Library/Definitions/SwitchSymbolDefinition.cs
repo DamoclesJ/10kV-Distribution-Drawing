@@ -165,14 +165,6 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
             elements.Add(new SceneText(context.LabelOrigin, context.Label, context.Stroke, _metrics.General.SmallFontSize));
         }
 
-        if (context.State is SymbolVisualState.Open or SymbolVisualState.Closed)
-        {
-            elements.Add(new SceneText(
-                new DocumentPoint(context.Origin.XMillimeters + context.WidthMillimeters + 2, context.Origin.YMillimeters + context.HeightMillimeters / 2),
-                context.State == SymbolVisualState.Closed ? "合" : "分",
-                context.Stroke,
-                _metrics.General.SmallFontSize));
-        }
     }
 
     private static SceneLine Line(SymbolRenderContext context, DocumentPoint start, DocumentPoint end) =>

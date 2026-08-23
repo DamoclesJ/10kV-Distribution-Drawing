@@ -23,6 +23,7 @@ public sealed class RingCabinetCreationViewModelTests
             "用户输入的环网柜");
 
         Assert.Equal("用户输入的环网柜", cabinet.DisplayName);
+        Assert.Equal("10kV 测试线路", cabinet.LineName);
         Assert.Equal(count, cabinet.Intervals.Count);
         Assert.All(cabinet.Intervals, interval =>
             Assert.Equal(IntervalKind.LoadSwitchInterval, interval.IntervalKind));
@@ -75,6 +76,7 @@ public sealed class RingCabinetCreationViewModelTests
         var viewModel = new RingCabinetCreationViewModel
         {
             DisplayName = name,
+            LineName = "10kV 测试线路",
             CabinetType = type,
             BusinessIntervalCount = count,
             IncludePTInterval = includePT

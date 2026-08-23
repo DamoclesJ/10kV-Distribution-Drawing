@@ -61,7 +61,8 @@ public sealed record ProjectRingCabinetDto(
     Guid MainBusNodeId,
     IReadOnlyList<ProjectRingCabinetIntervalDto> Intervals,
     IReadOnlyList<ProjectElectricalNodeDto> ElectricalNodes,
-    IReadOnlyList<ProjectTerminalDto> Terminals);
+    IReadOnlyList<ProjectTerminalDto> Terminals,
+    string? LineName = null);
 
 public sealed record ProjectRingCabinetIntervalDto(
     Guid IntervalId,
@@ -418,7 +419,8 @@ internal static class ProjectDomainMapper
             cabinet.MainBusNodeId,
             cabinet.Intervals.Select(ToDto).ToArray(),
             cabinet.ElectricalNodes.Select(ToDto).ToArray(),
-            cabinet.Terminals.Select(ToDto).ToArray());
+            cabinet.Terminals.Select(ToDto).ToArray(),
+            cabinet.LineName);
     }
 
     private static ProjectConnectionDto ToDto(Connection connection)
@@ -979,7 +981,8 @@ internal static class ProjectDomainMapper
                 dto.CabinetId,
                 dto.DisplayName,
                 dto.MainBusNodeId,
-                intervals));
+                intervals,
+                dto.LineName));
 
         ValidateRestoredAggregate(cabinet, dto);
         return cabinet;

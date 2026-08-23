@@ -39,7 +39,7 @@ public sealed class DrawingSceneBuilder
         _professionalSceneBuilder = new ProfessionalSceneBuilder(_symbolLibrary);
         _metrics = DrawingMetrics.Default;
         _routePlanner = new OrthogonalRoutePlanner(new OrthogonalRouter(_metrics));
-        _obstacleBuilder = new RoutingObstacleBuilder();
+        _obstacleBuilder = new RoutingObstacleBuilder(_metrics);
         _crossingDetector = new RouteCrossingDetector(_metrics);
         _lineJumpDecorator = new LineJumpDecorator(_metrics);
     }

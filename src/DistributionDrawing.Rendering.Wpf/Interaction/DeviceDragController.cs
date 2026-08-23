@@ -1,11 +1,12 @@
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
 
 /// <summary>
-/// Coordinates transient document-space dragging for Pole and RingCabinet
-/// layouts only. Domain objects and topology are never changed here.
+/// Coordinates transient document-space dragging for device layouts.
+/// Domain objects and topology are never changed here.
 /// </summary>
 public sealed class DeviceDragController
 {
@@ -24,7 +25,8 @@ public sealed class DeviceDragController
     public bool TryBeginDrag(
         SelectionReference target,
         DocumentPoint pointer,
-        RuntimeLayoutDocument layout)
+        RuntimeLayoutDocument layout,
+        Guid? orbitParentPoleId = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(layout);
@@ -54,6 +56,23 @@ public sealed class DeviceDragController
             return true;
         }
 
+        if (target.Kind == SelectionTargetKind.PoleAttachment &&
+            orbitParentPoleId is Guid poleId &&
+            layout.DrawingLayout.Attachments.TryGetValue(
+                target.ObjectId,
+                out AttachmentLayout? attachment) &&
+            layout.DrawingLayout.Poles.TryGetValue(poleId, out PoleLayout? parentPole))
+        {
+            _drag = new AttachmentDragState(
+                target,
+                pointer,
+                layout,
+                parentPole,
+                attachment,
+                attachment);
+            return true;
+        }
+
         return false;
     }
 
@@ -62,6 +81,23 @@ public sealed class DeviceDragController
         if (_drag is not { } drag)
         {
             throw new InvalidOperationException("No device drag is active.");
+        }
+
+        if (drag is AttachmentDragState attachment)
+        {
+            AttachmentLayout current = attachment.Before.MoveTo(
+                PoleProfessionalGeometry.GetCableTerminationOffset(
+                    attachment.ParentPole,
+                    attachment.Before,
+                    pointer));
+            if (current.Offset == attachment.Current.Offset)
+            {
+                return false;
+            }
+
+            attachment.Layout.DrawingLayout.Replace(current);
+            _drag = attachment with { Current = current };
+            return true;
         }
 
         DocumentPoint position = new(
@@ -108,6 +144,11 @@ public sealed class DeviceDragController
                 cabinet.Before.CabinetId,
                 cabinet.Before.Position,
                 cabinet.Current.Position),
+            AttachmentDragState attachment => new MoveAttachmentCommand(
+                attachment.Layout.DrawingLayout,
+                attachment.Before.AttachmentId,
+                attachment.Before.Offset,
+                attachment.Current.Offset),
             _ => throw new InvalidOperationException("Unsupported device drag state.")
         };
     }
@@ -127,6 +168,9 @@ public sealed class DeviceDragController
                 break;
             case RingCabinetDragState cabinet:
                 cabinet.Layout.ReplaceRingCabinet(cabinet.Before);
+                break;
+            case AttachmentDragState attachment:
+                attachment.Layout.DrawingLayout.Replace(attachment.Before);
                 break;
             default:
                 throw new InvalidOperationException("Unsupported device drag state.");
@@ -187,5 +231,19 @@ public sealed class DeviceDragController
         public override DocumentPoint StartPosition => Before.Position;
 
         public override DocumentPoint CurrentPosition => Current.Position;
+    }
+
+    private sealed record AttachmentDragState(
+        SelectionReference Target,
+        DocumentPoint StartPointer,
+        RuntimeLayoutDocument Layout,
+        PoleLayout ParentPole,
+        AttachmentLayout Before,
+        AttachmentLayout Current)
+        : DragState(Target, StartPointer, Layout)
+    {
+        public override DocumentPoint StartPosition => Before.Offset;
+
+        public override DocumentPoint CurrentPosition => Current.Offset;
     }
 }

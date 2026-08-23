@@ -4,6 +4,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -61,8 +62,8 @@ public sealed class PoleProfessionalSymbolTests
             [new SwitchAttachmentRenderInput(attachment, switchDevice, attachmentLayout)]);
 
         Assert.False(open.SequenceEqual(closed));
-        Assert.Contains(open.OfType<SceneText>(), text => text.Text == "分");
-        Assert.Contains(closed.OfType<SceneText>(), text => text.Text == "合");
+        Assert.DoesNotContain(open.OfType<SceneText>(), text => text.Text is "合" or "分");
+        Assert.DoesNotContain(closed.OfType<SceneText>(), text => text.Text is "合" or "分");
         Assert.Equal(SwitchState.Closed, switchDevice.SwitchState);
     }
 
@@ -154,7 +155,26 @@ public sealed class PoleProfessionalSymbolTests
         Assert.Single(elements.OfType<SceneEllipse>());
         ScenePolyline triangle = Assert.Single(elements.OfType<ScenePolyline>(), item => item.IsClosed);
         Assert.Equal(3, triangle.Points.Count);
+        DocumentPoint baseCenter = new(
+            (triangle.Points[1].XMillimeters + triangle.Points[2].XMillimeters) / 2,
+            (triangle.Points[1].YMillimeters + triangle.Points[2].YMillimeters) / 2);
+        Assert.Equal(
+            DrawingMetrics.Default.CableTermination.TriangleWidth,
+            EuclideanDistance(triangle.Points[1], triangle.Points[2]),
+            6);
+        Assert.Equal(
+            DrawingMetrics.Default.CableTermination.TriangleHeight,
+            EuclideanDistance(triangle.Points[0], baseCenter),
+            6);
+        Assert.Empty(elements.OfType<SceneLine>());
         Assert.Empty(elements.OfType<SceneRectangle>());
+    }
+
+    private static double EuclideanDistance(DocumentPoint first, DocumentPoint second)
+    {
+        double x = second.XMillimeters - first.XMillimeters;
+        double y = second.YMillimeters - first.YMillimeters;
+        return Math.Sqrt(x * x + y * y);
     }
 
     [Fact]

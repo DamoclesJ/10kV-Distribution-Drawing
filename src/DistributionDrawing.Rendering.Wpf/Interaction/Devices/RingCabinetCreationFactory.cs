@@ -22,6 +22,11 @@ public sealed class RingCabinetCreationFactory
             configuration.DisplayName);
         if (outcome.Result is { } result)
         {
+            if (!string.IsNullOrWhiteSpace(configuration.LineName))
+            {
+                result.Cabinet.RenameLineName(configuration.LineName);
+            }
+
             return result.Cabinet;
         }
 

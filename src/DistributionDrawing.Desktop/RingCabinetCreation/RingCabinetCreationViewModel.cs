@@ -18,6 +18,7 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
         Array.AsReadOnly(Enum.GetValues<GroundingStructureKind>());
     private readonly RingCabinetCreationTemplateFactory _templateFactory;
     private string _displayName = string.Empty;
+    private string _lineName = string.Empty;
     private RingCabinetTemplateType _cabinetType = RingCabinetTemplateType.Conventional;
     private int _businessIntervalCount = 3;
     private GroundingStructureKind _integratedGroundingStructureKind =
@@ -36,6 +37,12 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
     {
         get => _displayName;
         set => SetField(ref _displayName, value);
+    }
+
+    public string LineName
+    {
+        get => _lineName;
+        set => SetField(ref _lineName, value);
     }
 
     public IReadOnlyList<RingCabinetTemplateType> SupportedCabinetTypes => CabinetTypes;
@@ -134,6 +141,12 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
             return false;
         }
 
+        if (string.IsNullOrWhiteSpace(LineName))
+        {
+            errorMessage = "请输入线路名称。";
+            return false;
+        }
+
         try
         {
             RingCabinetTemplate template = _templateFactory.Create(
@@ -143,7 +156,8 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
                 IncludePTInterval);
             configuration = new RingCabinetCreationConfiguration(
                 DisplayName.Trim(),
-                template);
+                template,
+                LineName.Trim());
             errorMessage = string.Empty;
             return true;
         }

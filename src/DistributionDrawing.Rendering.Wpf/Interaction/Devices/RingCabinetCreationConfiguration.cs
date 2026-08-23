@@ -6,13 +6,17 @@ public sealed class RingCabinetCreationConfiguration
 {
     public RingCabinetCreationConfiguration(
         string displayName,
-        RingCabinetTemplate template)
+        RingCabinetTemplate template,
+        string? lineName = null)
     {
         DisplayName = displayName;
         Template = template ?? throw new ArgumentNullException(nameof(template));
+        LineName = lineName?.Trim() ?? string.Empty;
     }
 
     public string DisplayName { get; }
 
     public RingCabinetTemplate Template { get; }
+
+    public string LineName { get; }
 }

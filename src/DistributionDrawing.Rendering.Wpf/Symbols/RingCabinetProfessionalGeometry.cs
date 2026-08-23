@@ -15,6 +15,7 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint intervalOrigin,
         DrawingMetrics metrics)
     {
+        metrics = WithRingCabinetSwitchScale(metrics);
         DocumentRect bounds = GetBounds(layout, intervalOrigin);
         double centerX = bounds.XMillimeters + bounds.WidthMillimeters / 2;
         double contactInset = Math.Max(
@@ -44,7 +45,6 @@ internal static class RingCabinetProfessionalGeometry
                 metrics);
         }
 
-        AddStateLabel(elements, switchDevice, bounds, metrics);
         return (top, bottom);
     }
 
@@ -56,6 +56,7 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint circuitNode,
         DrawingMetrics metrics)
     {
+        metrics = WithRingCabinetSwitchScale(metrics);
         DocumentRect bounds = GetBounds(layout, intervalOrigin);
         // The grounding blade is a side branch from the actual electrical
         // node. Align its branch with that node instead of using an
@@ -81,7 +82,6 @@ internal static class RingCabinetProfessionalGeometry
             : new DocumentPoint(left.XMillimeters, left.YMillimeters - openOffset);
         elements.Add(Line(right, bladeEnd, metrics));
         AddLeftFacingEarth(elements, left, metrics);
-        AddStateLabel(elements, switchDevice, bounds, metrics);
         return (left, right);
     }
 
@@ -94,6 +94,7 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint intervalOrigin,
         DrawingMetrics metrics)
     {
+        metrics = WithRingCabinetSwitchScale(metrics);
         if (mainSwitch.SwitchKind is not (
                 SwitchKind.IsolationSwitch or SwitchKind.LoadSwitch) ||
             groundSwitch.SwitchKind != SwitchKind.GroundSwitch)
@@ -170,8 +171,6 @@ internal static class RingCabinetProfessionalGeometry
         }
 
         elements.Add(Line(common, bladeEnd, metrics));
-        AddStateLabel(elements, mainSwitch, mainBounds, metrics);
-        AddStateLabel(elements, groundSwitch, groundBounds, metrics);
         return (top, common);
     }
 
@@ -318,6 +317,21 @@ internal static class RingCabinetProfessionalGeometry
         DrawingMetrics metrics) =>
         new(start, end, Colors.Black, metrics.General.StandardStrokeThickness);
 
+    private static DrawingMetrics WithRingCabinetSwitchScale(DrawingMetrics metrics)
+    {
+        double scale = metrics.RingCabinet.SwitchSymbolScale;
+        return metrics with
+        {
+            Switch = metrics.Switch with
+            {
+                StandardSwitchLength = metrics.Switch.StandardSwitchLength * scale,
+                GroundSwitchLength = metrics.Switch.GroundSwitchLength * scale,
+                ContactRadius = metrics.Switch.ContactRadius * scale,
+                LogicalHitHeight = metrics.Switch.LogicalHitHeight * scale
+            }
+        };
+    }
+
     private static void AddLeftFacingEarth(
         ICollection<SceneElement> elements,
         DocumentPoint connection,
@@ -343,23 +357,4 @@ internal static class RingCabinetProfessionalGeometry
         }
     }
 
-    private static void AddStateLabel(
-        ICollection<SceneElement> elements,
-        SwitchDevice switchDevice,
-        DocumentRect bounds,
-        DrawingMetrics metrics)
-    {
-        if (switchDevice.SwitchState is not SwitchState state)
-        {
-            return;
-        }
-
-        elements.Add(new SceneText(
-            new DocumentPoint(
-                bounds.XMillimeters + bounds.WidthMillimeters + 2,
-                bounds.YMillimeters + bounds.HeightMillimeters / 2),
-            state == SwitchState.Closed ? "合" : "分",
-            Colors.Black,
-            metrics.General.SmallFontSize));
-    }
 }

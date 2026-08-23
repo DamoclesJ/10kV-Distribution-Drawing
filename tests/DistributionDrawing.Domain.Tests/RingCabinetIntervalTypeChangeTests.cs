@@ -28,10 +28,10 @@ public sealed class RingCabinetIntervalTypeChangeTests
         Assert.Equal(intervalId, target.IntervalId);
         Assert.Equal(source.Sequence, target.Sequence);
         Assert.Equal(source.BayIndex, target.BayIndex);
-        Assert.Equal("-3", target.BusinessNumber);
+        Assert.Equal("负3", target.BusinessNumber);
         Assert.Equal(IntervalKind.PTInterval, target.IntervalKind);
-        Assert.Equal("-3-2", NumberFor(target, SwitchKind.IsolationSwitch));
-        Assert.Equal("-3-7", NumberFor(target, SwitchKind.GroundSwitch));
+        Assert.Equal("负3-2", NumberFor(target, SwitchKind.IsolationSwitch));
+        Assert.Equal("负3-7", NumberFor(target, SwitchKind.GroundSwitch));
         Assert.DoesNotContain(oldSwitchIds, id => target.SwitchDevices.Any(device => device.Id == id));
         Assert.DoesNotContain(oldTerminalIds, id => target.SwitchDevices.Any(device => device.OwnsTerminal(id)));
         Assert.DoesNotContain(oldNodeIds, id =>
@@ -54,12 +54,12 @@ public sealed class RingCabinetIntervalTypeChangeTests
             RingCabinetInterval target = GetInterval(cabinet, 3);
             Assert.Equal(IntervalKind.IntegratedFeederInterval, target.IntervalKind);
             Assert.Equal(structure, target.GroundingStructureKind);
-            Assert.Equal("-3", NumberFor(target, SwitchKind.CircuitBreaker));
+            Assert.Equal("负3", NumberFor(target, SwitchKind.CircuitBreaker));
             Assert.Equal(
-                structure == GroundingStructureKind.LowerLowerGrounding ? "-3-2" : "-3-4",
+                structure == GroundingStructureKind.LowerLowerGrounding ? "负3-2" : "负3-4",
                 NumberFor(target, SwitchKind.IsolationSwitch));
             Assert.Equal(
-                structure == GroundingStructureKind.UpperIsolationGrounding ? "-3-47" : "-3-7",
+                structure == GroundingStructureKind.UpperIsolationGrounding ? "负3-47" : "负3-7",
                 NumberFor(target, SwitchKind.GroundSwitch));
         }
     }
@@ -105,8 +105,8 @@ public sealed class RingCabinetIntervalTypeChangeTests
             interval.IntervalKind == IntervalKind.PTInterval && interval.BayIndex == 2);
         RingCabinetInterval newPT = GetInterval(cabinet, 4);
         Assert.Equal(IntervalKind.PTInterval, newPT.IntervalKind);
-        Assert.Equal("-4-2", NumberFor(newPT, SwitchKind.IsolationSwitch));
-        Assert.Equal("-4-7", NumberFor(newPT, SwitchKind.GroundSwitch));
+        Assert.Equal("负4-2", NumberFor(newPT, SwitchKind.IsolationSwitch));
+        Assert.Equal("负4-7", NumberFor(newPT, SwitchKind.GroundSwitch));
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public sealed class RingCabinetIntervalTypeChangeTests
         Assert.Equal(sequence, target.Sequence);
         Assert.Equal(bayIndex, target.BayIndex);
         Assert.Equal(IntervalKind.LoadSwitchInterval, target.IntervalKind);
-        Assert.Equal("-3-7", NumberFor(target, SwitchKind.GroundSwitch));
+        Assert.Equal("负3-7", NumberFor(target, SwitchKind.GroundSwitch));
         Assert.Null(NumberFor(target, SwitchKind.LoadSwitch));
     }
 
@@ -178,7 +178,7 @@ public sealed class RingCabinetIntervalTypeChangeTests
         RingCabinetInterval target = GetInterval(cabinet, 3);
         Assert.Equal(IntervalKind.IntegratedFeederInterval, target.IntervalKind);
         Assert.Equal(structure, target.GroundingStructureKind);
-        Assert.Equal("-3", NumberFor(target, SwitchKind.CircuitBreaker));
+        Assert.Equal("负3", NumberFor(target, SwitchKind.CircuitBreaker));
     }
 
     [Theory]

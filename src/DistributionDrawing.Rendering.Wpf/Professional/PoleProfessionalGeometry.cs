@@ -9,7 +9,8 @@ namespace DistributionDrawing.Rendering.Wpf.Professional;
 public sealed record PoleAttachmentGeometry(
     DocumentPoint FirstTerminal,
     DocumentPoint SecondTerminal,
-    DocumentRect LogicalBounds);
+    DocumentRect LogicalBounds,
+    IReadOnlyList<DocumentPoint>? Outline = null);
 
 /// <summary>
 /// Keeps professional pole geometry and terminal anchors on one engineering baseline.
@@ -79,15 +80,39 @@ public static class PoleProfessionalGeometry
             double height = Math.Min(
                 effectiveMetrics.CableTermination.TriangleHeight,
                 attachmentLayout.HeightMillimeters);
-            DocumentRect bounds = new(
-                centerX - width / 2,
-                centerY - height / 2,
-                width,
-                height);
+            DocumentPoint poleCenter = GetPoleCenter(poleLayout, effectiveMetrics);
+            double deltaX = centerX - poleCenter.XMillimeters;
+            double deltaY = centerY - poleCenter.YMillimeters;
+            double length = Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+            double directionX = length == 0 ? 0 : deltaX / length;
+            double directionY = length == 0 ? 1 : deltaY / length;
+            DocumentPoint tangent = new(
+                poleCenter.XMillimeters +
+                directionX * effectiveMetrics.Pole.PoleRadius,
+                poleCenter.YMillimeters +
+                directionY * effectiveMetrics.Pole.PoleRadius);
+            DocumentPoint outerTip = new(
+                tangent.XMillimeters + directionX * height,
+                tangent.YMillimeters + directionY * height);
+            double perpendicularX = -directionY;
+            double perpendicularY = directionX;
+            DocumentPoint firstBase = new(
+                tangent.XMillimeters + perpendicularX * width / 2,
+                tangent.YMillimeters + perpendicularY * width / 2);
+            DocumentPoint secondBase = new(
+                tangent.XMillimeters - perpendicularX * width / 2,
+                tangent.YMillimeters - perpendicularY * width / 2);
+            DocumentPoint[] outline = [outerTip, firstBase, secondBase];
+            double minX = outline.Min(point => point.XMillimeters);
+            double minY = outline.Min(point => point.YMillimeters);
+            double maxX = outline.Max(point => point.XMillimeters);
+            double maxY = outline.Max(point => point.YMillimeters);
+            DocumentRect bounds = new(minX, minY, maxX - minX, maxY - minY);
             return new PoleAttachmentGeometry(
-                new DocumentPoint(centerX, bounds.YMillimeters),
-                new DocumentPoint(centerX, bounds.YMillimeters + bounds.HeightMillimeters),
-                Expand(bounds, effectiveMetrics.CableTermination.LogicalHitPadding));
+                outerTip,
+                tangent,
+                Expand(bounds, effectiveMetrics.CableTermination.LogicalHitPadding),
+                outline);
         }
 
         if (kind == SymbolKind.DropoutFuse)
@@ -110,6 +135,33 @@ public static class PoleProfessionalGeometry
                 origin.YMillimeters,
                 attachmentLayout.WidthMillimeters,
                 attachmentLayout.HeightMillimeters));
+    }
+
+    public static DocumentPoint GetCableTerminationOffset(
+        PoleLayout poleLayout,
+        AttachmentLayout attachmentLayout,
+        DocumentPoint directionTarget,
+        DrawingMetrics? metrics = null)
+    {
+        DrawingMetrics effectiveMetrics = metrics ?? DrawingMetrics.Default;
+        DocumentPoint poleCenter = GetPoleCenter(poleLayout, effectiveMetrics);
+        double deltaX = directionTarget.XMillimeters - poleCenter.XMillimeters;
+        double deltaY = directionTarget.YMillimeters - poleCenter.YMillimeters;
+        double length = Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+        double directionX = length == 0 ? 0 : deltaX / length;
+        double directionY = length == 0 ? 1 : deltaY / length;
+        double triangleHeight = Math.Min(
+            effectiveMetrics.CableTermination.TriangleHeight,
+            attachmentLayout.HeightMillimeters);
+        double centerDistance = effectiveMetrics.Pole.PoleRadius + triangleHeight / 2;
+        DocumentPoint attachmentCenter = new(
+            poleCenter.XMillimeters + directionX * centerDistance,
+            poleCenter.YMillimeters + directionY * centerDistance);
+        return new DocumentPoint(
+            attachmentCenter.XMillimeters - poleLayout.Position.XMillimeters -
+            attachmentLayout.WidthMillimeters / 2,
+            attachmentCenter.YMillimeters - poleLayout.Position.YMillimeters -
+            attachmentLayout.HeightMillimeters / 2);
     }
 
     public static DocumentPoint GetPoleEdgeTowards(

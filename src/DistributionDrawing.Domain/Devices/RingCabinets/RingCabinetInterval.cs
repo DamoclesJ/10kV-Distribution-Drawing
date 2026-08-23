@@ -254,7 +254,7 @@ public sealed class RingCabinetInterval
 
     private static string FormatBusinessNumber(int bayIndex)
     {
-        return $"-{bayIndex}";
+        return $"负{bayIndex}";
     }
 
     private static string? GetIntegratedFeederSwitchBusinessNumber(

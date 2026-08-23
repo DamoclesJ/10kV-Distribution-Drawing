@@ -9,6 +9,29 @@ namespace DistributionDrawing.Infrastructure.Tests;
 public sealed class IntervalTypeChangePersistenceTests
 {
     [Fact]
+    public void RingCabinetNames_RoundTripInVersion6()
+    {
+        DrawingDocument document = CreateIntegratedDocument();
+        RingCabinet cabinet = GetCabinet(document);
+        cabinet.Rename("NK1991");
+        cabinet.RenameLineName("10kV 奥东783线路");
+        string filePath = CreateTemporaryPath();
+
+        try
+        {
+            RingCabinet restored = RoundTrip(document, filePath);
+
+            Assert.Equal(ProjectFileFormat.Version6, GetSavedVersion(filePath));
+            Assert.Equal("NK1991", restored.DisplayName);
+            Assert.Equal("10kV 奥东783线路", restored.LineName);
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
     public void IntegratedFeederToPT_RoundTripPreservesNumberingAndStableIds()
     {
         DrawingDocument document = CreateIntegratedDocument();
@@ -27,9 +50,9 @@ public sealed class IntervalTypeChangePersistenceTests
             Assert.Equal(cabinet.Id, restored.Id);
             AssertIntervalIdentity(expected, actual);
             Assert.Equal(IntervalKind.PTInterval, actual.IntervalKind);
-            Assert.Equal("-3", actual.BusinessNumber);
-            Assert.Equal("-3-2", NumberFor(actual, SwitchKind.IsolationSwitch));
-            Assert.Equal("-3-7", NumberFor(actual, SwitchKind.GroundSwitch));
+            Assert.Equal("负3", actual.BusinessNumber);
+            Assert.Equal("负3-2", NumberFor(actual, SwitchKind.IsolationSwitch));
+            Assert.Equal("负3-7", NumberFor(actual, SwitchKind.GroundSwitch));
             Assert.Equal(
                 expected.SwitchDevices.Select(device => device.Id),
                 actual.SwitchDevices.Select(device => device.Id));
@@ -63,9 +86,9 @@ public sealed class IntervalTypeChangePersistenceTests
 
             AssertIntervalIdentity(expected, actual);
             Assert.Equal(GroundingStructureKind.UpperLowerGrounding, actual.GroundingStructureKind);
-            Assert.Equal("-3", NumberFor(actual, SwitchKind.CircuitBreaker));
-            Assert.Equal("-3-4", NumberFor(actual, SwitchKind.IsolationSwitch));
-            Assert.Equal("-3-7", NumberFor(actual, SwitchKind.GroundSwitch));
+            Assert.Equal("负3", NumberFor(actual, SwitchKind.CircuitBreaker));
+            Assert.Equal("负3-4", NumberFor(actual, SwitchKind.IsolationSwitch));
+            Assert.Equal("负3-7", NumberFor(actual, SwitchKind.GroundSwitch));
             Assert.Equal(expected.SwitchAssembly.AssemblyId, actual.SwitchAssembly.AssemblyId);
             Assert.Equal(expected.SwitchDevices.Select(device => device.Id), actual.SwitchDevices.Select(device => device.Id));
             Assert.Equal(expected.SwitchDevices.Select(device => device.TerminalIds), actual.SwitchDevices.Select(device => device.TerminalIds));
@@ -96,8 +119,8 @@ public sealed class IntervalTypeChangePersistenceTests
 
             AssertIntervalIdentity(expected, actual);
             Assert.Equal(GroundingStructureKind.LowerLowerGrounding, actual.GroundingStructureKind);
-            Assert.Equal("-3-2", NumberFor(actual, SwitchKind.IsolationSwitch));
-            Assert.Equal("-3-7", NumberFor(actual, SwitchKind.GroundSwitch));
+            Assert.Equal("负3-2", NumberFor(actual, SwitchKind.IsolationSwitch));
+            Assert.Equal("负3-7", NumberFor(actual, SwitchKind.GroundSwitch));
             Assert.Equal(expected.SwitchAssembly.AssemblyId, actual.SwitchAssembly.AssemblyId);
         }
         finally
@@ -123,7 +146,7 @@ public sealed class IntervalTypeChangePersistenceTests
 
             AssertIntervalIdentity(expected, actual);
             Assert.Equal(IntervalKind.LoadSwitchInterval, actual.IntervalKind);
-            Assert.Equal("-3-7", NumberFor(actual, SwitchKind.GroundSwitch));
+            Assert.Equal("负3-7", NumberFor(actual, SwitchKind.GroundSwitch));
             Assert.Null(NumberFor(actual, SwitchKind.LoadSwitch));
         }
         finally

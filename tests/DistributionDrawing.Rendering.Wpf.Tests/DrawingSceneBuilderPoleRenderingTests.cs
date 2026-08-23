@@ -74,7 +74,7 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
         Assert.Equal(1, labels.Count(text => text.Text == "P-301"));
         Assert.Equal(1, labels.Count(text => text.Text == "柱上隔离开关"));
         Assert.Equal(1, labels.Count(text => text.Text == "电缆终端"));
-        Assert.Equal(1, labels.Count(text => text.Text == "分"));
+        Assert.DoesNotContain(labels, text => text.Text is "合" or "分");
         Assert.Single(scene.Elements.OfType<SceneEllipse>(), ellipse =>
             ellipse.Bounds.WidthMillimeters == ellipse.Bounds.HeightMillimeters &&
             ellipse.Bounds.WidthMillimeters == 14);

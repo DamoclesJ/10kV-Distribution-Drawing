@@ -62,27 +62,28 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
             Colors.Black,
             _metrics.General.StandardStrokeThickness));
 
-        AddPTCoils(elements, ptOrigin, out DocumentPoint coilTop, out DocumentPoint coilBottom);
+        AddPTCoils(elements, ptOrigin, out DocumentPoint coilTop);
+        DocumentPoint terminalTip = new(
+            coilTop.XMillimeters,
+            origin.YMillimeters + layout.HeightMillimeters);
+        DocumentPoint terminalBase = new(
+            terminalTip.XMillimeters,
+            terminalTip.YMillimeters - _metrics.CableTermination.TriangleHeight);
         elements.Add(new SceneLine(
             common,
-            coilTop,
+            terminalBase,
             Colors.Black,
             _metrics.General.StandardStrokeThickness));
 
-        DocumentPoint terminalTip = new(
-            coilBottom.XMillimeters,
-            origin.YMillimeters + layout.HeightMillimeters);
-        double terminalTop = terminalTip.YMillimeters -
-                             _metrics.CableTermination.TriangleHeight;
-        elements.Add(new SceneLine(
-            coilBottom,
-            new DocumentPoint(terminalTip.XMillimeters, terminalTop),
-            Colors.Black,
-            _metrics.General.StandardStrokeThickness));
         RingCabinetProfessionalGeometry.AddCableTerminationMarker(
             elements,
             terminalTip,
             _metrics);
+        elements.Add(new SceneLine(
+            terminalTip,
+            coilTop,
+            Colors.Black,
+            _metrics.General.StandardStrokeThickness));
 
         return elements;
     }
@@ -90,8 +91,7 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
     private void AddPTCoils(
         ICollection<SceneElement> elements,
         DocumentPoint origin,
-        out DocumentPoint top,
-        out DocumentPoint bottom)
+        out DocumentPoint top)
     {
         double radius = _metrics.PT.CoilRadius;
         double diameter = radius * 2;
@@ -111,7 +111,6 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
 
         double centerX = origin.XMillimeters + radius;
         top = new DocumentPoint(centerX, origin.YMillimeters);
-        bottom = new DocumentPoint(centerX, origin.YMillimeters + secondOffset + diameter);
         elements.Add(new SceneText(
             new DocumentPoint(
                 origin.XMillimeters + diameter + 2,

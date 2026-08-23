@@ -8,6 +8,7 @@ public sealed class EditPropertyCommand : ICommand
 {
     public const string RingCabinetNameProperty = "RingCabinet.Name";
     public const string RingCabinetDisplayNameProperty = "RingCabinet.DisplayName";
+    public const string RingCabinetLineNameProperty = "RingCabinet.LineName";
     public const string PoleNumberProperty = "Pole.PoleNumber";
     public const string PoleDescriptionProperty = "Pole.Description";
     public const string CableTypeProperty = "CableSegment.CableType";
@@ -54,6 +55,9 @@ public sealed class EditPropertyCommand : ICommand
             case (RingCabinet cabinet, RingCabinetNameProperty or RingCabinetDisplayNameProperty):
                 cabinet.Rename((string)value);
                 break;
+            case (RingCabinet cabinet, RingCabinetLineNameProperty):
+                cabinet.RenameLineName((string)value);
+                break;
             case (Pole pole, PoleNumberProperty):
                 pole.RenamePoleNumber((string)value);
                 break;
@@ -80,6 +84,7 @@ public sealed class EditPropertyCommand : ICommand
         switch (target, propertyKey, value)
         {
             case (RingCabinet, RingCabinetNameProperty or RingCabinetDisplayNameProperty, string):
+            case (RingCabinet, RingCabinetLineNameProperty, string):
             case (Pole, PoleNumberProperty or PoleDescriptionProperty, string):
             case (SwitchDevice, SwitchDisplayNameProperty, string):
             case (CableSegment, CableTypeProperty, string):

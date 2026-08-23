@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
@@ -9,6 +10,13 @@ namespace DistributionDrawing.Rendering.Wpf.Routing;
 
 public sealed class RoutingObstacleBuilder
 {
+    private readonly DrawingMetrics _metrics;
+
+    public RoutingObstacleBuilder(DrawingMetrics? metrics = null)
+    {
+        _metrics = metrics ?? DrawingMetrics.Default;
+    }
+
     public IReadOnlyList<RoutingObstacle> Build(
         IEnumerable<Device> devices,
         IEnumerable<PoleAttachment> attachments,
@@ -37,6 +45,33 @@ public sealed class RoutingObstacleBuilder
                         layout.Position.YMillimeters,
                         layout.WidthMillimeters,
                         layout.HeightMillimeters)));
+
+                foreach (RingCabinetInterval interval in cabinet.Intervals
+                             .Where(interval => interval.IntervalKind == IntervalKind.PTInterval))
+                {
+                    if (!layout.IntervalLayouts.TryGetValue(
+                            interval.IntervalId,
+                            out RingCabinetIntervalLayout? intervalLayout) ||
+                        intervalLayout.PTSymbolPosition is not DocumentPoint ptPosition)
+                    {
+                        continue;
+                    }
+
+                    double diameter = _metrics.PT.CoilRadius * 2;
+                    double height = diameter * 2 - _metrics.PT.CoilSpacing;
+                    obstacles.Add(new RoutingObstacle(
+                        interval.IntervalId,
+                        RoutingObstacleKind.RingCabinet,
+                        new DocumentRect(
+                            layout.Position.XMillimeters +
+                            intervalLayout.RelativePosition.XMillimeters +
+                            ptPosition.XMillimeters,
+                            layout.Position.YMillimeters +
+                            intervalLayout.RelativePosition.YMillimeters +
+                            ptPosition.YMillimeters,
+                            diameter,
+                            height)));
+                }
             }
         }
 

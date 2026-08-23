@@ -10,6 +10,7 @@ using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
+using DistributionDrawing.Desktop.DrawingTypography;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -386,6 +387,7 @@ public partial class MainWindow : Window
         _propertyInspector.Apply(
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
+        UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
@@ -598,6 +600,18 @@ public partial class MainWindow : Window
         WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
         DrawingSurface.Clear();
         _viewport.Reset();
+    }
+
+    private void OnDrawingTypographySettings(object sender, RoutedEventArgs e)
+    {
+        var dialog = new DrawingTypographyDialog
+        {
+            Owner = this
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            RefreshDrawingScene();
+        }
     }
 
     private void OnZoomIn(object sender, RoutedEventArgs e)
@@ -1283,9 +1297,22 @@ public partial class MainWindow : Window
             _viewport.Transform.ViewDistanceToDocument(4));
         _selectionManager.Select(target);
 
+        ResolvedSelection? dragSelection = target is null
+            ? null
+            : _selectionResolver.Resolve(target);
+        Guid? orbitParentPoleId = dragSelection?.PoleAttachment is { } attachment &&
+                                  _workspace.CurrentSession?.PersistenceSession.Domain.Devices
+                                      .SingleOrDefault(device =>
+                                          device.Id == attachment.AttachedDeviceId) is CableTermination
+            ? attachment.PoleId
+            : null;
         if (target is not null &&
             _workspace.CurrentSession is { } session &&
-            _deviceDrag.TryBeginDrag(target, documentPoint, session.Layout))
+            _deviceDrag.TryBeginDrag(
+                target,
+                documentPoint,
+                session.Layout,
+                orbitParentPoleId))
         {
             if (!DrawingSurface.CaptureMouse())
             {
@@ -1378,6 +1405,7 @@ public partial class MainWindow : Window
         _propertyInspector.Apply(
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
+        UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
@@ -1406,6 +1434,41 @@ public partial class MainWindow : Window
                 "属性修改失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+            return;
+        }
+
+        RefreshDrawingScene();
+    }
+
+    private void OnApplyRingCabinetDisplayName(object sender, RoutedEventArgs e)
+    {
+        ApplyRingCabinetProperty(
+            PropertyCommandFactory.RingCabinetDisplayNamePropertyKey,
+            RingCabinetDisplayNameInput.Text);
+    }
+
+    private void OnApplyRingCabinetLineName(object sender, RoutedEventArgs e)
+    {
+        ApplyRingCabinetProperty(
+            PropertyCommandFactory.RingCabinetLineNamePropertyKey,
+            RingCabinetLineNameInput.Text);
+    }
+
+    private void ApplyRingCabinetProperty(string propertyKey, string input)
+    {
+        if (_selectionManager.Selected is not
+            { Kind: SelectionTargetKind.RingCabinet } target)
+        {
+            ShowCommandError("环网柜属性修改失败", "请先选择一个环网柜。");
+            return;
+        }
+
+        PropertyEditResult result = _propertyEditor.TryEdit(target, propertyKey, input);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError(
+                "环网柜属性修改失败",
+                result.ErrorMessage ?? "环网柜属性未能应用。");
             return;
         }
 
@@ -1683,6 +1746,22 @@ public partial class MainWindow : Window
 
         PoleNumberEditorPanel.Visibility = Visibility.Visible;
         PoleNumberInput.Text = pole.PoleNumber;
+    }
+
+    private void UpdateRingCabinetEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(
+            _selectionManager.Selected);
+        if (selection?.Reference.Kind != SelectionTargetKind.RingCabinet ||
+            selection.RingCabinet is not { } cabinet)
+        {
+            RingCabinetEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        RingCabinetEditorPanel.Visibility = Visibility.Visible;
+        RingCabinetDisplayNameInput.Text = cabinet.DisplayName ?? string.Empty;
+        RingCabinetLineNameInput.Text = cabinet.LineName;
     }
 
     private void UpdateCablePropertyEditor()
@@ -1964,6 +2043,7 @@ public partial class MainWindow : Window
             _propertyInspector.Apply(
                 _propertyProjector.Project(
                     _selectionResolver.Resolve(_selectionManager.Selected)));
+            UpdateRingCabinetEditor();
             UpdatePoleNumberEditor();
             UpdateIntervalEditor();
             UpdateAttachmentOffsetEditor();
@@ -2018,6 +2098,7 @@ public partial class MainWindow : Window
         _propertyInspector.Apply(
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
+        UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();

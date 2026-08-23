@@ -115,14 +115,27 @@ public sealed class SymbolLibrary
             attachmentConnector,
             _metrics);
 
-        var elements = new List<SceneElement>
+        var elements = new List<SceneElement>();
+        if (kind != SymbolKind.CableTermination)
         {
-            new SceneLine(
+            elements.Add(new SceneLine(
                 poleConnector,
                 attachmentConnector,
                 Colors.Black,
-                _metrics.General.ThinStrokeThickness)
-        };
+                _metrics.General.ThinStrokeThickness));
+        }
+
+        if (kind == SymbolKind.CableTermination && geometry.Outline is { } outline)
+        {
+            elements.Add(new SceneLogicalBounds(geometry.LogicalBounds));
+            elements.Add(new ScenePolyline(
+                outline,
+                isClosed: true,
+                Colors.Black,
+                _metrics.General.StandardStrokeThickness,
+                Colors.White));
+            return elements;
+        }
 
         elements.AddRange(
             Create(

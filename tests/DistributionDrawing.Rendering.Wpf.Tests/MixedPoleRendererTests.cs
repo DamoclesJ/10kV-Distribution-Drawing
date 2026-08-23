@@ -142,7 +142,7 @@ public sealed class MixedPoleRendererTests
         Assert.Contains(firstLabels, text => text.Text == "P-203");
         Assert.Contains(firstLabels, text => text.Text == "柱上隔离开关");
         Assert.Contains(firstLabels, text => text.Text == "电缆终端");
-        Assert.Contains(firstLabels, text => text.Text == "分");
+        Assert.DoesNotContain(firstLabels, text => text.Text is "合" or "分");
         Assert.Equal(firstLabels, secondLabels);
         Assert.True(firstLabels.Select(label => label.Origin).Distinct().Count() > 1);
     }

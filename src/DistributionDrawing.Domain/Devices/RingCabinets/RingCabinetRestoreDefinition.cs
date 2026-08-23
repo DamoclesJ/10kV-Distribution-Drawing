@@ -10,7 +10,8 @@ public sealed record RingCabinetRestoreDefinition(
     Guid CabinetId,
     string DisplayName,
     Guid MainBusNodeId,
-    IReadOnlyList<RingCabinetIntervalRestoreDefinition> Intervals);
+    IReadOnlyList<RingCabinetIntervalRestoreDefinition> Intervals,
+    string? LineName = null);
 
 public sealed record RingCabinetIntervalRestoreDefinition(
     Guid IntervalId,

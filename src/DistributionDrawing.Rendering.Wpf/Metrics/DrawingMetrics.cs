@@ -29,7 +29,12 @@ public sealed record DrawingMetrics(
             BusbarHeight: 1,
             IntervalSpacing: 5,
             CabinetNameOffset: new DocumentPoint(0, -8),
-            DeviceVerticalSpacing: 12),
+            DeviceVerticalSpacing: 12,
+            SwitchSymbolScale: 2,
+            CabinetNameFontSize: 16,
+            LineNameFontSize: 8,
+            IntervalNumberFontSize: 10.5,
+            SwitchNumberFontSize: 7),
         new SwitchDrawingMetrics(
             StandardSwitchLength: 16,
             GroundSwitchLength: 16,
@@ -82,15 +87,79 @@ public sealed record GeneralDrawingMetrics(
     double StandardFontSize,
     double SmallFontSize);
 
-public sealed record RingCabinetDrawingMetrics(
-    double CabinetPadding,
-    double StandardIntervalWidth,
-    double StandardIntervalHeight,
-    double BusbarOffset,
-    double BusbarHeight,
-    double IntervalSpacing,
-    DocumentPoint CabinetNameOffset,
-    double DeviceVerticalSpacing);
+public sealed class RingCabinetDrawingMetrics
+{
+    public RingCabinetDrawingMetrics(
+        double CabinetPadding,
+        double StandardIntervalWidth,
+        double StandardIntervalHeight,
+        double BusbarOffset,
+        double BusbarHeight,
+        double IntervalSpacing,
+        DocumentPoint CabinetNameOffset,
+        double DeviceVerticalSpacing,
+        double SwitchSymbolScale,
+        double CabinetNameFontSize,
+        double LineNameFontSize,
+        double IntervalNumberFontSize,
+        double SwitchNumberFontSize)
+    {
+        this.CabinetPadding = CabinetPadding;
+        this.StandardIntervalWidth = StandardIntervalWidth;
+        this.StandardIntervalHeight = StandardIntervalHeight;
+        this.BusbarOffset = BusbarOffset;
+        this.BusbarHeight = BusbarHeight;
+        this.IntervalSpacing = IntervalSpacing;
+        this.CabinetNameOffset = CabinetNameOffset;
+        this.DeviceVerticalSpacing = DeviceVerticalSpacing;
+        this.SwitchSymbolScale = SwitchSymbolScale;
+        UpdateTypography(
+            CabinetNameFontSize,
+            LineNameFontSize,
+            IntervalNumberFontSize,
+            SwitchNumberFontSize);
+    }
+
+    public double CabinetPadding { get; }
+    public double StandardIntervalWidth { get; }
+    public double StandardIntervalHeight { get; }
+    public double BusbarOffset { get; }
+    public double BusbarHeight { get; }
+    public double IntervalSpacing { get; }
+    public DocumentPoint CabinetNameOffset { get; }
+    public double DeviceVerticalSpacing { get; }
+    public double SwitchSymbolScale { get; }
+    public double CabinetNameFontSize { get; private set; }
+    public double LineNameFontSize { get; private set; }
+    public double IntervalNumberFontSize { get; private set; }
+    public double SwitchNumberFontSize { get; private set; }
+
+    public void UpdateTypography(
+        double cabinetNameFontSize,
+        double lineNameFontSize,
+        double intervalNumberFontSize,
+        double switchNumberFontSize)
+    {
+        double[] values =
+        [
+            cabinetNameFontSize,
+            lineNameFontSize,
+            intervalNumberFontSize,
+            switchNumberFontSize
+        ];
+        if (values.Any(value => !double.IsFinite(value) || value <= 0))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(cabinetNameFontSize),
+                "Drawing font sizes must be finite and greater than zero.");
+        }
+
+        CabinetNameFontSize = cabinetNameFontSize;
+        LineNameFontSize = lineNameFontSize;
+        IntervalNumberFontSize = intervalNumberFontSize;
+        SwitchNumberFontSize = switchNumberFontSize;
+    }
+}
 
 public sealed record SwitchDrawingMetrics(
     double StandardSwitchLength,
