@@ -38,9 +38,23 @@ public sealed class CommandStack
 
     public void ExecuteCommand(ICommand command)
     {
+        ExecuteCommand(command, null);
+    }
+
+    public void ExecuteCommand(ICommand command, Action? validateAfterExecute)
+    {
         ArgumentNullException.ThrowIfNull(command);
 
         command.Execute();
+        try
+        {
+            validateAfterExecute?.Invoke();
+        }
+        catch
+        {
+            command.Undo();
+            throw;
+        }
 
         if (CurrentIndex < _history.Count)
         {

@@ -2,7 +2,11 @@ using System.IO;
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.CableConnection;
+using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.ConnectionEditing;
+using DistributionDrawing.Desktop.DrawingTools;
+using DistributionDrawing.Desktop.Placement;
+using DistributionDrawing.Desktop.PoleSwitchCreation;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
@@ -21,6 +25,76 @@ namespace DistributionDrawing.Desktop.Tests;
 
 public sealed class CableConnectionControllerTests
 {
+    [Fact]
+    public void BeginPole_CancelsPartiallyPickedCableBeforeCanvasPlacement()
+    {
+        using TestProject project = CreateProject();
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        var placement = new PlacementController(() => project.Session);
+        var overheadLine = new OverheadLineConnectionController(() => project.Session);
+        var cableTermination = new CableTerminationAttachmentController(() => project.Session);
+        var cable = new CableConnectionController(() => project.Session);
+        var reconnect = new CableReconnectController(() => project.Session);
+        var poleSwitch = new PoleSwitchAttachmentController(() => project.Session);
+        var coordinator = new DrawingToolCoordinator(
+            placement,
+            overheadLine,
+            cableTermination,
+            cable,
+            reconnect,
+            poleSwitch);
+        coordinator.BeginCable();
+        coordinator.HandleClick(
+            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            8);
+        Assert.Equal(CableConnectionToolState.PickingEndTerminal, cable.State);
+        int poleCount = project.Document.Devices.OfType<Pole>().Count();
+
+        coordinator.BeginPole();
+        bool handled = coordinator.HandleClick(new DocumentPoint(300, 180), 8);
+
+        Assert.True(handled);
+        Assert.Equal(CableConnectionToolState.Idle, cable.State);
+        Assert.Equal(PlacementMode.Idle, placement.Mode);
+        Assert.Equal(poleCount + 1, project.Document.Devices.OfType<Pole>().Count());
+        Assert.Empty(project.Document.CableSegments);
+    }
+
+    [Fact]
+    public void BeginRingCabinet_CancelsPartiallyPickedCableBeforeCanvasPlacement()
+    {
+        using TestProject project = CreateProject();
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        var placement = new PlacementController(() => project.Session);
+        var overheadLine = new OverheadLineConnectionController(() => project.Session);
+        var cableTermination = new CableTerminationAttachmentController(() => project.Session);
+        var cable = new CableConnectionController(() => project.Session);
+        var reconnect = new CableReconnectController(() => project.Session);
+        var poleSwitch = new PoleSwitchAttachmentController(() => project.Session);
+        var coordinator = new DrawingToolCoordinator(
+            placement,
+            overheadLine,
+            cableTermination,
+            cable,
+            reconnect,
+            poleSwitch);
+        coordinator.BeginCable();
+        coordinator.HandleClick(
+            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            8);
+        Assert.Equal(CableConnectionToolState.PickingEndTerminal, cable.State);
+
+        coordinator.BeginRingCabinet(new RingCabinetCreationConfiguration(
+            "新环网柜",
+            new RingCabinetCreationTemplateFactory().Create(
+                RingCabinetTemplateType.Conventional,
+                3)));
+
+        Assert.Equal(CableConnectionToolState.Idle, cable.State);
+        Assert.Equal(PlacementMode.PlacingRingCabinet, placement.Mode);
+        Assert.Empty(project.Document.CableSegments);
+    }
+
     [Fact]
     public void CablePreview_UsesOnlyOrthogonalDashedSegments()
     {
@@ -93,6 +167,39 @@ public sealed class CableConnectionControllerTests
             new SelectionReference(SelectionTargetKind.CableSegment, cable.Id),
             project.Session.SelectionManager.Selected);
         Assert.Equal(CableConnectionToolState.Idle, controller.State);
+    }
+
+    [Fact]
+    public void Complete_WhenTerminalExitIsBlocked_RollsBackCableAndCommandHistory()
+    {
+        using TestProject project = CreateProject();
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        Guid startTerminalId = project.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid endTerminalId = project.CableTerminationCableSideTerminalId;
+        DocumentPoint start = anchors.PositionOf(startTerminalId);
+        var controller = new CableConnectionController(() => project.Session);
+        controller.Begin();
+        controller.Pick(start, 8);
+        controller.Pick(anchors.PositionOf(endTerminalId), 8);
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand blockingPole = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(
+                start.XMillimeters - DrawingMetrics.Default.Pole.PoleRadius,
+                start.YMillimeters + 10));
+        blockingPole.Execute();
+        project.Session.RebuildScene();
+        SelectionReference? selectionBefore = project.Session.SelectionManager.Selected;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            controller.Complete("YJV22", 80));
+
+        Assert.Empty(project.Document.CableSegments);
+        Assert.Empty(project.Document.Connections);
+        Assert.Empty(project.Session.CommandStack.History);
+        Assert.False(project.Session.CommandStack.IsDirty);
+        Assert.Equal(selectionBefore, project.Session.SelectionManager.Selected);
     }
 
     [Theory]

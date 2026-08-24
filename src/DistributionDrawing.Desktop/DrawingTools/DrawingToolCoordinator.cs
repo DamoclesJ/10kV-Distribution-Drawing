@@ -52,6 +52,7 @@ public sealed class DrawingToolCoordinator
     public void BeginPole()
     {
         _overheadLine.Cancel();
+        _cableConnection.Cancel();
         _cableReconnect.Cancel();
         _placement.BeginPole();
     }
@@ -59,6 +60,7 @@ public sealed class DrawingToolCoordinator
     public void BeginRingCabinet(RingCabinetCreationConfiguration configuration)
     {
         _overheadLine.Cancel();
+        _cableConnection.Cancel();
         _cableReconnect.Cancel();
         _placement.BeginRingCabinet(configuration);
     }

@@ -153,8 +153,7 @@ public sealed class CableConnectionController
             var command = new AddCableSegmentCommand(
                 session.PersistenceSession.Domain,
                 creation);
-            session.CommandStack.ExecuteCommand(command);
-            session.RebuildScene();
+            session.CommandStack.ExecuteCommand(command, session.RebuildScene);
             session.SelectionManager.Select(
                 new SelectionReference(
                     SelectionTargetKind.CableSegment,

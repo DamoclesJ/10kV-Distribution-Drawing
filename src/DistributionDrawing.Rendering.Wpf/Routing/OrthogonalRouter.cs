@@ -28,6 +28,11 @@ public sealed class OrthogonalRouter
         OrthogonalRoute[] priorRoutes = plannedRoutes?
             .OrderBy(route => route.ConnectionId)
             .ToArray() ?? [];
+        RoutingObstacle[] pathfindingObstacles = expandedObstacles
+            .Where(obstacle =>
+                !obstacle.Contains(request.Start.Position) &&
+                !obstacle.Contains(request.End.Position))
+            .ToArray();
 
         TerminalAnchorDirection startDirection = ResolveDirection(
             request.Start.Direction,
@@ -57,6 +62,7 @@ public sealed class OrthogonalRouter
                 startStub,
                 endStub,
                 expandedObstacles,
+                pathfindingObstacles,
                 request.PreferredHorizontalY)
             .Select((core, priority) => CreateCandidate(
                 request,
@@ -254,6 +260,7 @@ public sealed class OrthogonalRouter
         DocumentPoint start,
         DocumentPoint end,
         IReadOnlyList<RoutingObstacle> obstacles,
+        IReadOnlyList<RoutingObstacle> pathfindingObstacles,
         double? preferredHorizontalY)
     {
         if (start.XMillimeters == end.XMillimeters ||
@@ -330,7 +337,7 @@ public sealed class OrthogonalRouter
         IReadOnlyList<DocumentPoint>? obstacleAvoiding = FindObstacleAvoidingPath(
             start,
             end,
-            obstacles);
+            pathfindingObstacles);
         if (obstacleAvoiding is not null)
         {
             yield return obstacleAvoiding;

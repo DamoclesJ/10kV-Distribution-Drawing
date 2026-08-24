@@ -482,6 +482,49 @@ public sealed class OrthogonalRoutingTests
                 obstacle.Expand(DrawingMetrics.Default.Routing.ObstacleClearance).Bounds)));
     }
 
+    [Fact]
+    public void Route_FindsMultiTurnPathWhenTerminalStubsStartInsideEndpointObstacles()
+    {
+        ConnectionRouteRequest request = CreateRequest(
+            "00000000-0000-0000-0000-000000000018",
+            new DocumentPoint(0, 0),
+            TerminalAnchorDirection.Down,
+            new DocumentPoint(100, 100),
+            TerminalAnchorDirection.Down);
+        RoutingObstacle[] endpointObstacles =
+        [
+            new RoutingObstacle(
+                Guid.Parse("00000000-0000-0000-0000-000000000081"),
+                RoutingObstacleKind.RingCabinet,
+                new DocumentRect(-5, -5, 10, 10)),
+            new RoutingObstacle(
+                Guid.Parse("00000000-0000-0000-0000-000000000082"),
+                RoutingObstacleKind.PoleAttachment,
+                new DocumentRect(95, 95, 10, 10))
+        ];
+        RoutingObstacle[] routingObstacles =
+        [
+            new RoutingObstacle(
+                Guid.Parse("00000000-0000-0000-0000-000000000083"),
+                RoutingObstacleKind.Pole,
+                new DocumentRect(30, -100, 10, 170)),
+            new RoutingObstacle(
+                Guid.Parse("00000000-0000-0000-0000-000000000084"),
+                RoutingObstacleKind.Pole,
+                new DocumentRect(60, 40, 10, 160))
+        ];
+
+        OrthogonalRoute route = new OrthogonalRouter().Route(
+            request,
+            endpointObstacles.Concat(routingObstacles));
+
+        Assert.True(route.Segments.Count >= 5);
+        Assert.DoesNotContain(route.Segments, segment =>
+            routingObstacles.Any(obstacle => IntersectsInterior(
+                segment,
+                obstacle.Expand(DrawingMetrics.Default.Routing.ObstacleClearance).Bounds)));
+    }
+
     private static bool IntersectsInterior(
         OrthogonalRouteSegment segment,
         DocumentRect bounds)
