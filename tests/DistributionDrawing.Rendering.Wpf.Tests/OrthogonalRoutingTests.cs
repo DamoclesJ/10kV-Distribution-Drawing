@@ -108,7 +108,7 @@ public sealed class OrthogonalRoutingTests
 
         OrthogonalRoute route = new OrthogonalRouter().Route(request, []);
 
-        Assert.Contains(route.Points, point => point == new DocumentPoint(72, 0));
+        Assert.Contains(route.Points, point => point == new DocumentPoint(88, 0));
         Assert.All(route.Segments, segment => Assert.True(
             segment.IsHorizontal || segment.IsVertical));
     }
@@ -129,8 +129,14 @@ public sealed class OrthogonalRoutingTests
 
         OrthogonalRoute route = new OrthogonalRouter().Route(request, [obstacle]);
 
-        Assert.Contains(route.Points, point => point == new DocumentPoint(8, 50));
-        Assert.DoesNotContain(route.Points, point => point == new DocumentPoint(72, 0));
+        Assert.Contains(route.Points, point => point == new DocumentPoint(8, 10));
+        Assert.Contains(route.Points, point => point == new DocumentPoint(88, 50));
+        Assert.DoesNotContain(route.Segments, segment =>
+            segment.IsHorizontal &&
+            segment.Start.YMillimeters > -5 &&
+            segment.Start.YMillimeters < 5 &&
+            Math.Min(segment.Start.XMillimeters, segment.End.XMillimeters) < 45 &&
+            Math.Max(segment.Start.XMillimeters, segment.End.XMillimeters) > 35);
     }
 
     [Fact]
@@ -335,7 +341,7 @@ public sealed class OrthogonalRoutingTests
         OrthogonalRouteSegment last = route.Segments[^1];
         Assert.True(last.IsVertical);
         Assert.Equal(terminal, last.End);
-        Assert.True(last.Start.YMillimeters - last.End.YMillimeters >= 50);
+        Assert.True(last.End.YMillimeters - last.Start.YMillimeters >= 50);
     }
 
     [Theory]

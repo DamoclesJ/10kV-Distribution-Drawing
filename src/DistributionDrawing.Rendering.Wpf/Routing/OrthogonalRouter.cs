@@ -33,15 +33,13 @@ public sealed class OrthogonalRouter
             request.Start.Direction,
             request.Start.Position,
             request.End.Position);
-        TerminalAnchorDirection endDirection = ResolveDirection(
-            request.End.Direction == TerminalAnchorDirection.Auto
-                ? Opposite(ResolveDirection(
-                    TerminalAnchorDirection.Auto,
-                    request.Start.Position,
-                    request.End.Position))
-                : request.End.Direction,
-            request.End.Position,
-            request.Start.Position);
+        TerminalAnchorDirection endDirection = request.End.Direction ==
+            TerminalAnchorDirection.Auto
+            ? ResolveDirection(
+                TerminalAnchorDirection.Auto,
+                request.Start.Position,
+                request.End.Position)
+            : request.End.Direction;
         DocumentPoint startStub = Move(
             request.Start.Position,
             startDirection,

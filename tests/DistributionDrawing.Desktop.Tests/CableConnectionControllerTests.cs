@@ -555,7 +555,10 @@ public sealed class CableConnectionControllerTests
         DocumentPoint away = line.Start == terminal ? line.End : line.Start;
         double minimum = DrawingMetrics.Default.CableTermination
             .CableTerminalExitMinimumStubLength;
-        switch (terminalAnchor.Direction)
+        TerminalAnchorDirection routeDirection = cable.StartTerminalId == cabinetTerminalId
+            ? terminalAnchor.Direction
+            : Opposite(terminalAnchor.Direction);
+        switch (routeDirection)
         {
             case TerminalAnchorDirection.Down:
                 Assert.Equal(terminal.XMillimeters, away.XMillimeters);
@@ -577,6 +580,18 @@ public sealed class CableConnectionControllerTests
                 throw new Xunit.Sdk.XunitException(
                     $"Cabinet terminal direction must be explicit, was {terminalAnchor.Direction}.");
         }
+    }
+
+    private static TerminalAnchorDirection Opposite(TerminalAnchorDirection direction)
+    {
+        return direction switch
+        {
+            TerminalAnchorDirection.Left => TerminalAnchorDirection.Right,
+            TerminalAnchorDirection.Right => TerminalAnchorDirection.Left,
+            TerminalAnchorDirection.Up => TerminalAnchorDirection.Down,
+            TerminalAnchorDirection.Down => TerminalAnchorDirection.Up,
+            _ => direction
+        };
     }
 
     private sealed class TestProject : IDisposable
