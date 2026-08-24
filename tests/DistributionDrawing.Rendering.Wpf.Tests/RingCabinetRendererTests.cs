@@ -34,15 +34,15 @@ public sealed class RingCabinetRendererTests
         Assert.Contains(labels, label =>
             label.Text == "NK1991" &&
             label.FontSizeMillimeters ==
-            DrawingMetrics.Default.RingCabinet.CabinetNameFontSize);
+            DrawingMetrics.Default.Typography.CabinetNameFontSize);
         Assert.Contains(labels, label =>
             label.Text == "10kV 奥东783线路" &&
             label.FontSizeMillimeters ==
-            DrawingMetrics.Default.RingCabinet.LineNameFontSize);
+            DrawingMetrics.Default.Typography.LineNameFontSize);
         Assert.Contains(labels, label =>
             label.Text == "负1" &&
             label.FontSizeMillimeters ==
-            DrawingMetrics.Default.RingCabinet.IntervalNumberFontSize);
+            DrawingMetrics.Default.Typography.IntervalNumberFontSize);
     }
 
     [Fact]

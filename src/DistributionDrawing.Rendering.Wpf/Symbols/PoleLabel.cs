@@ -1,6 +1,8 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Labels;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 using System.Windows.Media;
@@ -9,6 +11,13 @@ namespace DistributionDrawing.Rendering.Wpf.Symbols;
 
 public sealed class PoleLabel
 {
+    private readonly DrawingMetrics _metrics;
+
+    public PoleLabel(DrawingMetrics? metrics = null)
+    {
+        _metrics = metrics ?? DrawingMetrics.Default;
+    }
+
     public LabelRequest CreatePoleRequest(Pole pole, PoleLayout layout)
     {
         ArgumentNullException.ThrowIfNull(pole);
@@ -19,15 +28,19 @@ public sealed class PoleLabel
             throw new InvalidOperationException("Pole and layout IDs must match.");
         }
 
+        DocumentPoint center = PoleProfessionalGeometry.GetPoleCenter(layout, _metrics);
         return new LabelRequest(
             LabelTargetKind.Pole,
             pole.Id,
             pole.PoleNumber,
-            layout.Position,
-            layout.LabelOffset,
-            preferredAlignment: LabelAlignment.Left,
+            center,
+            new DocumentPoint(
+                0,
+                _metrics.Pole.PoleRadius +
+                _metrics.Typography.PoleNumberFontSize + 2),
+            preferredAlignment: LabelAlignment.Center,
             priority: 100,
-            fontSizeMillimeters: 4);
+            fontSizeMillimeters: _metrics.Typography.PoleNumberFontSize);
     }
 
     public LabelRequest CreateAttachmentRequest(

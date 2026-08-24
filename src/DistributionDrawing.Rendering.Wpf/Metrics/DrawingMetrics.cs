@@ -4,6 +4,7 @@ namespace DistributionDrawing.Rendering.Wpf.Metrics;
 
 public sealed record DrawingMetrics(
     GeneralDrawingMetrics General,
+    DrawingTypographyMetrics Typography,
     RingCabinetDrawingMetrics RingCabinet,
     SwitchDrawingMetrics Switch,
     PTDrawingMetrics PT,
@@ -21,6 +22,13 @@ public sealed record DrawingMetrics(
             ThinStrokeThickness: 0.6,
             StandardFontSize: 4,
             SmallFontSize: 3.5),
+        new DrawingTypographyMetrics(
+            CabinetNameFontSize: 16,
+            LineNameFontSize: 8,
+            IntervalNumberFontSize: 10.5,
+            SwitchNumberFontSize: 7,
+            PoleNumberFontSize: 8,
+            PTLabelFontSize: 7),
         new RingCabinetDrawingMetrics(
             CabinetPadding: 10,
             StandardIntervalWidth: 60,
@@ -30,11 +38,7 @@ public sealed record DrawingMetrics(
             IntervalSpacing: 5,
             CabinetNameOffset: new DocumentPoint(0, -8),
             DeviceVerticalSpacing: 12,
-            SwitchSymbolScale: 2,
-            CabinetNameFontSize: 16,
-            LineNameFontSize: 8,
-            IntervalNumberFontSize: 10.5,
-            SwitchNumberFontSize: 7),
+            SwitchSymbolScale: 2),
         new SwitchDrawingMetrics(
             StandardSwitchLength: 16,
             GroundSwitchLength: 16,
@@ -87,65 +91,48 @@ public sealed record GeneralDrawingMetrics(
     double StandardFontSize,
     double SmallFontSize);
 
-public sealed class RingCabinetDrawingMetrics
+public sealed class DrawingTypographyMetrics
 {
-    public RingCabinetDrawingMetrics(
-        double CabinetPadding,
-        double StandardIntervalWidth,
-        double StandardIntervalHeight,
-        double BusbarOffset,
-        double BusbarHeight,
-        double IntervalSpacing,
-        DocumentPoint CabinetNameOffset,
-        double DeviceVerticalSpacing,
-        double SwitchSymbolScale,
+    public DrawingTypographyMetrics(
         double CabinetNameFontSize,
         double LineNameFontSize,
         double IntervalNumberFontSize,
-        double SwitchNumberFontSize)
+        double SwitchNumberFontSize,
+        double PoleNumberFontSize,
+        double PTLabelFontSize)
     {
-        this.CabinetPadding = CabinetPadding;
-        this.StandardIntervalWidth = StandardIntervalWidth;
-        this.StandardIntervalHeight = StandardIntervalHeight;
-        this.BusbarOffset = BusbarOffset;
-        this.BusbarHeight = BusbarHeight;
-        this.IntervalSpacing = IntervalSpacing;
-        this.CabinetNameOffset = CabinetNameOffset;
-        this.DeviceVerticalSpacing = DeviceVerticalSpacing;
-        this.SwitchSymbolScale = SwitchSymbolScale;
-        UpdateTypography(
+        Update(
             CabinetNameFontSize,
             LineNameFontSize,
             IntervalNumberFontSize,
-            SwitchNumberFontSize);
+            SwitchNumberFontSize,
+            PoleNumberFontSize,
+            PTLabelFontSize);
     }
 
-    public double CabinetPadding { get; }
-    public double StandardIntervalWidth { get; }
-    public double StandardIntervalHeight { get; }
-    public double BusbarOffset { get; }
-    public double BusbarHeight { get; }
-    public double IntervalSpacing { get; }
-    public DocumentPoint CabinetNameOffset { get; }
-    public double DeviceVerticalSpacing { get; }
-    public double SwitchSymbolScale { get; }
     public double CabinetNameFontSize { get; private set; }
     public double LineNameFontSize { get; private set; }
     public double IntervalNumberFontSize { get; private set; }
     public double SwitchNumberFontSize { get; private set; }
+    public double PoleNumberFontSize { get; private set; }
+    public double PTLabelFontSize { get; private set; }
 
-    public void UpdateTypography(
+    public void Update(
         double cabinetNameFontSize,
         double lineNameFontSize,
         double intervalNumberFontSize,
-        double switchNumberFontSize)
+        double switchNumberFontSize,
+        double poleNumberFontSize,
+        double ptLabelFontSize)
     {
         double[] values =
         [
             cabinetNameFontSize,
             lineNameFontSize,
             intervalNumberFontSize,
-            switchNumberFontSize
+            switchNumberFontSize,
+            poleNumberFontSize,
+            ptLabelFontSize
         ];
         if (values.Any(value => !double.IsFinite(value) || value <= 0))
         {
@@ -158,7 +145,44 @@ public sealed class RingCabinetDrawingMetrics
         LineNameFontSize = lineNameFontSize;
         IntervalNumberFontSize = intervalNumberFontSize;
         SwitchNumberFontSize = switchNumberFontSize;
+        PoleNumberFontSize = poleNumberFontSize;
+        PTLabelFontSize = ptLabelFontSize;
     }
+}
+
+public sealed class RingCabinetDrawingMetrics
+{
+    public RingCabinetDrawingMetrics(
+        double CabinetPadding,
+        double StandardIntervalWidth,
+        double StandardIntervalHeight,
+        double BusbarOffset,
+        double BusbarHeight,
+        double IntervalSpacing,
+        DocumentPoint CabinetNameOffset,
+        double DeviceVerticalSpacing,
+        double SwitchSymbolScale)
+    {
+        this.CabinetPadding = CabinetPadding;
+        this.StandardIntervalWidth = StandardIntervalWidth;
+        this.StandardIntervalHeight = StandardIntervalHeight;
+        this.BusbarOffset = BusbarOffset;
+        this.BusbarHeight = BusbarHeight;
+        this.IntervalSpacing = IntervalSpacing;
+        this.CabinetNameOffset = CabinetNameOffset;
+        this.DeviceVerticalSpacing = DeviceVerticalSpacing;
+        this.SwitchSymbolScale = SwitchSymbolScale;
+    }
+
+    public double CabinetPadding { get; }
+    public double StandardIntervalWidth { get; }
+    public double StandardIntervalHeight { get; }
+    public double BusbarOffset { get; }
+    public double BusbarHeight { get; }
+    public double IntervalSpacing { get; }
+    public DocumentPoint CabinetNameOffset { get; }
+    public double DeviceVerticalSpacing { get; }
+    public double SwitchSymbolScale { get; }
 }
 
 public sealed record SwitchDrawingMetrics(

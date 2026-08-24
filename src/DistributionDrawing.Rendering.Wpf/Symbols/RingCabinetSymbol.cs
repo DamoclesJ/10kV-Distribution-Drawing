@@ -115,7 +115,7 @@ public sealed class RingCabinetSymbol
                     layout.Position.YMillimeters),
                 layout.LabelOffset,
                 priority: 100,
-                fontSizeMillimeters: _metrics.RingCabinet.CabinetNameFontSize));
+                fontSizeMillimeters: _metrics.Typography.CabinetNameFontSize));
         }
 
         if (!string.IsNullOrWhiteSpace(cabinet.LineName))
@@ -127,9 +127,9 @@ public sealed class RingCabinetSymbol
                 new DocumentPoint(
                     layout.Position.XMillimeters + layout.WidthMillimeters / 2,
                     layout.Position.YMillimeters + layout.MainBusYMillimeters),
-                new DocumentPoint(0, -_metrics.RingCabinet.LineNameFontSize - 2),
+                new DocumentPoint(0, -_metrics.Typography.LineNameFontSize - 2),
                 priority: 95,
-                fontSizeMillimeters: _metrics.RingCabinet.LineNameFontSize));
+                fontSizeMillimeters: _metrics.Typography.LineNameFontSize));
         }
 
         foreach (RingCabinetInterval interval in cabinet.Intervals.OrderBy(
@@ -157,7 +157,7 @@ public sealed class RingCabinetSymbol
                 intervalNumberAnchor,
                 intervalNumberOffset,
                 priority: 80,
-                fontSizeMillimeters: _metrics.RingCabinet.IntervalNumberFontSize));
+                fontSizeMillimeters: _metrics.Typography.IntervalNumberFontSize));
 
             foreach (SwitchDevice switchDevice in interval.SwitchDevices)
             {
@@ -192,7 +192,7 @@ public sealed class RingCabinetSymbol
                         switchOrigin,
                         labelOffset,
                         priority: 70,
-                        fontSizeMillimeters: _metrics.RingCabinet.SwitchNumberFontSize));
+                        fontSizeMillimeters: _metrics.Typography.SwitchNumberFontSize));
                 }
 
             }
@@ -207,7 +207,9 @@ public sealed class RingCabinetSymbol
         DocumentPoint origin)
     {
         SwitchDevice? primarySwitch = interval.SwitchDevices.FirstOrDefault(device =>
-            device.SwitchKind is SwitchKind.CircuitBreaker or SwitchKind.LoadSwitch);
+            device.SwitchKind is SwitchKind.CircuitBreaker or
+                SwitchKind.LoadSwitch or
+                SwitchKind.IsolationSwitch);
 
         if (primarySwitch is not null &&
             intervalLayout.SwitchLayouts.TryGetValue(primarySwitch.Id, out RingCabinetSwitchLayout? primaryLayout) &&
@@ -217,16 +219,6 @@ public sealed class RingCabinetSymbol
                 origin.XMillimeters + primaryLayout.RelativePosition.XMillimeters,
                 origin.YMillimeters + primaryLayout.RelativePosition.YMillimeters);
             return (anchor, new DocumentPoint(primaryLayout.WidthMillimeters + 3, -2));
-        }
-
-        if (interval.IntervalKind == IntervalKind.PTInterval &&
-            intervalLayout.PTSymbolPosition is DocumentPoint ptPosition)
-        {
-            return (
-                new DocumentPoint(
-                    origin.XMillimeters + ptPosition.XMillimeters,
-                    origin.YMillimeters + ptPosition.YMillimeters),
-                new DocumentPoint(16, 0));
         }
 
         return (origin, intervalLayout.SequenceLabelOffset);

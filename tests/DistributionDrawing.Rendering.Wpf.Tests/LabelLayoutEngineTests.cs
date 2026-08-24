@@ -56,6 +56,31 @@ public sealed class LabelLayoutEngineTests
         Assert.Equal(first.Select(result => result.Bounds), second.Select(result => result.Bounds));
     }
 
+    [Fact]
+    public void LayoutSeparatesDenseLargeLabelsWithinLocalCandidateArea()
+    {
+        LabelRequest[] requests = Enumerable.Range(1, 6)
+            .Select(index => new LabelRequest(
+                LabelTargetKind.SwitchDevice,
+                Guid.Parse($"00000000-0000-0000-0000-{index:000000000000}"),
+                $"负{index}-47",
+                new DocumentPoint(20, 20),
+                new DocumentPoint(0, 0),
+                fontSizeMillimeters: 7))
+            .ToArray();
+
+        IReadOnlyList<LabelLayoutResult> results = new LabelLayoutEngine().Layout(requests);
+
+        Assert.DoesNotContain(results, result => result.HasCollision);
+        for (int first = 0; first < results.Count; first++)
+        {
+            for (int second = first + 1; second < results.Count; second++)
+            {
+                Assert.False(Overlaps(results[first].Bounds, results[second].Bounds));
+            }
+        }
+    }
+
     private static LabelRequest CreateRequest(Guid targetId)
     {
         return new LabelRequest(

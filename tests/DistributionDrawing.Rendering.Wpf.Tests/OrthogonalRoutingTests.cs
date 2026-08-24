@@ -47,7 +47,7 @@ public sealed class OrthogonalRoutingTests
         Assert.True(route.Segments[0].IsHorizontal);
         Assert.True(route.Segments[0].End.XMillimeters >= 8);
         Assert.True(route.Segments[^1].IsVertical);
-        Assert.True(route.Segments[^1].Start.YMillimeters >= 58);
+        Assert.True(route.Segments[^1].Start.YMillimeters <= 42);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class OrthogonalRoutingTests
 
         OrthogonalRoute route = new OrthogonalRouter().Route(request, []);
 
-        Assert.Contains(route.Points, point => point == new DocumentPoint(88, 0));
+        Assert.Contains(route.Points, point => point == new DocumentPoint(72, 0));
         Assert.All(route.Segments, segment => Assert.True(
             segment.IsHorizontal || segment.IsVertical));
     }
@@ -130,7 +130,7 @@ public sealed class OrthogonalRoutingTests
         OrthogonalRoute route = new OrthogonalRouter().Route(request, [obstacle]);
 
         Assert.Contains(route.Points, point => point == new DocumentPoint(8, 10));
-        Assert.Contains(route.Points, point => point == new DocumentPoint(88, 50));
+        Assert.Contains(route.Points, point => point == new DocumentPoint(72, 50));
         Assert.DoesNotContain(route.Segments, segment =>
             segment.IsHorizontal &&
             segment.Start.YMillimeters > -5 &&
@@ -341,7 +341,7 @@ public sealed class OrthogonalRoutingTests
         OrthogonalRouteSegment last = route.Segments[^1];
         Assert.True(last.IsVertical);
         Assert.Equal(terminal, last.End);
-        Assert.True(last.End.YMillimeters - last.Start.YMillimeters >= 50);
+        Assert.True(last.Start.YMillimeters - last.End.YMillimeters >= 50);
     }
 
     [Theory]
@@ -378,15 +378,68 @@ public sealed class OrthogonalRoutingTests
         Assert.True(direction switch
         {
             TerminalAnchorDirection.Left => last.IsHorizontal &&
-                last.Start.XMillimeters >= terminal.XMillimeters + 50,
-            TerminalAnchorDirection.Right => last.IsHorizontal &&
                 last.Start.XMillimeters <= terminal.XMillimeters - 50,
+            TerminalAnchorDirection.Right => last.IsHorizontal &&
+                last.Start.XMillimeters >= terminal.XMillimeters + 50,
             TerminalAnchorDirection.Up => last.IsVertical &&
-                last.Start.YMillimeters >= terminal.YMillimeters + 50,
-            TerminalAnchorDirection.Down => last.IsVertical &&
                 last.Start.YMillimeters <= terminal.YMillimeters - 50,
+            TerminalAnchorDirection.Down => last.IsVertical &&
+                last.Start.YMillimeters >= terminal.YMillimeters + 50,
             _ => false
         });
+    }
+
+    [Fact]
+    public void Route_UsesMultiTurnShortestPathWithoutCrossingDeviceObstacles()
+    {
+        ConnectionRouteRequest request = CreateRequest(
+            "00000000-0000-0000-0000-000000000017",
+            new DocumentPoint(0, 0),
+            TerminalAnchorDirection.Down,
+            new DocumentPoint(100, 100),
+            TerminalAnchorDirection.Down);
+        RoutingObstacle[] obstacles =
+        [
+            new RoutingObstacle(
+                Guid.Parse("00000000-0000-0000-0000-000000000091"),
+                RoutingObstacleKind.RingCabinet,
+                new DocumentRect(20, 20, 60, 20)),
+            new RoutingObstacle(
+                Guid.Parse("00000000-0000-0000-0000-000000000092"),
+                RoutingObstacleKind.PoleAttachment,
+                new DocumentRect(40, 55, 60, 20))
+        ];
+
+        OrthogonalRoute route = new OrthogonalRouter().Route(request, obstacles);
+
+        Assert.All(route.Segments, segment => Assert.True(
+            segment.IsHorizontal || segment.IsVertical));
+        Assert.DoesNotContain(route.Segments, segment =>
+            obstacles.Any(obstacle => IntersectsInterior(
+                segment,
+                obstacle.Expand(DrawingMetrics.Default.Routing.ObstacleClearance).Bounds)));
+    }
+
+    private static bool IntersectsInterior(
+        OrthogonalRouteSegment segment,
+        DocumentRect bounds)
+    {
+        if (segment.IsHorizontal)
+        {
+            return segment.Start.YMillimeters > bounds.YMillimeters &&
+                   segment.Start.YMillimeters < bounds.YMillimeters + bounds.HeightMillimeters &&
+                   Math.Max(Math.Min(segment.Start.XMillimeters, segment.End.XMillimeters),
+                       bounds.XMillimeters) <
+                   Math.Min(Math.Max(segment.Start.XMillimeters, segment.End.XMillimeters),
+                       bounds.XMillimeters + bounds.WidthMillimeters);
+        }
+
+        return segment.Start.XMillimeters > bounds.XMillimeters &&
+               segment.Start.XMillimeters < bounds.XMillimeters + bounds.WidthMillimeters &&
+               Math.Max(Math.Min(segment.Start.YMillimeters, segment.End.YMillimeters),
+                   bounds.YMillimeters) <
+               Math.Min(Math.Max(segment.Start.YMillimeters, segment.End.YMillimeters),
+                   bounds.YMillimeters + bounds.HeightMillimeters);
     }
 
     private static ConnectionRouteRequest CreateRequest(

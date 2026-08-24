@@ -6,16 +6,18 @@ namespace DistributionDrawing.Desktop.DrawingTypography;
 
 public partial class DrawingTypographyDialog : Window
 {
-    private readonly RingCabinetDrawingMetrics _metrics;
+    private readonly DrawingTypographyMetrics _metrics;
 
-    public DrawingTypographyDialog(RingCabinetDrawingMetrics? metrics = null)
+    public DrawingTypographyDialog(DrawingTypographyMetrics? metrics = null)
     {
         InitializeComponent();
-        _metrics = metrics ?? DrawingMetrics.Default.RingCabinet;
+        _metrics = metrics ?? DrawingMetrics.Default.Typography;
         CabinetNameFontSizeInput.Text = Format(_metrics.CabinetNameFontSize);
         LineNameFontSizeInput.Text = Format(_metrics.LineNameFontSize);
         IntervalNumberFontSizeInput.Text = Format(_metrics.IntervalNumberFontSize);
         SwitchNumberFontSizeInput.Text = Format(_metrics.SwitchNumberFontSize);
+        PoleNumberFontSizeInput.Text = Format(_metrics.PoleNumberFontSize);
+        PTLabelFontSizeInput.Text = Format(_metrics.PTLabelFontSize);
     }
 
     private void OnApply(object sender, RoutedEventArgs e)
@@ -23,13 +25,21 @@ public partial class DrawingTypographyDialog : Window
         if (!TryParse(CabinetNameFontSizeInput.Text, out double cabinetName) ||
             !TryParse(LineNameFontSizeInput.Text, out double lineName) ||
             !TryParse(IntervalNumberFontSizeInput.Text, out double intervalNumber) ||
-            !TryParse(SwitchNumberFontSizeInput.Text, out double switchNumber))
+            !TryParse(SwitchNumberFontSizeInput.Text, out double switchNumber) ||
+            !TryParse(PoleNumberFontSizeInput.Text, out double poleNumber) ||
+            !TryParse(PTLabelFontSizeInput.Text, out double ptLabel))
         {
             ValidationMessage.Text = "请输入大于 0 的有效字号。";
             return;
         }
 
-        _metrics.UpdateTypography(cabinetName, lineName, intervalNumber, switchNumber);
+        _metrics.Update(
+            cabinetName,
+            lineName,
+            intervalNumber,
+            switchNumber,
+            poleNumber,
+            ptLabel);
         DialogResult = true;
     }
 

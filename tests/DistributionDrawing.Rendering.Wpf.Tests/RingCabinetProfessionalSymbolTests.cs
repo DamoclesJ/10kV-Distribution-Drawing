@@ -3,6 +3,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Labels;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
@@ -43,27 +44,16 @@ public sealed class RingCabinetProfessionalSymbolTests
     [Fact]
     public void RingCabinetTypography_IsAdjustedByCategoryFromOneMetricsEntry()
     {
-        var metrics = new RingCabinetDrawingMetrics(
-            10,
-            60,
-            125,
-            25,
-            1,
-            5,
-            new DocumentPoint(0, -8),
-            12,
-            2,
-            16,
-            8,
-            10.5,
-            7);
+        var metrics = new DrawingTypographyMetrics(16, 8, 10.5, 7, 8, 7);
 
-        metrics.UpdateTypography(18, 9, 12, 8);
+        metrics.Update(18, 9, 12, 8, 10, 9);
 
         Assert.Equal(18, metrics.CabinetNameFontSize);
         Assert.Equal(9, metrics.LineNameFontSize);
         Assert.Equal(12, metrics.IntervalNumberFontSize);
         Assert.Equal(8, metrics.SwitchNumberFontSize);
+        Assert.Equal(10, metrics.PoleNumberFontSize);
+        Assert.Equal(9, metrics.PTLabelFontSize);
     }
 
     [Fact]
@@ -302,6 +292,31 @@ public sealed class RingCabinetProfessionalSymbolTests
         Assert.Contains(elements.OfType<SceneLine>(), line =>
             line.Start.YMillimeters == layout.Position.YMillimeters +
             layout.MainBusYMillimeters);
+
+        SceneEllipse lowerCoil = elements.OfType<SceneEllipse>()
+            .Where(ellipse => ellipse.Bounds.WidthMillimeters == diameter)
+            .OrderByDescending(ellipse => ellipse.Bounds.YMillimeters)
+            .First();
+        SceneText ptLabel = Assert.Single(elements.OfType<SceneText>(), text => text.Text == "PT");
+        Assert.True(ptLabel.Origin.YMillimeters >
+            lowerCoil.Bounds.YMillimeters + lowerCoil.Bounds.HeightMillimeters);
+        Assert.Equal(
+            DrawingMetrics.Default.Typography.PTLabelFontSize,
+            ptLabel.FontSizeMillimeters);
+
+        RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
+        RingCabinetIntervalLayout intervalLayout = layout.IntervalLayouts[interval.IntervalId];
+        SwitchDevice isolation = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.IsolationSwitch);
+        RingCabinetSwitchLayout isolationLayout = intervalLayout.SwitchLayouts[isolation.Id];
+        LabelRequest intervalNumber = Assert.Single(
+            new RingCabinetSymbol(new SymbolLibrary()).CreateLabelRequests(cabinet, layout),
+            request => request.TargetKind == LabelTargetKind.Interval);
+        Assert.Equal(
+            layout.Position.YMillimeters +
+            intervalLayout.RelativePosition.YMillimeters +
+            isolationLayout.RelativePosition.YMillimeters,
+            intervalNumber.Anchor.YMillimeters);
     }
 
     [Fact]
@@ -502,11 +517,7 @@ public sealed class RingCabinetProfessionalSymbolTests
                 source.IntervalSpacing,
                 source.CabinetNameOffset,
                 source.DeviceVerticalSpacing,
-                scale,
-                source.CabinetNameFontSize,
-                source.LineNameFontSize,
-                source.IntervalNumberFontSize,
-                source.SwitchNumberFontSize)
+                scale)
         };
     }
 }

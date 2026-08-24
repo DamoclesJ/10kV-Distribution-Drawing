@@ -1,6 +1,8 @@
 using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
@@ -111,6 +113,13 @@ public sealed class PoleRendererTests
         Assert.Equal("P-004", first.Text);
         Assert.Equal("P-004", second.Text);
         Assert.NotEqual(first.Origin, second.Origin);
+        DocumentPoint firstCenter = PoleProfessionalGeometry.GetPoleCenter(
+            new PoleLayout(result.Pole.Id, new DocumentPoint(10, 20)));
+        Assert.True(first.Origin.YMillimeters >
+            firstCenter.YMillimeters + DrawingMetrics.Default.Pole.PoleRadius);
+        Assert.Equal(
+            DrawingMetrics.Default.Typography.PoleNumberFontSize,
+            first.FontSizeMillimeters);
     }
 
     [Fact]

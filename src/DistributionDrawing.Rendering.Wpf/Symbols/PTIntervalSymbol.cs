@@ -111,13 +111,15 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
 
         double centerX = origin.XMillimeters + radius;
         top = new DocumentPoint(centerX, origin.YMillimeters);
+        double totalHeight = diameter * 2 - _metrics.PT.CoilSpacing;
         elements.Add(new SceneText(
             new DocumentPoint(
-                origin.XMillimeters + diameter + 2,
-                origin.YMillimeters + secondOffset / 2 + radius),
+                centerX - _metrics.Typography.PTLabelFontSize * 0.6,
+                origin.YMillimeters + totalHeight +
+                _metrics.Typography.PTLabelFontSize + 2),
             "PT",
             Colors.Black,
-            _metrics.General.SmallFontSize));
+            _metrics.Typography.PTLabelFontSize));
     }
 
     private static RingCabinetSwitchLayout GetLayout(

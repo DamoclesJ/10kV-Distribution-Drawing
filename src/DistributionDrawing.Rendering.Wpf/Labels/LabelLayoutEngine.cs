@@ -5,7 +5,8 @@ namespace DistributionDrawing.Rendering.Wpf.Labels;
 public sealed class LabelLayoutEngine
 {
     private const double CharacterWidthFactor = 0.6;
-    private const double CandidateOffset = 4;
+    private const double MinimumCandidateOffset = 4;
+    private const int CandidateRings = 6;
 
     public IReadOnlyList<LabelLayoutResult> Layout(IEnumerable<LabelRequest> requests)
     {
@@ -50,15 +51,10 @@ public sealed class LabelLayoutEngine
             return (preferredPosition, preferredBounds, false, false);
         }
 
-        DocumentPoint[] candidates =
-        [
-            new(preferredPosition.XMillimeters, preferredPosition.YMillimeters - CandidateOffset),
-            new(preferredPosition.XMillimeters, preferredPosition.YMillimeters + CandidateOffset),
-            new(preferredPosition.XMillimeters - CandidateOffset, preferredPosition.YMillimeters),
-            new(preferredPosition.XMillimeters + CandidateOffset, preferredPosition.YMillimeters)
-        ];
-
-        foreach (DocumentPoint candidate in candidates)
+        double step = Math.Max(
+            MinimumCandidateOffset,
+            request.FontSizeMillimeters / 2);
+        foreach (DocumentPoint candidate in CreateCandidates(preferredPosition, step))
         {
             DocumentRect bounds = Measure(request, candidate);
             if (!OverlapsAny(bounds, placed))
@@ -68,6 +64,40 @@ public sealed class LabelLayoutEngine
         }
 
         return (preferredPosition, preferredBounds, false, true);
+    }
+
+    private static IEnumerable<DocumentPoint> CreateCandidates(
+        DocumentPoint preferred,
+        double step)
+    {
+        for (int ring = 1; ring <= CandidateRings; ring++)
+        {
+            double distance = step * ring;
+            yield return new DocumentPoint(
+                preferred.XMillimeters,
+                preferred.YMillimeters - distance);
+            yield return new DocumentPoint(
+                preferred.XMillimeters,
+                preferred.YMillimeters + distance);
+            yield return new DocumentPoint(
+                preferred.XMillimeters - distance,
+                preferred.YMillimeters);
+            yield return new DocumentPoint(
+                preferred.XMillimeters + distance,
+                preferred.YMillimeters);
+            yield return new DocumentPoint(
+                preferred.XMillimeters - distance,
+                preferred.YMillimeters - distance);
+            yield return new DocumentPoint(
+                preferred.XMillimeters + distance,
+                preferred.YMillimeters - distance);
+            yield return new DocumentPoint(
+                preferred.XMillimeters - distance,
+                preferred.YMillimeters + distance);
+            yield return new DocumentPoint(
+                preferred.XMillimeters + distance,
+                preferred.YMillimeters + distance);
+        }
     }
 
     private static DocumentRect Measure(LabelRequest request, DocumentPoint position)

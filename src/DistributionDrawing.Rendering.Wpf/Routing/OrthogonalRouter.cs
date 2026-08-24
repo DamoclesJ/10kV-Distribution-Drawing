@@ -33,12 +33,12 @@ public sealed class OrthogonalRouter
             request.Start.Direction,
             request.Start.Position,
             request.End.Position);
-        TerminalAnchorDirection endDirection = request.End.Direction ==
+        TerminalAnchorDirection endOutwardDirection = request.End.Direction ==
             TerminalAnchorDirection.Auto
-            ? ResolveDirection(
+            ? Opposite(ResolveDirection(
                 TerminalAnchorDirection.Auto,
                 request.Start.Position,
-                request.End.Position)
+                request.End.Position))
             : request.End.Direction;
         DocumentPoint startStub = Move(
             request.Start.Position,
@@ -48,7 +48,7 @@ public sealed class OrthogonalRouter
                 request.Start.MinimumStubLength));
         DocumentPoint endStub = Move(
             request.End.Position,
-            Opposite(endDirection),
+            endOutwardDirection,
             Math.Max(
                 _metrics.Routing.PortStubLength,
                 request.End.MinimumStubLength));
@@ -68,7 +68,7 @@ public sealed class OrthogonalRouter
                 startDirection,
                 request.Start.MinimumStubLength,
                 request.End.Position,
-                endDirection,
+                endOutwardDirection,
                 request.End.MinimumStubLength))
             .GroupBy(candidate => string.Join(
                 ";",
@@ -84,7 +84,7 @@ public sealed class OrthogonalRouter
                 $"No orthogonal route candidates exist for connection '{request.ConnectionId}'.");
         }
 
-        return candidates
+        Candidate[] scoredCandidates = candidates
             .Select(candidate => candidate with
             {
                 Score = Score(
@@ -93,6 +93,16 @@ public sealed class OrthogonalRouter
                     expandedObstacles,
                     priorRoutes)
             })
+            .Where(candidate => candidate.Score.ObstacleIntersections == 0)
+            .ToArray();
+
+        if (scoredCandidates.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"No obstacle-free orthogonal route exists for connection '{request.ConnectionId}'.");
+        }
+
+        return scoredCandidates
             .OrderBy(candidate => candidate.Score.ObstacleIntersections)
             .ThenBy(candidate => candidate.Score.OverlapLength)
             .ThenBy(candidate => candidate.Score.Crossings)
@@ -129,7 +139,7 @@ public sealed class OrthogonalRouter
         TerminalAnchorDirection startDirection,
         double requestedStartLength,
         DocumentPoint end,
-        TerminalAnchorDirection endDirection,
+        TerminalAnchorDirection endOutwardDirection,
         double requestedEndLength)
     {
         if (route.Segments.Count == 0)
@@ -146,7 +156,11 @@ public sealed class OrthogonalRouter
 
         return StartsInDirection(route, startDirection) &&
                HasLengthFromStart(route.Segments[0], start, startDirection, startLength) &&
-               HasLengthIntoEnd(route.Segments[^1], end, endDirection, endLength);
+               HasLengthIntoEnd(
+                   route.Segments[^1],
+                   end,
+                   Opposite(endOutwardDirection),
+                   endLength);
     }
 
     private static bool HasLengthFromStart(
@@ -294,7 +308,150 @@ public sealed class OrthogonalRouter
                 end
             ];
         }
+
+        IReadOnlyList<DocumentPoint>? obstacleAvoiding = FindObstacleAvoidingPath(
+            start,
+            end,
+            obstacles);
+        if (obstacleAvoiding is not null)
+        {
+            yield return obstacleAvoiding;
+        }
     }
+
+    private IReadOnlyList<DocumentPoint>? FindObstacleAvoidingPath(
+        DocumentPoint start,
+        DocumentPoint end,
+        IReadOnlyList<RoutingObstacle> obstacles)
+    {
+        var xCoordinates = new SortedSet<double>
+        {
+            start.XMillimeters,
+            end.XMillimeters
+        };
+        var yCoordinates = new SortedSet<double>
+        {
+            start.YMillimeters,
+            end.YMillimeters
+        };
+
+        foreach (RoutingObstacle obstacle in obstacles)
+        {
+            xCoordinates.Add(obstacle.Bounds.XMillimeters);
+            xCoordinates.Add(obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters);
+            yCoordinates.Add(obstacle.Bounds.YMillimeters);
+            yCoordinates.Add(obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters);
+        }
+
+        DocumentPoint[] nodes = xCoordinates
+            .SelectMany(x => yCoordinates.Select(y => new DocumentPoint(x, y)))
+            .Where(point => !obstacles.Any(obstacle => ContainsInterior(obstacle.Bounds, point)))
+            .OrderBy(point => point.XMillimeters)
+            .ThenBy(point => point.YMillimeters)
+            .ToArray();
+        var adjacency = nodes.ToDictionary(point => point, _ => new List<DocumentPoint>());
+
+        foreach (IGrouping<double, DocumentPoint> column in nodes.GroupBy(point => point.XMillimeters))
+        {
+            ConnectVisibleNeighbors(
+                column.OrderBy(point => point.YMillimeters).ToArray(),
+                adjacency,
+                obstacles);
+        }
+
+        foreach (IGrouping<double, DocumentPoint> row in nodes.GroupBy(point => point.YMillimeters))
+        {
+            ConnectVisibleNeighbors(
+                row.OrderBy(point => point.XMillimeters).ToArray(),
+                adjacency,
+                obstacles);
+        }
+
+        if (!adjacency.ContainsKey(start) || !adjacency.ContainsKey(end))
+        {
+            return null;
+        }
+
+        var distances = nodes.ToDictionary(point => point, _ => double.PositiveInfinity);
+        var previous = new Dictionary<DocumentPoint, DocumentPoint>();
+        var queue = new PriorityQueue<DocumentPoint, (double Distance, double X, double Y)>();
+        distances[start] = 0;
+        queue.Enqueue(start, (0, start.XMillimeters, start.YMillimeters));
+
+        while (queue.TryDequeue(out DocumentPoint current, out var priority))
+        {
+            if (priority.Distance > distances[current])
+            {
+                continue;
+            }
+
+            if (current == end)
+            {
+                break;
+            }
+
+            foreach (DocumentPoint neighbor in adjacency[current]
+                         .OrderBy(point => point.XMillimeters)
+                         .ThenBy(point => point.YMillimeters))
+            {
+                double distance = distances[current] + ManhattanDistance(current, neighbor);
+                if (distance >= distances[neighbor])
+                {
+                    continue;
+                }
+
+                distances[neighbor] = distance;
+                previous[neighbor] = current;
+                queue.Enqueue(
+                    neighbor,
+                    (distance, neighbor.XMillimeters, neighbor.YMillimeters));
+            }
+        }
+
+        if (!previous.ContainsKey(end))
+        {
+            return null;
+        }
+
+        var path = new List<DocumentPoint> { end };
+        while (path[^1] != start)
+        {
+            path.Add(previous[path[^1]]);
+        }
+
+        path.Reverse();
+        return NormalizePreview(path);
+    }
+
+    private static void ConnectVisibleNeighbors(
+        IReadOnlyList<DocumentPoint> ordered,
+        IDictionary<DocumentPoint, List<DocumentPoint>> adjacency,
+        IReadOnlyList<RoutingObstacle> obstacles)
+    {
+        for (int index = 1; index < ordered.Count; index++)
+        {
+            DocumentPoint previous = ordered[index - 1];
+            DocumentPoint current = ordered[index];
+            var segment = new OrthogonalRouteSegment(previous, current, 0);
+            if (obstacles.Any(obstacle => IntersectsInterior(segment, obstacle.Bounds)))
+            {
+                continue;
+            }
+
+            adjacency[previous].Add(current);
+            adjacency[current].Add(previous);
+        }
+    }
+
+    private static bool ContainsInterior(DocumentRect bounds, DocumentPoint point) =>
+        point.XMillimeters > bounds.XMillimeters &&
+        point.XMillimeters < bounds.XMillimeters + bounds.WidthMillimeters &&
+        point.YMillimeters > bounds.YMillimeters &&
+        point.YMillimeters < bounds.YMillimeters + bounds.HeightMillimeters;
+
+    private static double ManhattanDistance(DocumentPoint first, DocumentPoint second) =>
+        Math.Abs(first.XMillimeters - second.XMillimeters) +
+        Math.Abs(first.YMillimeters - second.YMillimeters);
 
     private static Candidate CreateCandidate(
         ConnectionRouteRequest request,
