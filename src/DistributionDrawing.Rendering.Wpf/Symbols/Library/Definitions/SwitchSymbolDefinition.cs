@@ -165,11 +165,7 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
             context.Stroke,
             context.ThicknessMillimeters,
             context.Fill));
-        double arrowLength = _metrics.PoleAttachment.OperationArrowLength;
-        DocumentPoint arrowTip = new(x + width * 0.15, y + height * 0.62);
-        elements.Add(Line(context, new DocumentPoint(arrowTip.XMillimeters + arrowLength, arrowTip.YMillimeters - arrowLength * 0.6), arrowTip));
-        elements.Add(Line(context, arrowTip, new DocumentPoint(arrowTip.XMillimeters + arrowLength * 0.4, arrowTip.YMillimeters - arrowLength * 0.1)));
-        elements.Add(Line(context, arrowTip, new DocumentPoint(arrowTip.XMillimeters + arrowLength * 0.1, arrowTip.YMillimeters - arrowLength * 0.4)));
+        elements.Add(Line(context, tubeTop, tubeBottom));
     }
 
     private void AddText(SymbolRenderContext context, ICollection<SceneElement> elements)

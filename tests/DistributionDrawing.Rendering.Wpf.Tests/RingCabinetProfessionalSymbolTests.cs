@@ -331,35 +331,35 @@ public sealed class RingCabinetProfessionalSymbolTests
     }
 
     [Fact]
-    public void UpperIsolationGrounding_UsesLowerCompactGroundContact()
+    public void UpperLowerGrounding_AloneUsesLowerCompactGroundContact()
     {
         RingCabinet cabinet = CreateIntegratedCabinet(
             4,
-            GroundingStructureKind.UpperIsolationGrounding);
+            GroundingStructureKind.UpperLowerGrounding);
         RingCabinetInterval interval = cabinet.Intervals.Single(candidate =>
             candidate.BayIndex == 1);
         RingCabinetIntervalLayout intervalLayout = CreateLayout(cabinet)
             .IntervalLayouts[interval.IntervalId];
-        SwitchDevice isolation = interval.SwitchDevices.Single(device =>
-            device.SwitchKind == SwitchKind.IsolationSwitch);
+        SwitchDevice breaker = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.CircuitBreaker);
         SwitchDevice ground = interval.SwitchDevices.Single(device =>
             device.SwitchKind == SwitchKind.GroundSwitch);
-        RingCabinetSwitchLayout isolationLayout = intervalLayout.SwitchLayouts[isolation.Id];
+        RingCabinetSwitchLayout breakerLayout = intervalLayout.SwitchLayouts[breaker.Id];
         RingCabinetSwitchLayout groundLayout = intervalLayout.SwitchLayouts[ground.Id];
         double scaledContactRadius = DrawingMetrics.Default.Switch.ContactRadius *
                                      DrawingMetrics.Default.RingCabinet.SwitchSymbolScale;
-        double isolationInset = Math.Max(
+        double breakerInset = Math.Max(
             scaledContactRadius,
             Math.Min(
-                isolationLayout.HeightMillimeters / 4,
+                breakerLayout.HeightMillimeters / 4,
                 DrawingMetrics.Default.Switch.StandardSwitchLength *
                 DrawingMetrics.Default.RingCabinet.SwitchSymbolScale / 4));
-        double commonY = isolationLayout.RelativePosition.YMillimeters +
-                         isolationLayout.HeightMillimeters - isolationInset;
+        double breakerBottom = breakerLayout.RelativePosition.YMillimeters +
+                               breakerLayout.HeightMillimeters - breakerInset;
         double groundY = groundLayout.RelativePosition.YMillimeters +
                          groundLayout.HeightMillimeters / 2;
-        double mainX = isolationLayout.RelativePosition.XMillimeters +
-                       isolationLayout.WidthMillimeters / 2;
+        double mainX = breakerLayout.RelativePosition.XMillimeters +
+                       breakerLayout.WidthMillimeters / 2;
         double groundInset = Math.Max(
             scaledContactRadius,
             Math.Min(
@@ -369,9 +369,65 @@ public sealed class RingCabinetProfessionalSymbolTests
         double groundX = groundLayout.RelativePosition.XMillimeters +
                          groundLayout.WidthMillimeters - groundInset;
 
-        Assert.True(groundY > commonY);
+        Assert.True(groundY > breakerBottom);
         Assert.True(Math.Abs(mainX - groundX) <
                     DrawingMetrics.Default.RingCabinet.DeviceVerticalSpacing);
+
+        RingCabinetLayout cabinetLayout = CreateLayout(cabinet);
+        IReadOnlyList<SceneElement> elements = new RingCabinetRenderer().Render(
+            cabinet,
+            cabinetLayout);
+        DocumentPoint origin = new(
+            cabinetLayout.Position.XMillimeters +
+            intervalLayout.RelativePosition.XMillimeters,
+            cabinetLayout.Position.YMillimeters +
+            intervalLayout.RelativePosition.YMillimeters);
+        double terminalTop = origin.YMillimeters + intervalLayout.HeightMillimeters -
+                             DrawingMetrics.Default.CableTermination.TriangleHeight;
+        double expectedBranchY = origin.YMillimeters +
+                                 (breakerBottom + terminalTop -
+                                  origin.YMillimeters) / 2;
+
+        Assert.Contains(elements.OfType<SceneLine>(), line =>
+            Math.Abs(line.Start.YMillimeters - expectedBranchY) < 0.001 &&
+            Math.Abs(line.End.YMillimeters - expectedBranchY) < 0.001 &&
+            Math.Min(line.Start.XMillimeters, line.End.XMillimeters) <
+            origin.XMillimeters + mainX);
+        Assert.Contains(elements.OfType<SceneLine>(), line =>
+            Math.Abs(line.Start.YMillimeters - line.End.YMillimeters) < 0.001 &&
+            Math.Abs(Math.Abs(line.Start.XMillimeters - line.End.XMillimeters) -
+                     scaledContactRadius * 1.5) < 0.001);
+    }
+
+    [Theory]
+    [InlineData(GroundingStructureKind.UpperIsolationGrounding)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding)]
+    public void OtherGroundingStructuresKeepOriginalGroundLayout(
+        GroundingStructureKind structure)
+    {
+        RingCabinet cabinet = CreateIntegratedCabinet(4, structure);
+        RingCabinetInterval interval = cabinet.Intervals.Single(candidate =>
+            candidate.BayIndex == 1);
+        RingCabinetIntervalLayout intervalLayout = CreateLayout(cabinet)
+            .IntervalLayouts[interval.IntervalId];
+        SwitchDevice ground = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.GroundSwitch);
+        RingCabinetSwitchLayout groundLayout = intervalLayout.SwitchLayouts[ground.Id];
+        double expectedX = DrawingMetrics.Default.RingCabinet.StandardIntervalWidth / 2 -
+                           DrawingMetrics.Default.RingCabinet.DeviceVerticalSpacing / 2 -
+                           DrawingMetrics.Default.Switch.GroundSwitchLength *
+                           DrawingMetrics.Default.RingCabinet.SwitchSymbolScale;
+
+        Assert.Equal(expectedX, groundLayout.RelativePosition.XMillimeters);
+        double scaledContactRadius = DrawingMetrics.Default.Switch.ContactRadius *
+                                     DrawingMetrics.Default.RingCabinet.SwitchSymbolScale;
+        IReadOnlyList<SceneElement> elements = new RingCabinetRenderer().Render(
+            cabinet,
+            CreateLayout(cabinet));
+        Assert.Contains(elements.OfType<SceneLine>(), line =>
+            Math.Abs(line.Start.YMillimeters - line.End.YMillimeters) < 0.001 &&
+            Math.Abs(Math.Abs(line.Start.XMillimeters - line.End.XMillimeters) -
+                     scaledContactRadius * 3) < 0.001);
     }
 
     [Fact]

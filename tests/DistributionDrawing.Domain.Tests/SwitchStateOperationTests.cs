@@ -51,6 +51,37 @@ public sealed class SwitchStateOperationTests
         Assert.Equal(SwitchState.Open, groundSwitch.SwitchState);
     }
 
+    [Fact]
+    public void ChangeSwitchState_AfterIntervalTypeChangeUsesCurrentAggregateSwitch()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "Interval type change switch test");
+        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(
+            Guid.NewGuid(),
+            "测试环网柜",
+            [
+                CreateLoadSwitchInterval(1),
+                CreateLoadSwitchInterval(2),
+                CreateLoadSwitchInterval(3)
+            ]));
+        document.AddDevice(cabinet);
+        Guid intervalId = cabinet.Intervals[0].IntervalId;
+
+        cabinet.ChangeIntervalType(
+            intervalId,
+            IntervalKind.IntegratedFeederInterval,
+            GroundingStructureKind.UpperLowerGrounding);
+        SwitchDevice circuitBreaker = cabinet.Intervals[0].SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.CircuitBreaker);
+
+        SwitchStateChangeResult result = document.ChangeSwitchState(
+            circuitBreaker.Id,
+            SwitchState.Closed);
+
+        Assert.Same(circuitBreaker, result.SwitchDevice);
+        Assert.Equal(SwitchState.Open, result.PreviousState);
+        Assert.Equal(SwitchState.Closed, circuitBreaker.SwitchState);
+    }
+
     private static SwitchDevice AddPoleSwitch(
         DrawingDocument document,
         SwitchState initialState)

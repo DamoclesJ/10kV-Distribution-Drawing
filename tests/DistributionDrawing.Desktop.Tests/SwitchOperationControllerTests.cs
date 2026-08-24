@@ -100,6 +100,40 @@ public sealed class SwitchOperationControllerTests
         Assert.Equal(SwitchState.Closed, circuitBreaker.SwitchState);
     }
 
+    [Fact]
+    public void SwitchCreatedByIntervalTypeChange_RemainsOperable()
+    {
+        using TestProject project = CreateProject(CreateLoadSwitchConfiguration());
+        RingCabinet cabinet = Assert.Single(
+            project.Session.PersistenceSession.Domain.Devices.OfType<RingCabinet>());
+        Guid intervalId = cabinet.Intervals[0].IntervalId;
+        var changeType = new ChangeIntervalTypeCommand(
+            cabinet,
+            project.Session.Layout,
+            intervalId,
+            IntervalKind.IntegratedFeederInterval,
+            GroundingStructureKind.UpperLowerGrounding);
+        project.Session.CommandStack.ExecuteCommand(changeType);
+        project.Session.RebuildScene();
+        RingCabinetInterval changedInterval = cabinet.Intervals.Single(interval =>
+            interval.IntervalId == intervalId);
+        SwitchDevice circuitBreaker = changedInterval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.CircuitBreaker);
+        var selection = new SelectionReference(
+            SelectionTargetKind.Device,
+            circuitBreaker.Id,
+            intervalId);
+        project.Session.SelectionManager.Select(selection);
+        var controller = new SwitchOperationController(() => project.Session);
+
+        SwitchOperationResult result = controller.ToggleSelected();
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
+        Assert.Equal(SwitchState.Closed, circuitBreaker.SwitchState);
+        Assert.Equal(selection, project.Session.SelectionManager.Selected);
+        Assert.True(project.Session.CommandStack.CanUndo);
+    }
+
     [Theory]
     [InlineData(SwitchKind.LoadSwitch)]
     [InlineData(SwitchKind.IsolationSwitch)]

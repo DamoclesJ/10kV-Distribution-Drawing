@@ -133,22 +133,26 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
             Colors.Black,
             _metrics.General.StandardStrokeThickness));
 
-        if (!usesCombinedThreePositionSwitch)
-        {
-            RingCabinetProfessionalGeometry.AddGroundSwitch(
-                elements,
-                ground,
-                groundLayout,
-                origin,
-                lowerBottom,
-                _metrics);
-        }
-
         DocumentPoint terminalTip = new(
             centerX,
             origin.YMillimeters + layout.HeightMillimeters);
         double terminalTop = terminalTip.YMillimeters -
                              _metrics.CableTermination.TriangleHeight;
+        if (!usesCombinedThreePositionSwitch)
+        {
+            DocumentPoint downstreamGroundNode = new(
+                centerX,
+                (lowerBottom.YMillimeters + terminalTop) / 2);
+            RingCabinetProfessionalGeometry.AddGroundSwitch(
+                elements,
+                ground,
+                groundLayout,
+                origin,
+                downstreamGroundNode,
+                _metrics,
+                compactEarth: true);
+        }
+
         elements.Add(new SceneLine(
             lowerBottom,
             new DocumentPoint(centerX, terminalTop),

@@ -54,7 +54,8 @@ internal static class RingCabinetProfessionalGeometry
         RingCabinetSwitchLayout layout,
         DocumentPoint intervalOrigin,
         DocumentPoint circuitNode,
-        DrawingMetrics metrics)
+        DrawingMetrics metrics,
+        bool compactEarth = false)
     {
         metrics = WithRingCabinetSwitchScale(metrics);
         DocumentRect bounds = GetBounds(layout, intervalOrigin);
@@ -81,7 +82,7 @@ internal static class RingCabinetProfessionalGeometry
             ? left
             : new DocumentPoint(left.XMillimeters, left.YMillimeters - openOffset);
         elements.Add(Line(right, bladeEnd, metrics));
-        AddLeftFacingEarth(elements, left, metrics);
+        AddLeftFacingEarth(elements, left, metrics, compactEarth);
         return (left, right);
     }
 
@@ -342,9 +343,10 @@ internal static class RingCabinetProfessionalGeometry
     private static void AddLeftFacingEarth(
         ICollection<SceneElement> elements,
         DocumentPoint connection,
-        DrawingMetrics metrics)
+        DrawingMetrics metrics,
+        bool compact = false)
     {
-        double lead = metrics.Switch.ContactRadius * 1.5;
+        double lead = metrics.Switch.ContactRadius * (compact ? 1.5 : 3);
         DocumentPoint basePoint = new(connection.XMillimeters - lead, connection.YMillimeters);
         elements.Add(new SceneLine(
             connection,

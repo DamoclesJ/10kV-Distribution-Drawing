@@ -102,6 +102,25 @@ public sealed class PoleProfessionalSymbolTests
             Math.Abs(line.End.YMillimeters - contact.Bounds.YMillimeters) < 0.001);
     }
 
+    [Fact]
+    public void DropoutFuse_UsesFusedTubeAxisWithoutOperationArrow()
+    {
+        SceneElement[] geometry = RenderSwitch(SwitchKind.DropoutFuse);
+        ScenePolyline tube = Assert.Single(geometry.OfType<ScenePolyline>(), polyline =>
+            polyline.IsClosed && polyline.Points.Count == 4);
+        DocumentPoint topCenter = new(
+            (tube.Points[0].XMillimeters + tube.Points[1].XMillimeters) / 2,
+            (tube.Points[0].YMillimeters + tube.Points[1].YMillimeters) / 2);
+        DocumentPoint bottomCenter = new(
+            (tube.Points[2].XMillimeters + tube.Points[3].XMillimeters) / 2,
+            (tube.Points[2].YMillimeters + tube.Points[3].YMillimeters) / 2);
+
+        Assert.Contains(geometry.OfType<SceneLine>(), line =>
+            line.Start == topCenter && line.End == bottomCenter);
+        Assert.DoesNotContain(geometry.OfType<SceneLine>(), line =>
+            line.Start.XMillimeters < tube.Points.Min(point => point.XMillimeters));
+    }
+
     [Theory]
     [InlineData(SwitchKind.IsolationSwitch, false)]
     [InlineData(SwitchKind.CircuitBreaker, false)]

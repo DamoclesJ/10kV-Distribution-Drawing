@@ -573,11 +573,24 @@ public sealed class DrawingDocument
             throw new ArgumentOutOfRangeException(nameof(targetState));
         }
 
-        SwitchDevice switchDevice = _devices
+        RingCabinetInterval? cabinetInterval = _devices
+            .OfType<RingCabinet>()
+            .SelectMany(cabinet => cabinet.Intervals)
+            .SingleOrDefault(interval => interval.SwitchDevices.Any(device =>
+                device.Id == switchDeviceId));
+        SwitchDevice? switchDevice = cabinetInterval?.SwitchDevices.Single(device =>
+            device.Id == switchDeviceId);
+        switchDevice ??= _devices
             .OfType<SwitchDevice>()
-            .SingleOrDefault(device => device.Id == switchDeviceId)
-            ?? throw new InvalidOperationException(
+            .SingleOrDefault(device =>
+                device.Id == switchDeviceId &&
+                device.InstallationType == SwitchInstallationType.Pole);
+        if (switchDevice is null)
+        {
+            throw new InvalidOperationException(
                 $"Switch '{switchDeviceId}' does not exist.");
+        }
+
         SwitchState previousState = switchDevice.SwitchState
             ?? throw new InvalidOperationException(
                 $"Switch '{switchDeviceId}' has no switch state.");
@@ -596,8 +609,7 @@ public sealed class DrawingDocument
                 break;
 
             case SwitchInstallationType.CabinetInterval:
-                SwitchAssembly assembly = _switchAssemblies.SingleOrDefault(candidate =>
-                        candidate.MemberSwitchIds.Contains(switchDeviceId))
+                SwitchAssembly assembly = cabinetInterval?.SwitchAssembly
                     ?? throw new InvalidOperationException(
                         $"Cabinet switch '{switchDeviceId}' has no switch assembly.");
                 assembly.ChangeSwitchState(switchDeviceId, targetState);

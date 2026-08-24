@@ -160,7 +160,9 @@ public sealed class RingCabinetLayoutFactory
         double mainX = GetMainSwitchX();
         double primaryY = GetPrimaryDeviceY();
         double secondaryY = GetSecondaryDeviceY();
-        double groundX = GetGroundSwitchX();
+        double groundX = structure == GroundingStructureKind.UpperLowerGrounding
+            ? GetCompactGroundSwitchX()
+            : GetGroundSwitchX();
         (SwitchKind upper, SwitchKind lower, double connectedDeviceY) = structure switch
         {
             GroundingStructureKind.UpperIsolationGrounding =>
@@ -171,8 +173,7 @@ public sealed class RingCabinetLayoutFactory
                 (SwitchKind.CircuitBreaker, SwitchKind.IsolationSwitch, secondaryY),
             _ => throw new ArgumentOutOfRangeException(nameof(interval))
         };
-        double groundY = structure is GroundingStructureKind.UpperIsolationGrounding or
-            GroundingStructureKind.LowerLowerGrounding
+        double groundY = structure == GroundingStructureKind.UpperLowerGrounding
             ? GetGroundSwitchYBelowNode(connectedDeviceY)
             : GetGroundSwitchYForNode(connectedDeviceY);
 
@@ -228,6 +229,11 @@ public sealed class RingCabinetLayoutFactory
          _metrics.Switch.StandardSwitchLength * _metrics.RingCabinet.SwitchSymbolScale) / 2;
 
     private double GetGroundSwitchX() =>
+        _metrics.RingCabinet.StandardIntervalWidth / 2 -
+        _metrics.RingCabinet.DeviceVerticalSpacing / 2 -
+        _metrics.Switch.GroundSwitchLength * _metrics.RingCabinet.SwitchSymbolScale;
+
+    private double GetCompactGroundSwitchX() =>
         _metrics.RingCabinet.StandardIntervalWidth / 2 -
         _metrics.Switch.GroundSwitchLength * _metrics.RingCabinet.SwitchSymbolScale +
         _metrics.RingCabinet.DeviceVerticalSpacing / 2;
