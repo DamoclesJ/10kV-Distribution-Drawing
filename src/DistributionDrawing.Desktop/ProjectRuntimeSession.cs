@@ -235,6 +235,12 @@ internal static class ProjectLayoutRuntimeMapper
                 Point(endAnchor.Position),
                 Point(layout.ContinuationOffset));
         }).ToArray();
+        var cableRouteGuides = runtime.CableRouteGuides.Values
+            .OrderBy(guide => guide.CableSegmentId)
+            .Select(guide => new ProjectCableRouteGuideDto(
+                guide.CableSegmentId,
+                guide.HorizontalYMillimeters))
+            .ToArray();
 
         return new ProjectLayoutSnapshot(new ProjectLayoutDto(
             domain.Id,
@@ -242,7 +248,8 @@ internal static class ProjectLayoutRuntimeMapper
             cabinets,
             poles,
             attachments,
-            overheadLines));
+            overheadLines,
+            cableRouteGuides));
     }
 
     public static RuntimeLayoutDocument ToRuntime(
@@ -333,7 +340,13 @@ internal static class ProjectLayoutRuntimeMapper
                     Point(dto.LabelOffset)));
         }
 
-        return new RuntimeLayoutDocument(drawingLayout, cabinetLayouts);
+        Dictionary<Guid, CableRouteGuide> cableRouteGuides = snapshot.CableRouteGuides
+            .ToDictionary(
+                dto => dto.CableSegmentId,
+                dto => new CableRouteGuide(
+                    dto.CableSegmentId,
+                    dto.HorizontalYMillimeters));
+        return new RuntimeLayoutDocument(drawingLayout, cabinetLayouts, cableRouteGuides);
     }
 
     private static ProjectPointDto Point(DocumentPoint point)

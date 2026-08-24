@@ -344,6 +344,66 @@ public sealed class OrthogonalRoutingTests
         Assert.True(last.Start.YMillimeters - last.End.YMillimeters >= 50);
     }
 
+    [Fact]
+    public void Route_UsesPreferredHorizontalGuideWithoutChangingTerminalStubs()
+    {
+        Guid startId = Guid.NewGuid();
+        Guid endId = Guid.NewGuid();
+        ConnectionRouteRequest request = new(
+            Guid.NewGuid(),
+            ConnectionType.Cable,
+            startId,
+            endId,
+            new TerminalAnchor(
+                startId,
+                new DocumentPoint(0, 0),
+                TerminalAnchorDirection.Down,
+                MinimumStubLength: 50),
+            new TerminalAnchor(
+                endId,
+                new DocumentPoint(100, 0),
+                TerminalAnchorDirection.Down,
+                MinimumStubLength: 50),
+            PreferredHorizontalY: 80);
+
+        OrthogonalRoute route = new OrthogonalRouter().Route(request, []);
+
+        Assert.Contains(route.Segments, segment =>
+            segment.IsHorizontal && segment.Start.YMillimeters == 80);
+        Assert.True(route.Segments[0].IsVertical);
+        Assert.True(route.Segments[0].Length >= 50);
+        Assert.True(route.Segments[^1].IsVertical);
+        Assert.True(route.Segments[^1].Length >= 50);
+    }
+
+    [Fact]
+    public void Route_PrefersNearestObstacleFreeHorizontalChannelToGuide()
+    {
+        Guid startId = Guid.NewGuid();
+        Guid endId = Guid.NewGuid();
+        ConnectionRouteRequest request = new(
+            Guid.NewGuid(),
+            ConnectionType.Cable,
+            startId,
+            endId,
+            new TerminalAnchor(startId, new DocumentPoint(0, 0), TerminalAnchorDirection.Down, 50),
+            new TerminalAnchor(endId, new DocumentPoint(100, 0), TerminalAnchorDirection.Down, 50),
+            PreferredHorizontalY: 80);
+        var obstacle = new RoutingObstacle(
+            Guid.NewGuid(),
+            RoutingObstacleKind.Pole,
+            new DocumentRect(40, 70, 20, 20));
+
+        OrthogonalRoute route = new OrthogonalRouter().Route(request, [obstacle]);
+
+        Assert.DoesNotContain(route.Segments, segment =>
+            IntersectsInterior(
+                segment,
+                obstacle.Expand(DrawingMetrics.Default.Routing.ObstacleClearance).Bounds));
+        Assert.True(route.Segments[0].Length >= 50);
+        Assert.True(route.Segments[^1].Length >= 50);
+    }
+
     [Theory]
     [InlineData(TerminalAnchorDirection.Left)]
     [InlineData(TerminalAnchorDirection.Right)]

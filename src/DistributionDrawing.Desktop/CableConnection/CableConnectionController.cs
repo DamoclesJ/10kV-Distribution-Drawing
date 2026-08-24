@@ -194,7 +194,8 @@ public sealed class CableConnectionController
         var command = new RemoveCableSegmentCommand(
             document,
             cableSegment,
-            connection);
+            connection,
+            session.Layout);
         try
         {
             session.CommandStack.ExecuteCommand(command);

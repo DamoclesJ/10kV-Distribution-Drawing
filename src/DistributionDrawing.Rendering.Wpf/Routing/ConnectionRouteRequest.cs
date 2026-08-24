@@ -9,4 +9,5 @@ public sealed record ConnectionRouteRequest(
     Guid StartTerminalId,
     Guid EndTerminalId,
     TerminalAnchor Start,
-    TerminalAnchor End);
+    TerminalAnchor End,
+    double? PreferredHorizontalY = null);

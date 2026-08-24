@@ -108,6 +108,56 @@ public sealed class CablePersistenceV6Tests
         Assert.False(query.IsConnected(terminals[1].TerminalId, terminals[2].TerminalId));
     }
 
+    [Fact]
+    public void CableRouteGuide_RoundTrip_PreservesOptionalHorizontalHeightInV6()
+    {
+        DrawingDocument document = CreateDocumentWithIntermediateTerminals(2);
+        IntermediateTerminal[] terminals = document.IntermediateTerminals.ToArray();
+        CableSegmentCreationResult cable = CreateCable(document, terminals[0], terminals[1], "A-B");
+        new CreateCableSegmentCommand(document, cable).Execute();
+        var dto = new ProjectLayoutDto(
+            document.Id,
+            "mm",
+            [],
+            [],
+            [],
+            [],
+            [new ProjectCableRouteGuideDto(cable.CableSegment.Id, 125)]);
+
+        string filePath = Path.Combine(
+            Path.GetTempPath(),
+            $"distribution-drawing-cable-guide-v6-{Guid.NewGuid():N}.kvdrawing");
+        try
+        {
+            ProjectLayoutSnapshot snapshot = ProjectLayoutMapper.ToSnapshot(document, dto);
+            var container = new ProjectFileContainer();
+            container.Save(filePath, new ProjectFileDocument(
+                ProjectFileManifest.Create(
+                    document.Id,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow),
+                new ProjectFileMetadata(document.Title),
+                ProjectDomainMapper.ToDto(document),
+                snapshot.Data,
+                ProjectProfessionalDto.Empty(document.Id)));
+
+            ProjectFileDocument restored = container.Open(filePath);
+            ProjectCableRouteGuideDto guide = Assert.Single(
+                restored.Layout!.CableRouteGuides!);
+            Assert.Equal(cable.CableSegment.Id, guide.CableSegmentId);
+            Assert.Equal(125, guide.HorizontalYMillimeters);
+            Assert.Equal(ProjectFileFormat.Version6, restored.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version6, ProjectFileFormat.CurrentVersion);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+    }
+
     private static DrawingDocument CreateDocumentWithIntermediateTerminals(int count)
     {
         var document = new DrawingDocument(Guid.NewGuid(), "Cable V6 persistence test");

@@ -33,6 +33,13 @@ public sealed class SelectionHitTestIndex
         DocumentPoint point,
         double toleranceMillimeters = 0)
     {
+        return HitTestEntry(point, toleranceMillimeters)?.Target;
+    }
+
+    public SelectionHitTestEntry? HitTestEntry(
+        DocumentPoint point,
+        double toleranceMillimeters = 0)
+    {
         if (toleranceMillimeters < 0 ||
             double.IsNaN(toleranceMillimeters) ||
             double.IsInfinity(toleranceMillimeters))
@@ -43,7 +50,6 @@ public sealed class SelectionHitTestIndex
         return _entries
             .Where(entry => IsHit(entry, point, toleranceMillimeters))
             .OrderByDescending(entry => entry.Priority)
-            .Select(entry => entry.Target)
             .FirstOrDefault();
     }
 

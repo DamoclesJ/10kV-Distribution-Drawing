@@ -53,7 +53,11 @@ public sealed class OrthogonalRouter
                 _metrics.Routing.PortStubLength,
                 request.End.MinimumStubLength));
 
-        Candidate[] candidates = CreateCandidates(startStub, endStub, expandedObstacles)
+        Candidate[] candidates = CreateCandidates(
+                startStub,
+                endStub,
+                expandedObstacles,
+                request.PreferredHorizontalY)
             .Select((core, priority) => CreateCandidate(
                 request,
                 request.Start.Position,
@@ -91,7 +95,8 @@ public sealed class OrthogonalRouter
                     candidate.Route,
                     candidate.Priority,
                     expandedObstacles,
-                    priorRoutes)
+                    priorRoutes,
+                    request.PreferredHorizontalY)
             })
             .Where(candidate => candidate.Score.ObstacleIntersections == 0)
             .ToArray();
@@ -104,6 +109,7 @@ public sealed class OrthogonalRouter
 
         return scoredCandidates
             .OrderBy(candidate => candidate.Score.ObstacleIntersections)
+            .ThenBy(candidate => candidate.Score.HorizontalGuideDeviation)
             .ThenBy(candidate => candidate.Score.OverlapLength)
             .ThenBy(candidate => candidate.Score.Crossings)
             .ThenBy(candidate => candidate.Score.Bends)
@@ -247,7 +253,8 @@ public sealed class OrthogonalRouter
     private IEnumerable<IReadOnlyList<DocumentPoint>> CreateCandidates(
         DocumentPoint start,
         DocumentPoint end,
-        IReadOnlyList<RoutingObstacle> obstacles)
+        IReadOnlyList<RoutingObstacle> obstacles,
+        double? preferredHorizontalY)
     {
         if (start.XMillimeters == end.XMillimeters ||
             start.YMillimeters == end.YMillimeters)
@@ -257,6 +264,17 @@ public sealed class OrthogonalRouter
 
         yield return [start, new DocumentPoint(end.XMillimeters, start.YMillimeters), end];
         yield return [start, new DocumentPoint(start.XMillimeters, end.YMillimeters), end];
+
+        if (preferredHorizontalY is double guideY)
+        {
+            yield return
+            [
+                start,
+                new DocumentPoint(start.XMillimeters, guideY),
+                new DocumentPoint(end.XMillimeters, guideY),
+                end
+            ];
+        }
 
         var xChannels = new SortedSet<double>
         {
@@ -482,7 +500,8 @@ public sealed class OrthogonalRouter
         OrthogonalRoute route,
         int priority,
         IReadOnlyList<RoutingObstacle> obstacles,
-        IReadOnlyList<OrthogonalRoute> priorRoutes)
+        IReadOnlyList<OrthogonalRoute> priorRoutes,
+        double? preferredHorizontalY)
     {
         int obstacleIntersections = 0;
         foreach (OrthogonalRouteSegment segment in route.Segments)
@@ -525,6 +544,13 @@ public sealed class OrthogonalRouter
             obstacleIntersections,
             overlap,
             crossings,
+            preferredHorizontalY is double guideY
+                ? route.Segments
+                    .Where(segment => segment.IsHorizontal)
+                    .Select(segment => Math.Abs(segment.Start.YMillimeters - guideY))
+                    .DefaultIfEmpty(double.MaxValue)
+                    .Min()
+                : 0,
             Math.Max(0, route.Points.Count - 2),
             route.Length,
             priority);
@@ -677,6 +703,7 @@ public sealed class OrthogonalRouter
         int ObstacleIntersections,
         double OverlapLength,
         int Crossings,
+        double HorizontalGuideDeviation,
         int Bends,
         double Length,
         int Priority);

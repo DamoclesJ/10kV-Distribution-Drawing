@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private PropertyEditor _propertyEditor;
     private readonly ProfessionalCommandFactory _professionalCommandFactory = new();
     private readonly DeviceDragController _deviceDrag = new();
+    private readonly CableRouteDragController _cableRouteDrag = new();
     private SelectionObjectResolver _selectionResolver = new();
     private PropertyProjector _propertyProjector = new();
     private PropertyInspectorViewModel _propertyInspector = new();
@@ -331,7 +332,7 @@ public partial class MainWindow : Window
 
         if (e.Key == System.Windows.Input.Key.Escape)
         {
-            if (_deviceDrag.IsActive)
+            if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
             {
                 CancelDeviceDrag();
                 e.Handled = true;
@@ -446,7 +447,7 @@ public partial class MainWindow : Window
             _cableConnection.Cancel();
         }
 
-        if (!_deviceDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
         {
             return true;
         }
@@ -470,7 +471,9 @@ public partial class MainWindow : Window
 
         try
         {
-            ICommand? command = _deviceDrag.Commit();
+            ICommand? command = _cableRouteDrag.IsActive
+                ? _cableRouteDrag.Commit()
+                : _deviceDrag.Commit();
             DrawingSurface.ReleaseMouseCapture();
             if (command is not null)
             {
@@ -491,6 +494,7 @@ public partial class MainWindow : Window
     {
         _shellViewModel.RefreshCommandStates();
         _deviceDrag.Cancel();
+        _cableRouteDrag.Cancel();
         DrawingSurface.ReleaseMouseCapture();
         EndCanvasPan();
         _drawingTools.Cancel();
@@ -582,6 +586,7 @@ public partial class MainWindow : Window
     private void OnClearDrawing(object sender, RoutedEventArgs e)
     {
         _deviceDrag.Cancel();
+        _cableRouteDrag.Cancel();
         EndCanvasPan();
         _drawingTools.Cancel();
         DrawingSurface.ReleaseMouseCapture();
@@ -616,7 +621,7 @@ public partial class MainWindow : Window
 
     private void OnZoomIn(object sender, RoutedEventArgs e)
     {
-        if (!_deviceDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
         {
             _viewport.ZoomIn();
             UpdateConnectionPointerFromCurrentMouse();
@@ -625,7 +630,7 @@ public partial class MainWindow : Window
 
     private void OnZoomOut(object sender, RoutedEventArgs e)
     {
-        if (!_deviceDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
         {
             _viewport.ZoomOut();
             UpdateConnectionPointerFromCurrentMouse();
@@ -634,7 +639,7 @@ public partial class MainWindow : Window
 
     private void OnFitDrawing(object sender, RoutedEventArgs e)
     {
-        if (!_deviceDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
         {
             _viewport.Fit(_currentScene);
             UpdateConnectionPointerFromCurrentMouse();
@@ -686,7 +691,7 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseWheelEventArgs e)
     {
-        if (_deviceDrag.IsActive)
+        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
         {
             return;
         }
@@ -701,7 +706,8 @@ public partial class MainWindow : Window
         System.Windows.Input.MouseButtonEventArgs e)
     {
         if (e.ChangedButton != System.Windows.Input.MouseButton.Middle ||
-            _deviceDrag.IsActive)
+            _deviceDrag.IsActive ||
+            _cableRouteDrag.IsActive)
         {
             return;
         }
@@ -741,7 +747,9 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseEventArgs e)
     {
-        if (_deviceDrag.Cancel())
+        bool changed = _deviceDrag.Cancel();
+        changed |= _cableRouteDrag.Cancel();
+        if (changed)
         {
             RefreshDrawingScene();
         }
@@ -754,7 +762,9 @@ public partial class MainWindow : Window
 
     private void CancelDeviceDrag()
     {
-        if (!_deviceDrag.Cancel())
+        bool changed = _deviceDrag.Cancel();
+        changed |= _cableRouteDrag.Cancel();
+        if (!changed)
         {
             return;
         }
@@ -1292,9 +1302,10 @@ public partial class MainWindow : Window
             }
         }
 
-        SelectionReference? target = _currentScene.HitTestIndex.HitTest(
+        SelectionHitTestEntry? hit = _currentScene.HitTestIndex.HitTestEntry(
             documentPoint,
             _viewport.Transform.ViewDistanceToDocument(4));
+        SelectionReference? target = hit?.Target;
         _selectionManager.Select(target);
 
         ResolvedSelection? dragSelection = target is null
@@ -1308,15 +1319,20 @@ public partial class MainWindow : Window
             : null;
         if (target is not null &&
             _workspace.CurrentSession is { } session &&
+            ((hit is not null && _cableRouteDrag.TryBeginDrag(
+                hit,
+                _currentScene.HitTestIndex.FindAll(target),
+                session.Layout)) ||
             _deviceDrag.TryBeginDrag(
                 target,
                 documentPoint,
                 session.Layout,
-                orbitParentPoleId))
+                orbitParentPoleId)))
         {
             if (!DrawingSurface.CaptureMouse())
             {
                 _deviceDrag.Cancel();
+                _cableRouteDrag.Cancel();
             }
         }
 
@@ -1364,14 +1380,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_deviceDrag.IsActive ||
+        if ((!_deviceDrag.IsActive && !_cableRouteDrag.IsActive) ||
             e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
         {
             return;
         }
 
         DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
-        if (_deviceDrag.UpdatePreview(documentPoint))
+        if (_cableRouteDrag.IsActive
+                ? _cableRouteDrag.UpdatePreview(documentPoint)
+                : _deviceDrag.UpdatePreview(documentPoint))
         {
             RefreshDrawingScene();
         }
@@ -1383,12 +1401,14 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (!_deviceDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
         {
             return;
         }
 
-        ICommand? command = _deviceDrag.Commit();
+        ICommand? command = _cableRouteDrag.IsActive
+            ? _cableRouteDrag.Commit()
+            : _deviceDrag.Commit();
         DrawingSurface.ReleaseMouseCapture();
         if (command is not null)
         {

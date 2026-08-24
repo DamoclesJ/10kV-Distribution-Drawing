@@ -134,7 +134,8 @@ public sealed class DrawingSceneBuilder
             document.Connections,
             document.OverheadLines,
             terminalAnchors,
-            layout.RingCabinetLayouts);
+            layout.RingCabinetLayouts,
+            layout.CableRouteGuides);
 
         var elements = baseScene.Elements.ToList();
         var hitTestEntries = baseScene.HitTestIndex.Entries.ToList();
@@ -178,7 +179,8 @@ public sealed class DrawingSceneBuilder
             connections: null,
             overheadLines: overheadLines,
             terminalAnchors: null,
-            ringCabinetLayouts: null);
+            ringCabinetLayouts: null,
+            cableRouteGuides: null);
     }
 
     public DrawingScene Build(
@@ -201,7 +203,8 @@ public sealed class DrawingSceneBuilder
             connections,
             overheadLines,
             terminalAnchors: null,
-            ringCabinetLayouts: null);
+            ringCabinetLayouts: null,
+            cableRouteGuides: null);
     }
 
     private DrawingScene BuildCore(
@@ -214,7 +217,8 @@ public sealed class DrawingSceneBuilder
         IEnumerable<Connection>? connections,
         IEnumerable<OverheadLine> overheadLines,
         TerminalAnchorIndex? terminalAnchors,
-        IReadOnlyDictionary<Guid, RingCabinetLayout>? ringCabinetLayouts)
+        IReadOnlyDictionary<Guid, RingCabinetLayout>? ringCabinetLayouts,
+        IReadOnlyDictionary<Guid, CableRouteGuide>? cableRouteGuides)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(poles);
@@ -318,7 +322,13 @@ public sealed class DrawingSceneBuilder
                     $"Cable segment '{cableSegment.Id}' does not match its connection endpoints.");
             }
 
-            routeRequests.Add(CreateRouteRequest(connection, terminalAnchorById));
+            double? preferredY = cableRouteGuides?.TryGetValue(
+                cableSegment.Id,
+                out CableRouteGuide? guide)
+                == true
+                ? guide!.HorizontalYMillimeters
+                : null;
+            routeRequests.Add(CreateRouteRequest(connection, terminalAnchorById, preferredY));
             cableByConnectionId.Add(cableSegment.ConnectionId, cableSegment);
         }
 
@@ -616,7 +626,8 @@ public sealed class DrawingSceneBuilder
 
     private static ConnectionRouteRequest CreateRouteRequest(
         Connection connection,
-        IReadOnlyDictionary<Guid, TerminalAnchor> anchors)
+        IReadOnlyDictionary<Guid, TerminalAnchor> anchors,
+        double? preferredHorizontalY = null)
     {
         if (!anchors.TryGetValue(connection.StartTerminalId, out TerminalAnchor start) ||
             !anchors.TryGetValue(connection.EndTerminalId, out TerminalAnchor end))
@@ -631,7 +642,8 @@ public sealed class DrawingSceneBuilder
             connection.StartTerminalId,
             connection.EndTerminalId,
             start,
-            end);
+            end,
+            preferredHorizontalY);
     }
 
     private static DocumentRect ExpandBounds(DocumentRect bounds, double paddingMillimeters)

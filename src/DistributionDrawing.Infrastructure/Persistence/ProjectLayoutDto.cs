@@ -10,7 +10,8 @@ public sealed record ProjectLayoutDto(
     IReadOnlyList<ProjectRingCabinetLayoutDto> RingCabinets,
     IReadOnlyList<ProjectPoleLayoutDto> Poles,
     IReadOnlyList<ProjectAttachmentLayoutDto> Attachments,
-    IReadOnlyList<ProjectOverheadLineLayoutDto> OverheadLines)
+    IReadOnlyList<ProjectOverheadLineLayoutDto> OverheadLines,
+    IReadOnlyList<ProjectCableRouteGuideDto>? CableRouteGuides = null)
 {
     public static ProjectLayoutDto Empty(Guid documentId)
     {
@@ -67,6 +68,10 @@ public sealed record ProjectOverheadLineLayoutDto(
     ProjectPointDto End,
     ProjectPointDto ContinuationOffset);
 
+public sealed record ProjectCableRouteGuideDto(
+    Guid CableSegmentId,
+    double HorizontalYMillimeters);
+
 /// <summary>
 /// Persistence-neutral, validated layout snapshot. It deliberately contains
 /// no WPF Point, DIP, Visual, transform, selection, or hit-test state.
@@ -84,6 +89,9 @@ public sealed record ProjectLayoutSnapshot(ProjectLayoutDto Data)
     public IReadOnlyList<ProjectAttachmentLayoutDto> Attachments => Data.Attachments;
 
     public IReadOnlyList<ProjectOverheadLineLayoutDto> OverheadLines => Data.OverheadLines;
+
+    public IReadOnlyList<ProjectCableRouteGuideDto> CableRouteGuides =>
+        Data.CableRouteGuides ?? [];
 
     public static ProjectLayoutSnapshot Empty(Guid documentId)
     {
@@ -140,6 +148,8 @@ internal static class ProjectLayoutMapper
         IReadOnlyList<ProjectOverheadLineLayoutDto> overheadLineDtos =
             layout.OverheadLines ?? throw new InvalidDataException(
                 "Overhead line layouts are required.");
+        IReadOnlyList<ProjectCableRouteGuideDto> cableRouteGuideDtos =
+            layout.CableRouteGuides ?? [];
 
         EnsureUnique(cabinetDtos.Select(layoutDto => layoutDto.CabinetId), "ring cabinet layout");
         EnsureUnique(poleDtos.Select(layoutDto => layoutDto.PoleId), "pole layout");
@@ -149,6 +159,9 @@ internal static class ProjectLayoutMapper
         EnsureUnique(
             overheadLineDtos.Select(layoutDto => layoutDto.ConnectionId),
             "overhead line layout");
+        EnsureUnique(
+            cableRouteGuideDtos.Select(layoutDto => layoutDto.CableSegmentId),
+            "cable route guide");
 
         HashSet<Guid> intervalLayoutIds = [];
         HashSet<Guid> switchLayoutIds = [];
@@ -183,6 +196,9 @@ internal static class ProjectLayoutMapper
             .ToDictionary(attachment => attachment.AttachmentId);
         HashSet<Guid> overheadLineIds = domain.OverheadLines
             .Select(line => line.ConnectionId)
+            .ToHashSet();
+        HashSet<Guid> cableSegmentIds = domain.CableSegments
+            .Select(cable => cable.Id)
             .ToHashSet();
 
         if (cabinetDtos.Count != cabinets.Count ||
@@ -252,6 +268,21 @@ internal static class ProjectLayoutMapper
             ValidatePoint(
                 overheadLineDto.ContinuationOffset,
                 $"overhead line '{overheadLineDto.ConnectionId}' continuation offset");
+        }
+
+        foreach (ProjectCableRouteGuideDto guideDto in cableRouteGuideDtos)
+        {
+            if (!cableSegmentIds.Contains(guideDto.CableSegmentId))
+            {
+                throw new InvalidDataException(
+                    $"Cable route guide references missing cable '{guideDto.CableSegmentId}'.");
+            }
+
+            if (!IsFinite(guideDto.HorizontalYMillimeters))
+            {
+                throw new InvalidDataException(
+                    $"Cable route guide '{guideDto.CableSegmentId}' has an invalid height.");
+            }
         }
     }
 
