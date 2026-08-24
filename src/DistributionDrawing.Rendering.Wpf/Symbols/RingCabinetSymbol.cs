@@ -201,13 +201,37 @@ public sealed class RingCabinetSymbol
         return requests;
     }
 
-    private static (DocumentPoint Anchor, DocumentPoint Offset) GetIntervalNumberPlacement(
+    private (DocumentPoint Anchor, DocumentPoint Offset) GetIntervalNumberPlacement(
         RingCabinetInterval interval,
         RingCabinetIntervalLayout intervalLayout,
         DocumentPoint origin)
     {
-        SwitchDevice? primarySwitch = interval.SwitchDevices.FirstOrDefault(device =>
-            device.SwitchKind is SwitchKind.CircuitBreaker or
+        if (interval.IntervalKind == IntervalKind.PTInterval)
+        {
+            double secondaryY =
+                _metrics.RingCabinet.BusbarOffset -
+                _metrics.RingCabinet.CabinetPadding +
+                _metrics.RingCabinet.DeviceVerticalSpacing +
+                _metrics.Switch.LogicalHitHeight *
+                _metrics.RingCabinet.SwitchSymbolScale +
+                _metrics.RingCabinet.DeviceVerticalSpacing;
+            return (
+                new DocumentPoint(origin.XMillimeters, origin.YMillimeters + secondaryY),
+                new DocumentPoint(
+                    _metrics.RingCabinet.StandardIntervalWidth / 2 + 3,
+                    -2));
+        }
+
+        SwitchDevice? primarySwitch = interval.SwitchDevices
+            .OrderBy(device => device.SwitchKind switch
+            {
+                SwitchKind.CircuitBreaker => 0,
+                SwitchKind.LoadSwitch => 1,
+                SwitchKind.IsolationSwitch => 2,
+                _ => 3
+            })
+            .FirstOrDefault(device => device.SwitchKind is
+                SwitchKind.CircuitBreaker or
                 SwitchKind.LoadSwitch or
                 SwitchKind.IsolationSwitch);
 

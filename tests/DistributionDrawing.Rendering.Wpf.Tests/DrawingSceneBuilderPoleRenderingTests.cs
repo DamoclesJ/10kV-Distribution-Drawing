@@ -3,6 +3,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
@@ -77,7 +78,8 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
         Assert.DoesNotContain(labels, text => text.Text is "合" or "分");
         Assert.Single(scene.Elements.OfType<SceneEllipse>(), ellipse =>
             ellipse.Bounds.WidthMillimeters == ellipse.Bounds.HeightMillimeters &&
-            ellipse.Bounds.WidthMillimeters == 14);
+            ellipse.Bounds.WidthMillimeters ==
+            DrawingMetrics.Default.Pole.PoleRadius * 2);
         Assert.Single(scene.Elements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
         Assert.Contains(scene.HitTestIndex.Entries, entry =>
             entry.Target.ObjectId == poleId);

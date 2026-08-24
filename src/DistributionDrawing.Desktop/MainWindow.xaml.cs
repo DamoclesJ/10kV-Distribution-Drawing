@@ -107,6 +107,7 @@ public partial class MainWindow : Window
         _cableReconnect.VisualChanged += OnDrawingToolVisualChanged;
         _cableConnection.ParametersRequired += OnCableParametersRequired;
         _cableTerminationAttachment.SceneChanged += OnDrawingToolVisualChanged;
+        _poleSwitchAttachment.SceneChanged += OnDrawingToolVisualChanged;
         _switchOperation.SceneChanged += OnSwitchOperationSceneChanged;
         _viewport.ViewChanged += OnViewportChanged;
         DrawingSurface.SetViewTransform(_viewport.Transform);
@@ -805,6 +806,20 @@ public partial class MainWindow : Window
         }
 
         RefreshDrawingScene();
+    }
+
+    private void OnIntervalTypeSelectionChanged(
+        object sender,
+        System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        bool isIntegrated =
+            IntervalTypeInput.SelectedItem is IntervalKind.IntegratedFeederInterval;
+        IntervalGroundingStructureInput.IsEnabled = isIntegrated;
+        if (isIntegrated && IntervalGroundingStructureInput.SelectedItem is null)
+        {
+            IntervalGroundingStructureInput.SelectedItem =
+                GroundingStructureKind.UpperIsolationGrounding;
+        }
     }
 
     private void OnApplyIntervalDisplayName(object sender, RoutedEventArgs e)

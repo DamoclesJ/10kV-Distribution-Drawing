@@ -27,10 +27,10 @@ public sealed class DrawingMetricsTests
         Assert.Equal(16, metrics.Switch.StandardSwitchLength);
         Assert.Equal(10, metrics.Switch.LogicalHitHeight);
         Assert.Equal(7, metrics.PT.CoilRadius);
-        Assert.Equal(7, metrics.Pole.PoleRadius);
-        Assert.Equal(18, metrics.PoleAttachment.SymbolWidth);
-        Assert.Equal(10, metrics.PoleAttachment.SymbolHeight);
-        Assert.Equal(2.4, metrics.PoleAttachment.FuseTubeWidth);
+        Assert.Equal(10.5, metrics.Pole.PoleRadius);
+        Assert.Equal(27, metrics.PoleAttachment.SymbolWidth);
+        Assert.Equal(15, metrics.PoleAttachment.SymbolHeight);
+        Assert.Equal(3.6, metrics.PoleAttachment.FuseTubeWidth);
         Assert.Equal(10, metrics.CableTermination.TriangleWidth);
         Assert.Equal(8, metrics.CableTermination.TriangleHeight);
         Assert.Equal(0.8, metrics.Line.ConnectionThickness);

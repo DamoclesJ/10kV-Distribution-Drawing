@@ -117,24 +117,40 @@ public static class PoleProfessionalGeometry
 
         if (kind == SymbolKind.DropoutFuse)
         {
+            double width = Math.Max(
+                attachmentLayout.WidthMillimeters,
+                effectiveMetrics.PoleAttachment.SymbolWidth);
+            double height = Math.Max(
+                attachmentLayout.HeightMillimeters,
+                effectiveMetrics.PoleAttachment.SymbolHeight);
+            double scaledX = centerX - width / 2;
+            double scaledY = centerY - height / 2;
             return new PoleAttachmentGeometry(
-                new DocumentPoint(centerX, origin.YMillimeters),
-                new DocumentPoint(centerX, origin.YMillimeters + attachmentLayout.HeightMillimeters),
+                new DocumentPoint(centerX, scaledY),
+                new DocumentPoint(centerX, scaledY + height),
                 new DocumentRect(
-                    origin.XMillimeters,
-                    origin.YMillimeters,
-                    attachmentLayout.WidthMillimeters,
-                    attachmentLayout.HeightMillimeters));
+                    scaledX,
+                    scaledY,
+                    width,
+                    height));
         }
 
+        double effectiveWidth = Math.Max(
+            attachmentLayout.WidthMillimeters,
+            effectiveMetrics.PoleAttachment.SymbolWidth);
+        double effectiveHeight = Math.Max(
+            attachmentLayout.HeightMillimeters,
+            effectiveMetrics.PoleAttachment.SymbolHeight);
+        double effectiveX = centerX - effectiveWidth / 2;
+        double effectiveY = centerY - effectiveHeight / 2;
         return new PoleAttachmentGeometry(
-            new DocumentPoint(origin.XMillimeters, centerY),
-            new DocumentPoint(origin.XMillimeters + attachmentLayout.WidthMillimeters, centerY),
+            new DocumentPoint(effectiveX, centerY),
+            new DocumentPoint(effectiveX + effectiveWidth, centerY),
             new DocumentRect(
-                origin.XMillimeters,
-                origin.YMillimeters,
-                attachmentLayout.WidthMillimeters,
-                attachmentLayout.HeightMillimeters));
+                effectiveX,
+                effectiveY,
+                effectiveWidth,
+                effectiveHeight));
     }
 
     public static DocumentPoint GetCableTerminationOffset(

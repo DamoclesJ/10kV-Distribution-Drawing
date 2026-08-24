@@ -137,11 +137,12 @@ internal static class RingCabinetProfessionalGeometry
             groundBounds.XMillimeters +
             groundBounds.WidthMillimeters -
             horizontalInset,
-            common.YMillimeters);
+            groundBounds.YMillimeters + groundBounds.HeightMillimeters / 2);
 
+        DocumentPoint mainContact = top;
         if (mainSwitch.SwitchKind == SwitchKind.LoadSwitch)
         {
-            AddLoadSwitchFixedContact(elements, top, metrics);
+            mainContact = AddLoadSwitchFixedContact(elements, top, metrics);
         }
         else
         {
@@ -153,7 +154,7 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint bladeEnd;
         if (mainSwitch.SwitchState == SwitchState.Closed)
         {
-            bladeEnd = top;
+            bladeEnd = mainContact;
         }
         else if (groundSwitch.SwitchState == SwitchState.Closed)
         {
@@ -181,20 +182,23 @@ internal static class RingCabinetProfessionalGeometry
         SwitchDevice switchDevice,
         DrawingMetrics metrics)
     {
-        AddLoadSwitchFixedContact(elements, top, metrics);
-        AddKnifeSwitch(elements, top, bottom, switchDevice, metrics);
+        DocumentPoint bladeContact = AddLoadSwitchFixedContact(elements, top, metrics);
+        AddKnifeSwitch(elements, bladeContact, bottom, switchDevice, metrics);
     }
 
-    private static void AddLoadSwitchFixedContact(
+    private static DocumentPoint AddLoadSwitchFixedContact(
         ICollection<SceneElement> elements,
         DocumentPoint top,
         DrawingMetrics metrics)
     {
         double contactRadius = metrics.Switch.ContactRadius / 2;
+        DocumentPoint contactCenter = new(
+            top.XMillimeters,
+            top.YMillimeters + contactRadius);
         elements.Add(new SceneEllipse(
             new DocumentRect(
-                top.XMillimeters - contactRadius,
-                top.YMillimeters - contactRadius,
+                contactCenter.XMillimeters - contactRadius,
+                contactCenter.YMillimeters - contactRadius,
                 contactRadius * 2,
                 contactRadius * 2),
             Colors.Black,
@@ -208,6 +212,9 @@ internal static class RingCabinetProfessionalGeometry
                 top.XMillimeters + metrics.Switch.ContactRadius,
                 top.YMillimeters),
             metrics));
+        return new DocumentPoint(
+            contactCenter.XMillimeters,
+            contactCenter.YMillimeters + contactRadius);
     }
 
     public static void AddCableTerminationMarker(
@@ -337,7 +344,7 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint connection,
         DrawingMetrics metrics)
     {
-        double lead = metrics.Switch.ContactRadius * 3;
+        double lead = metrics.Switch.ContactRadius * 1.5;
         DocumentPoint basePoint = new(connection.XMillimeters - lead, connection.YMillimeters);
         elements.Add(new SceneLine(
             connection,

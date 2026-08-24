@@ -138,6 +138,36 @@ public sealed class SelectionObjectResolver
             };
         }
 
+        PoleAttachment? switchAttachment = _source.PoleAttachments
+            .SingleOrDefault(candidate => candidate.AttachedDeviceId == reference.ObjectId);
+        SwitchDevice? poleSwitch = switchAttachment is null
+            ? null
+            : _source.Devices
+                .OfType<SwitchDevice>()
+                .SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
+        if (poleSwitch is not null && switchAttachment is not null)
+        {
+            PoleLayout? poleLayout = null;
+            AttachmentLayout? attachmentLayout = null;
+            if (_source.DrawingLayout is { } drawingLayout)
+            {
+                drawingLayout.Poles.TryGetValue(switchAttachment.PoleId, out poleLayout);
+                drawingLayout.Attachments.TryGetValue(
+                    switchAttachment.AttachmentId,
+                    out attachmentLayout);
+            }
+
+            return new ResolvedSelection
+            {
+                Reference = reference,
+                SwitchDevice = poleSwitch,
+                PoleAttachment = switchAttachment,
+                AttachedDevice = poleSwitch,
+                PoleLayout = poleLayout,
+                AttachmentLayout = attachmentLayout
+            };
+        }
+
         RingCabinet? cabinet = GetRingCabinets().SingleOrDefault(candidate =>
             candidate.Intervals.Any(interval => interval.IntervalId == reference.ParentId));
         RingCabinetInterval? interval = cabinet?.Intervals

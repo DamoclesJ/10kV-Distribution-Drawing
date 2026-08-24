@@ -133,11 +133,25 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
         double height = context.HeightMillimeters;
         double centerX = x + width / 2;
         double inset = Math.Min(_metrics.PoleAttachment.FuseTubeInset, height / 5);
+        double contactRadius = _metrics.Switch.ContactRadius;
+        double contactCenterY = y + inset + contactRadius;
+        double tubeStartY = contactCenterY + contactRadius;
         DocumentPoint tubeTop = context.State == SymbolVisualState.Open
-            ? new DocumentPoint(centerX - _metrics.PoleAttachment.FuseOpenOffset, y + inset)
-            : new DocumentPoint(centerX, y + inset);
+            ? new DocumentPoint(
+                centerX - _metrics.PoleAttachment.FuseOpenOffset,
+                tubeStartY)
+            : new DocumentPoint(centerX, tubeStartY);
         DocumentPoint tubeBottom = new(centerX, y + height - inset);
         elements.Add(Line(context, new DocumentPoint(centerX, y), new DocumentPoint(centerX, y + inset)));
+        elements.Add(new SceneEllipse(
+            new DocumentRect(
+                centerX - contactRadius,
+                contactCenterY - contactRadius,
+                contactRadius * 2,
+                contactRadius * 2),
+            context.Stroke,
+            context.ThicknessMillimeters,
+            context.Fill));
         elements.Add(Line(context, tubeBottom, new DocumentPoint(centerX, y + height)));
         double halfTubeWidth = _metrics.PoleAttachment.FuseTubeWidth / 2;
         elements.Add(new ScenePolyline(

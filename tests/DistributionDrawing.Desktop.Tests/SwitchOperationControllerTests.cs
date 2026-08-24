@@ -1,4 +1,5 @@
 using System.IO;
+using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.SwitchOperation;
@@ -7,6 +8,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
@@ -96,6 +98,68 @@ public sealed class SwitchOperationControllerTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(SwitchState.Closed, circuitBreaker.SwitchState);
+    }
+
+    [Theory]
+    [InlineData(SwitchKind.LoadSwitch)]
+    [InlineData(SwitchKind.IsolationSwitch)]
+    [InlineData(SwitchKind.CircuitBreaker)]
+    [InlineData(SwitchKind.DropoutFuse)]
+    public void PoleSwitch_UsesSameOperationPathAndPreservesSelection(
+        SwitchKind switchKind)
+    {
+        string filePath = Path.Combine(
+            Path.GetTempPath(),
+            $"pole-switch-operation-{Guid.NewGuid():N}.kvdrawing");
+        var dialogs = new TestDialogs
+        {
+            NewRequest = new NewProjectRequest(filePath, "柱上开关操作测试", null)
+        };
+        var workspace = new ProjectWorkspaceController(dialogs, new DrawingSceneBuilder());
+        Assert.True(workspace.NewProject());
+        ProjectRuntimeSession session = workspace.CurrentSession!;
+        PoleCreationResult creation = new PoleCreationFactory().CreateWithAttachments(
+            "P-1",
+            PoleType.Cement,
+            null,
+            [switchKind],
+            includeCableTerminal: false);
+        SwitchDevice switchDevice = Assert.Single(creation.Devices.OfType<SwitchDevice>());
+        PoleAttachment attachment = Assert.Single(creation.Attachments);
+        session.PersistenceSession.Domain.AddDevice(creation.Pole);
+        session.PersistenceSession.Domain.AddPoleSwitchAttachment(
+            switchDevice,
+            creation.Terminals[0],
+            creation.Terminals[1],
+            attachment);
+        session.Layout.DrawingLayout.Add(new PoleLayout(
+            creation.Pole.Id,
+            new DocumentPoint(20, 20)));
+        session.Layout.DrawingLayout.Add(new AttachmentLayout(
+            attachment.AttachmentId,
+            new DocumentPoint(21, 3)));
+        session.RebuildScene();
+        var selection = new SelectionReference(
+            SelectionTargetKind.Device,
+            switchDevice.Id,
+            attachment.AttachmentId);
+        session.SelectionManager.Select(selection);
+        var controller = new SwitchOperationController(() => session);
+
+        SwitchOperationResult result = controller.ToggleSelected();
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SwitchState.Closed, switchDevice.SwitchState);
+        Assert.Equal(selection, session.SelectionManager.Selected);
+        Assert.True(session.CommandStack.Undo());
+        Assert.Equal(SwitchState.Open, switchDevice.SwitchState);
+        Assert.True(session.CommandStack.Redo());
+        Assert.Equal(SwitchState.Closed, switchDevice.SwitchState);
+        Assert.Equal(selection, session.SelectionManager.Selected);
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
     }
 
     private static TestProject CreateProject(RingCabinetCreationConfiguration configuration)

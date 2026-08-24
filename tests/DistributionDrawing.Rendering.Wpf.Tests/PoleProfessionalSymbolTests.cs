@@ -86,6 +86,22 @@ public sealed class PoleProfessionalSymbolTests
         Assert.Contains(geometries[3], element => element is ScenePolyline polyline && polyline.IsClosed);
     }
 
+    [Fact]
+    public void DropoutFuse_UsesContactCircleTangentToUpperConductor()
+    {
+        SceneElement[] geometry = RenderSwitch(SwitchKind.DropoutFuse);
+        SceneEllipse contact = Assert.Single(geometry.OfType<SceneEllipse>(), ellipse =>
+            ellipse.Bounds.WidthMillimeters <
+            DrawingMetrics.Default.Pole.PoleRadius * 2);
+        double centerX = contact.Bounds.XMillimeters +
+                         contact.Bounds.WidthMillimeters / 2;
+
+        Assert.Contains(geometry.OfType<SceneLine>(), line =>
+            Math.Abs(line.Start.XMillimeters - centerX) < 0.001 &&
+            Math.Abs(line.End.XMillimeters - centerX) < 0.001 &&
+            Math.Abs(line.End.YMillimeters - contact.Bounds.YMillimeters) < 0.001);
+    }
+
     [Theory]
     [InlineData(SwitchKind.IsolationSwitch, false)]
     [InlineData(SwitchKind.CircuitBreaker, false)]
@@ -203,7 +219,11 @@ public sealed class PoleProfessionalSymbolTests
             firstLayout,
             new Dictionary<Guid, RingCabinetLayout>());
         Assert.True(first.TryGet(poleTerminal.Id, out TerminalAnchor poleAnchor));
-        Assert.Equal(new DocumentPoint(27, 37), poleAnchor.Position);
+        Assert.Equal(
+            new DocumentPoint(
+                20 + DrawingMetrics.Default.Pole.PoleRadius,
+                30 + DrawingMetrics.Default.Pole.PoleRadius),
+            poleAnchor.Position);
         Assert.Equal(TerminalAnchorDirection.Auto, poleAnchor.Direction);
         Assert.True(first.TryGet(switchDevice.TerminalIds[0], out TerminalAnchor firstSwitch));
         Assert.True(first.TryGet(switchDevice.TerminalIds[1], out TerminalAnchor secondSwitch));

@@ -62,9 +62,24 @@ public sealed class PoleLabel
                 "Attachment, device, pole, and layout IDs must match.");
         }
 
-        DocumentPoint anchor = new(
-            poleLayout.Position.XMillimeters + layout.Offset.XMillimeters,
-            poleLayout.Position.YMillimeters + layout.Offset.YMillimeters);
+        DocumentPoint anchor;
+        if (attachedDevice is SwitchDevice)
+        {
+            PoleAttachmentGeometry geometry = PoleProfessionalGeometry.GetAttachmentGeometry(
+                poleLayout,
+                layout,
+                SymbolLibrary.ResolveAttachmentKind(attachedDevice),
+                _metrics);
+            anchor = new DocumentPoint(
+                geometry.LogicalBounds.XMillimeters,
+                geometry.LogicalBounds.YMillimeters);
+        }
+        else
+        {
+            anchor = new DocumentPoint(
+                poleLayout.Position.XMillimeters + layout.Offset.XMillimeters,
+                poleLayout.Position.YMillimeters + layout.Offset.YMillimeters);
+        }
 
         return new LabelRequest(
             attachedDevice is SwitchDevice

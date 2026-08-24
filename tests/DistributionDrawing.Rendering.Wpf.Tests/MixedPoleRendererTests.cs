@@ -1,6 +1,7 @@
 using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
@@ -50,7 +51,8 @@ public sealed class MixedPoleRendererTests
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "柱上隔离开关");
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "电缆终端");
         Assert.Single(elements.OfType<SceneEllipse>(), ellipse =>
-            ellipse.Bounds.WidthMillimeters == 14);
+            ellipse.Bounds.WidthMillimeters ==
+            DrawingMetrics.Default.Pole.PoleRadius * 2);
         Assert.Single(elements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
         Assert.NotEmpty(elements.OfType<SceneRectangle>());
     }

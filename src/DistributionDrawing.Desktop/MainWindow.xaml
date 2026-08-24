@@ -161,6 +161,7 @@
             <TextBlock Foreground="#555"
                        Text="间隔类型" />
             <ComboBox x:Name="IntervalTypeInput"
+                      SelectionChanged="OnIntervalTypeSelectionChanged"
                       Margin="0,4,0,4" />
             <TextBlock Foreground="#555"
                        Text="接地结构（IntegratedFeeder）" />

@@ -85,6 +85,34 @@ public sealed class RingCabinetProfessionalSymbolTests
         });
     }
 
+    [Fact]
+    public void LoadSwitchContactCircle_IsBelowAndTangentToFixedContactLine()
+    {
+        RingCabinet cabinet = CreateLoadSwitchCabinet(3);
+        RingCabinetInterval interval = cabinet.Intervals.Single(candidate =>
+            candidate.BayIndex == 1);
+        RingCabinetLayout layout = CreateLayout(cabinet);
+        RingCabinetIntervalLayout intervalLayout = layout.IntervalLayouts[interval.IntervalId];
+        double centerX = layout.Position.XMillimeters +
+                         intervalLayout.RelativePosition.XMillimeters +
+                         intervalLayout.WidthMillimeters / 2;
+        IReadOnlyList<SceneElement> elements = new RingCabinetRenderer().Render(cabinet, layout);
+        SceneEllipse contact = Assert.Single(elements.OfType<SceneEllipse>(), ellipse =>
+            Math.Abs(
+                ellipse.Bounds.XMillimeters + ellipse.Bounds.WidthMillimeters / 2 -
+                centerX) < 0.001);
+        SceneLine tangent = Assert.Single(elements.OfType<SceneLine>(), line =>
+            Math.Abs(line.Start.YMillimeters - contact.Bounds.YMillimeters) < 0.001 &&
+            Math.Abs(line.End.YMillimeters - contact.Bounds.YMillimeters) < 0.001 &&
+            line.Start.XMillimeters < contact.Bounds.XMillimeters &&
+            line.End.XMillimeters >
+            contact.Bounds.XMillimeters + contact.Bounds.WidthMillimeters);
+
+        Assert.Equal(contact.Bounds.YMillimeters, tangent.Start.YMillimeters, 6);
+        Assert.True(contact.Bounds.YMillimeters + contact.Bounds.HeightMillimeters >
+                    tangent.Start.YMillimeters);
+    }
+
     [Theory]
     [InlineData(4)]
     [InlineData(6)]
@@ -101,6 +129,59 @@ public sealed class RingCabinetProfessionalSymbolTests
             interval => Assert.Equal(
                 DrawingMetrics.Default.RingCabinet.StandardIntervalWidth,
                 interval.WidthMillimeters));
+    }
+
+    [Fact]
+    public void IntegratedAndPTIntervalNumbersShareBreakerLevel()
+    {
+        RingCabinet cabinet = CreateCabinet(
+            "Integrated with PT",
+            RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                1,
+                GroundingStructureKind.UpperIsolationGrounding,
+                SwitchState.Open,
+                SwitchState.Open,
+                SwitchState.Open),
+            RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                2,
+                GroundingStructureKind.UpperIsolationGrounding,
+                SwitchState.Open,
+                SwitchState.Open,
+                SwitchState.Open),
+            RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                3,
+                GroundingStructureKind.UpperIsolationGrounding,
+                SwitchState.Open,
+                SwitchState.Open,
+                SwitchState.Open),
+            RingCabinetIntervalDefinition.CreatePT(
+                4,
+                SwitchState.Open,
+                SwitchState.Open));
+        RingCabinetLayout layout = CreateLayout(cabinet);
+        LabelRequest[] labels = new RingCabinetSymbol(new SymbolLibrary())
+            .CreateLabelRequests(cabinet, layout)
+            .Where(request => request.TargetKind == LabelTargetKind.Interval)
+            .ToArray();
+        RingCabinetInterval integrated = cabinet.Intervals.Single(interval =>
+            interval.BayIndex == 1);
+        RingCabinetInterval pt = cabinet.Intervals.Single(interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        SwitchDevice breaker = integrated.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.CircuitBreaker);
+        RingCabinetSwitchLayout breakerLayout = layout.IntervalLayouts[integrated.IntervalId]
+            .SwitchLayouts[breaker.Id];
+        LabelRequest integratedLabel = Assert.Single(labels, label =>
+            label.TargetId == integrated.IntervalId);
+        LabelRequest ptLabel = Assert.Single(labels, label =>
+            label.TargetId == pt.IntervalId);
+
+        Assert.Equal(
+            layout.Position.YMillimeters +
+            layout.IntervalLayouts[integrated.IntervalId].RelativePosition.YMillimeters +
+            breakerLayout.RelativePosition.YMillimeters,
+            integratedLabel.Anchor.YMillimeters);
+        Assert.Equal(integratedLabel.Anchor.YMillimeters, ptLabel.Anchor.YMillimeters);
     }
 
     [Fact]
@@ -250,6 +331,50 @@ public sealed class RingCabinetProfessionalSymbolTests
     }
 
     [Fact]
+    public void UpperIsolationGrounding_UsesLowerCompactGroundContact()
+    {
+        RingCabinet cabinet = CreateIntegratedCabinet(
+            4,
+            GroundingStructureKind.UpperIsolationGrounding);
+        RingCabinetInterval interval = cabinet.Intervals.Single(candidate =>
+            candidate.BayIndex == 1);
+        RingCabinetIntervalLayout intervalLayout = CreateLayout(cabinet)
+            .IntervalLayouts[interval.IntervalId];
+        SwitchDevice isolation = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.IsolationSwitch);
+        SwitchDevice ground = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.GroundSwitch);
+        RingCabinetSwitchLayout isolationLayout = intervalLayout.SwitchLayouts[isolation.Id];
+        RingCabinetSwitchLayout groundLayout = intervalLayout.SwitchLayouts[ground.Id];
+        double scaledContactRadius = DrawingMetrics.Default.Switch.ContactRadius *
+                                     DrawingMetrics.Default.RingCabinet.SwitchSymbolScale;
+        double isolationInset = Math.Max(
+            scaledContactRadius,
+            Math.Min(
+                isolationLayout.HeightMillimeters / 4,
+                DrawingMetrics.Default.Switch.StandardSwitchLength *
+                DrawingMetrics.Default.RingCabinet.SwitchSymbolScale / 4));
+        double commonY = isolationLayout.RelativePosition.YMillimeters +
+                         isolationLayout.HeightMillimeters - isolationInset;
+        double groundY = groundLayout.RelativePosition.YMillimeters +
+                         groundLayout.HeightMillimeters / 2;
+        double mainX = isolationLayout.RelativePosition.XMillimeters +
+                       isolationLayout.WidthMillimeters / 2;
+        double groundInset = Math.Max(
+            scaledContactRadius,
+            Math.Min(
+                groundLayout.WidthMillimeters / 4,
+                DrawingMetrics.Default.Switch.GroundSwitchLength *
+                DrawingMetrics.Default.RingCabinet.SwitchSymbolScale / 4));
+        double groundX = groundLayout.RelativePosition.XMillimeters +
+                         groundLayout.WidthMillimeters - groundInset;
+
+        Assert.True(groundY > commonY);
+        Assert.True(Math.Abs(mainX - groundX) <
+                    DrawingMetrics.Default.RingCabinet.DeviceVerticalSpacing);
+    }
+
+    [Fact]
     public void IntegratedFeeder_RunningDisconnectedAndGroundedCombinationsAreVisuallyDistinct()
     {
         IReadOnlyList<SceneElement> running = RenderIntegratedState(
@@ -306,16 +431,18 @@ public sealed class RingCabinetProfessionalSymbolTests
 
         RingCabinetInterval interval = Assert.Single(cabinet.Intervals);
         RingCabinetIntervalLayout intervalLayout = layout.IntervalLayouts[interval.IntervalId];
-        SwitchDevice isolation = interval.SwitchDevices.Single(device =>
-            device.SwitchKind == SwitchKind.IsolationSwitch);
-        RingCabinetSwitchLayout isolationLayout = intervalLayout.SwitchLayouts[isolation.Id];
         LabelRequest intervalNumber = Assert.Single(
             new RingCabinetSymbol(new SymbolLibrary()).CreateLabelRequests(cabinet, layout),
             request => request.TargetKind == LabelTargetKind.Interval);
         Assert.Equal(
             layout.Position.YMillimeters +
             intervalLayout.RelativePosition.YMillimeters +
-            isolationLayout.RelativePosition.YMillimeters,
+            DrawingMetrics.Default.RingCabinet.BusbarOffset -
+            DrawingMetrics.Default.RingCabinet.CabinetPadding +
+            DrawingMetrics.Default.RingCabinet.DeviceVerticalSpacing +
+            DrawingMetrics.Default.Switch.LogicalHitHeight *
+            DrawingMetrics.Default.RingCabinet.SwitchSymbolScale +
+            DrawingMetrics.Default.RingCabinet.DeviceVerticalSpacing,
             intervalNumber.Anchor.YMillimeters);
     }
 

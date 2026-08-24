@@ -99,7 +99,7 @@ public sealed class SymbolLibrary
 
         SymbolKind kind = ResolveAttachmentKind(attachedDevice);
         SymbolVisualState visualState = state ?? ResolveVisualState(attachedDevice);
-        DocumentPoint origin = new(
+        DocumentPoint layoutOrigin = new(
             poleLayout.Position.XMillimeters + layout.Offset.XMillimeters,
             poleLayout.Position.YMillimeters + layout.Offset.YMillimeters);
         PoleAttachmentGeometry geometry = PoleProfessionalGeometry.GetAttachmentGeometry(
@@ -107,6 +107,17 @@ public sealed class SymbolLibrary
             layout,
             kind,
             _metrics);
+        DocumentPoint origin = kind == SymbolKind.CableTermination
+            ? layoutOrigin
+            : new DocumentPoint(
+                geometry.LogicalBounds.XMillimeters,
+                geometry.LogicalBounds.YMillimeters);
+        double symbolWidth = kind == SymbolKind.CableTermination
+            ? layout.WidthMillimeters
+            : geometry.LogicalBounds.WidthMillimeters;
+        double symbolHeight = kind == SymbolKind.CableTermination
+            ? layout.HeightMillimeters
+            : geometry.LogicalBounds.HeightMillimeters;
         DocumentPoint attachmentConnector = kind is SymbolKind.CableTermination or SymbolKind.DropoutFuse
             ? geometry.SecondTerminal
             : geometry.FirstTerminal;
@@ -142,8 +153,8 @@ public sealed class SymbolLibrary
                 kind,
                 new SymbolRenderContext(
                     origin,
-                    layout.WidthMillimeters,
-                    layout.HeightMillimeters,
+                    symbolWidth,
+                    symbolHeight,
                     labelOrigin: new DocumentPoint(
                         origin.XMillimeters + layout.LabelOffset.XMillimeters,
                         origin.YMillimeters + layout.LabelOffset.YMillimeters),

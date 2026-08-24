@@ -2,6 +2,7 @@ using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
@@ -39,7 +40,8 @@ public sealed class SwitchAttachmentRendererTests
         Assert.NotEmpty(elements.OfType<SceneLine>());
         Assert.Single(elements.OfType<SceneEllipse>(), ellipse =>
             ellipse.Bounds.WidthMillimeters == ellipse.Bounds.HeightMillimeters &&
-            ellipse.Bounds.WidthMillimeters == 14);
+            ellipse.Bounds.WidthMillimeters ==
+            DrawingMetrics.Default.Pole.PoleRadius * 2);
         Assert.True(elements.OfType<SceneLine>().Any() || elements.OfType<ScenePolyline>().Any());
     }
 
