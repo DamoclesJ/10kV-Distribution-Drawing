@@ -74,7 +74,8 @@ public sealed class LayoutSnapServiceTests
         Guid poleId = Guid.NewGuid();
         Guid cabinetId = Guid.NewGuid();
         var drawingLayout = new DrawingLayout();
-        drawingLayout.Add(new PoleLayout(poleId, new DocumentPoint(100, 100)));
+        var pole = new PoleLayout(poleId, new DocumentPoint(100, 100));
+        drawingLayout.Add(pole);
         var cabinet = new RingCabinetLayout(
             cabinetId,
             new DocumentPoint(0, 0),
@@ -85,12 +86,19 @@ public sealed class LayoutSnapServiceTests
         var runtime = new RuntimeLayoutDocument(
             drawingLayout,
             new Dictionary<Guid, RingCabinetLayout> { [cabinetId] = cabinet });
+        var alignedPosition = new DocumentPoint(
+            pole.Position.XMillimeters + pole.WidthMillimeters / 2 -
+            cabinet.WidthMillimeters / 2,
+            pole.Position.YMillimeters + pole.HeightMillimeters / 2 -
+            cabinet.HeightMillimeters / 2);
 
         DocumentPoint snapped = new LayoutSnapService().Snap(
             new SelectionReference(SelectionTargetKind.RingCabinet, cabinetId),
-            new DocumentPoint(74, 57),
+            new DocumentPoint(
+                alignedPosition.XMillimeters - 3,
+                alignedPosition.YMillimeters - 3),
             runtime);
 
-        Assert.Equal(new DocumentPoint(77, 57), snapped);
+        Assert.Equal(alignedPosition, snapped);
     }
 }
