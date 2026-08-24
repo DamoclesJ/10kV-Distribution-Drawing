@@ -8,6 +8,8 @@ using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Symbols.Library;
+using DistributionDrawing.Rendering.Wpf.Symbols.Library.Definitions;
 using Xunit;
 
 namespace DistributionDrawing.Rendering.Wpf.Tests;
@@ -105,7 +107,15 @@ public sealed class PoleProfessionalSymbolTests
     [Fact]
     public void DropoutFuse_UsesFusedTubeAxisWithoutOperationArrow()
     {
-        SceneElement[] geometry = RenderSwitch(SwitchKind.DropoutFuse);
+        SceneElement[] geometry = new SwitchSymbolDefinition(SymbolKind.DropoutFuse)
+            .Create(new SymbolRenderContext(
+                new DocumentPoint(0, 0),
+                DrawingMetrics.Default.PoleAttachment.SymbolWidth,
+                DrawingMetrics.Default.PoleAttachment.SymbolHeight,
+                state: SymbolVisualState.Open,
+                includeLabel: false))
+            .Where(element => element is not SceneLogicalBounds)
+            .ToArray();
         ScenePolyline tube = Assert.Single(geometry.OfType<ScenePolyline>(), polyline =>
             polyline.IsClosed && polyline.Points.Count == 4);
         DocumentPoint topCenter = new(
@@ -117,8 +127,7 @@ public sealed class PoleProfessionalSymbolTests
 
         Assert.Contains(geometry.OfType<SceneLine>(), line =>
             line.Start == topCenter && line.End == bottomCenter);
-        Assert.DoesNotContain(geometry.OfType<SceneLine>(), line =>
-            line.Start.XMillimeters < tube.Points.Min(point => point.XMillimeters));
+        Assert.Equal(3, geometry.OfType<SceneLine>().Count());
     }
 
     [Theory]
