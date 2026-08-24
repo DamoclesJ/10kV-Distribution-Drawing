@@ -108,7 +108,7 @@ public sealed class OrthogonalRoutingTests
 
         OrthogonalRoute route = new OrthogonalRouter().Route(request, []);
 
-        Assert.Contains(route.Points, point => point == new DocumentPoint(88, 0));
+        Assert.Contains(route.Points, point => point == new DocumentPoint(72, 0));
         Assert.All(route.Segments, segment => Assert.True(
             segment.IsHorizontal || segment.IsVertical));
     }

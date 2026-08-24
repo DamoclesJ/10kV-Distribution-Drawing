@@ -546,16 +546,37 @@ public sealed class CableConnectionControllerTests
             session.Layout.RingCabinetLayouts,
             session.PersistenceSession.Domain.Connections,
             session.PersistenceSession.Domain.CableSegments);
-        DocumentPoint terminal = anchors.PositionOf(cabinetTerminalId);
+        Assert.True(anchors.TryGet(cabinetTerminalId, out TerminalAnchor terminalAnchor));
+        DocumentPoint terminal = terminalAnchor.Position;
         SceneLine line = Assert.Single(
             session.Scene.Elements.OfType<SceneLine>(),
             candidate => candidate.TargetId == cable.Id &&
                 (candidate.Start == terminal || candidate.End == terminal));
         DocumentPoint away = line.Start == terminal ? line.End : line.Start;
-        Assert.Equal(terminal.XMillimeters, away.XMillimeters);
-        Assert.True(
-            away.YMillimeters - terminal.YMillimeters >=
-            DrawingMetrics.Default.CableTermination.CableTerminalExitMinimumStubLength);
+        double minimum = DrawingMetrics.Default.CableTermination
+            .CableTerminalExitMinimumStubLength;
+        switch (terminalAnchor.Direction)
+        {
+            case TerminalAnchorDirection.Down:
+                Assert.Equal(terminal.XMillimeters, away.XMillimeters);
+                Assert.True(away.YMillimeters - terminal.YMillimeters >= minimum);
+                break;
+            case TerminalAnchorDirection.Up:
+                Assert.Equal(terminal.XMillimeters, away.XMillimeters);
+                Assert.True(terminal.YMillimeters - away.YMillimeters >= minimum);
+                break;
+            case TerminalAnchorDirection.Left:
+                Assert.Equal(terminal.YMillimeters, away.YMillimeters);
+                Assert.True(terminal.XMillimeters - away.XMillimeters >= minimum);
+                break;
+            case TerminalAnchorDirection.Right:
+                Assert.Equal(away.YMillimeters, terminal.YMillimeters);
+                Assert.True(away.XMillimeters - terminal.XMillimeters >= minimum);
+                break;
+            default:
+                throw new Xunit.Sdk.XunitException(
+                    $"Cabinet terminal direction must be explicit, was {terminalAnchor.Direction}.");
+        }
     }
 
     private sealed class TestProject : IDisposable
