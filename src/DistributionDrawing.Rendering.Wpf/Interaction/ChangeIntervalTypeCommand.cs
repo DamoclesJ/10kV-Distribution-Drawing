@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Layout;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
@@ -6,6 +7,7 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction;
 public sealed class ChangeIntervalTypeCommand : ICommand
 {
     private readonly RingCabinet _cabinet;
+    private readonly DrawingDocument? _document;
     private readonly RuntimeLayoutDocument _runtimeLayout;
     private readonly RingCabinetLayoutFactory _layoutFactory;
     private readonly Guid _intervalId;
@@ -22,9 +24,11 @@ public sealed class ChangeIntervalTypeCommand : ICommand
         Guid intervalId,
         IntervalKind targetIntervalKind,
         GroundingStructureKind? targetGroundingStructureKind,
-        RingCabinetLayoutFactory? layoutFactory = null)
+        RingCabinetLayoutFactory? layoutFactory = null,
+        DrawingDocument? document = null)
     {
         _cabinet = cabinet ?? throw new ArgumentNullException(nameof(cabinet));
+        _document = document;
         _runtimeLayout = runtimeLayout ?? throw new ArgumentNullException(nameof(runtimeLayout));
         _layoutFactory = layoutFactory ?? new RingCabinetLayoutFactory();
         if (intervalId == Guid.Empty)
@@ -55,6 +59,7 @@ public sealed class ChangeIntervalTypeCommand : ICommand
                 _intervalId,
                 _targetIntervalKind,
                 _targetGroundingStructureKind);
+            _document?.SynchronizeRingCabinetAggregate(_cabinet);
             _afterLayout = _layoutFactory.RebuildInterval(
                 _cabinet,
                 _beforeLayout,
@@ -65,6 +70,7 @@ public sealed class ChangeIntervalTypeCommand : ICommand
         catch
         {
             _cabinet.RestoreState(_before);
+            _document?.SynchronizeRingCabinetAggregate(_cabinet);
             _runtimeLayout.ReplaceRingCabinet(_beforeLayout);
             throw;
         }
@@ -95,11 +101,13 @@ public sealed class ChangeIntervalTypeCommand : ICommand
         try
         {
             _cabinet.RestoreState(definition);
+            _document?.SynchronizeRingCabinetAggregate(_cabinet);
             _runtimeLayout.ReplaceRingCabinet(layout);
         }
         catch
         {
             _cabinet.RestoreState(currentDefinition);
+            _document?.SynchronizeRingCabinetAggregate(_cabinet);
             _runtimeLayout.ReplaceRingCabinet(currentLayout);
             throw;
         }

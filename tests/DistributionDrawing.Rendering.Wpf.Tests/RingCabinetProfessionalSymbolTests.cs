@@ -388,6 +388,7 @@ public sealed class RingCabinetProfessionalSymbolTests
                                  (breakerBottom + terminalTop -
                                   origin.YMillimeters) / 2;
 
+        Assert.Equal(expectedBranchY, origin.YMillimeters + groundY, 3);
         Assert.Contains(elements.OfType<SceneLine>(), line =>
             Math.Abs(line.Start.YMillimeters - expectedBranchY) < 0.001 &&
             Math.Abs(line.End.YMillimeters - expectedBranchY) < 0.001 &&
@@ -397,6 +398,28 @@ public sealed class RingCabinetProfessionalSymbolTests
             Math.Abs(line.Start.YMillimeters - line.End.YMillimeters) < 0.001 &&
             Math.Abs(Math.Abs(line.Start.XMillimeters - line.End.XMillimeters) -
                      scaledContactRadius * 1.5) < 0.001);
+        Assert.Contains(elements.OfType<SceneLine>(), line =>
+            Math.Abs(Math.Max(line.Start.YMillimeters, line.End.YMillimeters) -
+                     expectedBranchY) < 0.001 &&
+            Math.Abs(line.Start.YMillimeters - line.End.YMillimeters) > 0.001 &&
+            Math.Abs(Math.Abs(line.Start.XMillimeters - line.End.XMillimeters) -
+                     groundLayout.WidthMillimeters / 4) < 0.001);
+
+        DrawingScene scene = new DrawingSceneBuilder().Build(cabinet, cabinetLayout);
+        SelectionHitTestEntry hit = Assert.Single(scene.HitTestIndex.Entries, entry =>
+            entry.Target.Kind == SelectionTargetKind.Device &&
+            entry.Target.ObjectId == ground.Id);
+        Assert.Equal(
+            expectedBranchY,
+            hit.Bounds.YMillimeters + hit.Bounds.HeightMillimeters / 2,
+            3);
+
+        LabelRequest groundNumber = Assert.Single(
+            new RingCabinetSymbol(new SymbolLibrary())
+                .CreateLabelRequests(cabinet, cabinetLayout),
+            request => request.TargetKind == LabelTargetKind.SwitchDevice &&
+                       request.TargetId == ground.Id);
+        Assert.True(groundNumber.Offset.YMillimeters < 0);
     }
 
     [Theory]

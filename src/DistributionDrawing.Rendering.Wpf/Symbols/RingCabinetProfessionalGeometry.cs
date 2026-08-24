@@ -66,10 +66,26 @@ internal static class RingCabinetProfessionalGeometry
         double contactInset = Math.Max(
             metrics.Switch.ContactRadius,
             Math.Min(bounds.WidthMillimeters / 4, metrics.Switch.GroundSwitchLength / 4));
-        DocumentPoint left = new(bounds.XMillimeters + contactInset, centerY);
-        DocumentPoint right = new(
-            bounds.XMillimeters + bounds.WidthMillimeters - contactInset,
-            centerY);
+        DocumentPoint left;
+        DocumentPoint right;
+        if (compactEarth)
+        {
+            double bladeLength = bounds.WidthMillimeters / 4;
+            double leadLength = bounds.WidthMillimeters * 3 / 16;
+            right = new DocumentPoint(
+                circuitNode.XMillimeters - leadLength,
+                centerY);
+            left = new DocumentPoint(
+                right.XMillimeters - bladeLength,
+                centerY);
+        }
+        else
+        {
+            left = new DocumentPoint(bounds.XMillimeters + contactInset, centerY);
+            right = new DocumentPoint(
+                bounds.XMillimeters + bounds.WidthMillimeters - contactInset,
+                centerY);
+        }
 
         elements.Add(new SceneLine(
             circuitNode,

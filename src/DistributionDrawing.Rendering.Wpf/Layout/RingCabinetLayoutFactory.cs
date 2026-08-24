@@ -174,7 +174,7 @@ public sealed class RingCabinetLayoutFactory
             _ => throw new ArgumentOutOfRangeException(nameof(interval))
         };
         double groundY = structure == GroundingStructureKind.UpperLowerGrounding
-            ? GetGroundSwitchYBelowNode(connectedDeviceY)
+            ? GetUpperLowerGroundSwitchY(connectedDeviceY)
             : GetGroundSwitchYForNode(connectedDeviceY);
 
         return
@@ -260,7 +260,20 @@ public sealed class RingCabinetLayoutFactory
                contactInset;
     }
 
-    private double GetGroundSwitchYBelowNode(double connectedDeviceY) =>
-        GetGroundSwitchYForNode(connectedDeviceY) +
-        _metrics.RingCabinet.DeviceVerticalSpacing / 2;
+    private double GetUpperLowerGroundSwitchY(double lowerDeviceY)
+    {
+        double switchHeight = _metrics.Switch.LogicalHitHeight *
+                              _metrics.RingCabinet.SwitchSymbolScale;
+        double contactInset = Math.Max(
+            _metrics.Switch.ContactRadius * _metrics.RingCabinet.SwitchSymbolScale,
+            Math.Min(
+                switchHeight / 4,
+                _metrics.Switch.StandardSwitchLength *
+                _metrics.RingCabinet.SwitchSymbolScale / 4));
+        double lowerDeviceBottom = lowerDeviceY + switchHeight - contactInset;
+        double terminalTop = _metrics.RingCabinet.StandardIntervalHeight -
+                             _metrics.CableTermination.TriangleHeight;
+        double branchCenterY = (lowerDeviceBottom + terminalTop) / 2;
+        return branchCenterY - switchHeight / 2;
+    }
 }

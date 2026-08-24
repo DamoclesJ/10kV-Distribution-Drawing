@@ -89,30 +89,34 @@ public sealed class PoleProfessionalSymbolTests
     }
 
     [Fact]
-    public void DropoutFuse_UsesContactCircleTangentToUpperConductor()
+    public void DropoutFuse_UsesNoContactCircleAndKeepsVerticalTerminalAxis()
     {
         SceneElement[] geometry = RenderSwitch(SwitchKind.DropoutFuse);
-        SceneEllipse contact = Assert.Single(geometry.OfType<SceneEllipse>(), ellipse =>
-            ellipse.Bounds.WidthMillimeters <
-            DrawingMetrics.Default.Pole.PoleRadius * 2);
-        double centerX = contact.Bounds.XMillimeters +
-                         contact.Bounds.WidthMillimeters / 2;
+        Assert.Empty(geometry.OfType<SceneEllipse>());
+        ScenePolyline tube = Assert.Single(geometry.OfType<ScenePolyline>(), polyline =>
+            polyline.IsClosed && polyline.Points.Count == 4);
+        double centerX = (tube.Points[2].XMillimeters +
+                          tube.Points[3].XMillimeters) / 2;
 
         Assert.Contains(geometry.OfType<SceneLine>(), line =>
             Math.Abs(line.Start.XMillimeters - centerX) < 0.001 &&
             Math.Abs(line.End.XMillimeters - centerX) < 0.001 &&
-            Math.Abs(line.End.YMillimeters - contact.Bounds.YMillimeters) < 0.001);
+            line.End.YMillimeters > line.Start.YMillimeters);
     }
 
-    [Fact]
-    public void DropoutFuse_UsesFusedTubeAxisWithoutOperationArrow()
+    [Theory]
+    [InlineData(SymbolVisualState.Open, true)]
+    [InlineData(SymbolVisualState.Closed, false)]
+    public void DropoutFuse_UsesStateSpecificTubeAndOperationArrow(
+        SymbolVisualState state,
+        bool expectsSlantedTube)
     {
         SceneElement[] geometry = new SwitchSymbolDefinition(SymbolKind.DropoutFuse)
             .Create(new SymbolRenderContext(
                 new DocumentPoint(0, 0),
                 DrawingMetrics.Default.PoleAttachment.SymbolWidth,
                 DrawingMetrics.Default.PoleAttachment.SymbolHeight,
-                state: SymbolVisualState.Open,
+                state: state,
                 includeLabel: false))
             .Where(element => element is not SceneLogicalBounds)
             .ToArray();
@@ -127,7 +131,13 @@ public sealed class PoleProfessionalSymbolTests
 
         Assert.Contains(geometry.OfType<SceneLine>(), line =>
             line.Start == topCenter && line.End == bottomCenter);
-        Assert.Equal(3, geometry.OfType<SceneLine>().Count());
+        Assert.Equal(
+            expectsSlantedTube,
+            Math.Abs(topCenter.XMillimeters - bottomCenter.XMillimeters) > 0.001);
+        Assert.Contains(geometry.OfType<ScenePolyline>(), polyline =>
+            polyline.IsClosed && polyline.Points.Count == 3);
+        Assert.Contains(geometry.OfType<SceneLine>(), line =>
+            line.End.XMillimeters < line.Start.XMillimeters);
     }
 
     [Theory]

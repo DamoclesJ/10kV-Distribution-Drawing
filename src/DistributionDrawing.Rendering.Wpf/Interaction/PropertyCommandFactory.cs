@@ -91,7 +91,8 @@ public sealed class PropertyCommandFactory
             runtimeLayout,
             selection.RingCabinetInterval.IntervalId,
             targetIntervalKind,
-            targetGroundingStructureKind);
+            targetGroundingStructureKind,
+            document: selection.Document);
         return true;
     }
 

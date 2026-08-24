@@ -142,7 +142,9 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
         {
             DocumentPoint downstreamGroundNode = new(
                 centerX,
-                (lowerBottom.YMillimeters + terminalTop) / 2);
+                origin.YMillimeters +
+                groundLayout.RelativePosition.YMillimeters +
+                groundLayout.HeightMillimeters / 2);
             RingCabinetProfessionalGeometry.AddGroundSwitch(
                 elements,
                 ground,

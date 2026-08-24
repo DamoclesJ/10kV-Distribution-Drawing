@@ -182,9 +182,18 @@ public sealed class RingCabinetSymbol
                         StringComparison.Ordinal))
                 {
                     double labelGap = _metrics.Switch.ContactRadius + 1;
-                    DocumentPoint labelOffset = switchDevice.SwitchKind == SwitchKind.GroundSwitch
-                        ? new DocumentPoint(0, switchLayout.HeightMillimeters + labelGap)
-                        : new DocumentPoint(switchLayout.WidthMillimeters + labelGap, -labelGap);
+                    DocumentPoint labelOffset = switchDevice.SwitchKind switch
+                    {
+                        SwitchKind.GroundSwitch when
+                            interval.GroundingStructureKind ==
+                            GroundingStructureKind.UpperLowerGrounding =>
+                            new DocumentPoint(0, -labelGap),
+                        SwitchKind.GroundSwitch =>
+                            new DocumentPoint(0, switchLayout.HeightMillimeters + labelGap),
+                        _ => new DocumentPoint(
+                            switchLayout.WidthMillimeters + labelGap,
+                            -labelGap)
+                    };
                     requests.Add(new LabelRequest(
                         LabelTargetKind.SwitchDevice,
                         switchDevice.Id,

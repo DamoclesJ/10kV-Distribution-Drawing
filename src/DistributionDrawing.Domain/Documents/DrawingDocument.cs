@@ -120,6 +120,114 @@ public sealed class DrawingDocument
         _devices.Add(device);
     }
 
+    public void SynchronizeRingCabinetAggregate(RingCabinet ringCabinet)
+    {
+        ArgumentNullException.ThrowIfNull(ringCabinet);
+
+        RingCabinet registeredCabinet = _devices.OfType<RingCabinet>()
+            .SingleOrDefault(candidate => candidate.Id == ringCabinet.Id)
+            ?? throw new InvalidOperationException(
+                $"Ring cabinet '{ringCabinet.Id}' is not registered in this document.");
+        if (!ReferenceEquals(registeredCabinet, ringCabinet))
+        {
+            throw new InvalidOperationException(
+                "Only the registered ring-cabinet aggregate can be synchronized.");
+        }
+
+        ringCabinet.ValidateStructure();
+        HashSet<Guid> intervalIds = ringCabinet.Intervals
+            .Select(interval => interval.IntervalId)
+            .ToHashSet();
+        SwitchDevice[] previousSwitches = _devices.OfType<SwitchDevice>()
+            .Where(device => device.ParentId is Guid parentId && intervalIds.Contains(parentId))
+            .ToArray();
+        SwitchAssembly[] previousAssemblies = _switchAssemblies
+            .Where(assembly => intervalIds.Contains(assembly.ParentIntervalId))
+            .ToArray();
+        ElectricalNode[] previousNodes = _electricalNodes
+            .Where(node => node.OwnerType == TopologyOwnerType.InternalAggregate &&
+                intervalIds.Contains(node.OwnerId))
+            .ToArray();
+        Terminal[] previousTerminals = _terminals
+            .Where(terminal => terminal.OwnerType == TopologyOwnerType.InternalAggregate &&
+                intervalIds.Contains(terminal.OwnerId))
+            .ToArray();
+
+        SwitchDevice[] replacementSwitches = ringCabinet.InternalSwitchDevices.ToArray();
+        SwitchAssembly[] replacementAssemblies = ringCabinet.InternalSwitchAssemblies.ToArray();
+        ElectricalNode[] replacementNodes = ringCabinet.ElectricalNodes
+            .Where(node => node.OwnerType == TopologyOwnerType.InternalAggregate &&
+                intervalIds.Contains(node.OwnerId))
+            .ToArray();
+        Terminal[] replacementTerminals = ringCabinet.Terminals
+            .Where(terminal => terminal.OwnerType == TopologyOwnerType.InternalAggregate &&
+                intervalIds.Contains(terminal.OwnerId))
+            .ToArray();
+
+        HashSet<Guid> replacementTerminalIds = replacementTerminals
+            .Select(terminal => terminal.Id)
+            .ToHashSet();
+        HashSet<Guid> retiredTerminalIds = previousTerminals
+            .Select(terminal => terminal.Id)
+            .Where(id => !replacementTerminalIds.Contains(id))
+            .ToHashSet();
+        if (_connections.Any(connection =>
+                retiredTerminalIds.Contains(connection.StartTerminalId) ||
+                retiredTerminalIds.Contains(connection.EndTerminalId)) ||
+            _groundingPoints.Any(point => retiredTerminalIds.Contains(point.TerminalId)) ||
+            _workScopes.Any(scope =>
+                retiredTerminalIds.Contains(scope.StartBoundary.TerminalId) ||
+                retiredTerminalIds.Contains(scope.EndBoundary.TerminalId)))
+        {
+            throw new InvalidOperationException(
+                "A connected ring-cabinet terminal cannot be replaced by an interval type change.");
+        }
+
+        Guid[] replacementIds = replacementSwitches.Select(device => device.Id)
+            .Concat(replacementAssemblies.Select(assembly => assembly.AssemblyId))
+            .Concat(replacementNodes.Select(node => node.Id))
+            .Concat(replacementTerminals.Select(terminal => terminal.Id))
+            .ToArray();
+        if (replacementIds.Distinct().Count() != replacementIds.Length)
+        {
+            throw new InvalidOperationException(
+                "Ring-cabinet replacement objects must have unique stable IDs.");
+        }
+
+        EnsureReplacementIdsAreAvailable(
+            replacementSwitches.Select(device => device.Id),
+            previousSwitches.Select(device => device.Id));
+        EnsureReplacementIdsAreAvailable(
+            replacementAssemblies.Select(assembly => assembly.AssemblyId),
+            previousAssemblies.Select(assembly => assembly.AssemblyId));
+        EnsureReplacementIdsAreAvailable(
+            replacementNodes.Select(node => node.Id),
+            previousNodes.Select(node => node.Id));
+        EnsureReplacementIdsAreAvailable(
+            replacementTerminals.Select(terminal => terminal.Id),
+            previousTerminals.Select(terminal => terminal.Id));
+
+        _devices.RemoveAll(device => previousSwitches.Contains(device));
+        _switchAssemblies.RemoveAll(previousAssemblies.Contains);
+        _electricalNodes.RemoveAll(previousNodes.Contains);
+        _terminals.RemoveAll(previousTerminals.Contains);
+        _devices.AddRange(replacementSwitches);
+        _switchAssemblies.AddRange(replacementAssemblies);
+        _electricalNodes.AddRange(replacementNodes);
+        _terminals.AddRange(replacementTerminals);
+    }
+
+    private void EnsureReplacementIdsAreAvailable(
+        IEnumerable<Guid> replacementIds,
+        IEnumerable<Guid> previousIds)
+    {
+        HashSet<Guid> permittedIds = previousIds.ToHashSet();
+        foreach (Guid replacementId in replacementIds.Where(id => !permittedIds.Contains(id)))
+        {
+            EnsureObjectIdIsAvailable(replacementId, "Ring-cabinet aggregate object");
+        }
+    }
+
     public void RemoveDevice(Guid deviceId)
     {
         Device device = _devices.SingleOrDefault(candidate => candidate.Id == deviceId)

@@ -1,8 +1,11 @@
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.Building;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
@@ -103,6 +106,76 @@ public sealed class IntervalTypeChangeIntegrationTests
         Assert.Contains(rows, row => row is { PropertyKey: "BayIndex", DisplayValue: "1" });
         Assert.Contains(rows, row => row is { PropertyKey: "BusinessNumber", DisplayValue: "负1" });
         Assert.Contains(rows, row => row is { PropertyKey: "Sequence", IsReadOnly: true });
+    }
+
+    [Fact]
+    public void InspectorTypeChange_RegistersTheReplacementCableTerminalForPickingAndSelection()
+    {
+        RingCabinet cabinet = CreateCabinet();
+        var document = new DrawingDocument(Guid.NewGuid(), "Project");
+        document.AddDevice(cabinet);
+        RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
+        Guid previousExternalTerminalId = interval.ExternalTerminalId;
+        RuntimeLayoutDocument runtimeLayout = CreateLayout(cabinet);
+        var selection = new ResolvedSelection
+        {
+            Reference = new SelectionReference(
+                SelectionTargetKind.RingCabinetInterval,
+                interval.IntervalId,
+                cabinet.Id),
+            Document = document,
+            RingCabinet = cabinet,
+            RingCabinetInterval = interval
+        };
+        var factory = new PropertyCommandFactory();
+        var stack = new CommandStack();
+
+        Assert.True(factory.TryCreateIntervalTypeChange(
+            selection,
+            runtimeLayout,
+            IntervalKind.PTInterval,
+            null,
+            out ICommand? command,
+            out _));
+        stack.ExecuteCommand(command!);
+
+        RingCabinetInterval changed = cabinet.Intervals.Single(item => item.BayIndex == 1);
+        Assert.NotEqual(previousExternalTerminalId, changed.ExternalTerminalId);
+        Assert.DoesNotContain(document.Terminals, terminal =>
+            terminal.Id == previousExternalTerminalId);
+        Terminal replacement = Assert.Single(document.Terminals, terminal =>
+            terminal.Id == changed.ExternalTerminalId);
+        Assert.True(replacement.IsExternal);
+
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            runtimeLayout.DrawingLayout,
+            runtimeLayout.RingCabinetLayouts);
+        Assert.True(anchors.TryGet(changed.ExternalTerminalId, out _));
+
+        var resolver = new SelectionObjectResolver();
+        resolver.SetSource(new PropertyInspectionSource
+        {
+            Document = document,
+            Terminals = document.Terminals,
+            RingCabinetLayouts = runtimeLayout.RingCabinetLayouts
+        });
+        ResolvedSelection? resolved = resolver.Resolve(new SelectionReference(
+            SelectionTargetKind.Terminal,
+            changed.ExternalTerminalId));
+        Assert.Same(replacement, resolved?.Terminal);
+
+        Assert.True(stack.Undo());
+        Assert.Contains(document.Terminals, terminal =>
+            terminal.Id == previousExternalTerminalId);
+        Assert.DoesNotContain(document.Terminals, terminal =>
+            terminal.Id == changed.ExternalTerminalId);
+
+        Assert.True(stack.Redo());
+        RingCabinetInterval redone = cabinet.Intervals.Single(item => item.BayIndex == 1);
+        Assert.Equal(changed.ExternalTerminalId, redone.ExternalTerminalId);
+        Assert.Contains(document.Terminals, terminal =>
+            terminal.Id == redone.ExternalTerminalId);
     }
 
     [Fact]

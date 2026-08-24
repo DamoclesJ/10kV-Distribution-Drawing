@@ -132,10 +132,8 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
         double width = context.WidthMillimeters;
         double height = context.HeightMillimeters;
         double centerX = x + width / 2;
-        double inset = Math.Min(_metrics.PoleAttachment.FuseTubeInset, height / 5);
-        double contactRadius = _metrics.Switch.ContactRadius;
-        double contactCenterY = y + inset + contactRadius;
-        double tubeStartY = contactCenterY + contactRadius;
+        double inset = Math.Min(_metrics.PoleAttachment.FuseTubeInset / 2, height / 8);
+        double tubeStartY = y + inset;
         DocumentPoint tubeTop = context.State == SymbolVisualState.Open
             ? new DocumentPoint(
                 centerX - _metrics.PoleAttachment.FuseOpenOffset,
@@ -143,15 +141,14 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
             : new DocumentPoint(centerX, tubeStartY);
         DocumentPoint tubeBottom = new(centerX, y + height - inset);
         elements.Add(Line(context, new DocumentPoint(centerX, y), new DocumentPoint(centerX, y + inset)));
-        elements.Add(new SceneEllipse(
-            new DocumentRect(
-                centerX - contactRadius,
-                contactCenterY - contactRadius,
-                contactRadius * 2,
-                contactRadius * 2),
-            context.Stroke,
-            context.ThicknessMillimeters,
-            context.Fill));
+        elements.Add(Line(
+            context,
+            new DocumentPoint(
+                centerX - _metrics.PoleAttachment.ContactMarkerLength / 2,
+                y + inset),
+            new DocumentPoint(
+                centerX + _metrics.PoleAttachment.ContactMarkerLength / 2,
+                y + inset)));
         elements.Add(Line(context, tubeBottom, new DocumentPoint(centerX, y + height)));
         double halfTubeWidth = _metrics.PoleAttachment.FuseTubeWidth / 2;
         elements.Add(new ScenePolyline(
@@ -166,6 +163,50 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
             context.ThicknessMillimeters,
             context.Fill));
         elements.Add(Line(context, tubeTop, tubeBottom));
+        AddDropoutFuseOperationArrow(context, elements, tubeTop, tubeBottom);
+    }
+
+    private void AddDropoutFuseOperationArrow(
+        SymbolRenderContext context,
+        ICollection<SceneElement> elements,
+        DocumentPoint tubeTop,
+        DocumentPoint tubeBottom)
+    {
+        DocumentPoint tubeCenter = new(
+            (tubeTop.XMillimeters + tubeBottom.XMillimeters) / 2,
+            (tubeTop.YMillimeters + tubeBottom.YMillimeters) / 2);
+        double directionX = context.State == SymbolVisualState.Open
+            ? -1 / Math.Sqrt(2)
+            : -1;
+        double directionY = context.State == SymbolVisualState.Open
+            ? 1 / Math.Sqrt(2)
+            : 0;
+        double arrowLength = _metrics.PoleAttachment.OperationArrowLength;
+        DocumentPoint arrowTip = new(
+            tubeCenter.XMillimeters + directionX * arrowLength,
+            tubeCenter.YMillimeters + directionY * arrowLength);
+        elements.Add(Line(context, tubeCenter, arrowTip));
+
+        double headLength = _metrics.PoleAttachment.FuseTubeWidth;
+        double perpendicularX = -directionY;
+        double perpendicularY = directionX;
+        DocumentPoint headBase = new(
+            arrowTip.XMillimeters - directionX * headLength,
+            arrowTip.YMillimeters - directionY * headLength);
+        elements.Add(new ScenePolyline(
+            [
+                arrowTip,
+                new DocumentPoint(
+                    headBase.XMillimeters + perpendicularX * headLength / 2,
+                    headBase.YMillimeters + perpendicularY * headLength / 2),
+                new DocumentPoint(
+                    headBase.XMillimeters - perpendicularX * headLength / 2,
+                    headBase.YMillimeters - perpendicularY * headLength / 2)
+            ],
+            isClosed: true,
+            context.Stroke,
+            context.ThicknessMillimeters,
+            context.Stroke));
     }
 
     private void AddText(SymbolRenderContext context, ICollection<SceneElement> elements)
