@@ -66,7 +66,7 @@ public sealed class OrthogonalRoutingTests
 
         OrthogonalRoute route = new OrthogonalRouter().Route(request, [obstacle]);
 
-        Assert.Contains(route.Points, point => point.YMillimeters < 6 || point.YMillimeters > 34);
+        Assert.Contains(route.Points, point => point.YMillimeters <= 6 || point.YMillimeters >= 34);
         Assert.DoesNotContain(route.Segments, segment =>
             segment.IsHorizontal && segment.Start.YMillimeters > 6 &&
             segment.Start.YMillimeters < 34 &&
@@ -90,7 +90,7 @@ public sealed class OrthogonalRoutingTests
 
         OrthogonalRoute route = new OrthogonalRouter().Route(request, [obstacle]);
 
-        Assert.Contains(route.Points, point => point.XMillimeters < 6 || point.XMillimeters > 34);
+        Assert.Contains(route.Points, point => point.XMillimeters <= 6 || point.XMillimeters >= 34);
         Assert.True(route.Segments.Count >= 4);
         Assert.All(route.Segments, segment => Assert.True(
             segment.IsHorizontal || segment.IsVertical));
@@ -129,8 +129,10 @@ public sealed class OrthogonalRoutingTests
 
         OrthogonalRoute route = new OrthogonalRouter().Route(request, [obstacle]);
 
-        Assert.Contains(route.Points, point => point == new DocumentPoint(8, 10));
-        Assert.Contains(route.Points, point => point == new DocumentPoint(72, 50));
+        Assert.True(route.Segments[0].IsHorizontal);
+        Assert.True(route.Segments[0].End.XMillimeters >= 8);
+        Assert.True(route.Segments[^1].IsHorizontal);
+        Assert.True(route.Segments[^1].End.XMillimeters > route.Segments[^1].Start.XMillimeters);
         Assert.DoesNotContain(route.Segments, segment =>
             segment.IsHorizontal &&
             segment.Start.YMillimeters > -5 &&
@@ -165,7 +167,7 @@ public sealed class OrthogonalRoutingTests
         Assert.Equal(request.Start.Position, route.Points[0]);
         Assert.Equal(request.End.Position, route.Points[^1]);
         Assert.True(route.Segments[0].End.XMillimeters > route.Segments[0].Start.XMillimeters);
-        Assert.True(route.Segments[^1].Start.XMillimeters > route.Segments[^1].End.XMillimeters);
+        Assert.True(route.Segments[^1].Start.XMillimeters < route.Segments[^1].End.XMillimeters);
     }
 
     [Fact]

@@ -58,7 +58,14 @@ public sealed class RoutingObstacleBuilder
                     }
 
                     double diameter = _metrics.PT.CoilRadius * 2;
-                    double height = diameter * 2 - _metrics.PT.CoilSpacing;
+                    double coilTop = layout.Position.YMillimeters +
+                                     intervalLayout.RelativePosition.YMillimeters +
+                                     ptPosition.YMillimeters;
+                    double terminalY = layout.Position.YMillimeters +
+                                       intervalLayout.RelativePosition.YMillimeters +
+                                       intervalLayout.HeightMillimeters;
+                    double coilBottom = coilTop +
+                                        diameter * 2 - _metrics.PT.CoilSpacing;
                     obstacles.Add(new RoutingObstacle(
                         interval.IntervalId,
                         RoutingObstacleKind.RingCabinet,
@@ -66,11 +73,9 @@ public sealed class RoutingObstacleBuilder
                             layout.Position.XMillimeters +
                             intervalLayout.RelativePosition.XMillimeters +
                             ptPosition.XMillimeters,
-                            layout.Position.YMillimeters +
-                            intervalLayout.RelativePosition.YMillimeters +
-                            ptPosition.YMillimeters,
+                            Math.Min(terminalY, coilTop),
                             diameter,
-                            height)));
+                            coilBottom - Math.Min(terminalY, coilTop))));
                 }
             }
         }

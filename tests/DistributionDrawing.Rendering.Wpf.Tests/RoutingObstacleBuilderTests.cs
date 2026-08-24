@@ -82,13 +82,19 @@ public sealed class RoutingObstacleBuilderTests
             item => item.SourceId == pt.IntervalId);
 
         double diameter = DrawingMetrics.Default.PT.CoilRadius * 2;
+        double coilTop = layout.Position.YMillimeters +
+                         ptLayout.RelativePosition.YMillimeters +
+                         position.YMillimeters;
+        double terminalY = layout.Position.YMillimeters +
+                           ptLayout.RelativePosition.YMillimeters +
+                           ptLayout.HeightMillimeters;
+        double coilBottom = coilTop + diameter * 2 - DrawingMetrics.Default.PT.CoilSpacing;
         Assert.Equal(new DocumentRect(
             layout.Position.XMillimeters + ptLayout.RelativePosition.XMillimeters +
             position.XMillimeters,
-            layout.Position.YMillimeters + ptLayout.RelativePosition.YMillimeters +
-            position.YMillimeters,
+            Math.Min(terminalY, coilTop),
             diameter,
-            diameter * 2 - DrawingMetrics.Default.PT.CoilSpacing), obstacle.Bounds);
+            coilBottom - Math.Min(terminalY, coilTop)), obstacle.Bounds);
     }
 
     [Theory]
