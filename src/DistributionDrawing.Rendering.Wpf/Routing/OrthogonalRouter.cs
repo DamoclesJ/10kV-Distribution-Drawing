@@ -45,7 +45,7 @@ public sealed class OrthogonalRouter
                 request.Start.MinimumStubLength));
         DocumentPoint endStub = Move(
             request.End.Position,
-            endDirection,
+            Opposite(endDirection),
             Math.Max(
                 _metrics.Routing.PortStubLength,
                 request.End.MinimumStubLength));
@@ -59,8 +59,14 @@ public sealed class OrthogonalRouter
                 endStub,
                 request.End.Position,
                 priority))
-            .Where(candidate => request.Start.Direction == TerminalAnchorDirection.Auto ||
-                StartsInDirection(candidate.Route, startDirection))
+            .Where(candidate => HasTerminalStubs(
+                candidate.Route,
+                request.Start.Position,
+                startDirection,
+                request.Start.MinimumStubLength,
+                request.End.Position,
+                endDirection,
+                request.End.MinimumStubLength))
             .GroupBy(candidate => string.Join(
                 ";",
                 candidate.Route.Points.Select(point =>
@@ -111,6 +117,87 @@ public sealed class OrthogonalRouter
             TerminalAnchorDirection.Down => first.IsVertical &&
                 first.End.YMillimeters > first.Start.YMillimeters,
             _ => true
+        };
+    }
+
+    private bool HasTerminalStubs(
+        OrthogonalRoute route,
+        DocumentPoint start,
+        TerminalAnchorDirection startDirection,
+        double requestedStartLength,
+        DocumentPoint end,
+        TerminalAnchorDirection endDirection,
+        double requestedEndLength)
+    {
+        if (route.Segments.Count == 0)
+        {
+            return false;
+        }
+
+        double startLength = Math.Max(
+            _metrics.Routing.PortStubLength,
+            requestedStartLength);
+        double endLength = Math.Max(
+            _metrics.Routing.PortStubLength,
+            requestedEndLength);
+
+        return StartsInDirection(route, startDirection) &&
+               HasLengthFromStart(route.Segments[0], start, startDirection, startLength) &&
+               HasLengthIntoEnd(route.Segments[^1], end, endDirection, endLength);
+    }
+
+    private static bool HasLengthFromStart(
+        OrthogonalRouteSegment segment,
+        DocumentPoint terminal,
+        TerminalAnchorDirection direction,
+        double minimumLength)
+    {
+        if (segment.Start != terminal)
+        {
+            return false;
+        }
+
+        return IsInDirection(segment, direction) && segment.Length >= minimumLength;
+    }
+
+    private static bool HasLengthIntoEnd(
+        OrthogonalRouteSegment segment,
+        DocumentPoint terminal,
+        TerminalAnchorDirection direction,
+        double minimumLength)
+    {
+        if (segment.End != terminal)
+        {
+            return false;
+        }
+
+        return IsInDirection(segment, direction) &&
+               segment.Length >= minimumLength;
+    }
+
+    private static bool IsInDirection(
+        OrthogonalRouteSegment segment,
+        TerminalAnchorDirection direction)
+    {
+        return direction switch
+        {
+            TerminalAnchorDirection.Left => segment.End.XMillimeters < segment.Start.XMillimeters,
+            TerminalAnchorDirection.Right => segment.End.XMillimeters > segment.Start.XMillimeters,
+            TerminalAnchorDirection.Up => segment.End.YMillimeters < segment.Start.YMillimeters,
+            TerminalAnchorDirection.Down => segment.End.YMillimeters > segment.Start.YMillimeters,
+            _ => false
+        };
+    }
+
+    private static TerminalAnchorDirection Opposite(TerminalAnchorDirection direction)
+    {
+        return direction switch
+        {
+            TerminalAnchorDirection.Left => TerminalAnchorDirection.Right,
+            TerminalAnchorDirection.Right => TerminalAnchorDirection.Left,
+            TerminalAnchorDirection.Up => TerminalAnchorDirection.Down,
+            TerminalAnchorDirection.Down => TerminalAnchorDirection.Up,
+            _ => TerminalAnchorDirection.Auto
         };
     }
 

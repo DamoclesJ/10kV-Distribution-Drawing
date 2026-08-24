@@ -50,7 +50,7 @@ public sealed class PoleRendererTests
             poleLayout,
             [new PoleAttachmentRenderInput(attachment, cableTermination, attachmentLayout)]);
 
-        Assert.NotEmpty(elements.OfType<SceneLine>());
+        Assert.Empty(elements.OfType<SceneLine>());
         Assert.Single(elements.OfType<SceneEllipse>());
         Assert.Single(elements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
         Assert.Empty(elements.OfType<SceneRectangle>());

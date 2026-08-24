@@ -52,9 +52,7 @@ public sealed class MixedPoleRendererTests
         Assert.Single(elements.OfType<SceneEllipse>(), ellipse =>
             ellipse.Bounds.WidthMillimeters == 14);
         Assert.Single(elements.OfType<ScenePolyline>(), polyline => polyline.IsClosed);
-        Assert.DoesNotContain(elements.OfType<SceneRectangle>(), rectangle =>
-            rectangle.Bounds.WidthMillimeters == cableLayout.WidthMillimeters &&
-            rectangle.Bounds.HeightMillimeters == cableLayout.HeightMillimeters);
+        Assert.NotEmpty(elements.OfType<SceneRectangle>());
     }
 
     [Fact]

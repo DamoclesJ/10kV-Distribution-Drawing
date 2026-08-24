@@ -47,7 +47,7 @@ public sealed class OrthogonalRoutingTests
         Assert.True(route.Segments[0].IsHorizontal);
         Assert.True(route.Segments[0].End.XMillimeters >= 8);
         Assert.True(route.Segments[^1].IsVertical);
-        Assert.True(route.Segments[^1].Start.YMillimeters <= 42);
+        Assert.True(route.Segments[^1].Start.YMillimeters >= 58);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class OrthogonalRoutingTests
 
         OrthogonalRoute route = new OrthogonalRouter().Route(request, []);
 
-        Assert.Contains(route.Points, point => point == new DocumentPoint(72, 0));
+        Assert.Contains(route.Points, point => point == new DocumentPoint(88, 0));
         Assert.All(route.Segments, segment => Assert.True(
             segment.IsHorizontal || segment.IsVertical));
     }
@@ -159,7 +159,7 @@ public sealed class OrthogonalRoutingTests
         Assert.Equal(request.Start.Position, route.Points[0]);
         Assert.Equal(request.End.Position, route.Points[^1]);
         Assert.True(route.Segments[0].End.XMillimeters > route.Segments[0].Start.XMillimeters);
-        Assert.True(route.Segments[^1].Start.XMillimeters < route.Segments[^1].End.XMillimeters);
+        Assert.True(route.Segments[^1].Start.XMillimeters > route.Segments[^1].End.XMillimeters);
     }
 
     [Fact]
@@ -336,6 +336,51 @@ public sealed class OrthogonalRoutingTests
         Assert.True(last.IsVertical);
         Assert.Equal(terminal, last.End);
         Assert.True(last.Start.YMillimeters - last.End.YMillimeters >= 50);
+    }
+
+    [Theory]
+    [InlineData(TerminalAnchorDirection.Left)]
+    [InlineData(TerminalAnchorDirection.Right)]
+    [InlineData(TerminalAnchorDirection.Up)]
+    [InlineData(TerminalAnchorDirection.Down)]
+    public void Route_RespectsMinimumStubForEveryExplicitEndDirection(
+        TerminalAnchorDirection direction)
+    {
+        Guid startId = Guid.NewGuid();
+        Guid endId = Guid.NewGuid();
+        DocumentPoint terminal = new(80, 100);
+        ConnectionRouteRequest request = new(
+            Guid.NewGuid(),
+            ConnectionType.Cable,
+            startId,
+            endId,
+            new TerminalAnchor(
+                startId,
+                new DocumentPoint(0, 0),
+                TerminalAnchorDirection.Right),
+            new TerminalAnchor(
+                endId,
+                terminal,
+                direction,
+                MinimumStubLength: 50));
+
+        OrthogonalRoute route = new OrthogonalRouter().Route(request, []);
+
+        OrthogonalRouteSegment last = route.Segments[^1];
+        Assert.Equal(terminal, last.End);
+        Assert.True(last.Length >= 50);
+        Assert.True(direction switch
+        {
+            TerminalAnchorDirection.Left => last.IsHorizontal &&
+                last.Start.XMillimeters >= terminal.XMillimeters + 50,
+            TerminalAnchorDirection.Right => last.IsHorizontal &&
+                last.Start.XMillimeters <= terminal.XMillimeters - 50,
+            TerminalAnchorDirection.Up => last.IsVertical &&
+                last.Start.YMillimeters >= terminal.YMillimeters + 50,
+            TerminalAnchorDirection.Down => last.IsVertical &&
+                last.Start.YMillimeters <= terminal.YMillimeters - 50,
+            _ => false
+        });
     }
 
     private static ConnectionRouteRequest CreateRequest(
