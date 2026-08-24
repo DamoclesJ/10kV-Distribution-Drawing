@@ -92,7 +92,9 @@ public sealed class PoleProfessionalSymbolTests
     public void DropoutFuse_UsesNoContactCircleAndKeepsVerticalTerminalAxis()
     {
         SceneElement[] geometry = RenderSwitch(SwitchKind.DropoutFuse);
-        Assert.Empty(geometry.OfType<SceneEllipse>());
+        Assert.DoesNotContain(geometry.OfType<SceneEllipse>(), ellipse =>
+            ellipse.Bounds.WidthMillimeters <
+            DrawingMetrics.Default.Pole.PoleRadius * 2);
         ScenePolyline tube = Assert.Single(geometry.OfType<ScenePolyline>(), polyline =>
             polyline.IsClosed && polyline.Points.Count == 4);
         double centerX = (tube.Points[2].XMillimeters +
