@@ -518,7 +518,18 @@ public sealed class OrthogonalRoutingTests
             request,
             endpointObstacles.Concat(routingObstacles));
 
-        Assert.True(route.Segments.Count >= 5);
+        Assert.Equal(request.Start.Position, route.Points[0]);
+        Assert.Equal(request.End.Position, route.Points[^1]);
+        Assert.All(route.Segments, segment => Assert.True(
+            segment.IsHorizontal || segment.IsVertical));
+        Assert.True(route.Segments[0].IsVertical);
+        Assert.True(
+            route.Segments[0].End.YMillimeters >
+            route.Segments[0].Start.YMillimeters);
+        Assert.True(route.Segments[^1].IsVertical);
+        Assert.True(
+            route.Segments[^1].Start.YMillimeters >
+            route.Segments[^1].End.YMillimeters);
         Assert.DoesNotContain(route.Segments, segment =>
             routingObstacles.Any(obstacle => IntersectsInterior(
                 segment,
