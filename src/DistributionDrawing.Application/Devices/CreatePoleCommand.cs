@@ -31,6 +31,20 @@ public sealed class CreatePoleCommand
         _document.AddDevice(Pole);
         try
         {
+            foreach (ElectricalNode node in Result.ElectricalNodes.Where(node =>
+                         node.OwnerType == TopologyOwnerType.Device &&
+                         node.OwnerId == Pole.Id))
+            {
+                _document.AddElectricalNode(node);
+            }
+
+            foreach (Terminal terminal in Result.Terminals.Where(terminal =>
+                         terminal.OwnerType == TopologyOwnerType.Device &&
+                         terminal.OwnerId == Pole.Id))
+            {
+                _document.AddTerminal(terminal);
+            }
+
             foreach (Device device in Result.Devices)
             {
                 AddAttachedDevice(device);

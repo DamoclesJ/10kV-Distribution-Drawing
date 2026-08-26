@@ -447,6 +447,7 @@ public sealed class DrawingDocument
             }
 
             if (owner is CableTermination termination &&
+                terminal.Id == termination.CableSideTerminalId &&
                 terminal.ElectricalNodeId != termination.InternalNodeId)
             {
                 throw new InvalidOperationException(
@@ -500,6 +501,7 @@ public sealed class DrawingDocument
 
             if (terminal.OwnerType == TopologyOwnerType.Device &&
                 _devices.Single(device => device.Id == terminal.OwnerId) is CableTermination termination &&
+                terminal.Id == termination.CableSideTerminalId &&
                 (electricalNode.OwnerType != TopologyOwnerType.Device ||
                  electricalNode.OwnerId != termination.Id))
             {
@@ -842,23 +844,40 @@ public sealed class DrawingDocument
                 $"Device '{switchDevice.Id}' is already attached to a pole.");
         }
 
+        Guid switchRightNodeId = secondTerminal.ElectricalNodeId ?? Guid.NewGuid();
+        ElectricalNode switchRightNode = new(
+            switchRightNodeId,
+            ElectricalNodeType.Intermediate,
+            TopologyOwnerType.Device,
+            switchDevice.Id);
+
         EnsureObjectIdIsAvailable(switchDevice.Id, nameof(SwitchDevice));
+        EnsureObjectIdIsAvailable(switchRightNode.Id, nameof(ElectricalNode));
         EnsureObjectIdIsAvailable(firstTerminal.Id, nameof(Terminal));
         EnsureObjectIdIsAvailable(secondTerminal.Id, nameof(Terminal));
         EnsureObjectIdIsAvailable(attachment.AttachmentId, nameof(PoleAttachment));
 
+        Pole pole = (Pole)_devices.Single(device => device.Id == attachment.PoleId);
+        Guid? poleJunctionNodeId = pole.OverheadAnchorTerminalIds.Count > 0
+            ? EnsurePoleJunction(attachment.PoleId)
+            : null;
+
         _devices.Add(switchDevice);
+        _electricalNodes.Add(switchRightNode);
         try
         {
-            AddTerminal(firstTerminal);
-            AddTerminal(secondTerminal);
+            AddTerminal(poleJunctionNodeId is Guid junctionNodeId
+                ? BindTerminal(firstTerminal, junctionNodeId)
+                : firstTerminal);
+            AddTerminal(BindTerminal(secondTerminal, switchRightNodeId));
             AddPoleAttachment(attachment);
         }
         catch
         {
             _poleAttachments.Remove(attachment);
-            _terminals.Remove(firstTerminal);
-            _terminals.Remove(secondTerminal);
+            _terminals.RemoveAll(terminal =>
+                terminal.Id == firstTerminal.Id || terminal.Id == secondTerminal.Id);
+            _electricalNodes.Remove(switchRightNode);
             _devices.Remove(switchDevice);
             throw;
         }
@@ -894,6 +913,7 @@ public sealed class DrawingDocument
 
         _poleAttachments.Remove(attachment);
         _terminals.RemoveAll(terminal => terminalIds.Contains(terminal.Id));
+        _electricalNodes.RemoveAll(node => node.OwnerId == switchDevice.Id);
         _devices.Remove(switchDevice);
     }
 
@@ -943,12 +963,30 @@ public sealed class DrawingDocument
                 $"Device '{cableTermination.Id}' is already attached to a pole.");
         }
 
+        Terminal boundOverheadSideTerminal = overheadSideTerminal;
+        Pole attachedPole = (Pole)_devices.Single(device => device.Id == attachment.PoleId);
+        if (attachedPole.OverheadAnchorTerminalIds.Count > 0)
+        {
+            Guid poleJunctionNodeId = EnsurePoleJunction(attachment.PoleId);
+            boundOverheadSideTerminal = BindTerminal(
+                overheadSideTerminal,
+                poleJunctionNodeId);
+        }
+
         _devices.Add(cableTermination);
         _electricalNodes.Add(internalNode);
         _terminals.Add(cableSideTerminal);
-        _terminals.Add(overheadSideTerminal);
+        _terminals.Add(boundOverheadSideTerminal);
         internalNode.AttachTerminal(cableSideTerminal.Id);
-        internalNode.AttachTerminal(overheadSideTerminal.Id);
+        if (boundOverheadSideTerminal.ElectricalNodeId == internalNode.Id)
+        {
+            internalNode.AttachTerminal(boundOverheadSideTerminal.Id);
+        }
+        else
+        {
+            _electricalNodes.Single(node => node.Id == boundOverheadSideTerminal.ElectricalNodeId)
+                .AttachTerminal(boundOverheadSideTerminal.Id);
+        }
         _poleAttachments.Add(attachment);
     }
 
@@ -1402,13 +1440,11 @@ public sealed class DrawingDocument
                 "Cable termination internal node is inconsistent with its device.");
         }
 
-        HashSet<Guid> expectedTerminalIds =
-        [
-            cableTermination.CableSideTerminalId,
-            cableTermination.OverheadSideTerminalId
-        ];
         if (internalNode.TerminalIds.Count != 0 &&
-            !internalNode.TerminalIds.SetEquals(expectedTerminalIds))
+            !internalNode.TerminalIds.SetEquals([cableTermination.CableSideTerminalId]) &&
+            !internalNode.TerminalIds.SetEquals([
+                cableTermination.CableSideTerminalId,
+                cableTermination.OverheadSideTerminalId]))
         {
             throw new InvalidOperationException(
                 "Cable termination internal node contains inconsistent terminals.");
@@ -1420,12 +1456,84 @@ public sealed class DrawingDocument
             cableTermination.CableSideTerminalId,
             CableTermination.CableSideRole,
             ConnectionType.Cable);
-        ValidateCableTerminationTerminal(
+        ValidateCableTerminationOverheadTerminal(
             cableTermination,
             overheadSideTerminal,
             cableTermination.OverheadSideTerminalId,
             CableTermination.OverheadSideRole,
             ConnectionType.OverheadLine);
+    }
+
+    /// <summary>
+    /// Ensures that the pole's existing center terminals participate in one
+    /// explicit junction node. The pole remains a physical support device.
+    /// </summary>
+    public Guid EnsurePoleJunction(Guid poleId)
+    {
+        Pole pole = _devices.SingleOrDefault(device => device.Id == poleId) as Pole
+            ?? throw new InvalidOperationException($"Pole '{poleId}' does not exist.");
+        Guid[] terminalIds = pole.OverheadAnchorTerminalIds.ToArray();
+        if (terminalIds.Length == 0)
+        {
+            throw new InvalidOperationException($"Pole '{poleId}' has no overhead terminal.");
+        }
+
+        Guid[] existingNodeIds = _terminals
+            .Where(terminal => terminalIds.Contains(terminal.Id))
+            .Select(terminal => terminal.ElectricalNodeId)
+            .OfType<Guid>()
+            .Distinct()
+            .ToArray();
+        if (existingNodeIds.Length > 1)
+        {
+            throw new InvalidOperationException($"Pole '{poleId}' has inconsistent junction nodes.");
+        }
+
+        Guid nodeId = existingNodeIds.SingleOrDefault();
+        if (nodeId == Guid.Empty)
+        {
+            nodeId = Guid.NewGuid();
+            _electricalNodes.Add(new ElectricalNode(
+                nodeId,
+                ElectricalNodeType.Intermediate,
+                TopologyOwnerType.Device,
+                pole.Id));
+        }
+
+        ElectricalNode node = _electricalNodes.SingleOrDefault(candidate => candidate.Id == nodeId)
+            ?? throw new InvalidOperationException($"Pole junction node '{nodeId}' does not exist.");
+        foreach (Guid terminalId in terminalIds)
+        {
+            int index = _terminals.FindIndex(terminal => terminal.Id == terminalId);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            Terminal current = _terminals[index];
+            if (current.ElectricalNodeId != nodeId)
+            {
+                _terminals[index] = BindTerminal(current, nodeId);
+            }
+
+            node.AttachTerminal(terminalId);
+        }
+
+        return nodeId;
+    }
+
+    private static Terminal BindTerminal(Terminal terminal, Guid electricalNodeId)
+    {
+        return new Terminal(
+            terminal.Id,
+            terminal.OwnerType,
+            terminal.OwnerId,
+            terminal.Role,
+            terminal.VoltageLevel,
+            terminal.IsExternal,
+            terminal.AllowsMultipleConnections,
+            electricalNodeId,
+            terminal.AllowedConnectionTypes);
     }
 
     private static void ValidateCableTerminationTerminal(
@@ -1439,6 +1547,32 @@ public sealed class DrawingDocument
             terminal.OwnerType != TopologyOwnerType.Device ||
             terminal.OwnerId != cableTermination.Id ||
             terminal.ElectricalNodeId != cableTermination.InternalNodeId ||
+            !string.Equals(terminal.Role, expectedRole, StringComparison.Ordinal) ||
+            !string.Equals(
+                terminal.VoltageLevel,
+                cableTermination.VoltageLevel,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Cable termination terminal '{terminal.Id}' is inconsistent with its device.");
+        }
+
+        EnsureTerminalPolicy(
+            terminal,
+            expectedConnectionType,
+            $"Cable termination {expectedRole} terminal");
+    }
+
+    private static void ValidateCableTerminationOverheadTerminal(
+        CableTermination cableTermination,
+        Terminal terminal,
+        Guid expectedTerminalId,
+        string expectedRole,
+        ConnectionType expectedConnectionType)
+    {
+        if (terminal.Id != expectedTerminalId ||
+            terminal.OwnerType != TopologyOwnerType.Device ||
+            terminal.OwnerId != cableTermination.Id ||
             !string.Equals(terminal.Role, expectedRole, StringComparison.Ordinal) ||
             !string.Equals(
                 terminal.VoltageLevel,

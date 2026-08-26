@@ -686,6 +686,8 @@ internal static class ProjectDomainMapper
             .Select(value => Parse<ConnectionType>(value, dto.TerminalId, "allowedConnectionType"))
             .ToArray();
 
+        bool allowsMultipleConnections = dto.AllowsMultipleConnections ||
+            (forceMultipleConnections && IsPoleSwitchLeftTerminal(dto.Role));
         return new Terminal(
             dto.TerminalId,
             Parse<TopologyOwnerType>(dto.OwnerType, dto.TerminalId, "ownerType"),
@@ -693,9 +695,15 @@ internal static class ProjectDomainMapper
             dto.Role,
             dto.VoltageLevel,
             dto.IsExternal,
-            dto.AllowsMultipleConnections || forceMultipleConnections,
+            allowsMultipleConnections,
             dto.ElectricalNodeId,
             allowedConnectionTypes);
+    }
+
+    private static bool IsPoleSwitchLeftTerminal(string role)
+    {
+        return string.Equals(role, "SwitchLeftTerminal", StringComparison.Ordinal) ||
+            string.Equals(role, "SwitchTerminal1", StringComparison.Ordinal);
     }
 
     private static IntermediateTerminal RestoreIntermediateTerminal(
@@ -935,11 +943,19 @@ internal static class ProjectDomainMapper
                 .Select(terminal => terminal.Id)
                 .ToHashSet();
 
+            bool legacyInternalTopology = node.TerminalIds.SetEquals(termination.TerminalIds);
+            bool splitInternalTopology = node.TerminalIds.SetEquals(
+                [termination.CableSideTerminalId]);
+            Terminal overheadTerminal = document.Terminals.Single(candidate =>
+                candidate.Id == termination.OverheadSideTerminalId);
+            bool validOverheadTopology = overheadTerminal.ElectricalNodeId is Guid overheadNodeId &&
+                document.ElectricalNodes.Any(candidate => candidate.Id == overheadNodeId);
             if (node.Type != ElectricalNodeType.Intermediate ||
                 node.OwnerType != TopologyOwnerType.Device ||
                 node.OwnerId != termination.Id ||
                 !terminalIds.SetEquals(termination.TerminalIds) ||
-                !node.TerminalIds.SetEquals(termination.TerminalIds))
+                (!legacyInternalTopology &&
+                 (!splitInternalTopology || !validOverheadTopology)))
             {
                 throw new InvalidDataException(
                     $"Cable termination '{termination.Id}' topology is incomplete.");

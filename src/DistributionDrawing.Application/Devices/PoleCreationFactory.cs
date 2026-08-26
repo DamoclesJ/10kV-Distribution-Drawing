@@ -36,12 +36,28 @@ public sealed class PoleCreationFactory
         var devices = new List<Device>();
         var terminals = new List<Terminal>();
         var electricalNodes = new List<ElectricalNode>();
+        SwitchKind[] requestedSwitchKinds = (switchKinds ?? []).ToArray();
+        bool needsJunction = requestedSwitchKinds.Length > 0 || includeCableTerminal;
+        Guid? poleJunctionNodeId = needsJunction ? Guid.NewGuid() : null;
+        if (poleJunctionNodeId is Guid junctionNodeId)
+        {
+            electricalNodes.Add(new ElectricalNode(
+                junctionNodeId,
+                ElectricalNodeType.Intermediate,
+                TopologyOwnerType.Device,
+                pole.Id));
+        }
+        Terminal poleAnchor = pole.CreateOverheadAnchorTerminal(
+            Guid.NewGuid(),
+            allowsMultipleConnections: true,
+            poleJunctionNodeId);
 
-        foreach (SwitchKind switchKind in switchKinds ?? [])
+        foreach (SwitchKind switchKind in requestedSwitchKinds)
         {
             Guid switchId = Guid.NewGuid();
             Guid firstTerminalId = Guid.NewGuid();
             Guid secondTerminalId = Guid.NewGuid();
+            Guid rightElectricalNodeId = Guid.NewGuid();
             var switchDevice = SwitchDevice.CreateForPole(
                 switchId,
                 switchKind,
@@ -50,11 +66,14 @@ public sealed class PoleCreationFactory
             var firstTerminal = CreateSwitchTerminal(
                 firstTerminalId,
                 switchId,
-                "SwitchTerminal1");
+                "SwitchLeftTerminal",
+                allowsMultipleConnections: true);
             var secondTerminal = CreateSwitchTerminal(
                 secondTerminalId,
                 switchId,
-                "SwitchTerminal2");
+                "SwitchRightTerminal",
+                allowsMultipleConnections: false,
+                rightElectricalNodeId);
 
             devices.Add(switchDevice);
             terminals.Add(firstTerminal);
@@ -76,6 +95,11 @@ public sealed class PoleCreationFactory
                 attachments);
         }
 
+        // Keep the pole anchor last so existing attachment result ordering
+        // remains stable while every production pole creation path exposes
+        // the same center terminal.
+        terminals.Add(poleAnchor);
+
         return new PoleCreationResult(
             pole,
             attachments,
@@ -87,7 +111,9 @@ public sealed class PoleCreationFactory
     private static Terminal CreateSwitchTerminal(
         Guid terminalId,
         Guid switchId,
-        string role)
+        string role,
+        bool allowsMultipleConnections,
+        Guid? electricalNodeId = null)
     {
         return new Terminal(
             terminalId,
@@ -96,7 +122,8 @@ public sealed class PoleCreationFactory
             role,
             "10kV",
             isExternal: true,
-            allowsMultipleConnections: false,
+            allowsMultipleConnections,
+            electricalNodeId,
             allowedConnectionTypes: [ConnectionType.OverheadLine]);
     }
 

@@ -20,9 +20,9 @@ public sealed class ElectricalConnectivityGraphBuilderTests
         Guid secondTerminalId = result.Terminals[1].Id;
 
         ElectricalConnectivityEdge edge = Assert.Single(graph.Edges, candidate =>
-            candidate.Type == ElectricalConnectivityEdgeType.ElectricalNodeInternal);
+            candidate.Type == ElectricalConnectivityEdgeType.PassiveDeviceInternal);
         Assert.True(edge.Connects(firstTerminalId, secondTerminalId));
-        Assert.Equal(2, graph.TerminalIds.Count);
+        Assert.Equal(3, graph.TerminalIds.Count);
     }
 
     [Fact]
@@ -181,6 +181,104 @@ public sealed class ElectricalConnectivityGraphBuilderTests
             result.Terminals[0].Id));
     }
 
+    [Fact]
+    public void PoleAttachmentCreation_BindsPoleJunctionAndSwitchSidesToDistinctNodes()
+    {
+        (DrawingDocument document, PoleCreationResult result) = CreatePoleWithSwitchAndCableTermination();
+        Pole pole = result.Pole;
+        SwitchDevice switchDevice = Assert.IsType<SwitchDevice>(
+            Assert.Single(result.Devices.OfType<SwitchDevice>()));
+        CableTermination termination = Assert.IsType<CableTermination>(
+            Assert.Single(result.Devices.OfType<CableTermination>()));
+
+        Terminal poleTerminal = Assert.Single(document.Terminals, terminal =>
+            pole.OwnsTerminal(terminal.Id));
+        Terminal left = Assert.Single(document.Terminals, terminal =>
+            terminal.OwnerId == switchDevice.Id && terminal.Role == "SwitchLeftTerminal");
+        Terminal right = Assert.Single(document.Terminals, terminal =>
+            terminal.OwnerId == switchDevice.Id && terminal.Role == "SwitchRightTerminal");
+        Terminal overhead = Assert.Single(document.Terminals, terminal =>
+            terminal.Id == termination.OverheadSideTerminalId);
+
+        Assert.NotNull(poleTerminal.ElectricalNodeId);
+        Assert.Equal(poleTerminal.ElectricalNodeId, left.ElectricalNodeId);
+        Assert.Equal(poleTerminal.ElectricalNodeId, overhead.ElectricalNodeId);
+        Assert.NotEqual(left.ElectricalNodeId, right.ElectricalNodeId);
+        Assert.True(left.AllowsMultipleConnections);
+        Assert.False(right.AllowsMultipleConnections);
+        Assert.Equal(termination.InternalNodeId,
+            document.Terminals.Single(terminal =>
+                terminal.Id == termination.CableSideTerminalId).ElectricalNodeId);
+    }
+
+    [Theory]
+    [InlineData(SwitchState.Open, false)]
+    [InlineData(SwitchState.Closed, true)]
+    public void PoleJunctionGraph_UsesSwitchStateToConnectNodeAAndNodeB(
+        SwitchState state,
+        bool expectedDownstreamConnectivity)
+    {
+        (DrawingDocument document, PoleCreationResult result) = CreatePoleWithSwitchAndCableTermination(state);
+        SwitchDevice switchDevice = Assert.IsType<SwitchDevice>(
+            Assert.Single(result.Devices.OfType<SwitchDevice>()));
+        CableTermination termination = Assert.IsType<CableTermination>(
+            Assert.Single(result.Devices.OfType<CableTermination>()));
+        Pole downstreamPole = new(Guid.NewGuid(), "P-099");
+        Terminal downstreamTerminal = downstreamPole.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        document.AddDevice(downstreamPole);
+        document.AddTerminal(downstreamTerminal);
+        document.AddConnection(new Connection(
+            Guid.NewGuid(),
+            ConnectionType.OverheadLine,
+            switchDevice.TerminalIds[1],
+            downstreamTerminal.Id,
+            "出线",
+            "10kV"));
+        ElectricalConnectivityGraph graph = new ElectricalConnectivityGraphBuilder().Build(document);
+        var query = new ElectricalConnectivityQuery(graph);
+
+        Assert.Equal(
+            expectedDownstreamConnectivity,
+            query.IsConnected(termination.CableSideTerminalId, downstreamTerminal.Id));
+    }
+
+    [Fact]
+    public void PoleJunctionGraph_PreservesTBranchConnectivityOnNodeAWhenSwitchIsOpen()
+    {
+        (DrawingDocument document, PoleCreationResult result) = CreatePoleWithSwitchAndCableTermination();
+        SwitchDevice switchDevice = Assert.IsType<SwitchDevice>(
+            Assert.Single(result.Devices.OfType<SwitchDevice>()));
+        CableTermination termination = Assert.IsType<CableTermination>(
+            Assert.Single(result.Devices.OfType<CableTermination>()));
+        Pole firstBranchPole = new(Guid.NewGuid(), "P-100");
+        Pole secondBranchPole = new(Guid.NewGuid(), "P-101");
+        Terminal firstBranchTerminal = firstBranchPole.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        Terminal secondBranchTerminal = secondBranchPole.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        document.AddDevice(firstBranchPole);
+        document.AddDevice(secondBranchPole);
+        document.AddTerminal(firstBranchTerminal);
+        document.AddTerminal(secondBranchTerminal);
+        Terminal poleTerminal = Assert.Single(document.Terminals, terminal =>
+            terminal.OwnerId == result.Pole.Id);
+        document.AddConnection(new Connection(
+            Guid.NewGuid(), ConnectionType.OverheadLine, poleTerminal.Id,
+            firstBranchTerminal.Id, "支线1", "10kV"));
+        document.AddConnection(new Connection(
+            Guid.NewGuid(), ConnectionType.OverheadLine, poleTerminal.Id,
+            secondBranchTerminal.Id, "支线2", "10kV"));
+
+        var query = new ElectricalConnectivityQuery(new ElectricalConnectivityGraphBuilder().Build(document));
+        Assert.True(query.IsConnected(
+            termination.CableSideTerminalId,
+            firstBranchTerminal.Id));
+        Assert.True(query.IsConnected(
+            firstBranchTerminal.Id,
+            secondBranchTerminal.Id));
+        Assert.False(query.IsConnected(
+            firstBranchTerminal.Id,
+            switchDevice.TerminalIds[1]));
+    }
+
     private static (DrawingDocument Document, PoleCreationResult Result) CreatePoleSwitch(
         SwitchState state)
     {
@@ -204,6 +302,41 @@ public sealed class ElectricalConnectivityGraphBuilderTests
                 result.Pole,
                 result.Attachments,
                 [switchDevice],
+                result.Terminals,
+                result.ElectricalNodes);
+        }
+
+        new CreatePoleCommand(document, result).Execute();
+        return (document, result);
+    }
+
+    private static (DrawingDocument Document, PoleCreationResult Result)
+        CreatePoleWithSwitchAndCableTermination(
+            SwitchState state = SwitchState.Open)
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "Pole junction test");
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P-098",
+            PoleType.Cement,
+            null,
+            [SwitchKind.CircuitBreaker],
+            includeCableTerminal: true);
+        SwitchDevice originalSwitch = Assert.IsType<SwitchDevice>(
+            Assert.Single(result.Devices.OfType<SwitchDevice>()));
+        if (state != originalSwitch.SwitchState)
+        {
+            originalSwitch = SwitchDevice.CreateForPole(
+                originalSwitch.Id,
+                originalSwitch.SwitchKind,
+                originalSwitch.TerminalIds[0],
+                originalSwitch.TerminalIds[1],
+                state);
+            result = new PoleCreationResult(
+                result.Pole,
+                result.Attachments,
+                result.Devices.Select(device => device.Id == originalSwitch.Id
+                    ? originalSwitch
+                    : device),
                 result.Terminals,
                 result.ElectricalNodes);
         }

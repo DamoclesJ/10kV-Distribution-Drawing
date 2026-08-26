@@ -20,13 +20,19 @@ public sealed class PoleSwitchAttachmentCreationFactory
         Guid switchId = Guid.NewGuid();
         Guid firstTerminalId = Guid.NewGuid();
         Guid secondTerminalId = Guid.NewGuid();
+        Guid rightElectricalNodeId = Guid.NewGuid();
         var switchDevice = SwitchDevice.CreateForPole(
             switchId,
             switchKind,
             firstTerminalId,
             secondTerminalId);
-        var firstTerminal = CreateTerminal(firstTerminalId, switchId, "SwitchTerminal1");
-        var secondTerminal = CreateTerminal(secondTerminalId, switchId, "SwitchTerminal2");
+        var firstTerminal = CreateTerminal(firstTerminalId, switchId, "SwitchLeftTerminal", true);
+        var secondTerminal = CreateTerminal(
+            secondTerminalId,
+            switchId,
+            "SwitchRightTerminal",
+            false,
+            rightElectricalNodeId);
         var attachment = new PoleAttachment(Guid.NewGuid(), poleId, switchId);
 
         return new PoleSwitchAttachmentCreation(
@@ -37,13 +43,19 @@ public sealed class PoleSwitchAttachmentCreationFactory
             new AttachmentLayout(attachment.AttachmentId, attachmentOffset));
     }
 
-    private static Terminal CreateTerminal(Guid id, Guid ownerId, string role) => new(
+    private static Terminal CreateTerminal(
+        Guid id,
+        Guid ownerId,
+        string role,
+        bool allowsMultipleConnections,
+        Guid? electricalNodeId = null) => new(
         id,
         TopologyOwnerType.Device,
         ownerId,
         role,
         "10kV",
         isExternal: true,
-        allowsMultipleConnections: true,
+        allowsMultipleConnections,
+        electricalNodeId,
         allowedConnectionTypes: [ConnectionType.OverheadLine]);
 }

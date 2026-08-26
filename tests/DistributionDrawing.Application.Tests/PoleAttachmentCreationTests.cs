@@ -32,7 +32,7 @@ public sealed class PoleAttachmentCreationTests
         Assert.Single(document.PoleAttachments);
         Assert.Same(switchDevice, document.Devices.Single(device =>
             device.Id == switchDevice.Id));
-        Assert.Equal(2, document.Terminals.Count);
+        Assert.Equal(3, document.Terminals.Count);
     }
 
     [Fact]
@@ -49,8 +49,8 @@ public sealed class PoleAttachmentCreationTests
         CableTermination cableTermination = Assert.IsType<CableTermination>(
             Assert.Single(result.Devices));
         Assert.Single(document.PoleAttachments);
-        Assert.Single(document.ElectricalNodes);
-        Assert.Equal(2, document.Terminals.Count);
+        Assert.Equal(2, document.ElectricalNodes.Count);
+        Assert.Equal(3, document.Terminals.Count);
         Assert.Same(cableTermination, document.Devices.Single(device =>
             device.Id == cableTermination.Id));
     }
@@ -68,10 +68,10 @@ public sealed class PoleAttachmentCreationTests
             .Select(attachment => attachment.AttachmentId)
             .ToArray();
         Guid[] terminalIds = result.Terminals.Select(terminal => terminal.Id).ToArray();
-        Guid[] nodeIds = result.ElectricalNodes.Select(node => node.Id).ToArray();
 
         command.Execute();
         Assert.Equal(2, document.PoleAttachments.Count);
+        Guid[] nodeIds = document.ElectricalNodes.Select(node => node.Id).ToArray();
 
         command.Undo();
 

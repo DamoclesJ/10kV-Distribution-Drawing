@@ -49,6 +49,22 @@ public sealed class ElectricalConnectivityGraphBuilder
                 connection.Id));
         }
 
+        foreach (CableTermination termination in document.Devices.OfType<CableTermination>())
+        {
+            Terminal cableSide = document.Terminals.Single(terminal =>
+                terminal.Id == termination.CableSideTerminalId);
+            Terminal overheadSide = document.Terminals.Single(terminal =>
+                terminal.Id == termination.OverheadSideTerminalId);
+            if (cableSide.ElectricalNodeId != overheadSide.ElectricalNodeId)
+            {
+                edges.Add(new ElectricalConnectivityEdge(
+                    cableSide.Id,
+                    overheadSide.Id,
+                    ElectricalConnectivityEdgeType.PassiveDeviceInternal,
+                    termination.Id));
+            }
+        }
+
         foreach (SwitchDevice switchDevice in document.Devices.OfType<SwitchDevice>())
         {
             Guid[] switchTerminalIds = switchDevice.TerminalIds.ToArray();
