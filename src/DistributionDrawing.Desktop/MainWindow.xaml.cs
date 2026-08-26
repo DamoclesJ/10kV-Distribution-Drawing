@@ -21,6 +21,7 @@ using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.CableConnection;
 using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.PoleSwitchCreation;
+using DistributionDrawing.Desktop.PoleAttachmentManagement;
 using DistributionDrawing.Desktop.Demo;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.RingCabinetCreation;
@@ -33,6 +34,7 @@ namespace DistributionDrawing.Desktop;
 
 public partial class MainWindow : Window
 {
+    private sealed record InstalledDeviceItem(Guid AttachmentId, string DisplayText);
     private readonly DrawingSceneRenderer _renderer = new();
     private readonly DrawingSceneBuilder _sceneBuilder = new();
     private readonly CanvasViewportController _viewport = new();
@@ -50,6 +52,7 @@ public partial class MainWindow : Window
     private readonly OverheadLineConnectionController _overheadLineConnection;
     private readonly CableTerminationAttachmentController _cableTerminationAttachment;
     private readonly PoleSwitchAttachmentController _poleSwitchAttachment;
+    private readonly PoleAttachmentManagementController _poleAttachmentManagement;
     private readonly SwitchOperationController _switchOperation;
     private readonly CableConnectionController _cableConnection;
     private readonly CableReconnectController _cableReconnect;
@@ -92,6 +95,8 @@ public partial class MainWindow : Window
             () => _workspace.CurrentSession);
         _poleSwitchAttachment = new PoleSwitchAttachmentController(
             () => _workspace.CurrentSession);
+        _poleAttachmentManagement = new PoleAttachmentManagementController(
+            () => _workspace.CurrentSession);
         _switchOperation = new SwitchOperationController(
             () => _workspace.CurrentSession);
         _drawingTools = new DrawingToolCoordinator(
@@ -108,6 +113,7 @@ public partial class MainWindow : Window
         _cableConnection.ParametersRequired += OnCableParametersRequired;
         _cableTerminationAttachment.SceneChanged += OnDrawingToolVisualChanged;
         _poleSwitchAttachment.SceneChanged += OnDrawingToolVisualChanged;
+        _poleAttachmentManagement.SceneChanged += OnDrawingToolVisualChanged;
         _switchOperation.SceneChanged += OnSwitchOperationSceneChanged;
         _viewport.ViewChanged += OnViewportChanged;
         DrawingSurface.SetViewTransform(_viewport.Transform);
@@ -391,6 +397,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
+        UpdatePoleInstalledDevicesEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
         UpdateAttachmentLayoutEditor();
@@ -669,6 +676,11 @@ public partial class MainWindow : Window
             {
                 DesktopToolMode.CreateRingCabinet => "创建环网柜",
                 DesktopToolMode.CreatePole => "创建杆塔",
+                _ when _overheadLineConnection.IsActive =>
+                    _overheadLineConnection.State ==
+                    OverheadLineToolState.PickingStartTerminal
+                        ? "绘制架空线：请选择起点杆塔或设备端子"
+                        : "绘制架空线：请选择下一杆塔或设备端子，Esc 结束",
                 _ when _cableConnection.IsActive => _cableConnection.State ==
                     CableConnectionToolState.PickingStartTerminal
                         ? "绘制电缆：请选择起点"
@@ -1442,6 +1454,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
+        UpdatePoleInstalledDevicesEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
         UpdateAttachmentLayoutEditor();
@@ -1783,6 +1796,107 @@ public partial class MainWindow : Window
         PoleNumberInput.Text = pole.PoleNumber;
     }
 
+    private void UpdatePoleInstalledDevicesEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        Pole? pole = selection?.Pole;
+        if (pole is null && selection?.PoleAttachment is { } selectedAttachment &&
+            _activeSource?.Document is { } selectedDocument)
+        {
+            pole = selectedDocument.Devices.OfType<Pole>().SingleOrDefault(item =>
+                item.Id == selectedAttachment.PoleId);
+        }
+        if (pole is null)
+        {
+            PoleInstalledDevicesPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        PoleInstalledDevicesPanel.Visibility = Visibility.Visible;
+        if (_activeSource?.Document is not { } document)
+        {
+            PoleInstalledDevicesText.Text = "暂无安装设备";
+            return;
+        }
+
+        var items = document.PoleAttachments
+            .Where(attachment => attachment.PoleId == pole.Id)
+            .Select(attachment =>
+            {
+                Device? device = document.Devices.SingleOrDefault(item =>
+                    item.Id == attachment.AttachedDeviceId);
+                return new InstalledDeviceItem(
+                    attachment.AttachmentId,
+                    device is null
+                        ? attachment.AttachedDeviceId.ToString()
+                        : $"{device.GetType().Name}  {device.DisplayName ?? device.Id.ToString()}");
+            })
+            .ToArray();
+        PoleInstalledDevicesText.Text = items.Length == 0
+            ? "暂无安装设备"
+            : "请选择下方安装设备进行管理";
+        PoleInstalledDevicesList.ItemsSource = items;
+        PoleInstalledDevicesList.SelectedItem =
+            selection?.Reference.Kind == SelectionTargetKind.PoleAttachment
+                ? items.SingleOrDefault(item => item.AttachmentId == selection.Reference.ObjectId)
+                : null;
+    }
+
+    private void OnPoleInstalledDeviceSelected(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (PoleInstalledDevicesList.SelectedItem is not InstalledDeviceItem item ||
+            _selectionManager.Selected?.ObjectId == item.AttachmentId)
+        {
+            return;
+        }
+
+        _selectionManager.Select(new SelectionReference(
+            SelectionTargetKind.PoleAttachment,
+            item.AttachmentId));
+    }
+
+    private void OnRotatePoleAttachmentLeft(object sender, RoutedEventArgs e) =>
+        RotateSelectedPoleAttachment(-1);
+
+    private void OnRotatePoleAttachmentRight(object sender, RoutedEventArgs e) =>
+        RotateSelectedPoleAttachment(1);
+
+    private void RotateSelectedPoleAttachment(int quarterTurns)
+    {
+        if (_selectionManager.Selected is not { Kind: SelectionTargetKind.PoleAttachment } selected)
+        {
+            ShowCommandError("旋转失败", "请先在画布中选择柱上开关附着设备。");
+            return;
+        }
+
+        try
+        {
+            _poleAttachmentManagement.Rotate(selected.ObjectId, quarterTurns);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ShowCommandError("旋转失败", exception.Message);
+        }
+    }
+
+    private void OnRemovePoleAttachment(object sender, RoutedEventArgs e)
+    {
+        if (_selectionManager.Selected is not { Kind: SelectionTargetKind.PoleAttachment } selected)
+        {
+            ShowCommandError("删除失败", "请先在画布中选择要删除的安装设备。");
+            return;
+        }
+
+        try
+        {
+            _poleAttachmentManagement.Remove(selected.ObjectId);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ShowCommandError("删除失败", exception.Message);
+        }
+    }
+
     private void UpdateRingCabinetEditor()
     {
         ResolvedSelection? selection = _selectionResolver.Resolve(
@@ -2080,6 +2194,7 @@ public partial class MainWindow : Window
                     _selectionResolver.Resolve(_selectionManager.Selected)));
             UpdateRingCabinetEditor();
             UpdatePoleNumberEditor();
+            UpdatePoleInstalledDevicesEditor();
             UpdateIntervalEditor();
             UpdateAttachmentOffsetEditor();
             UpdateAttachmentLayoutEditor();
@@ -2135,6 +2250,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
+        UpdatePoleInstalledDevicesEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
         UpdateAttachmentLayoutEditor();

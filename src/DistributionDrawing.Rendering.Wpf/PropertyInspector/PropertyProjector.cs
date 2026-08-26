@@ -380,7 +380,8 @@ public sealed class PropertyProjector
                 "布局",
                 LayoutRow("Offset", "相对偏移", FormatPoint(attachment.Offset)),
                 LayoutRow("Size", "尺寸", $"{attachment.WidthMillimeters:0.###} × {attachment.HeightMillimeters:0.###} mm"),
-                LayoutRow("LabelOffset", "标签偏移", FormatPoint(attachment.LabelOffset))),
+                LayoutRow("LabelOffset", "标签偏移", FormatPoint(attachment.LabelOffset)),
+                LayoutRow("Rotation", "旋转", $"{attachment.RotationQuarterTurns * 90}°")),
             OverheadLineLayout line => Section(
                 "布局",
                 LayoutRow("Start", "起点", FormatPoint(line.Start)),

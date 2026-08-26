@@ -41,8 +41,7 @@ public sealed class PoleSwitchAttachmentController
             pole.Id,
             switchKind,
             PoleProfessionalGeometry.GetDefaultAttachmentOffset(switchKind));
-        session.CommandStack.ExecuteCommand(command);
-        session.RebuildScene();
+        session.CommandStack.ExecuteCommand(command, session.RebuildScene);
         session.SelectionManager.Select(new SelectionReference(
             SelectionTargetKind.PoleAttachment,
             command.Creation.Attachment.AttachmentId,

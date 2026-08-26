@@ -60,7 +60,8 @@ public sealed record ProjectAttachmentLayoutDto(
     ProjectPointDto Offset,
     double WidthMillimeters,
     double HeightMillimeters,
-    ProjectPointDto LabelOffset);
+    ProjectPointDto LabelOffset,
+    int RotationQuarterTurns = 0);
 
 public sealed record ProjectOverheadLineLayoutDto(
     Guid ConnectionId,

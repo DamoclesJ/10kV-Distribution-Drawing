@@ -10,7 +10,8 @@ public sealed record AttachmentLayout
         DocumentPoint offset,
         double? widthMillimeters = null,
         double? heightMillimeters = null,
-        DocumentPoint? labelOffset = null)
+        DocumentPoint? labelOffset = null,
+        int rotationQuarterTurns = 0)
     {
         DrawingMetrics metrics = DrawingMetrics.Default;
         widthMillimeters ??= metrics.PoleAttachment.SymbolWidth;
@@ -20,6 +21,13 @@ public sealed record AttachmentLayout
             throw new ArgumentException(
                 "Attachment ID cannot be empty.",
                 nameof(attachmentId));
+        }
+
+        if (rotationQuarterTurns is < 0 or > 3)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(rotationQuarterTurns),
+                "Attachment rotation must be between zero and three quarter turns.");
         }
 
         if (!double.IsFinite(widthMillimeters.Value) || widthMillimeters <= 0 ||
@@ -43,6 +51,7 @@ public sealed record AttachmentLayout
         WidthMillimeters = widthMillimeters.Value;
         HeightMillimeters = heightMillimeters.Value;
         LabelOffset = labelOffset ?? metrics.PoleAttachment.LabelOffset;
+        RotationQuarterTurns = rotationQuarterTurns;
     }
 
     public Guid AttachmentId { get; }
@@ -55,6 +64,8 @@ public sealed record AttachmentLayout
 
     public DocumentPoint LabelOffset { get; }
 
+    public int RotationQuarterTurns { get; }
+
     public AttachmentLayout MoveTo(DocumentPoint offset)
     {
         return new AttachmentLayout(
@@ -62,7 +73,8 @@ public sealed record AttachmentLayout
             offset,
             WidthMillimeters,
             HeightMillimeters,
-            LabelOffset);
+            LabelOffset,
+            RotationQuarterTurns);
     }
 
     public AttachmentLayout Resize(
@@ -74,7 +86,8 @@ public sealed record AttachmentLayout
             Offset,
             widthMillimeters,
             heightMillimeters,
-            LabelOffset);
+            LabelOffset,
+            RotationQuarterTurns);
     }
 
     public AttachmentLayout WithLabelOffset(DocumentPoint labelOffset)
@@ -84,6 +97,19 @@ public sealed record AttachmentLayout
             Offset,
             WidthMillimeters,
             HeightMillimeters,
-            labelOffset);
+            labelOffset,
+            RotationQuarterTurns);
+    }
+
+    public AttachmentLayout RotateBy(int quarterTurns)
+    {
+        int normalized = ((RotationQuarterTurns + quarterTurns) % 4 + 4) % 4;
+        return new AttachmentLayout(
+            AttachmentId,
+            Offset,
+            WidthMillimeters,
+            HeightMillimeters,
+            LabelOffset,
+            normalized);
     }
 }

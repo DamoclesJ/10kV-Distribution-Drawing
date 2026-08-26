@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
@@ -115,12 +116,19 @@ public sealed class OverheadLineConnectionController
                 picked.TerminalId,
                 startAnchor.Position,
                 picked.Position);
-            session.CommandStack.ExecuteCommand(command);
-            _startTerminalId = null;
-            _previewEnd = null;
-            State = OverheadLineToolState.Idle;
+            session.CommandStack.ExecuteCommand(command, session.RebuildScene);
+            Guid? continuationTerminalId = ResolveContinuationTerminalId(
+                session,
+                picked.TerminalId);
+            _startTerminalId = continuationTerminalId;
+            _previewEnd = continuationTerminalId is Guid nextTerminalId &&
+                BuildAnchors(session).TryGet(nextTerminalId, out TerminalAnchor nextAnchor)
+                    ? nextAnchor.Position
+                    : null;
+            State = continuationTerminalId is null
+                ? OverheadLineToolState.Idle
+                : OverheadLineToolState.PickingEndTerminal;
             LastOutcome = OverheadLineToolOutcome.Committed;
-            session.RebuildScene();
             session.SelectionManager.Select(
                 new SelectionReference(
                     SelectionTargetKind.Connection,
@@ -204,34 +212,80 @@ public sealed class OverheadLineConnectionController
         }
 
         var terminals = session.PersistenceSession.Domain.Terminals.ToDictionary(item => item.Id);
-        TerminalAnchor[] candidates = anchors.Anchors
+        var nearby = anchors.Anchors
             .Where(anchor => terminals.ContainsKey(anchor.TerminalId))
-            .Where(anchor => Distance(anchor.Position, pointer) <= toleranceMillimeters)
-            .OrderBy(anchor => Distance(anchor.Position, pointer))
-            .ThenBy(anchor => anchor.TerminalId)
+            .Select(anchor => new
+            {
+                Anchor = anchor,
+                Terminal = terminals[anchor.TerminalId],
+                Distance = Distance(anchor.Position, pointer)
+            })
+            .Where(candidate => candidate.Distance <= toleranceMillimeters)
             .ToArray();
-        if (candidates.Length == 0)
+        if (nearby.Length == 0)
         {
             throw new InvalidOperationException(
                 "未找到架空线端子，请点击有效的架空线连接点。");
         }
 
-        if (candidates.Length > 1 &&
-            candidates[0].Position == candidates[1].Position)
-        {
-            throw new InvalidOperationException(
-                "Multiple available terminals overlap at the selected position.");
-        }
-
-        TerminalAnchor selected = candidates[0];
-        Terminal terminal = terminals[selected.TerminalId];
-        if (!IsAvailable(session, terminal))
+        var candidates = nearby
+            .Where(candidate => IsAvailable(session, candidate.Terminal))
+            .OrderBy(candidate => candidate.Distance)
+            .ThenBy(candidate => EndpointPriority(session, candidate.Terminal))
+            .ThenBy(candidate => candidate.Anchor.TerminalId)
+            .ToArray();
+        if (candidates.Length == 0)
         {
             throw new InvalidOperationException(
                 "所选端子不能连接架空线，或已被其他连接占用。");
         }
 
-        return selected;
+        if (candidates.Length > 1 &&
+            candidates[0].Anchor.Position == candidates[1].Anchor.Position &&
+            EndpointPriority(session, candidates[0].Terminal) ==
+            EndpointPriority(session, candidates[1].Terminal))
+        {
+            throw new InvalidOperationException(
+                "多个可用架空线端子重叠，无法确定连接目标。");
+        }
+
+        return candidates[0].Anchor;
+    }
+
+    private static int EndpointPriority(ProjectRuntimeSession session, Terminal terminal)
+    {
+        if (terminal.OwnerType != TopologyOwnerType.Device)
+        {
+            return 0;
+        }
+
+        Device? owner = session.PersistenceSession.Domain.Devices
+            .SingleOrDefault(device => device.Id == terminal.OwnerId);
+        return owner is Pole ? 1 : 0;
+    }
+
+    private static Guid? ResolveContinuationTerminalId(
+        ProjectRuntimeSession session,
+        Guid reachedTerminalId)
+    {
+        Terminal reachedTerminal = session.PersistenceSession.Domain.Terminals
+            .Single(terminal => terminal.Id == reachedTerminalId);
+        if (reachedTerminal.AllowsMultipleConnections)
+        {
+            return reachedTerminal.Id;
+        }
+
+        if (reachedTerminal.OwnerType != TopologyOwnerType.Device)
+        {
+            return null;
+        }
+
+        SwitchDevice? switchDevice = session.PersistenceSession.Domain.Devices
+            .OfType<SwitchDevice>()
+            .SingleOrDefault(device =>
+                device.InstallationType == SwitchInstallationType.Pole &&
+                device.Id == reachedTerminal.OwnerId);
+        return switchDevice?.TerminalIds.Single(id => id != reachedTerminalId);
     }
 
     private static bool IsAvailable(ProjectRuntimeSession session, Terminal terminal)

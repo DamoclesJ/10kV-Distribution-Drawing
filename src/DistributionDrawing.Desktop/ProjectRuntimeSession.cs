@@ -202,7 +202,8 @@ internal static class ProjectLayoutRuntimeMapper
                 Point(layout.Position),
                 layout.WidthMillimeters,
                 layout.HeightMillimeters,
-                Point(layout.LabelOffset))).ToArray();
+                Point(layout.LabelOffset),
+                layout.RotationQuarterTurns)).ToArray();
         var attachments = runtime.DrawingLayout.Attachments.Values.Select(layout =>
             new ProjectAttachmentLayoutDto(
                 layout.AttachmentId,
@@ -272,7 +273,8 @@ internal static class ProjectLayoutRuntimeMapper
                 Point(dto.Position),
                 dto.WidthMillimeters,
                 dto.HeightMillimeters,
-                Point(dto.LabelOffset)));
+                Point(dto.LabelOffset),
+                dto.RotationQuarterTurns));
         }
 
         foreach (ProjectAttachmentLayoutDto dto in snapshot.Attachments)

@@ -536,6 +536,37 @@ public sealed class OrthogonalRoutingTests
                 obstacle.Expand(DrawingMetrics.Default.Routing.ObstacleClearance).Bounds)));
     }
 
+    [Fact]
+    public void Route_AllowsMultipleTurnsWhileLeavingEndpointDeviceObstacle()
+    {
+        ConnectionRouteRequest request = CreateRequest(
+            "00000000-0000-0000-0000-000000000019",
+            new DocumentPoint(0, 0),
+            TerminalAnchorDirection.Right,
+            new DocumentPoint(100, 50),
+            TerminalAnchorDirection.Left);
+        var endpointObstacle = new RoutingObstacle(
+            Guid.Parse("00000000-0000-0000-0000-000000000085"),
+            RoutingObstacleKind.Pole,
+            new DocumentRect(-20, -20, 60, 100));
+        var blockingObstacle = new RoutingObstacle(
+            Guid.Parse("00000000-0000-0000-0000-000000000086"),
+            RoutingObstacleKind.PoleAttachment,
+            new DocumentRect(30, -10, 40, 30));
+
+        OrthogonalRoute route = new OrthogonalRouter().Route(
+            request,
+            [endpointObstacle, blockingObstacle]);
+
+        Assert.Equal(request.Start.Position, route.Points[0]);
+        Assert.Equal(request.End.Position, route.Points[^1]);
+        Assert.DoesNotContain(route.Segments, segment =>
+            IntersectsInterior(
+                segment,
+                blockingObstacle.Expand(
+                    DrawingMetrics.Default.Routing.ObstacleClearance).Bounds));
+    }
+
     private static bool IntersectsInterior(
         OrthogonalRouteSegment segment,
         DocumentRect bounds)

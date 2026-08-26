@@ -351,7 +351,11 @@ internal static class ProjectDomainMapper
                     terminalDto.TerminalId,
                     "ownerType") != TopologyOwnerType.IntermediateTerminal)
             {
-                document.AddTerminal(RestoreTerminal(terminalDto));
+                bool poleSwitchTerminal = document.Devices
+                    .OfType<SwitchDevice>()
+                    .Any(device => device.InstallationType == SwitchInstallationType.Pole &&
+                        device.OwnsTerminal(terminalDto.TerminalId));
+                document.AddTerminal(RestoreTerminal(terminalDto, poleSwitchTerminal));
             }
         }
 
@@ -674,7 +678,9 @@ internal static class ProjectDomainMapper
                 : Parse<ElectricalState>(dto.ElectricalState, dto.NodeId, "electricalState"));
     }
 
-    private static Terminal RestoreTerminal(ProjectTerminalDto dto)
+    private static Terminal RestoreTerminal(
+        ProjectTerminalDto dto,
+        bool forceMultipleConnections = false)
     {
         ConnectionType[] allowedConnectionTypes = (dto.AllowedConnectionTypes ?? [])
             .Select(value => Parse<ConnectionType>(value, dto.TerminalId, "allowedConnectionType"))
@@ -687,7 +693,7 @@ internal static class ProjectDomainMapper
             dto.Role,
             dto.VoltageLevel,
             dto.IsExternal,
-            dto.AllowsMultipleConnections,
+            dto.AllowsMultipleConnections || forceMultipleConnections,
             dto.ElectricalNodeId,
             allowedConnectionTypes);
     }

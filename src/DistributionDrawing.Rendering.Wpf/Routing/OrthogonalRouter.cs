@@ -517,8 +517,8 @@ public sealed class OrthogonalRouter
             {
                 bool sourceObstacle = obstacle.Contains(route.Points[0]);
                 bool targetObstacle = obstacle.Contains(route.Points[^1]);
-                if (sourceObstacle && segment.Index <= 1 ||
-                    targetObstacle && segment.Index >= route.Segments.Count - 2)
+                if (sourceObstacle && obstacle.Contains(segment.Start) ||
+                    targetObstacle && obstacle.Contains(segment.End))
                 {
                     continue;
                 }

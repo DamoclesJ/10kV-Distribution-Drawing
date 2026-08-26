@@ -109,15 +109,23 @@ public sealed class SymbolLibrary
             _metrics);
         DocumentPoint origin = kind == SymbolKind.CableTermination
             ? layoutOrigin
-            : new DocumentPoint(
+            : layout.RotationQuarterTurns == 0
+            ? new DocumentPoint(
                 geometry.LogicalBounds.XMillimeters,
-                geometry.LogicalBounds.YMillimeters);
+                geometry.LogicalBounds.YMillimeters)
+            : new DocumentPoint(
+                layoutOrigin.XMillimeters,
+                layoutOrigin.YMillimeters);
         double symbolWidth = kind == SymbolKind.CableTermination
             ? layout.WidthMillimeters
-            : geometry.LogicalBounds.WidthMillimeters;
+            : layout.RotationQuarterTurns == 0
+            ? geometry.LogicalBounds.WidthMillimeters
+            : layout.WidthMillimeters;
         double symbolHeight = kind == SymbolKind.CableTermination
             ? layout.HeightMillimeters
-            : geometry.LogicalBounds.HeightMillimeters;
+            : layout.RotationQuarterTurns == 0
+            ? geometry.LogicalBounds.HeightMillimeters
+            : layout.HeightMillimeters;
         DocumentPoint attachmentConnector = kind is SymbolKind.CableTermination or SymbolKind.DropoutFuse
             ? geometry.SecondTerminal
             : geometry.FirstTerminal;
@@ -148,8 +156,7 @@ public sealed class SymbolLibrary
             return elements;
         }
 
-        elements.AddRange(
-            Create(
+        IReadOnlyList<SceneElement> symbolElements = Create(
                 kind,
                 new SymbolRenderContext(
                     origin,
@@ -161,9 +168,96 @@ public sealed class SymbolLibrary
                     label: ResolveAttachmentLabel(attachedDevice),
                     state: visualState,
                     fill: Colors.White,
-                    includeLabel: includeLabel)));
+                    includeLabel: includeLabel));
+
+        elements.AddRange(kind == SymbolKind.CableTermination
+            ? symbolElements
+            : RotateElements(symbolElements, new DocumentPoint(
+                layoutOrigin.XMillimeters + layout.WidthMillimeters / 2,
+                layoutOrigin.YMillimeters + layout.HeightMillimeters / 2),
+                layout.RotationQuarterTurns));
 
         return elements;
+    }
+
+    private static IReadOnlyList<SceneElement> RotateElements(
+        IReadOnlyList<SceneElement> elements,
+        DocumentPoint center,
+        int quarterTurns)
+    {
+        if (quarterTurns == 0)
+        {
+            return elements;
+        }
+
+        return elements.Select(element => element switch
+        {
+            SceneLine line => line with
+            {
+                Start = Rotate(line.Start, center, quarterTurns),
+                End = Rotate(line.End, center, quarterTurns)
+            },
+            SceneRectangle rectangle => rectangle with
+            {
+                Bounds = RotateBounds(rectangle.Bounds, center, quarterTurns)
+            },
+            SceneEllipse ellipse => new SceneEllipse(
+                RotateBounds(ellipse.Bounds, center, quarterTurns),
+                ellipse.Stroke,
+                ellipse.ThicknessMillimeters,
+                ellipse.Fill,
+                ellipse.StrokeStyle)
+            {
+                TargetKind = ellipse.TargetKind,
+                TargetId = ellipse.TargetId
+            },
+            ScenePolyline polyline => new ScenePolyline(
+                polyline.Points.Select(point => Rotate(point, center, quarterTurns)),
+                polyline.IsClosed,
+                polyline.Stroke,
+                polyline.ThicknessMillimeters,
+                polyline.Fill,
+                polyline.StrokeStyle)
+            {
+                TargetKind = polyline.TargetKind,
+                TargetId = polyline.TargetId
+            },
+            SceneText text => text with
+            {
+                Origin = Rotate(text.Origin, center, quarterTurns)
+            },
+            SceneLogicalBounds bounds => new SceneLogicalBounds(
+                RotateBounds(bounds.Bounds, center, quarterTurns)),
+            _ => element
+        }).ToArray();
+    }
+
+    private static DocumentPoint Rotate(DocumentPoint point, DocumentPoint center, int quarterTurns)
+    {
+        double x = point.XMillimeters - center.XMillimeters;
+        double y = point.YMillimeters - center.YMillimeters;
+        for (int index = 0; index < quarterTurns; index++)
+        {
+            (x, y) = (-y, x);
+        }
+
+        return new DocumentPoint(center.XMillimeters + x, center.YMillimeters + y);
+    }
+
+    private static DocumentRect RotateBounds(DocumentRect bounds, DocumentPoint center, int quarterTurns)
+    {
+        DocumentPoint[] corners =
+        [
+            Rotate(new DocumentPoint(bounds.XMillimeters, bounds.YMillimeters), center, quarterTurns),
+            Rotate(new DocumentPoint(bounds.XMillimeters + bounds.WidthMillimeters, bounds.YMillimeters), center, quarterTurns),
+            Rotate(new DocumentPoint(bounds.XMillimeters + bounds.WidthMillimeters, bounds.YMillimeters + bounds.HeightMillimeters), center, quarterTurns),
+            Rotate(new DocumentPoint(bounds.XMillimeters, bounds.YMillimeters + bounds.HeightMillimeters), center, quarterTurns)
+        ];
+        return new DocumentRect(
+            corners.Min(point => point.XMillimeters),
+            corners.Min(point => point.YMillimeters),
+            corners.Max(point => point.XMillimeters) - corners.Min(point => point.XMillimeters),
+            corners.Max(point => point.YMillimeters) - corners.Min(point => point.YMillimeters));
     }
 
     public IReadOnlyList<SceneElement> CreateOverheadLine(

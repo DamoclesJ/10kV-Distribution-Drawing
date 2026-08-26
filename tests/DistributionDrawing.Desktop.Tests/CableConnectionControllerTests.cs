@@ -143,6 +143,284 @@ public sealed class CableConnectionControllerTests
     }
 
     [Fact]
+    public void OverheadLine_ConnectsEmptyPolesAndAllowsTJunctionAtPoleAnchor()
+    {
+        using TestProject project = CreateProject();
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand junction = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(300, 180));
+        AddPoleCommand firstBranch = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(440, 100));
+        AddPoleCommand secondBranch = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(440, 260));
+        junction.Execute();
+        firstBranch.Execute();
+        secondBranch.Execute();
+        project.Session.RebuildScene();
+        Guid junctionTerminalId = Assert.Single(junction.Pole.OverheadAnchorTerminalIds);
+        Guid firstTerminalId = Assert.Single(firstBranch.Pole.OverheadAnchorTerminalIds);
+        Guid secondTerminalId = Assert.Single(secondBranch.Pole.OverheadAnchorTerminalIds);
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        var controller = new OverheadLineConnectionController(() => project.Session);
+
+        controller.Begin();
+        controller.Pick(anchors.PositionOf(junctionTerminalId), 8);
+        controller.Pick(anchors.PositionOf(firstTerminalId), 8);
+        controller.Begin();
+        controller.Pick(anchors.PositionOf(junctionTerminalId), 8);
+        controller.Pick(anchors.PositionOf(secondTerminalId), 8);
+
+        Assert.Equal(2, project.Document.OverheadLines.Count);
+        Assert.Equal(2, project.Document.Connections.Count(connection =>
+            connection.Type == ConnectionType.OverheadLine &&
+            connection.UsesTerminal(junctionTerminalId)));
+    }
+
+    [Fact]
+    public void OverheadLine_ContinuousClicksConnectEmptyPoleChainWithoutRestart()
+    {
+        using TestProject project = CreateProject();
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand first = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(300, 180));
+        AddPoleCommand second = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(440, 180));
+        AddPoleCommand third = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(580, 180));
+        first.Execute();
+        second.Execute();
+        third.Execute();
+        project.Session.RebuildScene();
+        Guid firstTerminalId = Assert.Single(first.Pole.OverheadAnchorTerminalIds);
+        Guid secondTerminalId = Assert.Single(second.Pole.OverheadAnchorTerminalIds);
+        Guid thirdTerminalId = Assert.Single(third.Pole.OverheadAnchorTerminalIds);
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        var controller = new OverheadLineConnectionController(() => project.Session);
+
+        controller.Begin();
+        controller.Pick(anchors.PositionOf(firstTerminalId), 8);
+        controller.Pick(anchors.PositionOf(secondTerminalId), 8);
+
+        Assert.Equal(OverheadLineToolState.PickingEndTerminal, controller.State);
+
+        controller.Pick(anchors.PositionOf(thirdTerminalId), 8);
+
+        Assert.Equal(2, project.Document.OverheadLines.Count);
+        Assert.Equal(2, project.Document.Connections.Count(connection =>
+            connection.Type == ConnectionType.OverheadLine &&
+            connection.UsesTerminal(secondTerminalId)));
+        Assert.Equal(OverheadLineToolState.PickingEndTerminal, controller.State);
+    }
+
+    [Fact]
+    public void OverheadLine_ConnectsIsolationSwitchPoleToCircuitBreakerPole()
+    {
+        using TestProject project = CreateProject();
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand isolationPole = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(300, 180));
+        AddPoleCommand breakerPole = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(500, 180));
+        isolationPole.Execute();
+        breakerPole.Execute();
+        AddPoleSwitchAttachmentCommand isolation = factory.CreateAddPoleSwitchAttachment(
+            project.Document,
+            project.Session.Layout,
+            isolationPole.Pole.Id,
+            SwitchKind.IsolationSwitch,
+            PoleProfessionalGeometry.GetDefaultAttachmentOffset(
+                SwitchKind.IsolationSwitch));
+        AddPoleSwitchAttachmentCommand breaker = factory.CreateAddPoleSwitchAttachment(
+            project.Document,
+            project.Session.Layout,
+            breakerPole.Pole.Id,
+            SwitchKind.CircuitBreaker,
+            PoleProfessionalGeometry.GetDefaultAttachmentOffset(
+                SwitchKind.CircuitBreaker));
+        isolation.Execute();
+        breaker.Execute();
+        project.Session.RebuildScene();
+        Guid startTerminalId = isolation.Creation.SwitchDevice.TerminalIds[1];
+        Guid endTerminalId = breaker.Creation.SwitchDevice.TerminalIds[0];
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        Assert.False(anchors.TryGet(
+            Assert.Single(isolationPole.Pole.OverheadAnchorTerminalIds),
+            out _));
+        Assert.False(anchors.TryGet(
+            Assert.Single(breakerPole.Pole.OverheadAnchorTerminalIds),
+            out _));
+        var controller = new OverheadLineConnectionController(() => project.Session);
+
+        controller.Begin();
+        controller.Pick(anchors.PositionOf(startTerminalId), 8);
+        controller.Pick(anchors.PositionOf(endTerminalId), 8);
+
+        Connection connection = Assert.Single(
+            project.Document.Connections,
+            candidate => candidate.Type == ConnectionType.OverheadLine);
+        Assert.Equal(startTerminalId, connection.StartTerminalId);
+        Assert.Equal(endTerminalId, connection.EndTerminalId);
+        Assert.Single(project.Document.OverheadLines);
+        Assert.Equal(OverheadLineToolState.PickingEndTerminal, controller.State);
+    }
+
+    [Fact]
+    public void AddPoleSwitch_AfterTwoLinesMigratesEndpointsAndPreservesConnectionIds()
+    {
+        using TestProject project = CreateProject();
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand left = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(280, 180));
+        AddPoleCommand middle = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(420, 180));
+        AddPoleCommand right = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(560, 180));
+        left.Execute();
+        middle.Execute();
+        right.Execute();
+        project.Session.RebuildScene();
+        Guid leftTerminalId = Assert.Single(left.Pole.OverheadAnchorTerminalIds);
+        Guid middleTerminalId = Assert.Single(middle.Pole.OverheadAnchorTerminalIds);
+        Guid rightTerminalId = Assert.Single(right.Pole.OverheadAnchorTerminalIds);
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        var overhead = new OverheadLineConnectionController(() => project.Session);
+        overhead.Begin();
+        overhead.Pick(anchors.PositionOf(leftTerminalId), 8);
+        overhead.Pick(anchors.PositionOf(middleTerminalId), 8);
+        overhead.Pick(anchors.PositionOf(rightTerminalId), 8);
+        overhead.Cancel();
+        Guid[] connectionIds = project.Document.Connections
+            .Where(connection => connection.Type == ConnectionType.OverheadLine &&
+                connection.UsesTerminal(middleTerminalId))
+            .Select(connection => connection.Id)
+            .Order()
+            .ToArray();
+        project.Session.SelectionManager.Select(
+            new SelectionReference(SelectionTargetKind.Device, middle.Pole.Id));
+        var poleSwitch = new PoleSwitchAttachmentController(() => project.Session);
+
+        poleSwitch.AddToSelectedPole(SwitchKind.IsolationSwitch);
+
+        SwitchDevice switchDevice = project.Document.Devices
+            .OfType<SwitchDevice>()
+            .Single(device => device.InstallationType == SwitchInstallationType.Pole &&
+                project.Document.PoleAttachments.Any(attachment =>
+                    attachment.PoleId == middle.Pole.Id &&
+                    attachment.AttachedDeviceId == device.Id));
+        Assert.Equal(
+            connectionIds,
+            project.Document.Connections
+                .Where(connection => connectionIds.Contains(connection.Id))
+                .Select(connection => connection.Id)
+                .Order()
+                .ToArray());
+        Assert.DoesNotContain(
+            project.Document.Connections,
+            connection => connection.UsesTerminal(middleTerminalId));
+        Assert.All(
+            switchDevice.TerminalIds,
+            terminalId => Assert.Single(project.Document.Connections,
+                connection => connection.UsesTerminal(terminalId)));
+
+        Assert.True(project.Session.CommandStack.Undo());
+        Assert.Equal(2, project.Document.Connections.Count(connection =>
+            connection.UsesTerminal(middleTerminalId)));
+        Assert.DoesNotContain(
+            project.Document.Devices,
+            device => device.Id == switchDevice.Id);
+
+        Assert.True(project.Session.CommandStack.Redo());
+        Assert.DoesNotContain(
+            project.Document.Connections,
+            connection => connection.UsesTerminal(middleTerminalId));
+        Assert.Contains(
+            project.Document.Devices,
+            device => device.Id == switchDevice.Id);
+    }
+
+    [Fact]
+    public void AddPoleSwitch_AfterTJunctionKeepsBranchesAtPoleJunction()
+    {
+        using TestProject project = CreateProject();
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand junction = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(360, 180));
+        AddPoleCommand first = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(500, 80));
+        AddPoleCommand second = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(500, 180));
+        AddPoleCommand third = factory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(500, 280));
+        junction.Execute();
+        first.Execute();
+        second.Execute();
+        third.Execute();
+        project.Session.RebuildScene();
+        Guid junctionTerminalId = Assert.Single(junction.Pole.OverheadAnchorTerminalIds);
+        TerminalAnchorIndex anchors = CreateAnchors(project);
+        var overhead = new OverheadLineConnectionController(() => project.Session);
+        foreach (Pole branch in new[] { first.Pole, second.Pole, third.Pole })
+        {
+            overhead.Begin();
+            overhead.Pick(anchors.PositionOf(junctionTerminalId), 8);
+            overhead.Pick(
+                anchors.PositionOf(Assert.Single(branch.OverheadAnchorTerminalIds)),
+                8);
+        }
+
+        project.Session.SelectionManager.Select(
+            new SelectionReference(SelectionTargetKind.Device, junction.Pole.Id));
+        var poleSwitch = new PoleSwitchAttachmentController(() => project.Session);
+        int historyCount = project.Session.CommandStack.History.Count;
+        Guid[] connectionIds = project.Document.Connections
+            .Select(connection => connection.Id)
+            .Order()
+            .ToArray();
+
+        poleSwitch.AddToSelectedPole(SwitchKind.CircuitBreaker);
+
+        Assert.Equal(historyCount + 1, project.Session.CommandStack.History.Count);
+        Assert.Equal(
+            connectionIds,
+            project.Document.Connections.Select(connection => connection.Id).Order().ToArray());
+        Assert.Equal(3, project.Document.Connections.Count(connection =>
+            connection.UsesTerminal(junctionTerminalId)));
+        Assert.Contains(
+            project.Document.PoleAttachments,
+            attachment => attachment.PoleId == junction.Pole.Id);
+    }
+
+    [Fact]
     public void PickAndComplete_CreatesCableConnectionAndSelectsCable()
     {
         using TestProject project = CreateProject();

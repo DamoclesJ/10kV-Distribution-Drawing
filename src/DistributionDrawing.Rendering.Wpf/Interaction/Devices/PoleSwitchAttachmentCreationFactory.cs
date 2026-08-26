@@ -44,6 +44,6 @@ public sealed class PoleSwitchAttachmentCreationFactory
         role,
         "10kV",
         isExternal: true,
-        allowsMultipleConnections: false,
+        allowsMultipleConnections: true,
         allowedConnectionTypes: [ConnectionType.OverheadLine]);
 }

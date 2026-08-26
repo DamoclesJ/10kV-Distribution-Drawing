@@ -193,6 +193,23 @@
             <Button Content="应用杆号"
                     Click="OnApplyPoleNumber" />
           </StackPanel>
+          <StackPanel x:Name="PoleInstalledDevicesPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="#555" Text="杆塔安装设备" />
+            <TextBlock x:Name="PoleInstalledDevicesText"
+                       Margin="0,4,0,4"
+                       Foreground="#666"
+                       TextWrapping="Wrap" />
+            <ListBox x:Name="PoleInstalledDevicesList"
+                     Margin="0,2,0,4"
+                     DisplayMemberPath="DisplayText"
+                     SelectionChanged="OnPoleInstalledDeviceSelected" />
+            <Button Content="左转 90°" Click="OnRotatePoleAttachmentLeft" />
+            <Button Margin="0,2,0,0" Content="右转 90°" Click="OnRotatePoleAttachmentRight" />
+            <Button Margin="0,2,0,0" Content="删除选中安装设备" Click="OnRemovePoleAttachment" />
+          </StackPanel>
           <StackPanel x:Name="CablePropertyEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"

@@ -125,14 +125,14 @@ public static class PoleProfessionalGeometry
                 effectiveMetrics.PoleAttachment.SymbolHeight);
             double scaledX = centerX - width / 2;
             double scaledY = centerY - height / 2;
-            return new PoleAttachmentGeometry(
-                new DocumentPoint(centerX, scaledY),
-                new DocumentPoint(centerX, scaledY + height),
-                new DocumentRect(
-                    scaledX,
-                    scaledY,
-                    width,
-                    height));
+            return RotateSwitchGeometry(
+                new PoleAttachmentGeometry(
+                    new DocumentPoint(centerX, scaledY),
+                    new DocumentPoint(centerX, scaledY + height),
+                    new DocumentRect(scaledX, scaledY, width, height)),
+                centerX,
+                centerY,
+                attachmentLayout.RotationQuarterTurns);
         }
 
         double effectiveWidth = Math.Max(
@@ -143,14 +143,62 @@ public static class PoleProfessionalGeometry
             effectiveMetrics.PoleAttachment.SymbolHeight);
         double effectiveX = centerX - effectiveWidth / 2;
         double effectiveY = centerY - effectiveHeight / 2;
-        return new PoleAttachmentGeometry(
-            new DocumentPoint(effectiveX, centerY),
-            new DocumentPoint(effectiveX + effectiveWidth, centerY),
-            new DocumentRect(
-                effectiveX,
-                effectiveY,
-                effectiveWidth,
-                effectiveHeight));
+        return RotateSwitchGeometry(
+            new PoleAttachmentGeometry(
+                new DocumentPoint(effectiveX, centerY),
+                new DocumentPoint(effectiveX + effectiveWidth, centerY),
+                new DocumentRect(effectiveX, effectiveY, effectiveWidth, effectiveHeight)),
+            centerX,
+            centerY,
+            attachmentLayout.RotationQuarterTurns);
+    }
+
+    private static PoleAttachmentGeometry RotateSwitchGeometry(
+        PoleAttachmentGeometry geometry,
+        double centerX,
+        double centerY,
+        int quarterTurns)
+    {
+        if (quarterTurns == 0)
+        {
+            return geometry;
+        }
+
+        DocumentPoint first = Rotate(geometry.FirstTerminal, centerX, centerY, quarterTurns);
+        DocumentPoint second = Rotate(geometry.SecondTerminal, centerX, centerY, quarterTurns);
+        DocumentPoint[] corners =
+        [
+            Rotate(new DocumentPoint(geometry.LogicalBounds.XMillimeters, geometry.LogicalBounds.YMillimeters), centerX, centerY, quarterTurns),
+            Rotate(new DocumentPoint(geometry.LogicalBounds.XMillimeters + geometry.LogicalBounds.WidthMillimeters, geometry.LogicalBounds.YMillimeters), centerX, centerY, quarterTurns),
+            Rotate(new DocumentPoint(geometry.LogicalBounds.XMillimeters + geometry.LogicalBounds.WidthMillimeters, geometry.LogicalBounds.YMillimeters + geometry.LogicalBounds.HeightMillimeters), centerX, centerY, quarterTurns),
+            Rotate(new DocumentPoint(geometry.LogicalBounds.XMillimeters, geometry.LogicalBounds.YMillimeters + geometry.LogicalBounds.HeightMillimeters), centerX, centerY, quarterTurns)
+        ];
+        double minX = corners.Min(point => point.XMillimeters);
+        double minY = corners.Min(point => point.YMillimeters);
+        double maxX = corners.Max(point => point.XMillimeters);
+        double maxY = corners.Max(point => point.YMillimeters);
+        return geometry with
+        {
+            FirstTerminal = first,
+            SecondTerminal = second,
+            LogicalBounds = new DocumentRect(minX, minY, maxX - minX, maxY - minY)
+        };
+    }
+
+    private static DocumentPoint Rotate(
+        DocumentPoint point,
+        double centerX,
+        double centerY,
+        int quarterTurns)
+    {
+        double x = point.XMillimeters - centerX;
+        double y = point.YMillimeters - centerY;
+        for (int index = 0; index < quarterTurns; index++)
+        {
+            (x, y) = (-y, x);
+        }
+
+        return new DocumentPoint(centerX + x, centerY + y);
     }
 
     public static DocumentPoint GetCableTerminationOffset(

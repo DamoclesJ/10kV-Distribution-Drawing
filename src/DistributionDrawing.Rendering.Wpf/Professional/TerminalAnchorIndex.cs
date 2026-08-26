@@ -41,7 +41,6 @@ public sealed class TerminalAnchorIndex
         ArgumentNullException.ThrowIfNull(ringCabinetLayouts);
 
         var anchors = new Dictionary<Guid, TerminalAnchor>();
-
         foreach (Pole pole in document.Devices.OfType<Pole>())
         {
             if (!drawingLayout.Poles.TryGetValue(pole.Id, out PoleLayout poleLayout))
@@ -97,17 +96,19 @@ public sealed class TerminalAnchorIndex
             }
             else if (attachedDevice is SwitchDevice switchDevice)
             {
-                bool vertical = symbolKind == SymbolKind.DropoutFuse;
+                TerminalAnchorDirection firstDirection = ResolveDirection(
+                    geometry.SecondTerminal,
+                    geometry.FirstTerminal);
                 Set(
                     anchors,
                     switchDevice.TerminalIds[0],
                     geometry.FirstTerminal,
-                    vertical ? TerminalAnchorDirection.Up : TerminalAnchorDirection.Left);
+                    firstDirection);
                 Set(
                     anchors,
                     switchDevice.TerminalIds[1],
                     geometry.SecondTerminal,
-                    vertical ? TerminalAnchorDirection.Down : TerminalAnchorDirection.Right);
+                    Opposite(firstDirection));
             }
         }
 
