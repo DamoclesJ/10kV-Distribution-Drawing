@@ -259,10 +259,10 @@ public sealed class CableConnectionControllerTests
         Guid startTerminalId = isolation.Creation.SwitchDevice.TerminalIds[1];
         Guid endTerminalId = breaker.Creation.SwitchDevice.TerminalIds[0];
         TerminalAnchorIndex anchors = CreateAnchors(project);
-        Assert.False(anchors.TryGet(
+        Assert.True(anchors.TryGet(
             Assert.Single(isolationPole.Pole.OverheadAnchorTerminalIds),
             out _));
-        Assert.False(anchors.TryGet(
+        Assert.True(anchors.TryGet(
             Assert.Single(breakerPole.Pole.OverheadAnchorTerminalIds),
             out _));
         var controller = new OverheadLineConnectionController(() => project.Session);

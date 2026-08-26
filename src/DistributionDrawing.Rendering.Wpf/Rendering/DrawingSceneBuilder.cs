@@ -368,7 +368,8 @@ public sealed class DrawingSceneBuilder
             poleAttachments,
             layout,
             ringCabinetLayouts,
-            jointInputs.Select(input => input.Layout));
+            jointInputs.Select(input => input.Layout),
+            connectionById?.Values);
         IReadOnlyList<OrthogonalRoute> routes = _routePlanner.Plan(routeRequests, obstacles);
         IReadOnlyList<RouteIntersection> intersections = _crossingDetector.Detect(routes);
         var cableInputs = new List<(CableSegment CableSegment, CableLayout Layout)>();

@@ -22,13 +22,24 @@ public sealed class RoutingObstacleBuilder
         IEnumerable<PoleAttachment> attachments,
         DrawingLayout drawingLayout,
         IReadOnlyDictionary<Guid, RingCabinetLayout>? ringCabinetLayouts = null,
-        IEnumerable<JointLayout>? jointLayouts = null)
+        IEnumerable<JointLayout>? jointLayouts = null,
+        IEnumerable<Connection>? connections = null)
     {
         ArgumentNullException.ThrowIfNull(devices);
         ArgumentNullException.ThrowIfNull(attachments);
         ArgumentNullException.ThrowIfNull(drawingLayout);
 
         Device[] deviceArray = devices.ToArray();
+        HashSet<Guid> branchedPoleIds = (connections ?? [])
+            .Where(connection => connection.Type == ConnectionType.OverheadLine)
+            .SelectMany(connection => new[] { connection.StartTerminalId, connection.EndTerminalId })
+            .Where(terminalId => deviceArray.OfType<Pole>().Any(pole =>
+                pole.OverheadAnchorTerminalIds.Contains(terminalId)))
+            .GroupBy(terminalId => deviceArray.OfType<Pole>()
+                .Single(pole => pole.OverheadAnchorTerminalIds.Contains(terminalId)).Id)
+            .Where(group => group.Count() > 2)
+            .Select(group => group.Key)
+            .ToHashSet();
         Dictionary<Guid, Device> devicesById = deviceArray.ToDictionary(device => device.Id);
         var obstacles = new List<RoutingObstacle>();
 
@@ -98,6 +109,11 @@ public sealed class RoutingObstacleBuilder
                     out AttachmentLayout? attachmentLayout) ||
                 !drawingLayout.Poles.TryGetValue(attachment.PoleId, out PoleLayout? poleLayout) ||
                 !devicesById.TryGetValue(attachment.AttachedDeviceId, out Device? device))
+            {
+                continue;
+            }
+
+            if (branchedPoleIds.Contains(attachment.PoleId) && device is SwitchDevice)
             {
                 continue;
             }
