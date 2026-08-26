@@ -202,15 +202,15 @@ internal static class ProjectLayoutRuntimeMapper
                 Point(layout.Position),
                 layout.WidthMillimeters,
                 layout.HeightMillimeters,
-                Point(layout.LabelOffset),
-                layout.RotationQuarterTurns)).ToArray();
+                Point(layout.LabelOffset))).ToArray();
         var attachments = runtime.DrawingLayout.Attachments.Values.Select(layout =>
             new ProjectAttachmentLayoutDto(
                 layout.AttachmentId,
                 Point(layout.Offset),
                 layout.WidthMillimeters,
                 layout.HeightMillimeters,
-                Point(layout.LabelOffset))).ToArray();
+                Point(layout.LabelOffset),
+                layout.RotationQuarterTurns)).ToArray();
         TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
             domain,
             runtime.DrawingLayout,
@@ -273,8 +273,7 @@ internal static class ProjectLayoutRuntimeMapper
                 Point(dto.Position),
                 dto.WidthMillimeters,
                 dto.HeightMillimeters,
-                Point(dto.LabelOffset),
-                dto.RotationQuarterTurns));
+                Point(dto.LabelOffset)));
         }
 
         foreach (ProjectAttachmentLayoutDto dto in snapshot.Attachments)
@@ -284,7 +283,8 @@ internal static class ProjectLayoutRuntimeMapper
                 Point(dto.Offset),
                 dto.WidthMillimeters,
                 dto.HeightMillimeters,
-                Point(dto.LabelOffset)));
+                Point(dto.LabelOffset),
+                dto.RotationQuarterTurns));
         }
 
         foreach (ProjectOverheadLineLayoutDto dto in snapshot.OverheadLines)
