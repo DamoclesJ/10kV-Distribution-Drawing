@@ -28,7 +28,9 @@ public static class PoleProfessionalGeometry
         double width = effectiveMetrics.PoleAttachment.SymbolWidth;
         double height = effectiveMetrics.PoleAttachment.SymbolHeight;
 
-        return new DocumentPoint(poleDiameter, (poleDiameter - height) / 2);
+        return kind == SwitchKind.DropoutFuse
+            ? new DocumentPoint((poleDiameter - width) / 2, -height)
+            : new DocumentPoint(poleDiameter, (poleDiameter - height) / 2);
     }
 
     public static DocumentRect GetPoleBounds(
