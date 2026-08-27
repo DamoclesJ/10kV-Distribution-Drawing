@@ -917,6 +917,127 @@ public sealed class DrawingDocument
         _devices.Remove(switchDevice);
     }
 
+    /// <summary>
+    /// Removes a pole switch while restoring the overhead connections that it
+    /// controls to the pole junction. The operation is atomic and preserves
+    /// every connection and overhead-line identity.
+    /// </summary>
+    public void RemovePoleSwitchAndBypass(Guid attachmentId)
+    {
+        PoleAttachment attachment = _poleAttachments.SingleOrDefault(item =>
+                item.AttachmentId == attachmentId)
+            ?? throw new InvalidOperationException(
+                $"Pole attachment '{attachmentId}' does not exist.");
+        SwitchDevice switchDevice = _devices.SingleOrDefault(item =>
+                item.Id == attachment.AttachedDeviceId) as SwitchDevice
+            ?? throw new InvalidOperationException(
+                $"Attachment '{attachmentId}' does not reference a switch.");
+        Pole pole = _devices.SingleOrDefault(item => item.Id == attachment.PoleId) as Pole
+            ?? throw new InvalidOperationException(
+                $"Pole '{attachment.PoleId}' does not exist.");
+        Guid[] switchTerminalIds = [.. switchDevice.TerminalIds];
+        Terminal[] poleTerminals = _terminals
+            .Where(item => pole.OverheadAnchorTerminalIds.Contains(item.Id))
+            .ToArray();
+        Guid poleJunctionTerminalId = poleTerminals
+            .Where(item => item.ElectricalNodeId is not null)
+            .Select(item => item.Id)
+            .FirstOrDefault();
+        if (poleJunctionTerminalId == Guid.Empty)
+        {
+            throw new InvalidOperationException("杆塔缺少可用的汇流端子。");
+        }
+
+        Connection[] connected = _connections
+            .Where(connection => switchTerminalIds.Any(connection.UsesTerminal))
+            .ToArray();
+        if (connected.Count(connection =>
+                connection.UsesTerminal(switchDevice.TerminalIds[1])) > 1)
+        {
+            throw new InvalidOperationException("当前柱上开关控制了多条线路，暂不能自动旁路删除。");
+        }
+
+        var replacements = new List<(Connection Before, Connection After, OverheadLine Line)>();
+        foreach (Connection connection in connected)
+        {
+            if (connection.UsesTerminal(switchDevice.TerminalIds[0]) &&
+                connection.UsesTerminal(switchDevice.TerminalIds[1]))
+            {
+                throw new InvalidOperationException("柱上开关连接状态不一致，不能旁路删除。");
+            }
+
+            OverheadLine line = _overheadLines.SingleOrDefault(item =>
+                    item.ConnectionId == connection.Id)
+                ?? throw new InvalidOperationException("柱上开关关联的架空线明细缺失。");
+            Connection after = new(
+                connection.Id,
+                connection.Type,
+                connection.StartTerminalId == switchTerminalIds[0] ||
+                    connection.StartTerminalId == switchTerminalIds[1]
+                    ? poleJunctionTerminalId
+                    : connection.StartTerminalId,
+                connection.EndTerminalId == switchTerminalIds[0] ||
+                    connection.EndTerminalId == switchTerminalIds[1]
+                    ? poleJunctionTerminalId
+                    : connection.EndTerminalId,
+                connection.DisplayName,
+                connection.VoltageLevel);
+            replacements.Add((connection, after, line));
+        }
+
+        int applied = 0;
+        try
+        {
+            foreach ((Connection before, Connection after, OverheadLine line) in replacements)
+            {
+                ReplaceOverheadConnection(before, after, line);
+                applied++;
+            }
+
+            RemovePoleSwitchAttachment(attachmentId);
+        }
+        catch
+        {
+            foreach ((Connection before, Connection after, OverheadLine line) in
+                     replacements.Take(applied).Reverse())
+            {
+                ReplaceOverheadConnection(after, before, line);
+            }
+
+            throw;
+        }
+    }
+
+    private void ReplaceOverheadConnection(
+        Connection before,
+        Connection after,
+        OverheadLine line)
+    {
+        if (before.Id != after.Id || line.ConnectionId != before.Id)
+        {
+            throw new InvalidOperationException("架空线旁路连接标识不一致。");
+        }
+
+        RemoveOverheadLine(before.Id);
+        RemoveConnection(before.Id);
+        try
+        {
+            AddConnection(after);
+            AddOverheadLine(line);
+        }
+        catch
+        {
+            if (_connections.Any(item => item.Id == after.Id))
+            {
+                RemoveConnection(after.Id);
+            }
+
+            AddConnection(before);
+            AddOverheadLine(line);
+            throw;
+        }
+    }
+
     public void AddCableTerminationAttachment(
         CableTermination cableTermination,
         ElectricalNode internalNode,

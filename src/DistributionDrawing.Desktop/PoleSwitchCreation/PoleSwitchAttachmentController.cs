@@ -4,6 +4,7 @@ using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Topology;
 
 namespace DistributionDrawing.Desktop.PoleSwitchCreation;
 
@@ -11,6 +12,8 @@ public sealed class PoleSwitchAttachmentController
 {
     private readonly Func<ProjectRuntimeSession?> _getSession;
     private readonly DeviceCommandFactory _commandFactory;
+    private Guid? _pendingPoleId;
+    private SwitchKind? _pendingSwitchKind;
 
     public PoleSwitchAttachmentController(
         Func<ProjectRuntimeSession?> getSession,
@@ -21,6 +24,13 @@ public sealed class PoleSwitchAttachmentController
     }
 
     public event EventHandler? SceneChanged;
+
+    public bool IsSelectingControlledConnection =>
+        _pendingPoleId is not null && _pendingSwitchKind is not null;
+
+    public string StatusText => IsSelectingControlledConnection
+        ? "请选择柱上开关要控制的架空线路，Esc 取消"
+        : string.Empty;
 
     public void AddToSelectedPole(SwitchKind switchKind)
     {
@@ -35,12 +45,74 @@ public sealed class PoleSwitchAttachmentController
             throw new InvalidOperationException("请先选择一个杆塔。");
         }
 
-        AddPoleSwitchAttachmentCommand command = _commandFactory.CreateAddPoleSwitchAttachment(
-            session.PersistenceSession.Domain,
-            session.Layout,
+        Guid[] poleTerminalIds = pole.OverheadAnchorTerminalIds.ToArray();
+        int connectedLineCount = session.PersistenceSession.Domain.Connections.Count(connection =>
+            connection.Type == ConnectionType.OverheadLine &&
+            (poleTerminalIds.Contains(connection.StartTerminalId) ||
+             poleTerminalIds.Contains(connection.EndTerminalId)));
+        if (connectedLineCount > 2)
+        {
+            _pendingPoleId = pole.Id;
+            _pendingSwitchKind = switchKind;
+            SceneChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        AddPoleSwitchAttachmentCommand command = CreateCommand(
+            session,
             pole.Id,
             switchKind,
-            PoleProfessionalGeometry.GetDefaultAttachmentOffset(switchKind));
+            controlledConnectionId: null);
+        Complete(session, pole, command);
+    }
+
+    public void PickControlledConnection(Guid connectionId)
+    {
+        if (!IsSelectingControlledConnection)
+        {
+            return;
+        }
+
+        ProjectRuntimeSession session = _getSession()
+            ?? throw new InvalidOperationException("当前没有打开工程。");
+        Pole pole = session.PersistenceSession.Domain.Devices.OfType<Pole>()
+            .Single(item => item.Id == _pendingPoleId);
+        AddPoleSwitchAttachmentCommand command = CreateCommand(
+            session,
+            pole.Id,
+            _pendingSwitchKind!.Value,
+            connectionId);
+        _pendingPoleId = null;
+        _pendingSwitchKind = null;
+        Complete(session, pole, command);
+    }
+
+    public void Cancel()
+    {
+        _pendingPoleId = null;
+        _pendingSwitchKind = null;
+    }
+
+    private AddPoleSwitchAttachmentCommand CreateCommand(
+        ProjectRuntimeSession session,
+        Guid poleId,
+        SwitchKind switchKind,
+        Guid? controlledConnectionId)
+    {
+        return _commandFactory.CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            poleId,
+            switchKind,
+            PoleProfessionalGeometry.GetDefaultAttachmentOffset(switchKind),
+            controlledConnectionId);
+    }
+
+    private void Complete(
+        ProjectRuntimeSession session,
+        Pole pole,
+        AddPoleSwitchAttachmentCommand command)
+    {
         session.CommandStack.ExecuteCommand(command, session.RebuildScene);
         session.SelectionManager.Select(new SelectionReference(
             SelectionTargetKind.PoleAttachment,

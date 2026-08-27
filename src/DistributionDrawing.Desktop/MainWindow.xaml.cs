@@ -689,6 +689,8 @@ public partial class MainWindow : Window
                     CableReconnectEndpoint.Start
                         ? "修改电缆：请选择新的起点端子"
                         : "修改电缆：请选择新的终点端子",
+                _ when _poleSwitchAttachment.IsSelectingControlledConnection =>
+                    _poleSwitchAttachment.StatusText,
                 _ => "选择"
             });
     }
@@ -733,6 +735,18 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    private void OnDrawingSurfaceMouseRightButtonDown(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_drawingTools.IsActive || _placement.Mode != PlacementMode.Idle)
+        {
+            _drawingTools.Cancel();
+            UpdateCanvasStatus();
+            e.Handled = true;
+        }
     }
 
     private void OnDrawingSurfaceMouseUp(
@@ -1233,9 +1247,13 @@ public partial class MainWindow : Window
         {
             try
             {
+                SelectionReference? activeHitTarget = _currentScene.HitTestIndex.HitTest(
+                    documentPoint,
+                    _viewport.Transform.ViewDistanceToDocument(4));
                 _drawingTools.HandleClick(
                     documentPoint,
-                    _viewport.Transform.ViewDistanceToDocument(8));
+                    _viewport.Transform.ViewDistanceToDocument(8),
+                    activeHitTarget);
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {

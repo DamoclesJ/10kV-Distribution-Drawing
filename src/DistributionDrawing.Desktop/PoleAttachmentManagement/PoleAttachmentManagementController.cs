@@ -40,8 +40,8 @@ public sealed class PoleAttachmentManagementController
     {
         ProjectRuntimeSession session = _getSession()
             ?? throw new InvalidOperationException("当前没有打开工程。");
-        RemovePoleSwitchAttachmentCommand command = _commandFactory
-            .CreateRemovePoleSwitchAttachment(
+        RemovePoleSwitchAndBypassCommand command = _commandFactory
+            .CreateRemovePoleSwitchAndBypass(
                 session.PersistenceSession.Domain,
                 session.Layout,
                 attachmentId);

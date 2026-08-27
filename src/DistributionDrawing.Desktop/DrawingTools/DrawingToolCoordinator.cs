@@ -2,9 +2,11 @@ using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.CableConnection;
 using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.PoleSwitchCreation;
+using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Desktop.DrawingTools;
@@ -47,13 +49,15 @@ public sealed class DrawingToolCoordinator
         _placement.Mode != PlacementMode.Idle ||
         _overheadLine.IsActive ||
         _cableConnection.IsActive ||
-        _cableReconnect.IsActive;
+        _cableReconnect.IsActive ||
+        _poleSwitchAttachment.IsSelectingControlledConnection;
 
     public void BeginPole()
     {
         _overheadLine.Cancel();
         _cableConnection.Cancel();
         _cableReconnect.Cancel();
+        _poleSwitchAttachment.Cancel();
         _placement.BeginPole();
     }
 
@@ -62,6 +66,7 @@ public sealed class DrawingToolCoordinator
         _overheadLine.Cancel();
         _cableConnection.Cancel();
         _cableReconnect.Cancel();
+        _poleSwitchAttachment.Cancel();
         _placement.BeginRingCabinet(configuration);
     }
 
@@ -70,6 +75,7 @@ public sealed class DrawingToolCoordinator
         _placement.Cancel();
         _cableConnection.Cancel();
         _cableReconnect.Cancel();
+        _poleSwitchAttachment.Cancel();
         _overheadLine.Begin();
     }
 
@@ -78,6 +84,7 @@ public sealed class DrawingToolCoordinator
         _placement.Cancel();
         _overheadLine.Cancel();
         _cableReconnect.Cancel();
+        _poleSwitchAttachment.Cancel();
         _cableConnection.Begin();
     }
 
@@ -87,10 +94,25 @@ public sealed class DrawingToolCoordinator
         _overheadLine.Cancel();
         _cableConnection.Cancel();
         _cableReconnect.Cancel();
+        _poleSwitchAttachment.Cancel();
     }
 
-    public bool HandleClick(DocumentPoint point, double terminalToleranceMillimeters)
+    public bool HandleClick(
+        DocumentPoint point,
+        double terminalToleranceMillimeters,
+        SelectionReference? hitTarget = null)
     {
+        if (_poleSwitchAttachment.IsSelectingControlledConnection)
+        {
+            if (hitTarget?.Kind != SelectionTargetKind.Connection)
+            {
+                throw new InvalidOperationException("请选择一条与当前杆塔相连的架空线路。");
+            }
+
+            _poleSwitchAttachment.PickControlledConnection(hitTarget.ObjectId);
+            return true;
+        }
+
         if (_overheadLine.IsActive)
         {
             _overheadLine.Pick(point, terminalToleranceMillimeters);

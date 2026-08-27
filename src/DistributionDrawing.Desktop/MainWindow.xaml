@@ -109,6 +109,7 @@
         <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
                                            MouseDown="OnDrawingSurfaceMouseDown"
                                            MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown"
+                                           MouseRightButtonDown="OnDrawingSurfaceMouseRightButtonDown"
                                            MouseMove="OnDrawingSurfaceMouseMove"
                                            MouseLeftButtonUp="OnDrawingSurfaceMouseLeftButtonUp"
                                            MouseUp="OnDrawingSurfaceMouseUp"

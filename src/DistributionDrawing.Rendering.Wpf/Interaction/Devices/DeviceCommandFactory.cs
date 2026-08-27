@@ -112,7 +112,8 @@ public sealed class DeviceCommandFactory
         RuntimeLayoutDocument runtimeLayout,
         Guid poleId,
         SwitchKind switchKind,
-        DocumentPoint attachmentOffset)
+        DocumentPoint attachmentOffset,
+        Guid? controlledConnectionId = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(runtimeLayout);
@@ -126,7 +127,12 @@ public sealed class DeviceCommandFactory
             switchKind,
             attachmentOffset);
         IReadOnlyList<OverheadConnectionEndpointTransition> transitions =
-            CreatePoleSwitchOverheadTransitions(document, runtimeLayout, pole, creation);
+            CreatePoleSwitchOverheadTransitions(
+                document,
+                runtimeLayout,
+                pole,
+                creation,
+                controlledConnectionId);
         return new AddPoleSwitchAttachmentCommand(
             document,
             runtimeLayout,
@@ -136,10 +142,11 @@ public sealed class DeviceCommandFactory
 
     private static IReadOnlyList<OverheadConnectionEndpointTransition>
         CreatePoleSwitchOverheadTransitions(
-            DrawingDocument document,
-            RuntimeLayoutDocument runtimeLayout,
-            Pole pole,
-            PoleSwitchAttachmentCreation creation)
+        DrawingDocument document,
+        RuntimeLayoutDocument runtimeLayout,
+        Pole pole,
+        PoleSwitchAttachmentCreation creation,
+        Guid? controlledConnectionId = null)
     {
         HashSet<Guid> poleTerminalIds = pole.OverheadAnchorTerminalIds.ToHashSet();
         Connection[] attachedConnections = document.Connections
@@ -152,9 +159,15 @@ public sealed class DeviceCommandFactory
         // existing branches are intentionally left on the pole junction.
         // Automatic endpoint migration is only unambiguous for one or two
         // through-line connections.
-        if (attachedConnections.Length > 2)
+        if (attachedConnections.Length > 2 && controlledConnectionId is null)
         {
-            return [];
+            throw new InvalidOperationException("请选择柱上开关要控制的架空线路。");
+        }
+
+        if (controlledConnectionId is Guid selectedId &&
+            !attachedConnections.Any(connection => connection.Id == selectedId))
+        {
+            throw new InvalidOperationException("所选架空线路不属于当前杆塔。");
         }
 
         if (attachedConnections.Length == 0)
@@ -193,6 +206,30 @@ public sealed class DeviceCommandFactory
             return (Connection: connection, PoleTerminalId: poleTerminalId,
                 OtherPosition: otherAnchor.Position);
         }).ToArray();
+
+        if (controlledConnectionId is Guid chosenConnectionId)
+        {
+            (Connection Connection, Guid PoleTerminalId, DocumentPoint OtherPosition) chosen =
+                connectionPositions.Single(item => item.Connection.Id == chosenConnectionId);
+            Connection before = chosen.Connection;
+            Guid start = before.StartTerminalId == chosen.PoleTerminalId
+                ? creation.SecondTerminal.Id
+                : before.StartTerminalId;
+            Guid end = before.EndTerminalId == chosen.PoleTerminalId
+                ? creation.SecondTerminal.Id
+                : before.EndTerminalId;
+            OverheadLine line = document.OverheadLines.Single(item => item.ConnectionId == before.Id);
+            return [new OverheadConnectionEndpointTransition(
+                before,
+                new Connection(
+                    before.Id,
+                    before.Type,
+                    start,
+                    end,
+                    before.DisplayName,
+                    before.VoltageLevel),
+                line)];
+        }
 
         Guid[] targetTerminalIds = connectionPositions.Length == 1
             ? [NearestTerminal(
@@ -370,6 +407,72 @@ public sealed class DeviceCommandFactory
             document,
             runtimeLayout,
             new PoleSwitchAttachmentCreation(switchDevice, first, second, attachment, layout));
+    }
+
+    public RemovePoleSwitchAndBypassCommand CreateRemovePoleSwitchAndBypass(
+        DrawingDocument document,
+        RuntimeLayoutDocument runtimeLayout,
+        Guid attachmentId)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+        PoleAttachment attachment = document.PoleAttachments.SingleOrDefault(item =>
+                item.AttachmentId == attachmentId)
+            ?? throw new InvalidOperationException("所选杆塔安装设备不存在。");
+        SwitchDevice switchDevice = document.Devices.SingleOrDefault(item =>
+                item.Id == attachment.AttachedDeviceId) as SwitchDevice
+            ?? throw new InvalidOperationException("所选附着设备不是柱上开关。");
+        Terminal first = document.Terminals.Single(item => item.Id == switchDevice.TerminalIds[0]);
+        Terminal second = document.Terminals.Single(item => item.Id == switchDevice.TerminalIds[1]);
+        AttachmentLayout layout = runtimeLayout.DrawingLayout.Attachments[attachmentId];
+        Pole pole = document.Devices.OfType<Pole>().Single(item => item.Id == attachment.PoleId);
+        Guid[] switchTerminalIds = [first.Id, second.Id];
+        Guid? poleTerminalId = pole.OverheadAnchorTerminalIds
+            .Select(id => document.Terminals.SingleOrDefault(item => item.Id == id))
+            .Where(item => item?.ElectricalNodeId == first.ElectricalNodeId)
+            .Select(item => item!.Id)
+            .FirstOrDefault();
+        if (poleTerminalId is null)
+        {
+            throw new InvalidOperationException("柱上开关缺少对应的杆塔汇流端子。");
+        }
+
+        Connection[] connections = document.Connections
+            .Where(item => switchTerminalIds.Any(item.UsesTerminal))
+            .ToArray();
+        if (connections.Any(item => item.UsesTerminal(first.Id) && item.UsesTerminal(second.Id)))
+        {
+            throw new InvalidOperationException("柱上开关连接状态不一致，不能旁路删除。");
+        }
+
+        var transitions = connections.Select(connection =>
+        {
+            OverheadLine line = document.OverheadLines.SingleOrDefault(item =>
+                    item.ConnectionId == connection.Id)
+                ?? throw new InvalidOperationException("柱上开关关联的架空线明细缺失。");
+            Guid start = switchTerminalIds.Contains(connection.StartTerminalId)
+                ? poleTerminalId.Value
+                : connection.StartTerminalId;
+            Guid end = switchTerminalIds.Contains(connection.EndTerminalId)
+                ? poleTerminalId.Value
+                : connection.EndTerminalId;
+            return new OverheadConnectionEndpointTransition(
+                connection,
+                new Connection(
+                    connection.Id,
+                    connection.Type,
+                    start,
+                    end,
+                    connection.DisplayName,
+                    connection.VoltageLevel),
+                line);
+        }).ToArray();
+
+        return new RemovePoleSwitchAndBypassCommand(
+            document,
+            runtimeLayout,
+            new PoleSwitchAttachmentCreation(switchDevice, first, second, attachment, layout),
+            transitions);
     }
 
     public ICommand CreateRemove(

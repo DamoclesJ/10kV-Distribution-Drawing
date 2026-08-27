@@ -76,8 +76,11 @@ public sealed class PlacementController
         }
 
         session.CommandStack.ExecuteCommand(command);
-        _pendingRingCabinetConfiguration = null;
-        Mode = PlacementMode.Idle;
+        if (Mode == PlacementMode.PlacingRingCabinet)
+        {
+            _pendingRingCabinetConfiguration = null;
+            Mode = PlacementMode.Idle;
+        }
         session.RebuildScene();
         session.SelectionManager.Select(selection);
         SceneChanged?.Invoke(this, EventArgs.Empty);

@@ -109,23 +109,15 @@ public sealed class SymbolLibrary
             _metrics);
         DocumentPoint origin = kind == SymbolKind.CableTermination
             ? layoutOrigin
-            : layout.RotationQuarterTurns == 0
-            ? new DocumentPoint(
-                geometry.LogicalBounds.XMillimeters,
-                geometry.LogicalBounds.YMillimeters)
             : new DocumentPoint(
-                layoutOrigin.XMillimeters,
-                layoutOrigin.YMillimeters);
+                geometry.LogicalBounds.XMillimeters,
+                geometry.LogicalBounds.YMillimeters);
         double symbolWidth = kind == SymbolKind.CableTermination
             ? layout.WidthMillimeters
-            : layout.RotationQuarterTurns == 0
-            ? geometry.LogicalBounds.WidthMillimeters
-            : layout.WidthMillimeters;
+            : geometry.LogicalBounds.WidthMillimeters;
         double symbolHeight = kind == SymbolKind.CableTermination
             ? layout.HeightMillimeters
-            : layout.RotationQuarterTurns == 0
-            ? geometry.LogicalBounds.HeightMillimeters
-            : layout.HeightMillimeters;
+            : geometry.LogicalBounds.HeightMillimeters;
         DocumentPoint attachmentConnector = kind is SymbolKind.CableTermination or SymbolKind.DropoutFuse
             ? geometry.SecondTerminal
             : geometry.FirstTerminal;
@@ -170,12 +162,7 @@ public sealed class SymbolLibrary
                     fill: Colors.White,
                     includeLabel: includeLabel));
 
-        elements.AddRange(kind == SymbolKind.CableTermination
-            ? symbolElements
-            : RotateElements(symbolElements, new DocumentPoint(
-                layoutOrigin.XMillimeters + layout.WidthMillimeters / 2,
-                layoutOrigin.YMillimeters + layout.HeightMillimeters / 2),
-                layout.RotationQuarterTurns));
+        elements.AddRange(symbolElements);
 
         return elements;
     }

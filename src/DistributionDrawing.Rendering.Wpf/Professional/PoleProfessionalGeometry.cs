@@ -28,9 +28,7 @@ public static class PoleProfessionalGeometry
         double width = effectiveMetrics.PoleAttachment.SymbolWidth;
         double height = effectiveMetrics.PoleAttachment.SymbolHeight;
 
-        return kind == SwitchKind.DropoutFuse
-            ? new DocumentPoint((poleDiameter - width) / 2, -height)
-            : new DocumentPoint(poleDiameter, (poleDiameter - height) / 2);
+        return new DocumentPoint(poleDiameter, (poleDiameter - height) / 2);
     }
 
     public static DocumentRect GetPoleBounds(
@@ -130,8 +128,8 @@ public static class PoleProfessionalGeometry
                     new DocumentPoint(centerX, scaledY),
                     new DocumentPoint(centerX, scaledY + height),
                     new DocumentRect(scaledX, scaledY, width, height)),
-                centerX,
-                centerY,
+                GetPoleCenter(poleLayout, effectiveMetrics).XMillimeters,
+                GetPoleCenter(poleLayout, effectiveMetrics).YMillimeters,
                 attachmentLayout.RotationQuarterTurns);
         }
 
@@ -143,13 +141,14 @@ public static class PoleProfessionalGeometry
             effectiveMetrics.PoleAttachment.SymbolHeight);
         double effectiveX = centerX - effectiveWidth / 2;
         double effectiveY = centerY - effectiveHeight / 2;
+        DocumentPoint poleCenterForRotation = GetPoleCenter(poleLayout, effectiveMetrics);
         return RotateSwitchGeometry(
             new PoleAttachmentGeometry(
                 new DocumentPoint(effectiveX, centerY),
                 new DocumentPoint(effectiveX + effectiveWidth, centerY),
                 new DocumentRect(effectiveX, effectiveY, effectiveWidth, effectiveHeight)),
-            centerX,
-            centerY,
+            poleCenterForRotation.XMillimeters,
+            poleCenterForRotation.YMillimeters,
             attachmentLayout.RotationQuarterTurns);
     }
 
