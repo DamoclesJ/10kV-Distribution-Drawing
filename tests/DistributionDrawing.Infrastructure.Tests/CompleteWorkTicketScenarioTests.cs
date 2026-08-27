@@ -170,20 +170,6 @@ public sealed class CompleteWorkTicketScenarioTests
             document.AddElectricalNode(node);
         }
 
-        foreach (SwitchDevice switchDevice in result.Devices.OfType<SwitchDevice>())
-        {
-            Guid rightNodeId = result.Terminals
-                .Single(terminal => terminal.OwnerId == switchDevice.Id &&
-                    terminal.Role == "SwitchRightTerminal")
-                .ElectricalNodeId
-                ?? throw new InvalidOperationException("Pole switch right node is missing.");
-            document.AddElectricalNode(new ElectricalNode(
-                rightNodeId,
-                ElectricalNodeType.Intermediate,
-                TopologyOwnerType.Device,
-                switchDevice.Id));
-        }
-
         foreach (Terminal terminal in result.Terminals)
         {
             document.AddTerminal(terminal);
