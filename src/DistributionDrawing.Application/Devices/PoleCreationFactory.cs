@@ -58,6 +58,11 @@ public sealed class PoleCreationFactory
             Guid firstTerminalId = Guid.NewGuid();
             Guid secondTerminalId = Guid.NewGuid();
             Guid rightElectricalNodeId = Guid.NewGuid();
+            electricalNodes.Add(new ElectricalNode(
+                rightElectricalNodeId,
+                ElectricalNodeType.Intermediate,
+                TopologyOwnerType.Device,
+                switchId));
             var switchDevice = SwitchDevice.CreateForPole(
                 switchId,
                 switchKind,
