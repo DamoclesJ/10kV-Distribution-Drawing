@@ -406,12 +406,15 @@ public sealed class CableConnectionControllerTests
             .Select(connection => connection.Id)
             .Order()
             .ToArray();
+        Guid middleBranchTerminalId = Assert.Single(second.Pole.OverheadAnchorTerminalIds);
+        Guid controlledConnectionId = Assert.Single(project.Document.Connections,
+            connection => connection.UsesTerminal(middleBranchTerminalId)).Id;
 
         poleSwitch.AddToSelectedPole(SwitchKind.CircuitBreaker);
 
         Assert.True(poleSwitch.IsSelectingControlledConnection);
         Assert.Equal(historyCount, project.Session.CommandStack.History.Count);
-        poleSwitch.PickControlledConnection(connectionIds[0]);
+        poleSwitch.PickControlledConnection(controlledConnectionId);
 
         Assert.False(poleSwitch.IsSelectingControlledConnection);
         Assert.Equal(historyCount + 1, project.Session.CommandStack.History.Count);
