@@ -31,6 +31,12 @@ public sealed class RoutingObstacleBuilder
         ArgumentNullException.ThrowIfNull(drawingLayout);
 
         Device[] deviceArray = devices.ToArray();
+        PoleAttachment[] attachmentArray = attachments.ToArray();
+        HashSet<Guid> polesWithSwitchAttachments = attachmentArray
+            .Where(attachment => deviceArray.Any(device =>
+                device.Id == attachment.AttachedDeviceId && device is SwitchDevice))
+            .Select(attachment => attachment.PoleId)
+            .ToHashSet();
         HashSet<Guid> branchedPoleIds = (connections ?? [])
             .Where(connection => connection.Type == ConnectionType.OverheadLine)
             .SelectMany(connection => new[] { connection.StartTerminalId, connection.EndTerminalId })
@@ -38,7 +44,8 @@ public sealed class RoutingObstacleBuilder
                 pole.OverheadAnchorTerminalIds.Contains(terminalId)))
             .GroupBy(terminalId => deviceArray.OfType<Pole>()
                 .Single(pole => pole.OverheadAnchorTerminalIds.Contains(terminalId)).Id)
-            .Where(group => group.Count() > 2)
+            .Where(group => group.Count() > 2 ||
+                (group.Count() >= 2 && polesWithSwitchAttachments.Contains(group.Key)))
             .Select(group => group.Key)
             .ToHashSet();
         Dictionary<Guid, Device> devicesById = deviceArray.ToDictionary(device => device.Id);
@@ -103,7 +110,7 @@ public sealed class RoutingObstacleBuilder
             }
         }
 
-        foreach (PoleAttachment attachment in attachments.OrderBy(attachment => attachment.AttachmentId))
+        foreach (PoleAttachment attachment in attachmentArray.OrderBy(attachment => attachment.AttachmentId))
         {
             if (!drawingLayout.Attachments.TryGetValue(
                     attachment.AttachmentId,
