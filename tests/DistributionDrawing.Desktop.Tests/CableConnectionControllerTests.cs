@@ -55,7 +55,7 @@ public sealed class CableConnectionControllerTests
 
         Assert.True(handled);
         Assert.Equal(CableConnectionToolState.Idle, cable.State);
-        Assert.Equal(PlacementMode.Idle, placement.Mode);
+        Assert.Equal(PlacementMode.PlacingPole, placement.Mode);
         Assert.Equal(poleCount + 1, project.Document.Devices.OfType<Pole>().Count());
         Assert.Empty(project.Document.CableSegments);
     }
@@ -409,11 +409,16 @@ public sealed class CableConnectionControllerTests
 
         poleSwitch.AddToSelectedPole(SwitchKind.CircuitBreaker);
 
+        Assert.True(poleSwitch.IsSelectingControlledConnection);
+        Assert.Equal(historyCount, project.Session.CommandStack.History.Count);
+        poleSwitch.PickControlledConnection(connectionIds[0]);
+
+        Assert.False(poleSwitch.IsSelectingControlledConnection);
         Assert.Equal(historyCount + 1, project.Session.CommandStack.History.Count);
         Assert.Equal(
             connectionIds,
             project.Document.Connections.Select(connection => connection.Id).Order().ToArray());
-        Assert.Equal(3, project.Document.Connections.Count(connection =>
+        Assert.Equal(2, project.Document.Connections.Count(connection =>
             connection.UsesTerminal(junctionTerminalId)));
         Assert.Contains(
             project.Document.PoleAttachments,
