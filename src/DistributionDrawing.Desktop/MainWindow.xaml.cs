@@ -1836,10 +1836,10 @@ public partial class MainWindow : Window
             ? "暂无安装设备"
             : "请选择下方安装设备进行管理";
         PoleInstalledDevicesList.ItemsSource = items;
-        PoleInstalledDevicesList.SelectedItem =
-            selection?.Reference.Kind == SelectionTargetKind.PoleAttachment
-                ? items.SingleOrDefault(item => item.AttachmentId == selection.Reference.ObjectId)
-                : null;
+        Guid? selectedAttachmentId = selection?.PoleAttachment?.AttachmentId;
+        PoleInstalledDevicesList.SelectedItem = selectedAttachmentId is Guid attachmentId
+            ? items.SingleOrDefault(item => item.AttachmentId == attachmentId)
+            : null;
     }
 
     private void OnPoleInstalledDeviceSelected(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -1863,15 +1863,12 @@ public partial class MainWindow : Window
 
     private void RotateSelectedPoleAttachment(int quarterTurns)
     {
-        if (_selectionManager.Selected is not { Kind: SelectionTargetKind.PoleAttachment } selected)
-        {
-            ShowCommandError("旋转失败", "请先在画布中选择柱上开关附着设备。");
-            return;
-        }
-
         try
         {
-            _poleAttachmentManagement.Rotate(selected.ObjectId, quarterTurns);
+            _poleAttachmentManagement.RotateCurrent(
+                _selectionManager.Selected,
+                quarterTurns,
+                GetSelectedPoleAttachmentIdFromList());
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -1881,20 +1878,23 @@ public partial class MainWindow : Window
 
     private void OnRemovePoleAttachment(object sender, RoutedEventArgs e)
     {
-        if (_selectionManager.Selected is not { Kind: SelectionTargetKind.PoleAttachment } selected)
-        {
-            ShowCommandError("删除失败", "请先在画布中选择要删除的安装设备。");
-            return;
-        }
-
         try
         {
-            _poleAttachmentManagement.Remove(selected.ObjectId);
+            _poleAttachmentManagement.RemoveCurrent(
+                _selectionManager.Selected,
+                GetSelectedPoleAttachmentIdFromList());
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
             ShowCommandError("删除失败", exception.Message);
         }
+    }
+
+    private Guid? GetSelectedPoleAttachmentIdFromList()
+    {
+        return PoleInstalledDevicesList.SelectedItem is InstalledDeviceItem item
+            ? item.AttachmentId
+            : null;
     }
 
     private void UpdateRingCabinetEditor()
