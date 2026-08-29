@@ -37,6 +37,8 @@ public sealed class DrawingClipboardService
 
     public bool HasContent => _fragment is not null;
 
+    public event EventHandler? ContentChanged;
+
     public ClipboardActionResult Copy(ProjectRuntimeSession? source)
     {
         if (source is null)
@@ -53,6 +55,7 @@ public sealed class DrawingClipboardService
 
         _fragment = plan.Fragment;
         _successfulPasteCount = 0;
+        ContentChanged?.Invoke(this, EventArgs.Empty);
         string message = plan.Warnings.Count == 0
             ? "已复制所选对象。"
             : $"已复制可支持的对象；{string.Join(" ", plan.Warnings)}";
@@ -93,7 +96,12 @@ public sealed class DrawingClipboardController
     {
         _activeSession = activeSession ?? throw new ArgumentNullException(nameof(activeSession));
         _service = service ?? new DrawingClipboardService();
+        _service.ContentChanged += (_, _) => ContentChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    public bool HasContent => _service.HasContent;
+
+    public event EventHandler? ContentChanged;
 
     public ClipboardActionResult Copy() => _service.Copy(_activeSession());
 

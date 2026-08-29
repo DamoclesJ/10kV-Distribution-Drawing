@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.ComponentModel;
 using System.Globalization;
@@ -30,6 +31,7 @@ using DistributionDrawing.Desktop.Viewport;
 using DistributionDrawing.Desktop.Services;
 using DistributionDrawing.Desktop.ViewModels;
 using DistributionDrawing.Desktop.SwitchOperation;
+using DistributionDrawing.Desktop.Actions;
 
 namespace DistributionDrawing.Desktop;
 
@@ -61,6 +63,9 @@ public partial class MainWindow : Window
     private readonly CableReconnectController _cableReconnect;
     private readonly DrawingClipboardController _clipboard;
     private readonly DrawingToolCoordinator _drawingTools;
+    private readonly DesktopUserActions _actions;
+    private readonly IDesktopMessageService _messageService;
+    private readonly DesktopContextMenuResolver _contextMenuResolver = new();
     private DocumentSession? _boundDocumentSession;
     private MainWindowViewModel _shellViewModel = null!;
     private bool _gridVisible;
@@ -116,6 +121,54 @@ public partial class MainWindow : Window
             _cableReconnect,
             _poleSwitchAttachment,
             () => _workspace.CurrentSession);
+        _messageService = new DesktopMessageService(this);
+        _actions = new DesktopUserActions(
+            new DesktopActionContext
+            {
+                ActiveSession = () => _workspace.CurrentSession,
+                HasClipboardContent = () => _clipboard.HasContent,
+                IsInteractionIdle = IsInteractionIdle,
+                CanRotateSelection = CanRotateCurrentSelection,
+                CanOperateSwitch = CanOperateCurrentSwitch,
+                CanReconnectCable = CanReconnectCurrentCable,
+                CanAddPoleAttachment = CanAddAttachmentToCurrentPole
+            },
+            new DesktopUserActionHandlers
+            {
+                New = () => _workspace.NewProject(),
+                Open = () => _workspace.OpenProject(),
+                Save = () => _workspace.SaveProject(),
+                SaveAs = () => _workspace.SaveProjectAs(),
+                CloseDocument = () => _workspace.CloseCurrentProject(),
+                Exit = Close,
+                Undo = OnUndoRequested,
+                Redo = OnRedoRequested,
+                Copy = ExecuteCopyAction,
+                Paste = ExecutePasteAction,
+                SelectAll = OnSelectAllRequested,
+                Delete = OnDeleteRequested,
+                CancelCurrentOperation = CancelCurrentOperation,
+                Select = OnSelectModeRequested,
+                CreatePole = () => OnBeginPlacePole(this, new RoutedEventArgs()),
+                CreateRingCabinet = () => OnBeginPlaceRingCabinet(this, new RoutedEventArgs()),
+                CreateOverheadLine = () => OnBeginOverheadLine(this, new RoutedEventArgs()),
+                CreateCable = () => OnBeginCable(this, new RoutedEventArgs()),
+                AddCableTermination = () => OnAddCableTermination(this, new RoutedEventArgs()),
+                AddPoleSwitch = () => OnAddPoleSwitch(this, new RoutedEventArgs()),
+                AddGroundingPoint = () => OnBeginAddGroundingPoint(this, new RoutedEventArgs()),
+                AddWorkScope = () => OnBeginAddWorkScope(this, new RoutedEventArgs()),
+                ZoomIn = () => OnZoomIn(this, new RoutedEventArgs()),
+                ZoomOut = () => OnZoomOut(this, new RoutedEventArgs()),
+                FitDrawing = () => OnFitDrawing(this, new RoutedEventArgs()),
+                ToggleGrid = ToggleGrid,
+                TypographySettings = () => OnDrawingTypographySettings(this, new RoutedEventArgs()),
+                RotateLeft = () => RotateSelectedPoleAttachment(-1),
+                RotateRight = () => RotateSelectedPoleAttachment(1),
+                SwitchOperation = ExecuteSwitchOperation,
+                ReconnectCableStart = () => BeginCableReconnect(_cableReconnect.BeginStart),
+                ReconnectCableEnd = () => BeginCableReconnect(_cableReconnect.BeginEnd)
+            },
+            _messageService);
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
         _cableConnection.VisualChanged += OnDrawingToolVisualChanged;
@@ -125,23 +178,12 @@ public partial class MainWindow : Window
         _poleSwitchAttachment.SceneChanged += OnDrawingToolVisualChanged;
         _poleAttachmentManagement.SceneChanged += OnDrawingToolVisualChanged;
         _switchOperation.SceneChanged += OnSwitchOperationSceneChanged;
+        _clipboard.ContentChanged += (_, _) => _actions.RefreshCanExecute();
         _viewport.ViewChanged += OnViewportChanged;
         DrawingSurface.SetViewTransform(_viewport.Transform);
         _shellViewModel = new MainWindowViewModel(
             new DesktopShellService(),
-            () => _workspace.NewProject(),
-            () => _workspace.OpenProject(),
-            () => _workspace.SaveProject(),
-            OnUndoRequested,
-            OnRedoRequested,
-            OnDeleteRequested,
-            OnCancelRequested,
-            () => _commandStack.CanUndo,
-            () => _commandStack.CanRedo,
-            () => _selectionManager.HasSingleSelection,
-            OnSelectModeRequested,
-            OnCreateRingCabinetModeRequested,
-            OnCreatePoleModeRequested);
+            _actions);
         _shellViewModel.Toolbox.PropertyChanged += OnToolboxPropertyChanged;
         DataContext = _shellViewModel;
         UpdateCanvasStatus();
@@ -162,6 +204,8 @@ public partial class MainWindow : Window
         CancelDeviceDrag();
         CancelProfessionalPicking();
         _drawingTools.BeginPole();
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreatePole);
+        UpdateCanvasStatus();
     }
 
     private void OnBeginPlaceRingCabinet(object sender, RoutedEventArgs e)
@@ -175,6 +219,8 @@ public partial class MainWindow : Window
         CancelDeviceDrag();
         CancelProfessionalPicking();
         _drawingTools.BeginRingCabinet(dialog.Configuration);
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateRingCabinet);
+        UpdateCanvasStatus();
     }
 
     private void OnAddCableTermination(object sender, RoutedEventArgs e)
@@ -195,7 +241,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            ShowCommandError("无法添加电缆终端", exception.Message);
+            _messageService.ShowError("无法添加电缆终端", exception.Message);
         }
     }
 
@@ -213,7 +259,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            ShowCommandError("无法添加柱上开关", exception.Message);
+            _messageService.ShowError("无法添加柱上开关", exception.Message);
         }
     }
 
@@ -224,10 +270,12 @@ public partial class MainWindow : Window
             CancelDeviceDrag();
             CancelProfessionalPicking();
             _drawingTools.BeginOverheadLine();
+            _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateOverheadLine);
+            UpdateCanvasStatus();
         }
         catch (InvalidOperationException exception)
         {
-            ShowCommandError("无法绘制架空线", exception.Message);
+            _messageService.ShowError("无法绘制架空线", exception.Message);
         }
     }
 
@@ -238,11 +286,12 @@ public partial class MainWindow : Window
             CancelDeviceDrag();
             CancelProfessionalPicking();
             _drawingTools.BeginCable();
+            _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateCable);
             UpdateCanvasStatus();
         }
         catch (InvalidOperationException exception)
         {
-            ShowCommandError("无法绘制电缆", exception.Message);
+            _messageService.ShowError("无法绘制电缆", exception.Message);
         }
     }
 
@@ -276,10 +325,15 @@ public partial class MainWindow : Window
 
     private void OnSwitchOperation(object sender, RoutedEventArgs e)
     {
+        ExecuteSwitchOperation();
+    }
+
+    private void ExecuteSwitchOperation()
+    {
         SwitchOperationResult result = _switchOperation.ToggleSelected();
         if (!result.IsSuccess)
         {
-            ShowCommandError("开关操作失败", result.ErrorMessage!);
+            _messageService.ShowError("开关操作失败", result.ErrorMessage!);
         }
     }
 
@@ -311,118 +365,105 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            ShowCommandError("删除对象失败", exception.Message);
+            _messageService.ShowError("删除对象失败", exception.Message);
         }
     }
 
-    private void OnWindowKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void ExecuteCopyAction()
     {
-        if (System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+        ClipboardActionResult result = _clipboard.Copy();
+        if (!result.IsSuccess)
         {
-            if (e.Key == System.Windows.Input.Key.Z)
-            {
-                _shellViewModel.UndoCommand.Execute(null);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == System.Windows.Input.Key.Y)
-            {
-                _shellViewModel.RedoCommand.Execute(null);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == System.Windows.Input.Key.S)
-            {
-                _shellViewModel.SaveProjectCommand.Execute(null);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == System.Windows.Input.Key.A)
-            {
-                OnSelectAllRequested();
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == System.Windows.Input.Key.C)
-            {
-                ClipboardActionResult result = _clipboard.Copy();
-                if (!result.IsSuccess)
-                {
-                    ShowCommandError("无法复制对象", result.Message);
-                }
-                else if (result.HasWarning)
-                {
-                    ShowCommandError("部分对象未复制", result.Message);
-                }
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == System.Windows.Input.Key.V)
-            {
-                try
-                {
-                    ClipboardActionResult result = _clipboard.Paste();
-                    if (!result.IsSuccess)
-                    {
-                        ShowCommandError("无法粘贴对象", result.Message);
-                    }
-                    else
-                    {
-                        OnDrawingToolVisualChanged(this, EventArgs.Empty);
-                    }
-                }
-                catch (Exception exception) when (
-                    exception is ArgumentException or InvalidOperationException)
-                {
-                    ShowCommandError("粘贴对象失败", exception.Message);
-                }
-                e.Handled = true;
-                return;
-            }
+            _messageService.ShowError("无法复制对象", result.Message);
         }
-
-        if (e.Key == System.Windows.Input.Key.Delete)
+        else if (result.HasWarning)
         {
-            _shellViewModel.DeleteCommand.Execute(null);
-            e.Handled = true;
+            _messageService.ShowWarning("部分对象未复制", result.Message);
+        }
+    }
+
+    private void ExecutePasteAction()
+    {
+        ClipboardActionResult result = _clipboard.Paste();
+        if (!result.IsSuccess)
+        {
+            _messageService.ShowError("无法粘贴对象", result.Message);
             return;
         }
 
-        if (e.Key == System.Windows.Input.Key.Escape)
-        {
-            if (_selectionRectangle.Cancel())
-            {
-                DrawingSurface.ReleaseMouseCapture();
-                RenderCurrentScene();
-                e.Handled = true;
-                return;
-            }
-
-            if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
-            {
-                CancelDeviceDrag();
-                e.Handled = true;
-                return;
-            }
-
-            if (_viewport.IsPanning)
-            {
-                EndCanvasPan();
-                e.Handled = true;
-                return;
-            }
-
-            _shellViewModel.CancelCommand.Execute(null);
-            e.Handled = true;
-        }
+        OnDrawingToolVisualChanged(this, EventArgs.Empty);
     }
 
-    private void OnCancelRequested() => _drawingTools.Cancel();
+    private void CancelCurrentOperation()
+    {
+        if (_selectionRectangle.Cancel())
+        {
+            DrawingSurface.ReleaseMouseCapture();
+            RenderCurrentScene();
+            return;
+        }
+
+        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
+        {
+            CancelDeviceDrag();
+            return;
+        }
+
+        if (_viewport.IsPanning)
+        {
+            EndCanvasPan();
+            return;
+        }
+
+        _drawingTools.Cancel();
+        CancelProfessionalPicking();
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
+        UpdateCanvasStatus();
+        _actions.RefreshCanExecute();
+    }
+
+    private bool IsInteractionIdle()
+    {
+        return !_drawingTools.IsActive &&
+               _placement.Mode == PlacementMode.Idle &&
+               !_deviceDrag.IsActive &&
+               !_cableRouteDrag.IsActive &&
+               !_selectionRectangle.IsActive &&
+               !_viewport.IsPanning &&
+               !_groundingPointPickMode &&
+               _workScopePickState == WorkScopePickState.Idle;
+    }
+
+    private bool CanRotateCurrentSelection()
+    {
+        if (!_selectionManager.HasSingleSelection)
+        {
+            return false;
+        }
+
+        ResolvedSelection? selection = _selectionResolver.Resolve(
+            _selectionManager.Selected);
+        return selection?.PoleAttachment is not null &&
+               selection.AttachedDevice is SwitchDevice;
+    }
+
+    private bool CanOperateCurrentSwitch()
+    {
+        return _selectionManager.HasSingleSelection &&
+               _selectionResolver.Resolve(_selectionManager.Selected)?.SwitchDevice is not null;
+    }
+
+    private bool CanReconnectCurrentCable()
+    {
+        return _selectionManager.HasSingleSelection &&
+               _selectionResolver.Resolve(_selectionManager.Selected)?.CableSegment is not null;
+    }
+
+    private bool CanAddAttachmentToCurrentPole()
+    {
+        return _selectionManager.HasSingleSelection &&
+               _selectionResolver.Resolve(_selectionManager.Selected)?.Pole is not null;
+    }
 
     private void OnSelectAllRequested()
     {
@@ -439,6 +480,8 @@ public partial class MainWindow : Window
     private void OnSelectModeRequested()
     {
         _drawingTools.Cancel();
+        CancelProfessionalPicking();
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
         UpdateCanvasStatus();
     }
 
@@ -481,6 +524,7 @@ public partial class MainWindow : Window
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
         UpdateCanvasStatus();
+        _actions.RefreshCanExecute();
         RenderCurrentScene();
     }
 
@@ -608,6 +652,11 @@ public partial class MainWindow : Window
         }
 
         _selectionManager.SelectionChanged -= OnSelectionChanged;
+        if (_boundDocumentSession is not null)
+        {
+            _boundDocumentSession.StateChanged -= OnBoundDocumentSessionStateChanged;
+        }
+
         _boundDocumentSession = documentSession;
         if (documentSession is null)
         {
@@ -627,6 +676,7 @@ public partial class MainWindow : Window
         }
 
         ProjectRuntimeSession session = documentSession.RuntimeSession;
+        documentSession.StateChanged += OnBoundDocumentSessionStateChanged;
         _selectionManager = session.SelectionManager;
         _selectionRectangle = new SelectionRectangleController(_selectionManager);
         _commandStack = session.CommandStack;
@@ -641,6 +691,9 @@ public partial class MainWindow : Window
         _viewport.RestoreState(documentSession.ViewState);
         OnSelectionChanged(this, EventArgs.Empty);
     }
+
+    private void OnBoundDocumentSessionStateChanged(object? sender, EventArgs e) =>
+        _actions.RefreshCanExecute();
 
     private void CancelTransientInteraction()
     {
@@ -791,9 +844,15 @@ public partial class MainWindow : Window
 
     private void OnToggleGrid(object sender, RoutedEventArgs e)
     {
-        _gridVisible = sender is System.Windows.Controls.MenuItem menuItem && menuItem.IsChecked;
+        ToggleGrid();
+    }
+
+    private void ToggleGrid()
+    {
+        _gridVisible = !_gridVisible;
         DrawingSurface.ShowGrid = _gridVisible;
         UpdateCanvasStatus();
+        _actions.RefreshCanExecute();
     }
 
     private void UpdateCanvasStatus()
@@ -803,8 +862,6 @@ public partial class MainWindow : Window
             _gridVisible,
             _shellViewModel.Toolbox.SelectedMode switch
             {
-                DesktopToolMode.CreateRingCabinet => "创建环网柜",
-                DesktopToolMode.CreatePole => "创建杆塔",
                 _ when _overheadLineConnection.IsActive =>
                     _overheadLineConnection.State ==
                     OverheadLineToolState.PickingStartTerminal
@@ -820,9 +877,17 @@ public partial class MainWindow : Window
                         : "修改电缆：请选择新的终点端子",
                 _ when _poleSwitchAttachment.IsSelectingControlledConnection =>
                     _poleSwitchAttachment.StatusText,
+                _ when _groundingPointPickMode => "添加工作地线：请选择端子",
+                _ when _workScopePickState is WorkScopePickState.PickingBoundaryA =>
+                    "添加工作范围：请选择边界 A",
+                _ when _workScopePickState is WorkScopePickState.PickingBoundaryB =>
+                    "添加工作范围：请选择边界 B",
+                DesktopToolMode.CreateRingCabinet => "创建环网柜",
+                DesktopToolMode.CreatePole => "创建杆塔",
                 _ => "选择"
             },
             _selectionManager.SelectionCount);
+        _actions.RefreshCanExecute();
     }
 
     private void OnDrawingSurfaceSizeChanged(
@@ -891,7 +956,89 @@ public partial class MainWindow : Window
             _drawingTools.Cancel();
             UpdateCanvasStatus();
             e.Handled = true;
+            return;
         }
+
+        if (_groundingPointPickMode || _workScopePickState != WorkScopePickState.Idle)
+        {
+            CancelProfessionalPicking();
+            UpdateCanvasStatus();
+            e.Handled = true;
+            return;
+        }
+
+        if (!IsInteractionIdle() || _currentScene is null)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        DocumentPoint point = _viewport.Transform.ViewToDocument(
+            e.GetPosition(DrawingSurface));
+        SelectionReference? target = _currentScene.HitTestIndex.HitTest(
+            point,
+            _viewport.Transform.ViewDistanceToDocument(4));
+        if (target is not null && !_selectionManager.SelectionSet.Contains(target))
+        {
+            _selectionManager.Select(target);
+        }
+
+        ContextMenu menu = CreateDrawingContextMenu(target is null);
+        if (menu.Items.Count > 0)
+        {
+            DrawingSurface.ContextMenu = menu;
+            menu.PlacementTarget = DrawingSurface;
+            menu.IsOpen = true;
+        }
+
+        e.Handled = true;
+    }
+
+    private ContextMenu CreateDrawingContextMenu(bool isBlank)
+    {
+        IReadOnlyList<DesktopContextActionKind> actionKinds =
+            _contextMenuResolver.Resolve(
+                IsInteractionIdle(),
+                isBlank,
+                _selectionManager.SelectionCount,
+                CanRotateCurrentSelection(),
+                CanOperateCurrentSwitch(),
+                CanReconnectCurrentCable());
+        var menu = new ContextMenu();
+        foreach (DesktopContextActionKind actionKind in actionKinds)
+        {
+            menu.Items.Add(CreateContextMenuItem(actionKind));
+        }
+
+        return menu;
+    }
+
+    private MenuItem CreateContextMenuItem(DesktopContextActionKind actionKind)
+    {
+        (string header, System.Windows.Input.ICommand command) = actionKind switch
+        {
+            DesktopContextActionKind.Paste => ("粘贴", _actions.Paste),
+            DesktopContextActionKind.SelectAll => ("全选", _actions.SelectAll),
+            DesktopContextActionKind.FitDrawing => ("适合图形", _actions.FitDrawing),
+            DesktopContextActionKind.ToggleGrid => ("显示网格", _actions.ToggleGrid),
+            DesktopContextActionKind.Copy => ("复制", _actions.Copy),
+            DesktopContextActionKind.Delete => ("删除", _actions.Delete),
+            DesktopContextActionKind.RotateLeft => ("左转 90°", _actions.RotateLeft),
+            DesktopContextActionKind.RotateRight => ("右转 90°", _actions.RotateRight),
+            DesktopContextActionKind.SwitchOperation => ("开关分/合", _actions.SwitchOperation),
+            DesktopContextActionKind.ReconnectCableStart =>
+                ("修改电缆起点", _actions.ReconnectCableStart),
+            DesktopContextActionKind.ReconnectCableEnd =>
+                ("修改电缆终点", _actions.ReconnectCableEnd),
+            _ => throw new ArgumentOutOfRangeException(nameof(actionKind))
+        };
+        return new MenuItem
+        {
+            Header = header,
+            Command = command,
+            IsCheckable = actionKind == DesktopContextActionKind.ToggleGrid,
+            IsChecked = actionKind == DesktopContextActionKind.ToggleGrid && _gridVisible
+        };
     }
 
     private void OnDrawingSurfaceMouseUp(
@@ -1075,11 +1222,11 @@ public partial class MainWindow : Window
         }
         catch (ArgumentException exception)
         {
-            ShowCommandError("撤销失败", exception.Message);
+            _messageService.ShowError("撤销失败", exception.Message);
         }
         catch (InvalidOperationException exception)
         {
-            ShowCommandError("撤销失败", exception.Message);
+            _messageService.ShowError("撤销失败", exception.Message);
         }
     }
 
@@ -1112,11 +1259,11 @@ public partial class MainWindow : Window
         }
         catch (ArgumentException exception)
         {
-            ShowCommandError("重做失败", exception.Message);
+            _messageService.ShowError("重做失败", exception.Message);
         }
         catch (InvalidOperationException exception)
         {
-            ShowCommandError("重做失败", exception.Message);
+            _messageService.ShowError("重做失败", exception.Message);
         }
     }
 
@@ -1148,7 +1295,7 @@ public partial class MainWindow : Window
     {
         if (_activeSource?.Document is null || _activeSource.DrawingLayout is null)
         {
-            ShowCommandError(
+            _messageService.ShowError(
                 "无法添加工作地线",
                 "当前场景没有可编辑的 DrawingDocument 工程。");
             return;
@@ -1165,13 +1312,14 @@ public partial class MainWindow : Window
         GroundingPointLocationInput.Text = string.Empty;
         GroundingPointNumberInput.Text = string.Empty;
         GroundingPointNoteInput.Text = string.Empty;
+        UpdateCanvasStatus();
     }
 
     private void OnBeginAddWorkScope(object sender, RoutedEventArgs e)
     {
         if (_activeSource?.Document is null || _activeSource.DrawingLayout is null)
         {
-            ShowCommandError(
+            _messageService.ShowError(
                 "无法添加工作范围",
                 "当前场景没有可编辑的 DrawingDocument 工程。");
             return;
@@ -1189,6 +1337,7 @@ public partial class MainWindow : Window
         WorkScopeGroundingPointIdsInput.Text = string.Empty;
         _selectionManager.Clear();
         UpdateWorkScopeEditor();
+        UpdateCanvasStatus();
     }
 
     private void OnDrawRingCabinetComposition(object sender, RoutedEventArgs e)
@@ -1889,7 +2038,7 @@ public partial class MainWindow : Window
         }
         catch (InvalidOperationException exception)
         {
-            ShowCommandError("电缆端点修改失败", exception.Message);
+            _messageService.ShowError("电缆端点修改失败", exception.Message);
         }
     }
 
@@ -2173,7 +2322,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            ShowCommandError("旋转失败", exception.Message);
+            _messageService.ShowError("旋转失败", exception.Message);
         }
     }
 

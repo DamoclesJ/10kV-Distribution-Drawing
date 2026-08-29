@@ -36,6 +36,24 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
+    public void SuccessfulCopyPublishesClipboardStateChange()
+    {
+        ProjectRuntimeSession session = CreateSession("剪贴板通知");
+        AddPoleCommand source = AddPole(session, new DocumentPoint(10, 10));
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            source.Pole.Id));
+        var clipboard = new DrawingClipboardService();
+        int notifications = 0;
+        clipboard.ContentChanged += (_, _) => notifications++;
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+
+        Assert.True(clipboard.HasContent);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
     public void PolePaste_RemapsIdsOffsetsAndSelectsNewPole()
     {
         ProjectRuntimeSession session = CreateSession("杆塔复制");

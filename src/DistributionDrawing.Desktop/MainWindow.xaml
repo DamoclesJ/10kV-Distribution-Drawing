@@ -7,101 +7,108 @@
         Height="800"
         MinWidth="800"
         MinHeight="600"
-        KeyDown="OnWindowKeyDown"
         WindowStartupLocation="CenterScreen">
+  <Window.InputBindings>
+    <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewProjectCommand}" />
+    <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenProjectCommand}" />
+    <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveProjectCommand}" />
+    <KeyBinding Key="S" Modifiers="Control+Shift" Command="{Binding SaveProjectAsCommand}" />
+    <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseDocumentCommand}" />
+    <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
+    <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
+    <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyCommand}" />
+    <KeyBinding Key="V" Modifiers="Control" Command="{Binding PasteCommand}" />
+    <KeyBinding Key="A" Modifiers="Control" Command="{Binding SelectAllCommand}" />
+    <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
+    <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
+  </Window.InputBindings>
   <DockPanel>
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="文件">
-        <MenuItem Header="新建工程" Command="{Binding NewProjectCommand}" />
-        <MenuItem Header="打开工程" Command="{Binding OpenProjectCommand}" />
-        <MenuItem Header="保存工程" Command="{Binding SaveProjectCommand}" />
-        <MenuItem Header="另存为" Click="OnSaveProjectAs" />
+        <MenuItem Header="新建" Command="{Binding NewProjectCommand}" InputGestureText="Ctrl+N" />
+        <MenuItem Header="打开" Command="{Binding OpenProjectCommand}" InputGestureText="Ctrl+O" />
+        <MenuItem Header="保存" Command="{Binding SaveProjectCommand}" InputGestureText="Ctrl+S" />
+        <MenuItem Header="另存为" Command="{Binding SaveProjectAsCommand}" InputGestureText="Ctrl+Shift+S" />
+        <MenuItem Header="关闭当前工程" Command="{Binding CloseDocumentCommand}" InputGestureText="Ctrl+W" />
         <Separator />
-        <MenuItem Header="关闭工程" Click="OnCloseProject" />
-      </MenuItem>
-      <MenuItem Header="设备">
-        <MenuItem Header="添加杆塔" Click="OnBeginPlacePole" />
-        <MenuItem Header="添加环网柜" Click="OnBeginPlaceRingCabinet" />
-        <MenuItem Header="添加电缆终端" Click="OnAddCableTermination" />
-        <MenuItem Header="添加柱上开关" Click="OnAddPoleSwitch" />
-        <MenuItem Header="绘制架空线" Click="OnBeginOverheadLine" />
-        <MenuItem Header="绘制电缆" Click="OnBeginCable" />
-        <MenuItem Header="取消放置" Click="OnCancelPlacement" />
-        <Separator />
-        <MenuItem Header="删除所选对象" Command="{Binding DeleteCommand}" />
+        <MenuItem Header="退出" Command="{Binding ExitCommand}" />
       </MenuItem>
       <MenuItem Header="编辑">
-        <MenuItem Header="撤销"
-                  Command="{Binding UndoCommand}" />
-        <MenuItem Header="重做"
-                  Command="{Binding RedoCommand}" />
-        <MenuItem Header="添加工作地线"
-                  Click="OnBeginAddGroundingPoint" />
-        <MenuItem Header="添加工作范围"
-                  Click="OnBeginAddWorkScope" />
+        <MenuItem Header="撤销" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z" />
+        <MenuItem Header="重做" Command="{Binding RedoCommand}" InputGestureText="Ctrl+Y" />
+        <Separator />
+        <MenuItem Header="复制" Command="{Binding CopyCommand}" InputGestureText="Ctrl+C" />
+        <MenuItem Header="粘贴" Command="{Binding PasteCommand}" InputGestureText="Ctrl+V" />
+        <MenuItem Header="全选" Command="{Binding SelectAllCommand}" InputGestureText="Ctrl+A" />
+        <MenuItem Header="删除" Command="{Binding DeleteCommand}" InputGestureText="Delete" />
+        <Separator />
+        <MenuItem Header="取消当前操作" Command="{Binding CancelCommand}" InputGestureText="Esc" />
+      </MenuItem>
+      <MenuItem Header="绘图">
+        <MenuItem Header="选择" Command="{Binding SelectCommand}" />
+        <MenuItem Header="杆塔" Command="{Binding CreatePoleCommand}" />
+        <MenuItem Header="环网柜" Command="{Binding CreateRingCabinetCommand}" />
+        <MenuItem Header="架空线" Command="{Binding CreateOverheadLineCommand}" />
+        <MenuItem Header="电缆" Command="{Binding CreateCableCommand}" />
+        <MenuItem Header="电缆终端" Command="{Binding AddCableTerminationCommand}" />
+        <MenuItem Header="柱上开关" Command="{Binding AddPoleSwitchCommand}" />
+        <MenuItem Header="工作地线" Command="{Binding AddGroundingPointCommand}" />
+        <MenuItem Header="工作范围" Command="{Binding AddWorkScopeCommand}" />
+      </MenuItem>
+      <MenuItem Header="操作">
+        <MenuItem Header="开关分/合" Command="{Binding SwitchOperationCommand}" />
+        <MenuItem Header="左转 90°" Command="{Binding RotateLeftCommand}" />
+        <MenuItem Header="右转 90°" Command="{Binding RotateRightCommand}" />
+        <Separator />
+        <MenuItem Header="修改电缆起点" Command="{Binding ReconnectCableStartCommand}" />
+        <MenuItem Header="修改电缆终点" Command="{Binding ReconnectCableEndCommand}" />
       </MenuItem>
       <MenuItem Header="视图">
-        <MenuItem Header="图面字号设置"
-                  Click="OnDrawingTypographySettings" />
+        <MenuItem Header="放大" Command="{Binding ZoomInCommand}" />
+        <MenuItem Header="缩小" Command="{Binding ZoomOutCommand}" />
+        <MenuItem Header="适合图形" Command="{Binding FitDrawingCommand}" />
+        <MenuItem Header="显示网格" IsCheckable="True"
+                  IsChecked="{Binding GridVisible, Mode=OneWay}" Command="{Binding ToggleGridCommand}" />
         <Separator />
-        <MenuItem Header="放大"
-                  Click="OnZoomIn" />
-        <MenuItem Header="缩小"
-                  Click="OnZoomOut" />
-        <MenuItem Header="适合图形"
-                  Click="OnFitDrawing" />
-        <MenuItem Header="显示网格"
-                  IsCheckable="True"
-                  Click="OnToggleGrid" />
-        <Separator />
-        <MenuItem Header="绘制测试内容"
-                  Click="OnDrawTestContent" />
-        <MenuItem Header="绘制环网柜组合场景"
-                  Click="OnDrawRingCabinetComposition" />
-        <MenuItem Header="清空绘图区"
-                  Click="OnClearDrawing" />
+        <MenuItem Header="图面字号设置" Command="{Binding TypographySettingsCommand}" />
       </MenuItem>
     </Menu>
 
+    <ToolBarTray DockPanel.Dock="Top">
+      <ToolBar>
+        <Button Content="选择" Command="{Binding SelectCommand}" />
+        <Button Content="杆塔" Command="{Binding CreatePoleCommand}" />
+        <Button Content="环网柜" Command="{Binding CreateRingCabinetCommand}" />
+        <Button Content="架空线" Command="{Binding CreateOverheadLineCommand}" />
+        <Button Content="电缆" Command="{Binding CreateCableCommand}" />
+        <Separator />
+        <Button Content="保存" Command="{Binding SaveProjectCommand}" />
+        <Button Content="撤销" Command="{Binding UndoCommand}" />
+        <Button Content="重做" Command="{Binding RedoCommand}" />
+        <Button Content="复制" Command="{Binding CopyCommand}" />
+        <Button Content="粘贴" Command="{Binding PasteCommand}" />
+        <Button Content="删除" Command="{Binding DeleteCommand}" />
+        <Button Content="适合图形" Command="{Binding FitDrawingCommand}" />
+      </ToolBar>
+    </ToolBarTray>
+
     <StatusBar DockPanel.Dock="Bottom">
+      <StatusBarItem Content="{Binding StatusText}" />
+      <Separator />
+      <StatusBarItem Content="{Binding SelectionStatus}" />
+      <Separator />
       <StatusBarItem Content="{Binding ZoomText}" />
       <StatusBarItem Content="{Binding GridText}" />
-      <StatusBarItem Content="{Binding ModeText}" />
+      <StatusBarItem Content="{Binding SnapText}" />
     </StatusBar>
 
     <Grid>
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="170" />
         <ColumnDefinition />
         <ColumnDefinition Width="300" />
       </Grid.ColumnDefinitions>
 
       <Border Grid.Column="0"
-              Margin="12,12,0,12"
-              Padding="10"
-              Background="#FFF"
-              BorderBrush="#D0D0D0"
-              BorderThickness="1">
-        <StackPanel>
-          <TextBlock FontSize="16"
-                     FontWeight="SemiBold"
-                     Text="工具箱" />
-          <Button Margin="0,12,0,4"
-                  Content="选择"
-                  Command="{Binding Toolbox.SelectModeCommand}" />
-          <Button Margin="0,4"
-                  Content="创建环网柜"
-                  Command="{Binding Toolbox.CreateRingCabinetModeCommand}" />
-          <Button Margin="0,4"
-                  Content="创建杆塔"
-                  Command="{Binding Toolbox.CreatePoleModeCommand}" />
-          <Button Margin="0,4"
-                  Content="绘制电缆"
-                  Click="OnBeginCable" />
-        </StackPanel>
-      </Border>
-
-      <Border Grid.Column="1"
               Margin="12"
               Background="#FFF"
               BorderBrush="#D0D0D0"
@@ -119,7 +126,7 @@
       </Border>
 
       <Border x:Name="PropertyInspectorPanel"
-              Grid.Column="2"
+              Grid.Column="1"
               Margin="0,12,12,12"
               Padding="10"
               Background="#FFF"
@@ -181,7 +188,7 @@
                        Margin="0,4,0,4"
                        Foreground="#666" />
             <Button x:Name="SwitchOperationButton"
-                    Click="OnSwitchOperation" />
+                    Command="{Binding DataContext.SwitchOperationCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
           </StackPanel>
           <StackPanel x:Name="PoleNumberEditorPanel"
                       DockPanel.Dock="Top"
@@ -207,8 +214,10 @@
                      Margin="0,2,0,4"
                      DisplayMemberPath="DisplayText"
                      SelectionChanged="OnPoleInstalledDeviceSelected" />
-            <Button Content="左转 90°" Click="OnRotatePoleAttachmentLeft" />
-            <Button Margin="0,2,0,0" Content="右转 90°" Click="OnRotatePoleAttachmentRight" />
+            <Button Content="左转 90°"
+                    Command="{Binding DataContext.RotateLeftCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <Button Margin="0,2,0,0" Content="右转 90°"
+                    Command="{Binding DataContext.RotateRightCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
             <Button Margin="0,2,0,0" Content="删除选中安装设备" Click="OnRemovePoleAttachment" />
           </StackPanel>
           <StackPanel x:Name="CablePropertyEditorPanel"
@@ -233,10 +242,10 @@
                     Click="OnApplyCableLength" />
             <Button Margin="0,4,0,0"
                     Content="修改起点"
-                    Click="OnBeginCableReconnectStart" />
+                    Command="{Binding DataContext.ReconnectCableStartCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
             <Button Margin="0,2,0,0"
                     Content="修改终点"
-                    Click="OnBeginCableReconnectEnd" />
+                    Command="{Binding DataContext.ReconnectCableEndCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
             <Button Margin="0,2,0,0"
                     Content="取消端点修改"
                     Click="OnCancelCableReconnect" />

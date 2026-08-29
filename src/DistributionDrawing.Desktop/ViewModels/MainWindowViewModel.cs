@@ -1,88 +1,79 @@
-using DistributionDrawing.Desktop.Services;
-using System.Windows.Input;
 using System.ComponentModel;
+using System.Windows.Input;
+using DistributionDrawing.Desktop.Actions;
+using DistributionDrawing.Desktop.Services;
 
 namespace DistributionDrawing.Desktop.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
-    private readonly RelayCommand _undoCommand;
-    private readonly RelayCommand _redoCommand;
-    private readonly RelayCommand _deleteCommand;
     private double _zoom = 1.0;
     private bool _gridVisible;
-    private string _modeText = "选择";
+    private string _modeText = "就绪";
     private int _selectionCount;
 
     public MainWindowViewModel(
         DesktopShellService shellService,
-        Action newProject,
-        Action openProject,
-        Action saveProject,
-        Action undo,
-        Action redo,
-        Action delete,
-        Action cancel,
-        Func<bool>? canUndo = null,
-        Func<bool>? canRedo = null,
-        Func<bool>? canDelete = null,
-        Action? selectMode = null,
-        Action? createRingCabinetMode = null,
-        Action? createPoleMode = null)
+        DesktopUserActions actions)
     {
         ArgumentNullException.ThrowIfNull(shellService);
-        ArgumentNullException.ThrowIfNull(newProject);
-        ArgumentNullException.ThrowIfNull(openProject);
-        ArgumentNullException.ThrowIfNull(saveProject);
-        ArgumentNullException.ThrowIfNull(undo);
-        ArgumentNullException.ThrowIfNull(redo);
-        ArgumentNullException.ThrowIfNull(delete);
-        ArgumentNullException.ThrowIfNull(cancel);
+        Actions = actions ?? throw new ArgumentNullException(nameof(actions));
         _modeText = shellService.InitialStatus;
-        NewProjectCommand = new RelayCommand(newProject);
-        OpenProjectCommand = new RelayCommand(openProject);
-        SaveProjectCommand = new RelayCommand(saveProject);
-        _undoCommand = new RelayCommand(undo, canUndo);
-        _redoCommand = new RelayCommand(redo, canRedo);
-        _deleteCommand = new RelayCommand(delete, canDelete);
-        UndoCommand = _undoCommand;
-        RedoCommand = _redoCommand;
-        DeleteCommand = _deleteCommand;
-        CancelCommand = new RelayCommand(cancel);
-        Toolbox = new ToolboxViewModel(
-            selectMode ?? (() => { }),
-            createRingCabinetMode ?? (() => { }),
-            createPoleMode ?? (() => { }));
+        Toolbox = new ToolboxViewModel();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public DesktopUserActions Actions { get; }
 
     public string CanvasTitle => "绘图区";
 
     public string InspectorTitle => "属性检查器";
 
-    public string StatusText =>
-        $"缩放 {_zoom:0.00}x · 网格 {(_gridVisible ? "开" : "关")} · 模式 {_modeText} · 已选择 {_selectionCount}";
+    public string StatusText => _modeText;
+
+    public string SelectionStatus => $"已选择: {_selectionCount}";
 
     public string ZoomText => $"缩放: {_zoom:0.00}x";
 
     public string GridText => $"网格: {(_gridVisible ? "开" : "关")}";
 
-    public string ModeText => $"模式: {_modeText}";
+    public string SnapText => "吸附: 开";
 
-    public ICommand NewProjectCommand { get; }
+    public bool GridVisible => _gridVisible;
 
-    public ICommand OpenProjectCommand { get; }
-
-    public ICommand SaveProjectCommand { get; }
-
-    public ICommand UndoCommand { get; }
-
-    public ICommand RedoCommand { get; }
-
-    public ICommand DeleteCommand { get; }
-
-    public ICommand CancelCommand { get; }
+    public ICommand NewProjectCommand => Actions.New;
+    public ICommand OpenProjectCommand => Actions.Open;
+    public ICommand SaveProjectCommand => Actions.Save;
+    public ICommand SaveProjectAsCommand => Actions.SaveAs;
+    public ICommand CloseDocumentCommand => Actions.CloseDocument;
+    public ICommand ExitCommand => Actions.Exit;
+    public ICommand UndoCommand => Actions.Undo;
+    public ICommand RedoCommand => Actions.Redo;
+    public ICommand CopyCommand => Actions.Copy;
+    public ICommand PasteCommand => Actions.Paste;
+    public ICommand SelectAllCommand => Actions.SelectAll;
+    public ICommand DeleteCommand => Actions.Delete;
+    public ICommand CancelCommand => Actions.CancelCurrentOperation;
+    public ICommand SelectCommand => Actions.Select;
+    public ICommand CreatePoleCommand => Actions.CreatePole;
+    public ICommand CreateRingCabinetCommand => Actions.CreateRingCabinet;
+    public ICommand CreateOverheadLineCommand => Actions.CreateOverheadLine;
+    public ICommand CreateCableCommand => Actions.CreateCable;
+    public ICommand AddCableTerminationCommand => Actions.AddCableTermination;
+    public ICommand AddPoleSwitchCommand => Actions.AddPoleSwitch;
+    public ICommand AddGroundingPointCommand => Actions.AddGroundingPoint;
+    public ICommand AddWorkScopeCommand => Actions.AddWorkScope;
+    public ICommand ZoomInCommand => Actions.ZoomIn;
+    public ICommand ZoomOutCommand => Actions.ZoomOut;
+    public ICommand FitDrawingCommand => Actions.FitDrawing;
+    public ICommand ToggleGridCommand => Actions.ToggleGrid;
+    public ICommand TypographySettingsCommand => Actions.TypographySettings;
+    public ICommand RotateLeftCommand => Actions.RotateLeft;
+    public ICommand RotateRightCommand => Actions.RotateRight;
+    public ICommand SwitchOperationCommand => Actions.SwitchOperation;
+    public ICommand ReconnectCableStartCommand => Actions.ReconnectCableStart;
+    public ICommand ReconnectCableEndCommand => Actions.ReconnectCableEnd;
 
     public ToolboxViewModel Toolbox { get; }
 
@@ -97,38 +88,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _modeText = string.IsNullOrWhiteSpace(modeText) ? "选择" : modeText;
         _selectionCount = Math.Max(0, selectionCount);
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(SelectionStatus));
         OnPropertyChanged(nameof(ZoomText));
         OnPropertyChanged(nameof(GridText));
-        OnPropertyChanged(nameof(ModeText));
+        OnPropertyChanged(nameof(GridVisible));
     }
 
-    public void RefreshCommandStates()
-    {
-        _undoCommand.Refresh();
-        _redoCommand.Refresh();
-        _deleteCommand.Refresh();
-    }
+    public void RefreshCommandStates() => Actions.RefreshCanExecute();
 
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-
-    private sealed class RelayCommand : ICommand
-    {
-        private readonly Action _execute;
-        private readonly Func<bool>? _canExecute;
-
-        public RelayCommand(Action execute, Func<bool>? canExecute = null)
-        {
-            _execute = execute;
-            _canExecute = canExecute;
-        }
-
-        public event EventHandler? CanExecuteChanged;
-
-        public bool CanExecute(object? parameter) => _canExecute?.Invoke() ?? true;
-
-        public void Execute(object? parameter) => _execute();
-
-        public void Refresh() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-    }
 }
