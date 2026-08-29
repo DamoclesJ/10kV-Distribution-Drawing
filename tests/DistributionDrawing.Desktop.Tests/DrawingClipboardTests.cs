@@ -279,7 +279,7 @@ public sealed class DrawingClipboardTests : IDisposable
                 "电缆柜",
                 new RingCabinetCreationTemplateFactory().Create(
                     RingCabinetTemplateType.Conventional,
-                    2)),
+                    3)),
             new DocumentPoint(20, 20));
         cabinet.Execute();
         AddPoleCommand pole = AddPole(session, new DocumentPoint(180, 30));
