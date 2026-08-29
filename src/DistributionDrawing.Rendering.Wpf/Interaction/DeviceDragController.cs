@@ -1,3 +1,4 @@
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -11,16 +12,63 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction;
 public sealed class DeviceDragController
 {
     private readonly LayoutSnapService _snapService;
+    private readonly SelectionMovePlanner _movePlanner;
     private DragState? _drag;
 
-    public DeviceDragController(LayoutSnapService? snapService = null)
+    public DeviceDragController(
+        LayoutSnapService? snapService = null,
+        SelectionMovePlanner? movePlanner = null)
     {
         _snapService = snapService ?? new LayoutSnapService();
+        _movePlanner = movePlanner ?? new SelectionMovePlanner();
     }
 
     public bool IsActive => _drag is not null;
 
     public SelectionReference? Target => _drag?.Target;
+
+    public bool IsGroupDrag => _drag is GroupDragState;
+
+    public bool TryBeginGroupDrag(
+        SelectionSet selection,
+        SelectionReference dragTarget,
+        DocumentPoint pointer,
+        DrawingDocument document,
+        RuntimeLayoutDocument layout)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        ArgumentNullException.ThrowIfNull(dragTarget);
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(layout);
+        EnsureInactive();
+
+        SelectionMovePlan plan = _movePlanner.Create(
+            selection,
+            dragTarget,
+            document,
+            layout);
+        if (!plan.CanMove)
+        {
+            return false;
+        }
+
+        GroupMoveLayoutState before = CaptureState(plan.Roots, layout);
+        SelectionMoveRoot anchor = plan.DragAnchorRoot!;
+        _drag = new GroupDragState(
+            dragTarget,
+            pointer,
+            layout,
+            before,
+            before,
+            anchor,
+            GetRootPosition(anchor, before),
+            plan.Roots
+                .Where(item => item.Kind is SelectionMoveRootKind.Pole or
+                    SelectionMoveRootKind.RingCabinet)
+                .Select(item => item.ObjectId)
+                .ToHashSet());
+        return true;
+    }
 
     public bool TryBeginDrag(
         SelectionReference target,
@@ -30,10 +78,7 @@ public sealed class DeviceDragController
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(layout);
-        if (_drag is not null)
-        {
-            throw new InvalidOperationException("A device drag is already active.");
-        }
+        EnsureInactive();
 
         if (target.Kind == SelectionTargetKind.Device &&
             layout.DrawingLayout.Poles.TryGetValue(target.ObjectId, out PoleLayout? pole))
@@ -69,11 +114,44 @@ public sealed class DeviceDragController
                 layout,
                 parentPole,
                 attachment,
-                attachment);
+                attachment,
+                true);
             return true;
         }
 
         return false;
+    }
+
+    public bool TryBeginAttachmentDrag(
+        SelectionReference target,
+        Guid attachmentId,
+        DocumentPoint pointer,
+        RuntimeLayoutDocument layout,
+        Guid parentPoleId,
+        bool orbitAroundPole)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(layout);
+        EnsureInactive();
+        if (!layout.DrawingLayout.Attachments.TryGetValue(
+                attachmentId,
+                out AttachmentLayout? attachment) ||
+            !layout.DrawingLayout.Poles.TryGetValue(
+                parentPoleId,
+                out PoleLayout? parentPole))
+        {
+            return false;
+        }
+
+        _drag = new AttachmentDragState(
+            target,
+            pointer,
+            layout,
+            parentPole,
+            attachment,
+            attachment,
+            orbitAroundPole);
+        return true;
     }
 
     public bool UpdatePreview(DocumentPoint pointer)
@@ -83,13 +161,22 @@ public sealed class DeviceDragController
             throw new InvalidOperationException("No device drag is active.");
         }
 
+        if (drag is GroupDragState group)
+        {
+            return UpdateGroup(group, pointer);
+        }
+
         if (drag is AttachmentDragState attachment)
         {
-            AttachmentLayout current = attachment.Before.MoveTo(
-                PoleProfessionalGeometry.GetCableTerminationOffset(
+            DocumentPoint offset = attachment.OrbitAroundPole
+                ? PoleProfessionalGeometry.GetCableTerminationOffset(
                     attachment.ParentPole,
                     attachment.Before,
-                    pointer));
+                    pointer)
+                : Translate(
+                    attachment.Before.Offset,
+                    Delta(pointer, attachment.StartPointer));
+            AttachmentLayout current = attachment.Before.MoveTo(offset);
             if (current.Offset == attachment.Current.Offset)
             {
                 return false;
@@ -135,6 +222,10 @@ public sealed class DeviceDragController
 
         return drag switch
         {
+            GroupDragState group => new GroupMoveCommand(
+                group.Layout,
+                group.Before,
+                group.Current),
             PoleDragState pole => new MoveCommand(
                 pole.Layout.DrawingLayout,
                 pole.Before,
@@ -163,6 +254,9 @@ public sealed class DeviceDragController
         _drag = null;
         switch (drag)
         {
+            case GroupDragState group:
+                GroupMoveCommand.Apply(group.Layout, group.Before);
+                break;
             case PoleDragState pole:
                 pole.Layout.DrawingLayout.Replace(pole.Before);
                 break;
@@ -195,6 +289,86 @@ public sealed class DeviceDragController
         RingCabinetLayout preview = drag.Before.MoveTo(position);
         drag.Layout.ReplaceRingCabinet(preview);
         return drag with { Current = preview };
+    }
+
+    private bool UpdateGroup(GroupDragState drag, DocumentPoint pointer)
+    {
+        DocumentPoint rawDelta = Delta(pointer, drag.StartPointer);
+        DocumentPoint anchorCandidate = Translate(drag.AnchorStartPosition, rawDelta);
+        DocumentPoint snappedAnchor = _snapService.Snap(
+            drag.AnchorRoot.SelectionReference,
+            anchorCandidate,
+            drag.Layout,
+            drag.ExcludedSnapObjectIds);
+        DocumentPoint finalDelta = Delta(snappedAnchor, drag.AnchorStartPosition);
+        GroupMoveLayoutState current = Translate(drag.Before, finalDelta);
+        if (current.HasSamePositions(drag.Current))
+        {
+            return false;
+        }
+
+        GroupMoveCommand.Apply(drag.Layout, current);
+        _drag = drag with { Current = current };
+        return true;
+    }
+
+    private static GroupMoveLayoutState CaptureState(
+        IEnumerable<SelectionMoveRoot> roots,
+        RuntimeLayoutDocument layout)
+    {
+        SelectionMoveRoot[] values = roots.ToArray();
+        return new GroupMoveLayoutState(
+            Array.AsReadOnly(values
+                .Where(item => item.Kind == SelectionMoveRootKind.Pole)
+                .Select(item => layout.DrawingLayout.Poles[item.ObjectId])
+                .ToArray()),
+            Array.AsReadOnly(values
+                .Where(item => item.Kind == SelectionMoveRootKind.RingCabinet)
+                .Select(item => layout.RingCabinetLayouts[item.ObjectId])
+                .ToArray()),
+            Array.AsReadOnly(values
+                .Where(item => item.Kind == SelectionMoveRootKind.PoleAttachment)
+                .Select(item => layout.DrawingLayout.Attachments[item.ObjectId])
+                .ToArray()));
+    }
+
+    private static DocumentPoint GetRootPosition(
+        SelectionMoveRoot root,
+        GroupMoveLayoutState state) => root.Kind switch
+        {
+            SelectionMoveRootKind.Pole => state.Poles.Single(item =>
+                item.PoleId == root.ObjectId).Position,
+            SelectionMoveRootKind.RingCabinet => state.RingCabinets.Single(item =>
+                item.CabinetId == root.ObjectId).Position,
+            SelectionMoveRootKind.PoleAttachment => state.Attachments.Single(item =>
+                item.AttachmentId == root.ObjectId).Offset,
+            _ => throw new InvalidOperationException("Unsupported selection move root.")
+        };
+
+    private static GroupMoveLayoutState Translate(
+        GroupMoveLayoutState state,
+        DocumentPoint delta) => new(
+        Array.AsReadOnly(state.Poles.Select(item =>
+            item.MoveTo(Translate(item.Position, delta))).ToArray()),
+        Array.AsReadOnly(state.RingCabinets.Select(item =>
+            item.MoveTo(Translate(item.Position, delta))).ToArray()),
+        Array.AsReadOnly(state.Attachments.Select(item =>
+            item.MoveTo(Translate(item.Offset, delta))).ToArray()));
+
+    private static DocumentPoint Delta(DocumentPoint value, DocumentPoint origin) => new(
+        value.XMillimeters - origin.XMillimeters,
+        value.YMillimeters - origin.YMillimeters);
+
+    private static DocumentPoint Translate(DocumentPoint value, DocumentPoint delta) => new(
+        value.XMillimeters + delta.XMillimeters,
+        value.YMillimeters + delta.YMillimeters);
+
+    private void EnsureInactive()
+    {
+        if (_drag is not null)
+        {
+            throw new InvalidOperationException("A device drag is already active.");
+        }
     }
 
     private abstract record DragState(
@@ -239,11 +413,30 @@ public sealed class DeviceDragController
         RuntimeLayoutDocument Layout,
         PoleLayout ParentPole,
         AttachmentLayout Before,
-        AttachmentLayout Current)
+        AttachmentLayout Current,
+        bool OrbitAroundPole)
         : DragState(Target, StartPointer, Layout)
     {
         public override DocumentPoint StartPosition => Before.Offset;
 
         public override DocumentPoint CurrentPosition => Current.Offset;
+    }
+
+    private sealed record GroupDragState(
+        SelectionReference Target,
+        DocumentPoint StartPointer,
+        RuntimeLayoutDocument Layout,
+        GroupMoveLayoutState Before,
+        GroupMoveLayoutState Current,
+        SelectionMoveRoot AnchorRoot,
+        DocumentPoint AnchorStartPosition,
+        IReadOnlySet<Guid> ExcludedSnapObjectIds)
+        : DragState(Target, StartPointer, Layout)
+    {
+        public override DocumentPoint StartPosition => AnchorStartPosition;
+
+        public override DocumentPoint CurrentPosition => GetRootPosition(
+            AnchorRoot,
+            Current);
     }
 }

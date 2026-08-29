@@ -16,7 +16,8 @@ public sealed class LayoutSnapService
     public DocumentPoint Snap(
         SelectionReference target,
         DocumentPoint candidatePosition,
-        RuntimeLayoutDocument layout)
+        RuntimeLayoutDocument layout,
+        IReadOnlySet<Guid>? excludedObjectIds = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(layout);
@@ -27,7 +28,10 @@ public sealed class LayoutSnapService
             layout);
         (double Delta, Guid Id)? xSnap = null;
         (double Delta, Guid Id)? ySnap = null;
-        foreach ((Guid id, DocumentPoint otherCenter) in GetOtherCenters(target, layout))
+        foreach ((Guid id, DocumentPoint otherCenter) in GetOtherCenters(
+                     target,
+                     layout,
+                     excludedObjectIds))
         {
             double deltaX = otherCenter.XMillimeters - center.XMillimeters;
             double deltaY = otherCenter.YMillimeters - center.YMillimeters;
@@ -87,10 +91,12 @@ public sealed class LayoutSnapService
 
     private static IEnumerable<(Guid Id, DocumentPoint Center)> GetOtherCenters(
         SelectionReference target,
-        RuntimeLayoutDocument layout)
+        RuntimeLayoutDocument layout,
+        IReadOnlySet<Guid>? excludedObjectIds)
     {
         foreach (PoleLayout pole in layout.DrawingLayout.Poles.Values
-                     .Where(pole => pole.PoleId != target.ObjectId)
+                     .Where(pole => pole.PoleId != target.ObjectId &&
+                                    excludedObjectIds?.Contains(pole.PoleId) != true)
                      .OrderBy(pole => pole.PoleId))
         {
             yield return (
@@ -101,7 +107,8 @@ public sealed class LayoutSnapService
         }
 
         foreach (RingCabinetLayout cabinet in layout.RingCabinetLayouts.Values
-                     .Where(cabinet => cabinet.CabinetId != target.ObjectId)
+                     .Where(cabinet => cabinet.CabinetId != target.ObjectId &&
+                                       excludedObjectIds?.Contains(cabinet.CabinetId) != true)
                      .OrderBy(cabinet => cabinet.CabinetId))
         {
             yield return (

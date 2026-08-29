@@ -101,4 +101,26 @@ public sealed class LayoutSnapServiceTests
 
         Assert.Equal(alignedPosition, snapped);
     }
+
+    [Fact]
+    public void Snap_ExcludedObjectIsNotUsedAsAlignmentTarget()
+    {
+        Guid movingId = Guid.NewGuid();
+        Guid selectedPeerId = Guid.NewGuid();
+        var drawingLayout = new DrawingLayout();
+        drawingLayout.Add(new PoleLayout(movingId, new DocumentPoint(0, 0)));
+        drawingLayout.Add(new PoleLayout(selectedPeerId, new DocumentPoint(50, 40)));
+        var runtime = new RuntimeLayoutDocument(
+            drawingLayout,
+            new Dictionary<Guid, RingCabinetLayout>());
+        DocumentPoint candidate = new(47, 10);
+
+        DocumentPoint snapped = new LayoutSnapService().Snap(
+            new SelectionReference(SelectionTargetKind.Device, movingId),
+            candidate,
+            runtime,
+            new HashSet<Guid> { movingId, selectedPeerId });
+
+        Assert.Equal(candidate, snapped);
+    }
 }

@@ -648,8 +648,13 @@ public partial class MainWindow : Window
 
     private void CancelTransientInteraction()
     {
-        _deviceDrag.Cancel();
-        _cableRouteDrag.Cancel();
+        bool layoutChanged = _deviceDrag.Cancel();
+        layoutChanged |= _cableRouteDrag.Cancel();
+        if (layoutChanged && _workspace.CurrentSession is { } session)
+        {
+            session.RebuildScene();
+        }
+
         _selectionRectangle.Cancel();
         EndCanvasPan();
         DrawingSurface.ReleaseMouseCapture();
@@ -874,6 +879,13 @@ public partial class MainWindow : Window
         {
             DrawingSurface.ReleaseMouseCapture();
             RenderCurrentScene();
+            e.Handled = true;
+            return;
+        }
+
+        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
+        {
+            CancelDeviceDrag();
             e.Handled = true;
             return;
         }
@@ -1496,7 +1508,6 @@ public partial class MainWindow : Window
         bool shiftPressed =
             (System.Windows.Input.Keyboard.Modifiers &
              System.Windows.Input.ModifierKeys.Shift) != 0;
-        int selectionCountBeforeClick = _selectionManager.SelectionCount;
         if (target is null)
         {
             _selectionRectangle.Begin(documentPoint, shiftPressed);
@@ -1516,27 +1527,52 @@ public partial class MainWindow : Window
             return;
         }
 
-        SelectionReference selectedTarget = target;
-        _selectionManager.Select(selectedTarget);
+        bool targetWasSelected = _selectionManager.SelectionSet.Contains(target);
+        if (_workspace.CurrentSession is not { } session)
+        {
+            e.Handled = true;
+            return;
+        }
 
-        ResolvedSelection? dragSelection = _selectionResolver.Resolve(selectedTarget);
-        Guid? orbitParentPoleId = dragSelection?.PoleAttachment is { } attachment &&
-                                  _workspace.CurrentSession?.PersistenceSession.Domain.Devices
-                                      .SingleOrDefault(device =>
-                                          device.Id == attachment.AttachedDeviceId) is CableTermination
-            ? attachment.PoleId
-            : null;
-        if (selectionCountBeforeClick <= 1 &&
-            _workspace.CurrentSession is { } session &&
-            ((hit is not null && _cableRouteDrag.TryBeginDrag(
-                hit,
-                _currentScene.HitTestIndex.FindAll(selectedTarget),
-                session.Layout)) ||
-            _deviceDrag.TryBeginDrag(
-                selectedTarget,
+        bool dragStarted;
+        if (_selectionManager.SelectionCount > 1 && targetWasSelected)
+        {
+            dragStarted = _deviceDrag.TryBeginGroupDrag(
+                _selectionManager.SelectionSet,
+                target,
                 documentPoint,
-                session.Layout,
-                orbitParentPoleId)))
+                session.PersistenceSession.Domain,
+                session.Layout);
+        }
+        else
+        {
+            _selectionManager.Select(target);
+            ResolvedSelection? dragSelection = _selectionResolver.Resolve(target);
+            PoleAttachment? attachment = dragSelection?.PoleAttachment;
+            Device? attachedDevice = attachment is null
+                ? null
+                : session.PersistenceSession.Domain.Devices.SingleOrDefault(device =>
+                    device.Id == attachment.AttachedDeviceId);
+            dragStarted = attachment is not null &&
+                          attachedDevice is CableTermination or SwitchDevice
+                ? _deviceDrag.TryBeginAttachmentDrag(
+                    target,
+                    attachment.AttachmentId,
+                    documentPoint,
+                    session.Layout,
+                    attachment.PoleId,
+                    attachedDevice is CableTermination)
+                : (hit is not null && _cableRouteDrag.TryBeginDrag(
+                       hit,
+                       _currentScene.HitTestIndex.FindAll(target),
+                       session.Layout)) ||
+                  _deviceDrag.TryBeginDrag(
+                      target,
+                      documentPoint,
+                      session.Layout);
+        }
+
+        if (dragStarted)
         {
             if (!DrawingSurface.CaptureMouse())
             {
