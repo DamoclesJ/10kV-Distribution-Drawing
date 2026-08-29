@@ -50,6 +50,22 @@ public sealed class GroupMoveCommand : ICommand
         RuntimeLayoutDocument layout,
         GroupMoveLayoutState state)
     {
+        GroupMoveLayoutState current = CaptureCurrent(layout, state);
+        try
+        {
+            ApplyUnchecked(layout, state);
+        }
+        catch
+        {
+            ApplyUnchecked(layout, current);
+            throw;
+        }
+    }
+
+    private static void ApplyUnchecked(
+        RuntimeLayoutDocument layout,
+        GroupMoveLayoutState state)
+    {
         foreach (PoleLayout pole in state.Poles)
         {
             layout.DrawingLayout.Replace(pole);
@@ -66,27 +82,20 @@ public sealed class GroupMoveCommand : ICommand
         }
     }
 
+    private static GroupMoveLayoutState CaptureCurrent(
+        RuntimeLayoutDocument layout,
+        GroupMoveLayoutState roots) => new(
+        Array.AsReadOnly(roots.Poles.Select(item =>
+            layout.DrawingLayout.Poles[item.PoleId]).ToArray()),
+        Array.AsReadOnly(roots.RingCabinets.Select(item =>
+            layout.RingCabinetLayouts[item.CabinetId]).ToArray()),
+        Array.AsReadOnly(roots.Attachments.Select(item =>
+            layout.DrawingLayout.Attachments[item.AttachmentId]).ToArray()));
+
     private void ApplyAtomically(GroupMoveLayoutState state)
     {
-        GroupMoveLayoutState current = CaptureCurrent(state);
-        try
-        {
-            Apply(_layout, state);
-        }
-        catch
-        {
-            Apply(_layout, current);
-            throw;
-        }
+        Apply(_layout, state);
     }
-
-    private GroupMoveLayoutState CaptureCurrent(GroupMoveLayoutState roots) => new(
-        Array.AsReadOnly(roots.Poles.Select(item =>
-            _layout.DrawingLayout.Poles[item.PoleId]).ToArray()),
-        Array.AsReadOnly(roots.RingCabinets.Select(item =>
-            _layout.RingCabinetLayouts[item.CabinetId]).ToArray()),
-        Array.AsReadOnly(roots.Attachments.Select(item =>
-            _layout.DrawingLayout.Attachments[item.AttachmentId]).ToArray()));
 
     private static void ValidateMatchingRoots(
         GroupMoveLayoutState before,

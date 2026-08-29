@@ -204,6 +204,9 @@ internal sealed class ClipboardFragmentMaterializer
             ids.Add(item.Id);
             ids.UnionWith(item.OverheadAnchorTerminalIds);
             ids.UnionWith(item.Nodes.Select(node => node.Id));
+            ids.UnionWith(item.Terminals
+                .Where(terminal => terminal.ElectricalNodeId is not null)
+                .Select(terminal => terminal.ElectricalNodeId!.Value));
         }
         foreach (RingCabinetSnapshot item in fragment.RingCabinets)
         {
@@ -216,6 +219,10 @@ internal sealed class ClipboardFragmentMaterializer
                 item.AttachmentId, item.PoleId, item.DeviceId,
                 item.FirstTerminal.Id, item.SecondTerminal.Id
             });
+            if (item.FirstTerminal.ElectricalNodeId is Guid firstNodeId)
+            {
+                ids.Add(firstNodeId);
+            }
             if (item.SecondTerminal.ElectricalNodeId is Guid nodeId) ids.Add(nodeId);
         }
         foreach (CableTerminationAttachmentSnapshot item in fragment.CableTerminations)
@@ -225,6 +232,14 @@ internal sealed class ClipboardFragmentMaterializer
                 item.AttachmentId, item.PoleId, item.DeviceId, item.InternalNodeId,
                 item.CableSideTerminal.Id, item.OverheadSideTerminal.Id
             });
+            if (item.CableSideTerminal.ElectricalNodeId is Guid cableNodeId)
+            {
+                ids.Add(cableNodeId);
+            }
+            if (item.OverheadSideTerminal.ElectricalNodeId is Guid overheadNodeId)
+            {
+                ids.Add(overheadNodeId);
+            }
         }
         foreach (OverheadLineSnapshot item in fragment.OverheadLines)
         {

@@ -1641,11 +1641,20 @@ public partial class MainWindow : Window
         }
 
         DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
-        if (_cableRouteDrag.IsActive
-                ? _cableRouteDrag.UpdatePreview(documentPoint)
-                : _deviceDrag.UpdatePreview(documentPoint))
+        try
         {
-            RefreshDrawingScene();
+            if (_cableRouteDrag.IsActive
+                    ? _cableRouteDrag.UpdatePreview(documentPoint)
+                    : _deviceDrag.UpdatePreview(documentPoint))
+            {
+                RefreshDrawingScene();
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
+        {
+            CancelDeviceDrag();
+            ShowCommandError("拖动预览失败", exception.Message);
         }
 
         e.Handled = true;
@@ -1671,14 +1680,42 @@ public partial class MainWindow : Window
             return;
         }
 
-        ICommand? command = _cableRouteDrag.IsActive
-            ? _cableRouteDrag.Commit()
-            : _deviceDrag.Commit();
-        DrawingSurface.ReleaseMouseCapture();
-        if (command is not null)
+        ICommand? command = null;
+        bool commandRecorded = false;
+        try
         {
-            _commandStack.ExecuteCommand(command);
-            RefreshDrawingScene();
+            command = _cableRouteDrag.IsActive
+                ? _cableRouteDrag.Commit()
+                : _deviceDrag.Commit();
+            DrawingSurface.ReleaseMouseCapture();
+            if (command is not null)
+            {
+                _commandStack.ExecuteCommand(command);
+                commandRecorded = true;
+                RefreshDrawingScene();
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
+        {
+            try
+            {
+                if (!commandRecorded)
+                {
+                    command?.Undo();
+                }
+                if (_workspace.CurrentSession is not null)
+                {
+                    RefreshDrawingScene();
+                }
+            }
+            catch (Exception recoveryException) when (
+                recoveryException is ArgumentException or InvalidOperationException or KeyNotFoundException)
+            {
+                ShowCommandError("拖动恢复失败", recoveryException.Message);
+            }
+
+            ShowCommandError("提交拖动失败", exception.Message);
         }
 
         e.Handled = true;

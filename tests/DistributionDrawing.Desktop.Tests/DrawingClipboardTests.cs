@@ -323,6 +323,82 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
+    public void RingCabinetCablePaste_CanImmediatelyGroupMoveCopiedCabinets()
+    {
+        ProjectRuntimeSession session = CreateSession("环网柜电缆整体复制");
+        var factory = new DeviceCommandFactory();
+        AddRingCabinetCommand first = AddRing(session, factory, "RC-A", 20);
+        AddRingCabinetCommand second = AddRing(session, factory, "RC-B", 300);
+        Guid startTerminal = first.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid endTerminal = second.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid connectionId = Guid.NewGuid();
+        Guid cableId = Guid.NewGuid();
+        var connection = new Connection(
+            connectionId,
+            ConnectionType.Cable,
+            startTerminal,
+            endTerminal,
+            "RC cable",
+            "10kV");
+        var cable = new CableSegment(
+            cableId,
+            "RC cable",
+            "YJV22",
+            280,
+            "10kV",
+            connectionId,
+            startTerminal,
+            endTerminal);
+        session.PersistenceSession.Domain.AddCableSegment(cable, connection);
+        session.RebuildScene();
+        session.SelectionManager.Replace([
+            new SelectionReference(SelectionTargetKind.RingCabinet, first.Cabinet.Id),
+            new SelectionReference(SelectionTargetKind.RingCabinet, second.Cabinet.Id),
+            new SelectionReference(SelectionTargetKind.CableSegment, cableId)
+        ]);
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        RingCabinet[] copiedCabinets = session.PersistenceSession.Domain.Devices
+            .OfType<RingCabinet>()
+            .Where(item => item.Id != first.Cabinet.Id && item.Id != second.Cabinet.Id)
+            .ToArray();
+        Assert.Equal(2, copiedCabinets.Length);
+        CableSegment copiedCable = Assert.Single(
+            session.PersistenceSession.Domain.CableSegments,
+            item => item.Id != cableId);
+        Guid[] copiedTerminalIds = copiedCabinets
+            .SelectMany(item => item.Intervals)
+            .Select(item => item.ExternalTerminalId)
+            .ToArray();
+        Assert.All(
+            new[] { copiedCable.StartTerminalId, copiedCable.EndTerminalId },
+            id => Assert.Contains(copiedTerminalIds, candidate => candidate == id));
+        Assert.DoesNotContain(
+            new[] { startTerminal, endTerminal },
+            id => id == copiedCable.StartTerminalId || id == copiedCable.EndTerminalId);
+
+        SelectionSet pastedSelection = session.SelectionManager.SelectionSet;
+        var drag = new DeviceDragController();
+        SelectionReference copiedFirst = pastedSelection.SelectedReferences.Single(item =>
+            item.Kind == SelectionTargetKind.RingCabinet);
+        DocumentPoint before = session.Layout.RingCabinetLayouts[copiedFirst.ObjectId].Position;
+        Assert.True(drag.TryBeginGroupDrag(
+            pastedSelection,
+            copiedFirst,
+            before,
+            session.PersistenceSession.Domain,
+            session.Layout));
+        Assert.True(drag.UpdatePreview(new DocumentPoint(
+            before.XMillimeters + 40,
+            before.YMillimeters + 25)));
+        Assert.IsType<GroupMoveCommand>(drag.Commit());
+        session.RebuildScene();
+    }
+
+    [Fact]
     public void PoleJunctionCopy_PreservesSharedNodeAcrossPoleSwitchAndCableTermination()
     {
         ProjectRuntimeSession session = CreateSession("共享节点复制");
@@ -467,6 +543,27 @@ public sealed class DrawingClipboardTests : IDisposable
             session.PersistenceSession.Domain,
             session.Layout,
             position);
+        command.Execute();
+        session.RebuildScene();
+        return command;
+    }
+
+    private static AddRingCabinetCommand AddRing(
+        ProjectRuntimeSession session,
+        DeviceCommandFactory factory,
+        string name,
+        double x)
+    {
+        AddRingCabinetCommand command = factory.CreateAddRingCabinet(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new RingCabinetCreationConfiguration(
+                name,
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    1),
+                "10kV line"),
+            new DocumentPoint(x, 20));
         command.Execute();
         session.RebuildScene();
         return command;
