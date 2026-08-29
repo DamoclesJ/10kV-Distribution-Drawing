@@ -680,6 +680,29 @@ public sealed class CableConnectionControllerTests
     }
 
     [Fact]
+    public void SelectionDeletePlanner_RemovesRingCabinetWithUndoRedo()
+    {
+        using TestProject project = CreateProject();
+        RingCabinet cabinet = project.Cabinet;
+        project.Session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.RingCabinet,
+            cabinet.Id));
+        var planner = new SelectionDeletePlanner();
+
+        project.Session.CommandStack.ExecuteCommand(planner.Create(
+            project.Session,
+            project.Session.SelectionManager.SelectionSet));
+
+        Assert.DoesNotContain(cabinet, project.Document.Devices.OfType<RingCabinet>());
+        Assert.DoesNotContain(cabinet.Id, project.Session.Layout.RingCabinetLayouts.Keys);
+        Assert.True(project.Session.CommandStack.Undo());
+        Assert.Contains(cabinet, project.Document.Devices.OfType<RingCabinet>());
+        Assert.Contains(cabinet.Id, project.Session.Layout.RingCabinetLayouts.Keys);
+        Assert.True(project.Session.CommandStack.Redo());
+        Assert.DoesNotContain(cabinet, project.Document.Devices.OfType<RingCabinet>());
+    }
+
+    [Fact]
     public void CompositeDeleteCommand_RollsBackEarlierDeleteWhenLaterDeleteFails()
     {
         var first = new TestDeleteCommand(true);

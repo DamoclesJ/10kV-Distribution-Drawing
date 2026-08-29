@@ -41,6 +41,8 @@ public sealed class SelectionDeletePlanner
         {
             switch (reference.Kind)
             {
+                case SelectionTargetKind.RingCabinet:
+                    break;
                 case SelectionTargetKind.PoleAttachment:
                     attachmentIds.Add(reference.ObjectId);
                     break;
