@@ -50,6 +50,14 @@ public sealed class SelectionDeletePlanner
                     Device? device = document.Devices.SingleOrDefault(item => item.Id == reference.ObjectId);
                     if (device is SwitchDevice or CableTermination)
                     {
+                        if (device is SwitchDevice { ParentId: Guid intervalId } &&
+                            document.Devices.OfType<RingCabinet>().Any(cabinet =>
+                                cabinet.Intervals.Any(interval => interval.IntervalId == intervalId) &&
+                                cabinetIds.Contains(cabinet.Id)))
+                        {
+                            break;
+                        }
+
                         PoleAttachment? attachment = document.PoleAttachments.SingleOrDefault(item =>
                             item.AttachedDeviceId == reference.ObjectId || item.AttachmentId == reference.ParentId);
                         if (attachment is null) throw new InvalidOperationException("所选安装设备不存在对应的杆塔安装关系。");

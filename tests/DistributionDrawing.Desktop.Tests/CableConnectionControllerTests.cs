@@ -703,6 +703,63 @@ public sealed class CableConnectionControllerTests
     }
 
     [Fact]
+    public void SelectionDeletePlanner_RemovesTwoIndependentRingCabinetsWithNestedSelections()
+    {
+        using TestProject project = CreateProject();
+        var factory = new DeviceCommandFactory();
+        AddRingCabinetCommand secondCommand = factory.CreateAddRingCabinet(
+            project.Document,
+            project.Session.Layout,
+            new RingCabinetCreationConfiguration(
+                "环网柜B",
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
+            new DocumentPoint(360, 40));
+        secondCommand.Execute();
+        RingCabinet first = project.Cabinet;
+        RingCabinet second = secondCommand.Cabinet;
+        var selections = new List<SelectionReference>
+        {
+            new(SelectionTargetKind.RingCabinet, first.Id),
+            new(SelectionTargetKind.RingCabinet, second.Id)
+        };
+        foreach (RingCabinet cabinet in new[] { first, second })
+        {
+            selections.AddRange(cabinet.Intervals.SelectMany(interval =>
+                new[]
+                {
+                    new SelectionReference(
+                        SelectionTargetKind.RingCabinetInterval,
+                        interval.IntervalId,
+                        cabinet.Id)
+                }.Concat(interval.SwitchDevices.Select(device => new SelectionReference(
+                    SelectionTargetKind.Device,
+                    device.Id,
+                    interval.IntervalId)))));
+        }
+
+        project.Session.SelectionManager.Replace(selections);
+        var planner = new SelectionDeletePlanner();
+
+        project.Session.CommandStack.ExecuteCommand(planner.Create(
+            project.Session,
+            project.Session.SelectionManager.SelectionSet));
+
+        Assert.Empty(project.Document.Devices.OfType<RingCabinet>());
+        Assert.Empty(project.Session.Layout.RingCabinetLayouts);
+        Assert.True(project.Session.CommandStack.Undo());
+        Assert.Contains(first, project.Document.Devices.OfType<RingCabinet>());
+        Assert.Contains(second, project.Document.Devices.OfType<RingCabinet>());
+        Assert.Contains(first.Id, project.Session.Layout.RingCabinetLayouts.Keys);
+        Assert.Contains(second.Id, project.Session.Layout.RingCabinetLayouts.Keys);
+        Assert.True(project.Session.CommandStack.Redo());
+        Assert.Empty(project.Document.Devices.OfType<RingCabinet>());
+        project.Session.SelectionManager.Clear();
+        Assert.Empty(project.Session.SelectionManager.SelectionSet.SelectedReferences);
+    }
+
+    [Fact]
     public void CompositeDeleteCommand_RollsBackEarlierDeleteWhenLaterDeleteFails()
     {
         var first = new TestDeleteCommand(true);
