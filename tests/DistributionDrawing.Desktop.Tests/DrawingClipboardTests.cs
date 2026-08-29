@@ -561,7 +561,7 @@ public sealed class DrawingClipboardTests : IDisposable
                 name,
                 new RingCabinetCreationTemplateFactory().Create(
                     RingCabinetTemplateType.Conventional,
-                    1),
+                    3),
                 "10kV line"),
             new DocumentPoint(x, 20));
         command.Execute();
