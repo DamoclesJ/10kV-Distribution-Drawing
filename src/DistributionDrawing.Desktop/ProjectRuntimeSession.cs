@@ -64,7 +64,12 @@ public sealed class ProjectRuntimeSession
 
     public ISelectionTransitionCoordinator SelectionTransitions { get; }
 
-    public bool IsDirty => PersistenceSession.IsDirty || CommandStack.IsDirty;
+    /// <summary>
+    /// Runtime edits are tracked by the command-stack save checkpoint. The
+    /// persistence flag remains a lifecycle compatibility input, not a second
+    /// Desktop-managed dirty flag.
+    /// </summary>
+    public bool IsDirty => CommandStack.IsDirty || PersistenceSession.IsDirty;
 
     public long SavePoint => CommandStack.SavedStateId;
 

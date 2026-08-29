@@ -98,6 +98,19 @@ public sealed class CanvasViewportController
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    public DocumentViewState CaptureState() => new(
+        Transform.Scale,
+        Transform.Translation.X,
+        Transform.Translation.Y);
+
+    public void RestoreState(DocumentViewState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        _lastPanPoint = null;
+        Transform.Restore(state.Zoom, state.PanX, state.PanY);
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     private void ZoomAt(Point anchorDip, double scale)
     {
         Transform.ZoomAt(anchorDip, scale);

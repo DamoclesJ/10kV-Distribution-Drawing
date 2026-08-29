@@ -17,13 +17,19 @@ public sealed class ProjectWorkspaceController
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _sceneBuilder = sceneBuilder ?? throw new ArgumentNullException(nameof(sceneBuilder));
         _prepareTransientEdits = prepareTransientEdits ?? (() => true);
+        Workspace = new DesktopWorkspace();
+        Workspace.ActiveSessionChanged += OnActiveSessionChanged;
     }
 
-    public ProjectService? CurrentService { get; private set; }
+    public DesktopWorkspace Workspace { get; }
 
-    public ProjectRuntimeSession? CurrentSession { get; private set; }
+    public DocumentSession? ActiveDocumentSession => Workspace.ActiveSession;
 
-    public bool IsDirty => CurrentSession?.IsDirty == true;
+    public ProjectService? CurrentService => ActiveDocumentSession?.ProjectService;
+
+    public ProjectRuntimeSession? CurrentSession => ActiveDocumentSession?.RuntimeSession;
+
+    public bool IsDirty => ActiveDocumentSession?.IsDirty == true;
 
     public event EventHandler? SessionChanged;
 
@@ -39,7 +45,9 @@ public sealed class ProjectWorkspaceController
                 request.FilePath,
                 request.Title,
                 request.Description);
-            Replace(service, ProjectRuntimeSession.CreateEmpty(persisted, _sceneBuilder));
+            Replace(new DocumentSession(
+                service,
+                ProjectRuntimeSession.CreateEmpty(persisted, _sceneBuilder)));
             return true;
         }
         catch (Exception exception)
@@ -58,7 +66,9 @@ public sealed class ProjectWorkspaceController
         {
             var service = new ProjectService();
             ProjectSession persisted = service.LoadProject(path);
-            Replace(service, ProjectRuntimeSession.Create(persisted, _sceneBuilder));
+            Replace(new DocumentSession(
+                service,
+                ProjectRuntimeSession.Create(persisted, _sceneBuilder)));
             return true;
         }
         catch (Exception exception)
@@ -70,15 +80,15 @@ public sealed class ProjectWorkspaceController
 
     public bool SaveProject()
     {
-        if (CurrentService is null || CurrentSession is null) return false;
+        if (ActiveDocumentSession is not { } documentSession) return false;
         if (!_prepareTransientEdits()) return false;
         try
         {
             ProjectLayoutSnapshot layout = ProjectLayoutRuntimeMapper.ToSnapshot(
-                CurrentSession.PersistenceSession.Domain,
-                CurrentSession.Layout);
-            ProjectSession saved = CurrentService.SaveProject(layout);
-            CurrentSession.AcceptSavedSession(saved);
+                documentSession.RuntimeSession.PersistenceSession.Domain,
+                documentSession.RuntimeSession.Layout);
+            ProjectSession saved = documentSession.ProjectService.SaveProject(layout);
+            documentSession.RuntimeSession.AcceptSavedSession(saved);
             SessionChanged?.Invoke(this, EventArgs.Empty);
             return true;
         }
@@ -91,17 +101,17 @@ public sealed class ProjectWorkspaceController
 
     public bool SaveProjectAs()
     {
-        if (CurrentService is null || CurrentSession is null) return false;
+        if (ActiveDocumentSession is not { } documentSession) return false;
         if (!_prepareTransientEdits()) return false;
-        string? path = _dialogs.ChooseSaveAs(CurrentService.Current?.FilePath);
+        string? path = _dialogs.ChooseSaveAs(documentSession.FilePath);
         if (path is null) return false;
         try
         {
             ProjectLayoutSnapshot layout = ProjectLayoutRuntimeMapper.ToSnapshot(
-                CurrentSession.PersistenceSession.Domain,
-                CurrentSession.Layout);
-            ProjectSession saved = CurrentService.SaveProjectAs(path, layout);
-            CurrentSession.AcceptSavedSession(saved);
+                documentSession.RuntimeSession.PersistenceSession.Domain,
+                documentSession.RuntimeSession.Layout);
+            ProjectSession saved = documentSession.ProjectService.SaveProjectAs(path, layout);
+            documentSession.RuntimeSession.AcceptSavedSession(saved);
             SessionChanged?.Invoke(this, EventArgs.Empty);
             return true;
         }
@@ -115,7 +125,7 @@ public sealed class ProjectWorkspaceController
     public bool CloseCurrentProject()
     {
         if (!PrepareReplacement("关闭工程")) return false;
-        Replace(null, null);
+        Replace(null);
         return true;
     }
 
@@ -133,10 +143,15 @@ public sealed class ProjectWorkspaceController
         };
     }
 
-    private void Replace(ProjectService? service, ProjectRuntimeSession? session)
+    private void Replace(DocumentSession? session)
     {
-        CurrentService = service;
-        CurrentSession = session;
+        Workspace.ReplaceAllWith(session);
+    }
+
+    private void OnActiveSessionChanged(
+        object? sender,
+        ActiveDocumentSessionChangedEventArgs e)
+    {
         SessionChanged?.Invoke(this, EventArgs.Empty);
     }
 }

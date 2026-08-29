@@ -57,6 +57,7 @@ public partial class MainWindow : Window
     private readonly CableConnectionController _cableConnection;
     private readonly CableReconnectController _cableReconnect;
     private readonly DrawingToolCoordinator _drawingTools;
+    private DocumentSession? _boundDocumentSession;
     private MainWindowViewModel _shellViewModel = null!;
     private bool _gridVisible;
     private DrawingScene? _currentScene;
@@ -83,6 +84,7 @@ public partial class MainWindow : Window
             new WpfProjectWorkspaceDialogs(this),
             _sceneBuilder,
             EnsureTransientEditsCommitted);
+        _workspace.Workspace.ActiveSessionChanging += OnActiveDocumentSessionChanging;
         _workspace.SessionChanged += OnWorkspaceSessionChanged;
         _placement = new PlacementController(() => _workspace.CurrentSession);
         _overheadLineConnection = new OverheadLineConnectionController(
@@ -501,21 +503,55 @@ public partial class MainWindow : Window
     private void OnWorkspaceSessionChanged(object? sender, EventArgs e)
     {
         _shellViewModel.RefreshCommandStates();
-        _deviceDrag.Cancel();
-        _cableRouteDrag.Cancel();
-        DrawingSurface.ReleaseMouseCapture();
-        EndCanvasPan();
-        _drawingTools.Cancel();
         _viewport.SetViewportSize(
             new Size(DrawingSurface.ActualWidth, DrawingSurface.ActualHeight));
-        _viewport.Reset();
-        if (_workspace.CurrentSession is not { } session)
+        BindActiveSession(_workspace.ActiveDocumentSession);
+    }
+
+    private void OnActiveDocumentSessionChanging(
+        object? sender,
+        ActiveDocumentSessionChangedEventArgs e)
+    {
+        CancelTransientInteraction();
+        if (e.Previous is not null &&
+            ReferenceEquals(_boundDocumentSession, e.Previous))
         {
-            OnClearDrawing(this, new RoutedEventArgs());
+            e.Previous.UpdateViewState(_viewport.CaptureState());
+        }
+    }
+
+    private void BindActiveSession(DocumentSession? documentSession)
+    {
+        if (ReferenceEquals(_boundDocumentSession, documentSession) &&
+            documentSession is not null)
+        {
+            ProjectRuntimeSession current = documentSession.RuntimeSession;
+            _currentScene = current.Scene;
+            _activeSource = current.InspectionSource;
+            _selectionResolver.SetSource(_activeSource);
+            OnSelectionChanged(this, EventArgs.Empty);
             return;
         }
 
         _selectionManager.SelectionChanged -= OnSelectionChanged;
+        _boundDocumentSession = documentSession;
+        if (documentSession is null)
+        {
+            _selectionManager = new SelectionManager();
+            _selectionManager.SelectionChanged += OnSelectionChanged;
+            _commandStack = new CommandStack();
+            _selectionResolver = new SelectionObjectResolver();
+            _propertyProjector = new PropertyProjector();
+            _propertyInspector = new PropertyInspectorViewModel();
+            _propertyEditor = new PropertyEditor(_selectionResolver, _commandStack);
+            PropertyInspectorPanel.DataContext = _propertyInspector;
+            _viewport.Reset();
+            OnClearDrawing(this, new RoutedEventArgs());
+            _shellViewModel.RefreshCommandStates();
+            return;
+        }
+
+        ProjectRuntimeSession session = documentSession.RuntimeSession;
         _selectionManager = session.SelectionManager;
         _commandStack = session.CommandStack;
         _selectionResolver = session.SelectionResolver;
@@ -526,7 +562,18 @@ public partial class MainWindow : Window
         _activeSource = session.InspectionSource;
         _selectionManager.SelectionChanged += OnSelectionChanged;
         PropertyInspectorPanel.DataContext = _propertyInspector;
-        RenderCurrentScene();
+        _viewport.RestoreState(documentSession.ViewState);
+        OnSelectionChanged(this, EventArgs.Empty);
+    }
+
+    private void CancelTransientInteraction()
+    {
+        _deviceDrag.Cancel();
+        _cableRouteDrag.Cancel();
+        EndCanvasPan();
+        DrawingSurface.ReleaseMouseCapture();
+        _drawingTools.Cancel();
+        CancelProfessionalPicking();
     }
 
     private void OnDrawTestContent(object sender, RoutedEventArgs e)

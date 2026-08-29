@@ -48,6 +48,12 @@ public sealed class ProjectWorkflowRuntimeTests
 
         Assert.True(controller.NewProject());
         ProjectRuntimeSession originalSession = controller.CurrentSession!;
+        Assert.Single(controller.Workspace.Sessions);
+        DocumentSession activeDocument = Assert.IsType<DocumentSession>(
+            controller.Workspace.ActiveSession);
+        Assert.Same(
+            originalSession,
+            activeDocument.RuntimeSession);
         originalSession.CommandStack.ExecuteCommand(new TestCommand());
         Assert.True(controller.IsDirty);
 
@@ -57,6 +63,12 @@ public sealed class ProjectWorkflowRuntimeTests
         dialogs.OpenPath = path;
         Assert.True(controller.OpenProject());
         Assert.NotSame(originalSession, controller.CurrentSession);
+        Assert.Single(controller.Workspace.Sessions);
+        activeDocument = Assert.IsType<DocumentSession>(
+            controller.Workspace.ActiveSession);
+        Assert.Same(
+            controller.CurrentSession,
+            activeDocument.RuntimeSession);
         Assert.NotNull(controller.CurrentSession!.Scene);
         Assert.False(controller.IsDirty);
     }

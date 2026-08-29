@@ -36,6 +36,10 @@ public sealed class CommandStack
 
     public bool IsDirty => CurrentStateId != SavedStateId;
 
+    public event EventHandler? StateChanged;
+
+    public event EventHandler? DirtyChanged;
+
     public void ExecuteCommand(ICommand command)
     {
         ExecuteCommand(command, null);
@@ -44,6 +48,8 @@ public sealed class CommandStack
     public void ExecuteCommand(ICommand command, Action? validateAfterExecute)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        bool wasDirty = IsDirty;
 
         command.Execute();
         try
@@ -66,6 +72,7 @@ public sealed class CommandStack
         _afterStateIds.Add(_nextStateId++);
         CurrentIndex++;
         TrimHistory();
+        NotifyStateChanged(wasDirty);
     }
 
     public bool Undo()
@@ -75,9 +82,11 @@ public sealed class CommandStack
             return false;
         }
 
+        bool wasDirty = IsDirty;
         ICommand command = _history[CurrentIndex - 1];
         command.Undo();
         CurrentIndex--;
+        NotifyStateChanged(wasDirty);
         return true;
     }
 
@@ -88,15 +97,28 @@ public sealed class CommandStack
             return false;
         }
 
+        bool wasDirty = IsDirty;
         ICommand command = _history[CurrentIndex];
         command.Redo();
         CurrentIndex++;
+        NotifyStateChanged(wasDirty);
         return true;
     }
 
     public void MarkSaved()
     {
+        bool wasDirty = IsDirty;
         _savedStateId = CurrentStateId;
+        NotifyStateChanged(wasDirty);
+    }
+
+    private void NotifyStateChanged(bool wasDirty)
+    {
+        StateChanged?.Invoke(this, EventArgs.Empty);
+        if (wasDirty != IsDirty)
+        {
+            DirtyChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void TrimHistory()

@@ -128,6 +128,11 @@ public sealed class CanvasViewTransform
         Set(1.0, new Vector());
     }
 
+    public void Restore(double scale, double translationX, double translationY)
+    {
+        Set(scale, new Vector(translationX, translationY));
+    }
+
     private void Set(double scale, Vector translation)
     {
         if (!IsPositiveFinite(scale) ||
