@@ -19,6 +19,7 @@ using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Desktop.ConnectionEditing;
 using DistributionDrawing.Desktop.CableConnection;
+using DistributionDrawing.Desktop.Clipboard;
 using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.PoleSwitchCreation;
 using DistributionDrawing.Desktop.PoleAttachmentManagement;
@@ -58,6 +59,7 @@ public partial class MainWindow : Window
     private readonly SwitchOperationController _switchOperation;
     private readonly CableConnectionController _cableConnection;
     private readonly CableReconnectController _cableReconnect;
+    private readonly DrawingClipboardController _clipboard;
     private readonly DrawingToolCoordinator _drawingTools;
     private DocumentSession? _boundDocumentSession;
     private MainWindowViewModel _shellViewModel = null!;
@@ -95,6 +97,8 @@ public partial class MainWindow : Window
         _cableConnection = new CableConnectionController(
             () => _workspace.CurrentSession);
         _cableReconnect = new CableReconnectController(
+            () => _workspace.CurrentSession);
+        _clipboard = new DrawingClipboardController(
             () => _workspace.CurrentSession);
         _cableTerminationAttachment = new CableTerminationAttachmentController(
             () => _workspace.CurrentSession);
@@ -343,6 +347,44 @@ public partial class MainWindow : Window
             if (e.Key == System.Windows.Input.Key.A)
             {
                 OnSelectAllRequested();
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == System.Windows.Input.Key.C)
+            {
+                ClipboardActionResult result = _clipboard.Copy();
+                if (!result.IsSuccess)
+                {
+                    ShowCommandError("无法复制对象", result.Message);
+                }
+                else if (result.HasWarning)
+                {
+                    ShowCommandError("部分对象未复制", result.Message);
+                }
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == System.Windows.Input.Key.V)
+            {
+                try
+                {
+                    ClipboardActionResult result = _clipboard.Paste();
+                    if (!result.IsSuccess)
+                    {
+                        ShowCommandError("无法粘贴对象", result.Message);
+                    }
+                    else
+                    {
+                        OnDrawingToolVisualChanged(this, EventArgs.Empty);
+                    }
+                }
+                catch (Exception exception) when (
+                    exception is ArgumentException or InvalidOperationException)
+                {
+                    ShowCommandError("粘贴对象失败", exception.Message);
+                }
                 e.Handled = true;
                 return;
             }

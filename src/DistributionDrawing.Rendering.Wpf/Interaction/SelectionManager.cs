@@ -26,6 +26,13 @@ public sealed class SelectionManager
         SetSelectionSet(SelectionSet.Create(targets));
     }
 
+    public void Replace(
+        IEnumerable<SelectionReference> targets,
+        SelectionReference? primarySelection)
+    {
+        SetSelectionSet(SelectionSet.Create(targets, primarySelection));
+    }
+
     public void AddRange(IEnumerable<SelectionReference> targets)
     {
         SetSelectionSet(SelectionSet.AddRange(targets));
