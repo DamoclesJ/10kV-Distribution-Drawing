@@ -90,8 +90,12 @@ public sealed class OrthogonalRouter
 
         if (candidates.Length == 0)
         {
-            throw new InvalidOperationException(
-                $"No orthogonal route candidates exist for connection '{request.ConnectionId}'.");
+            return CreateFallbackRoute(
+                request,
+                request.Start.Position,
+                startStub,
+                endStub,
+                request.End.Position);
         }
 
         Candidate[] scoredCandidates = candidates
@@ -109,8 +113,12 @@ public sealed class OrthogonalRouter
 
         if (scoredCandidates.Length == 0)
         {
-            throw new InvalidOperationException(
-                $"No obstacle-free orthogonal route exists for connection '{request.ConnectionId}'.");
+            return CreateFallbackRoute(
+                request,
+                request.Start.Position,
+                startStub,
+                endStub,
+                request.End.Position);
         }
 
         return scoredCandidates
@@ -124,6 +132,30 @@ public sealed class OrthogonalRouter
             .ThenBy(candidate => candidate.Key, StringComparer.Ordinal)
             .Select(candidate => candidate.Route)
             .First();
+    }
+
+    private static OrthogonalRoute CreateFallbackRoute(
+        ConnectionRouteRequest request,
+        DocumentPoint start,
+        DocumentPoint startStub,
+        DocumentPoint endStub,
+        DocumentPoint end)
+    {
+        var points = new List<DocumentPoint> { start, startStub };
+        if (startStub.XMillimeters != endStub.XMillimeters &&
+            startStub.YMillimeters != endStub.YMillimeters)
+        {
+            points.Add(new DocumentPoint(endStub.XMillimeters, startStub.YMillimeters));
+        }
+
+        points.Add(endStub);
+        points.Add(end);
+        return new OrthogonalRoute(
+            request.ConnectionId,
+            request.ConnectionType,
+            request.StartTerminalId,
+            request.EndTerminalId,
+            points);
     }
 
     private static bool StartsInDirection(

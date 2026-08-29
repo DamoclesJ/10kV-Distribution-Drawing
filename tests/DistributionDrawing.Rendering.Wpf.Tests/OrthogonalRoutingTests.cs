@@ -142,6 +142,33 @@ public sealed class OrthogonalRoutingTests
     }
 
     [Fact]
+    public void Route_UsesDeterministicOrthogonalFallbackWhenAllRoutesAreBlocked()
+    {
+        ConnectionRouteRequest request = CreateRequest(
+            "00000000-0000-0000-0000-000000000017",
+            new DocumentPoint(0, 0),
+            TerminalAnchorDirection.Right,
+            new DocumentPoint(80, 50),
+            TerminalAnchorDirection.Left);
+        RoutingObstacle[] obstacles =
+        [
+            new RoutingObstacle(
+                Guid.NewGuid(),
+                RoutingObstacleKind.RingCabinet,
+                new DocumentRect(-100, -100, 300, 300))
+        ];
+
+        OrthogonalRoute first = new OrthogonalRouter().Route(request, obstacles);
+        OrthogonalRoute second = new OrthogonalRouter().Route(request, obstacles);
+
+        Assert.Equal(request.Start.Position, first.Points[0]);
+        Assert.Equal(request.End.Position, first.Points[^1]);
+        Assert.All(first.Segments, segment => Assert.True(
+            segment.IsHorizontal || segment.IsVertical));
+        Assert.Equal(first.Points, second.Points);
+    }
+
+    [Fact]
     public void Route_AllowsDirectionalExitFromSourceAndTargetObstacles()
     {
         ConnectionRouteRequest request = CreateRequest(
