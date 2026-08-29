@@ -456,7 +456,7 @@ public sealed class CableConnectionControllerTests
     }
 
     [Fact]
-    public void Complete_WhenTerminalExitIsBlocked_RollsBackCableAndCommandHistory()
+    public void Complete_WhenTerminalExitIsBlocked_UsesFallbackAndKeepsCable()
     {
         using TestProject project = CreateProject();
         TerminalAnchorIndex anchors = CreateAnchors(project);
@@ -476,16 +476,17 @@ public sealed class CableConnectionControllerTests
                 start.YMillimeters + 10));
         blockingPole.Execute();
         project.Session.RebuildScene();
-        SelectionReference? selectionBefore = project.Session.SelectionManager.Selected;
+        controller.Complete("YJV22", 80);
 
-        Assert.Throws<InvalidOperationException>(() =>
-            controller.Complete("YJV22", 80));
-
-        Assert.Empty(project.Document.CableSegments);
-        Assert.Empty(project.Document.Connections);
-        Assert.Empty(project.Session.CommandStack.History);
-        Assert.False(project.Session.CommandStack.IsDirty);
-        Assert.Equal(selectionBefore, project.Session.SelectionManager.Selected);
+        CableSegment cable = Assert.Single(project.Document.CableSegments);
+        Connection connection = Assert.Single(project.Document.Connections);
+        Assert.Equal(connection.Id, cable.ConnectionId);
+        Assert.Single(project.Session.CommandStack.History);
+        Assert.True(project.Session.CommandStack.IsDirty);
+        Assert.Equal(
+            new SelectionReference(SelectionTargetKind.CableSegment, cable.Id),
+            project.Session.SelectionManager.Selected);
+        Assert.Equal(CableConnectionToolState.Idle, controller.State);
     }
 
     [Theory]
