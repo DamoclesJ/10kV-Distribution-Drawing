@@ -57,6 +57,47 @@ public static class PoleProfessionalGeometry
             bounds.YMillimeters + bounds.HeightMillimeters / 2);
     }
 
+    public static DocumentPoint RotateAroundPole(
+        PoleLayout poleLayout,
+        DocumentPoint point,
+        int quarterTurns,
+        DrawingMetrics? metrics = null)
+    {
+        ArgumentNullException.ThrowIfNull(poleLayout);
+        DocumentPoint center = GetPoleCenter(poleLayout, metrics);
+        return Rotate(
+            point,
+            center.XMillimeters,
+            center.YMillimeters,
+            quarterTurns);
+    }
+
+    public static DocumentRect RotateBoundsAroundPole(
+        PoleLayout poleLayout,
+        DocumentRect bounds,
+        int quarterTurns,
+        DrawingMetrics? metrics = null)
+    {
+        DocumentPoint[] corners =
+        [
+            new(bounds.XMillimeters, bounds.YMillimeters),
+            new(bounds.XMillimeters + bounds.WidthMillimeters, bounds.YMillimeters),
+            new(bounds.XMillimeters + bounds.WidthMillimeters,
+                bounds.YMillimeters + bounds.HeightMillimeters),
+            new(bounds.XMillimeters, bounds.YMillimeters + bounds.HeightMillimeters)
+        ];
+        DocumentPoint[] rotated = corners
+            .Select(point => RotateAroundPole(poleLayout, point, quarterTurns, metrics))
+            .ToArray();
+        return new DocumentRect(
+            rotated.Min(point => point.XMillimeters),
+            rotated.Min(point => point.YMillimeters),
+            rotated.Max(point => point.XMillimeters) -
+            rotated.Min(point => point.XMillimeters),
+            rotated.Max(point => point.YMillimeters) -
+            rotated.Min(point => point.YMillimeters));
+    }
+
     public static PoleAttachmentGeometry GetAttachmentGeometry(
         PoleLayout poleLayout,
         AttachmentLayout attachmentLayout,

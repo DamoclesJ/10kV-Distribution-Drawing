@@ -63,16 +63,34 @@ public sealed class PoleLabel
         }
 
         DocumentPoint anchor;
+        DocumentPoint offset = layout.LabelOffset;
         if (attachedDevice is SwitchDevice)
         {
-            PoleAttachmentGeometry geometry = PoleProfessionalGeometry.GetAttachmentGeometry(
+            AttachmentLayout baseLayout = layout.RotateBy(-layout.RotationQuarterTurns);
+            PoleAttachmentGeometry baseGeometry = PoleProfessionalGeometry.GetAttachmentGeometry(
                 poleLayout,
-                layout,
+                baseLayout,
                 SymbolLibrary.ResolveAttachmentKind(attachedDevice),
                 _metrics);
-            anchor = new DocumentPoint(
-                geometry.LogicalBounds.XMillimeters,
-                geometry.LogicalBounds.YMillimeters);
+            DocumentPoint baseAnchor = new(
+                baseGeometry.LogicalBounds.XMillimeters,
+                baseGeometry.LogicalBounds.YMillimeters);
+            DocumentPoint baseLabelPosition = new(
+                baseAnchor.XMillimeters + layout.LabelOffset.XMillimeters,
+                baseAnchor.YMillimeters + layout.LabelOffset.YMillimeters);
+            anchor = PoleProfessionalGeometry.RotateAroundPole(
+                poleLayout,
+                baseAnchor,
+                layout.RotationQuarterTurns,
+                _metrics);
+            DocumentPoint labelPosition = PoleProfessionalGeometry.RotateAroundPole(
+                poleLayout,
+                baseLabelPosition,
+                layout.RotationQuarterTurns,
+                _metrics);
+            offset = new DocumentPoint(
+                labelPosition.XMillimeters - anchor.XMillimeters,
+                labelPosition.YMillimeters - anchor.YMillimeters);
         }
         else
         {
@@ -88,7 +106,7 @@ public sealed class PoleLabel
             attachedDevice is SwitchDevice ? attachedDevice.Id : attachment.AttachmentId,
             SymbolLibrary.ResolveAttachmentLabel(attachedDevice),
             anchor,
-            layout.LabelOffset,
+            offset,
             preferredAlignment: LabelAlignment.Left,
             priority: attachedDevice is SwitchDevice ? 80 : 70,
             fontSizeMillimeters: 3.5);

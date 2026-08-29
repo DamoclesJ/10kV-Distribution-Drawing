@@ -16,6 +16,24 @@ namespace DistributionDrawing.Rendering.Wpf.Tests;
 
 public sealed class PoleProfessionalSymbolTests
 {
+    public static IEnumerable<object[]> PoleSwitchKindsAndRotations()
+    {
+        SwitchKind[] kinds =
+        [
+            SwitchKind.IsolationSwitch,
+            SwitchKind.LoadSwitch,
+            SwitchKind.CircuitBreaker,
+            SwitchKind.DropoutFuse
+        ];
+        foreach (SwitchKind kind in kinds)
+        {
+            for (int quarterTurns = 0; quarterTurns < 4; quarterTurns++)
+            {
+                yield return [kind, quarterTurns];
+            }
+        }
+    }
+
     [Fact]
     public void CementPole_UsesOneCircleAndNoLegacyPoleLines()
     {
@@ -86,6 +104,212 @@ public sealed class PoleProfessionalSymbolTests
         Assert.Contains(geometries[2], element => element is SceneRectangle);
         Assert.NotEqual(geometries[0], geometries[2]);
         Assert.Contains(geometries[3], element => element is ScenePolyline polyline && polyline.IsClosed);
+    }
+
+    [Theory]
+    [MemberData(nameof(PoleSwitchKindsAndRotations))]
+    public void PoleSwitch_InternalProfessionalGeometryRotatesAsOneRigidAttachment(
+        SwitchKind kind,
+        int quarterTurns)
+    {
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P",
+            PoleType.Cement,
+            null,
+            [kind],
+            includeCableTerminal: false);
+        SwitchDevice device = Assert.Single(result.Devices.OfType<SwitchDevice>());
+        PoleAttachment attachment = Assert.Single(result.Attachments);
+        PoleLayout poleLayout = new(result.Pole.Id, new DocumentPoint(40, 50));
+        AttachmentLayout right = new(
+            attachment.AttachmentId,
+            PoleProfessionalGeometry.GetDefaultAttachmentOffset(kind));
+        AttachmentLayout rotated = right.RotateBy(quarterTurns);
+        var library = new SymbolLibrary();
+        SceneElement[] baseline = library.CreateAttachment(
+                attachment,
+                device,
+                poleLayout,
+                right,
+                includeLabel: false)
+            .ToArray();
+        SceneElement[] actual = library.CreateAttachment(
+                attachment,
+                device,
+                poleLayout,
+                rotated,
+                includeLabel: false)
+            .ToArray();
+        SceneElement[] expected = baseline
+            .Select(element => RotateElement(element, poleLayout, quarterTurns))
+            .ToArray();
+
+        SceneElementAssertions.Equal(expected, actual);
+    }
+
+    [Theory]
+    [MemberData(nameof(PoleSwitchKindsAndRotations))]
+    public void PoleSwitch_RotationKeepsTerminalIdentityAndAlignsAnchorsAndHitBounds(
+        SwitchKind kind,
+        int quarterTurns)
+    {
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P",
+            PoleType.Cement,
+            null,
+            [kind],
+            includeCableTerminal: false);
+        var document = CreateDocument(result);
+        SwitchDevice device = Assert.Single(result.Devices.OfType<SwitchDevice>());
+        PoleAttachment attachment = Assert.Single(result.Attachments);
+        Terminal[] terminals = device.TerminalIds
+            .Select(id => document.Terminals.Single(terminal => terminal.Id == id))
+            .ToArray();
+        Guid?[] nodeIds = terminals.Select(terminal => terminal.ElectricalNodeId).ToArray();
+        PoleLayout poleLayout = new(result.Pole.Id, new DocumentPoint(40, 50));
+        AttachmentLayout attachmentLayout = new AttachmentLayout(
+                attachment.AttachmentId,
+                PoleProfessionalGeometry.GetDefaultAttachmentOffset(kind))
+            .RotateBy(quarterTurns);
+        var drawingLayout = new DrawingLayout();
+        drawingLayout.Add(poleLayout);
+        drawingLayout.Add(attachmentLayout);
+        var runtimeLayout = new RuntimeLayoutDocument(
+            drawingLayout,
+            new Dictionary<Guid, RingCabinetLayout>());
+        PoleAttachmentGeometry geometry = PoleProfessionalGeometry.GetAttachmentGeometry(
+            poleLayout,
+            attachmentLayout,
+            SymbolLibrary.ResolveAttachmentKind(device));
+
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            drawingLayout,
+            new Dictionary<Guid, RingCabinetLayout>());
+        Assert.True(anchors.TryGet(device.TerminalIds[0], out TerminalAnchor firstAnchor));
+        Assert.True(anchors.TryGet(device.TerminalIds[1], out TerminalAnchor secondAnchor));
+        Assert.Equal(geometry.FirstTerminal, firstAnchor.Position);
+        Assert.Equal(geometry.SecondTerminal, secondAnchor.Position);
+
+        DrawingScene scene = new DrawingSceneBuilder().Build(document, runtimeLayout);
+        Assert.Contains(scene.HitTestIndex.Entries, entry =>
+            entry.Target.Kind == DistributionDrawing.Rendering.Wpf.Interaction.SelectionTargetKind.Device &&
+            entry.Target.ObjectId == device.Id &&
+            entry.Bounds == geometry.LogicalBounds);
+        Assert.Equal(terminals.Select(terminal => terminal.Id), device.TerminalIds);
+        Assert.Equal(nodeIds, terminals.Select(terminal => terminal.ElectricalNodeId));
+    }
+
+    [Fact]
+    public void PoleSwitch_RotationCommandUndoRedoRestoresInternalGeometry()
+    {
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P",
+            PoleType.Cement,
+            null,
+            [SwitchKind.CircuitBreaker],
+            includeCableTerminal: false);
+        SwitchDevice device = Assert.Single(result.Devices.OfType<SwitchDevice>());
+        PoleAttachment attachment = Assert.Single(result.Attachments);
+        PoleLayout poleLayout = new(result.Pole.Id, new DocumentPoint(40, 50));
+        AttachmentLayout before = new(
+            attachment.AttachmentId,
+            PoleProfessionalGeometry.GetDefaultAttachmentOffset(SwitchKind.CircuitBreaker));
+        AttachmentLayout after = before.RotateBy(1);
+        var drawingLayout = new DrawingLayout();
+        drawingLayout.Add(poleLayout);
+        drawingLayout.Add(before);
+        var command = new ChangeAttachmentLayoutCommand(drawingLayout, before, after);
+        var library = new SymbolLibrary();
+        SceneElement[] right = library.CreateAttachment(
+            attachment, device, poleLayout, before, includeLabel: false).ToArray();
+
+        command.Execute();
+        SceneElement[] down = library.CreateAttachment(
+            attachment, device, poleLayout,
+            drawingLayout.Attachments[attachment.AttachmentId],
+            includeLabel: false).ToArray();
+        command.Undo();
+        SceneElement[] undone = library.CreateAttachment(
+            attachment, device, poleLayout,
+            drawingLayout.Attachments[attachment.AttachmentId],
+            includeLabel: false).ToArray();
+        command.Redo();
+        SceneElement[] redone = library.CreateAttachment(
+            attachment, device, poleLayout,
+            drawingLayout.Attachments[attachment.AttachmentId],
+            includeLabel: false).ToArray();
+
+        Assert.NotEqual(Geometry(right), Geometry(down));
+        SceneElementAssertions.Equal(right, undone);
+        SceneElementAssertions.Equal(down, redone);
+        Assert.Equal(device.Id, attachment.AttachedDeviceId);
+    }
+
+    [Fact]
+    public void PoleSwitch_RotationReroutesConnectedOverheadLineWithoutChangingTopologyIdentity()
+    {
+        var factory = new PoleCreationFactory();
+        PoleCreationResult switched = factory.CreateWithAttachments(
+            "P-1",
+            PoleType.Cement,
+            null,
+            [SwitchKind.IsolationSwitch],
+            includeCableTerminal: false);
+        PoleCreationResult target = factory.Create("P-2");
+        var document = new DrawingDocument(Guid.NewGuid(), "Pole switch route rotation");
+        AddPoleAggregate(document, switched);
+        AddPoleAggregate(document, target);
+        SwitchDevice switchDevice = Assert.Single(switched.Devices.OfType<SwitchDevice>());
+        PoleAttachment attachment = Assert.Single(switched.Attachments);
+        Guid targetTerminalId = Assert.Single(target.Pole.OverheadAnchorTerminalIds);
+        var connection = new Connection(
+            Guid.NewGuid(),
+            ConnectionType.OverheadLine,
+            switchDevice.TerminalIds[1],
+            targetTerminalId,
+            "架空线路",
+            "10kV");
+        var overheadLine = new OverheadLine(
+            connection.Id,
+            "JKLYJ-10kV",
+            [switched.Pole.Id, target.Pole.Id]);
+        document.AddConnection(connection);
+        document.AddOverheadLine(overheadLine);
+        var drawingLayout = new DrawingLayout();
+        var switchedPoleLayout = new PoleLayout(
+            switched.Pole.Id,
+            new DocumentPoint(40, 50));
+        drawingLayout.Add(switchedPoleLayout);
+        drawingLayout.Add(new PoleLayout(target.Pole.Id, new DocumentPoint(240, 160)));
+        var right = new AttachmentLayout(
+            attachment.AttachmentId,
+            PoleProfessionalGeometry.GetDefaultAttachmentOffset(
+                SwitchKind.IsolationSwitch));
+        drawingLayout.Add(right);
+        drawingLayout.Add(new OverheadLineLayout(
+            connection.Id,
+            new DocumentPoint(0, 0),
+            new DocumentPoint(1, 1)));
+        var layout = new RuntimeLayoutDocument(
+            drawingLayout,
+            new Dictionary<Guid, RingCabinetLayout>());
+        var builder = new DrawingSceneBuilder();
+        string before = GeometryKey(builder.Build(document, layout), connection.Id);
+
+        new ChangeAttachmentLayoutCommand(
+            drawingLayout,
+            right,
+            right.RotateBy(1)).Execute();
+        string after = GeometryKey(builder.Build(document, layout), connection.Id);
+
+        Assert.NotEmpty(before);
+        Assert.NotEmpty(after);
+        Assert.NotEqual(before, after);
+        Assert.Same(connection, Assert.Single(document.Connections));
+        Assert.Same(overheadLine, Assert.Single(document.OverheadLines));
+        Assert.Equal(switchDevice.TerminalIds[1], connection.StartTerminalId);
+        Assert.Equal(targetTerminalId, connection.EndTerminalId);
     }
 
     [Fact]
@@ -356,9 +580,62 @@ public sealed class PoleProfessionalSymbolTests
     private static SceneElement[] Geometry(IEnumerable<SceneElement> elements) =>
         elements.Where(element => element is not SceneText).ToArray();
 
+    private static string GeometryKey(DrawingScene scene, Guid targetId) =>
+        string.Join(';', scene.Elements.OfType<SceneLine>()
+            .Where(line => line.TargetId == targetId)
+            .Select(line =>
+                $"{line.Start.XMillimeters:R},{line.Start.YMillimeters:R}-" +
+                $"{line.End.XMillimeters:R},{line.End.YMillimeters:R}"));
+
+    private static SceneElement RotateElement(
+        SceneElement element,
+        PoleLayout poleLayout,
+        int quarterTurns) => element switch
+        {
+            SceneLine line => line with
+            {
+                Start = PoleProfessionalGeometry.RotateAroundPole(
+                    poleLayout, line.Start, quarterTurns),
+                End = PoleProfessionalGeometry.RotateAroundPole(
+                    poleLayout, line.End, quarterTurns)
+            },
+            SceneRectangle rectangle => rectangle with
+            {
+                Bounds = PoleProfessionalGeometry.RotateBoundsAroundPole(
+                    poleLayout, rectangle.Bounds, quarterTurns)
+            },
+            SceneEllipse ellipse => new SceneEllipse(
+                PoleProfessionalGeometry.RotateBoundsAroundPole(
+                    poleLayout, ellipse.Bounds, quarterTurns),
+                ellipse.Stroke,
+                ellipse.ThicknessMillimeters,
+                ellipse.Fill,
+                ellipse.StrokeStyle),
+            ScenePolyline polyline => new ScenePolyline(
+                polyline.Points.Select(point => PoleProfessionalGeometry.RotateAroundPole(
+                    poleLayout, point, quarterTurns)),
+                polyline.IsClosed,
+                polyline.Stroke,
+                polyline.ThicknessMillimeters,
+                polyline.Fill,
+                polyline.StrokeStyle),
+            SceneLogicalBounds bounds => new SceneLogicalBounds(
+                PoleProfessionalGeometry.RotateBoundsAroundPole(
+                    poleLayout, bounds.Bounds, quarterTurns)),
+            _ => element
+        };
+
     private static DrawingDocument CreateDocument(PoleCreationResult result)
     {
         var document = new DrawingDocument(Guid.NewGuid(), "Professional pole symbols");
+        AddPoleAggregate(document, result);
+        return document;
+    }
+
+    private static void AddPoleAggregate(
+        DrawingDocument document,
+        PoleCreationResult result)
+    {
         document.AddDevice(result.Pole);
         foreach (Device device in result.Devices)
         {
@@ -379,7 +656,5 @@ public sealed class PoleProfessionalSymbolTests
         {
             document.AddPoleAttachment(attachment);
         }
-
-        return document;
     }
 }
