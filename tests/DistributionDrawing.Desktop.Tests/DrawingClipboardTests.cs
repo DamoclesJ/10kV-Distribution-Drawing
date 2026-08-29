@@ -382,8 +382,9 @@ public sealed class DrawingClipboardTests : IDisposable
 
         SelectionSet pastedSelection = session.SelectionManager.SelectionSet;
         var drag = new DeviceDragController();
-        SelectionReference copiedFirst = pastedSelection.SelectedReferences.Single(item =>
-            item.Kind == SelectionTargetKind.RingCabinet);
+        SelectionReference copiedFirst = pastedSelection.SelectedReferences.First(item =>
+            item.Kind == SelectionTargetKind.RingCabinet &&
+            item.ObjectId == copiedCabinets[0].Id);
         DocumentPoint before = session.Layout.RingCabinetLayouts[copiedFirst.ObjectId].Position;
         Assert.True(drag.TryBeginGroupDrag(
             pastedSelection,
