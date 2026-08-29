@@ -19,6 +19,8 @@ public sealed class DrawingToolCoordinator
     private readonly CableConnectionController _cableConnection;
     private readonly CableReconnectController _cableReconnect;
     private readonly PoleSwitchAttachmentController _poleSwitchAttachment;
+    private readonly Func<ProjectRuntimeSession?> _getSession;
+    private readonly SelectionDeletePlanner _selectionDeletePlanner = new();
 
     public DrawingToolCoordinator(
         PlacementController placement,
@@ -26,7 +28,8 @@ public sealed class DrawingToolCoordinator
         CableTerminationAttachmentController cableTerminationAttachment,
         CableConnectionController cableConnection,
         CableReconnectController cableReconnect,
-        PoleSwitchAttachmentController poleSwitchAttachment)
+        PoleSwitchAttachmentController poleSwitchAttachment,
+        Func<ProjectRuntimeSession?>? getSession = null)
     {
         _placement = placement ?? throw new ArgumentNullException(nameof(placement));
         _overheadLine = overheadLine ?? throw new ArgumentNullException(nameof(overheadLine));
@@ -38,6 +41,7 @@ public sealed class DrawingToolCoordinator
             throw new ArgumentNullException(nameof(cableReconnect));
         _poleSwitchAttachment = poleSwitchAttachment ??
             throw new ArgumentNullException(nameof(poleSwitchAttachment));
+        _getSession = getSession ?? (() => null);
     }
 
     public void AddSwitchAttachment(SwitchKind switchKind)
@@ -142,25 +146,13 @@ public sealed class DrawingToolCoordinator
 
     public void RemoveSelected()
     {
-        if (_overheadLine.IsOverheadLineSelected)
-        {
-            _overheadLine.RemoveSelected();
-            return;
-        }
-
-        if (_cableConnection.IsCableSegmentSelected)
-        {
-            _cableConnection.RemoveSelected();
-            return;
-        }
-
-        if (_cableTerminationAttachment.IsCableTerminationAttachmentSelected)
-        {
-            _cableTerminationAttachment.RemoveSelected();
-            return;
-        }
-
-        _placement.RemoveSelected();
+        ProjectRuntimeSession session = _getSession()
+            ?? throw new InvalidOperationException("No project is currently open.");
+        ICommand command = _selectionDeletePlanner.Create(
+            session,
+            session.SelectionManager.SelectionSet);
+        session.CommandStack.ExecuteCommand(command, session.RebuildScene);
+        session.SelectionManager.Clear();
     }
 
     public IReadOnlyList<SceneElement> CreateTransientElements()

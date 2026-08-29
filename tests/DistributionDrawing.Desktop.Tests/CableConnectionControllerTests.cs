@@ -13,6 +13,7 @@ using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Metrics;
@@ -540,6 +541,173 @@ public sealed class CableConnectionControllerTests
         Assert.Equal(cableId, restored.Id);
         Assert.Equal(connectionId, restored.ConnectionId);
         Assert.Single(project.Document.Connections);
+    }
+
+    [Fact]
+    public void SelectionDeletePlanner_RemovesCableTerminationAtomicallyWithUndoRedo()
+    {
+        using TestProject project = CreateProject();
+        PoleAttachment attachment = Assert.Single(project.Document.PoleAttachments);
+        project.Session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.PoleAttachment,
+            attachment.AttachmentId,
+            attachment.PoleId));
+        var planner = new SelectionDeletePlanner();
+
+        project.Session.CommandStack.ExecuteCommand(planner.Create(
+            project.Session,
+            project.Session.SelectionManager.SelectionSet));
+
+        Assert.Empty(project.Document.Devices.OfType<CableTermination>());
+        Assert.Empty(project.Document.PoleAttachments);
+        Assert.True(project.Session.CommandStack.Undo());
+        Assert.Single(project.Document.Devices.OfType<CableTermination>());
+        Assert.Single(project.Document.PoleAttachments);
+        Assert.True(project.Session.CommandStack.Redo());
+        Assert.Empty(project.Document.Devices.OfType<CableTermination>());
+    }
+
+    [Fact]
+    public void SelectionDeletePlanner_KeepsSelectionAndDocumentWhenExternalConnectionBlocksDelete()
+    {
+        using TestProject project = CreateProject();
+        _ = CreateCable(project);
+        PoleAttachment attachment = Assert.Single(project.Document.PoleAttachments);
+        SelectionReference selection = new(
+            SelectionTargetKind.PoleAttachment,
+            attachment.AttachmentId,
+            attachment.PoleId);
+        project.Session.SelectionManager.Select(selection);
+        var planner = new SelectionDeletePlanner();
+
+        Assert.Throws<InvalidOperationException>(() => project.Session.CommandStack.ExecuteCommand(
+            planner.Create(project.Session, project.Session.SelectionManager.SelectionSet)));
+
+        Assert.Single(project.Document.Devices.OfType<CableTermination>());
+        Assert.Single(project.Document.CableSegments);
+        Assert.Equal(selection, project.Session.SelectionManager.Selected);
+    }
+
+    [Fact]
+    public void SelectionDeletePlanner_FoldsPoleAndAttachmentAndRestoresBoth()
+    {
+        using TestProject project = CreateProject();
+        Pole pole = Assert.Single(project.Document.Devices.OfType<Pole>());
+        PoleAttachment attachment = Assert.Single(project.Document.PoleAttachments);
+        project.Session.SelectionManager.Replace([
+            new SelectionReference(SelectionTargetKind.Device, pole.Id),
+            new SelectionReference(
+                SelectionTargetKind.PoleAttachment,
+                attachment.AttachmentId,
+                pole.Id)
+        ]);
+        var planner = new SelectionDeletePlanner();
+        project.Session.CommandStack.ExecuteCommand(planner.Create(
+            project.Session,
+            project.Session.SelectionManager.SelectionSet));
+
+        Assert.Empty(project.Document.Devices.OfType<Pole>());
+        Assert.Empty(project.Document.PoleAttachments);
+        Assert.True(project.Session.CommandStack.Undo());
+        Assert.Single(project.Document.Devices.OfType<Pole>());
+        Assert.Single(project.Document.PoleAttachments);
+        Assert.True(project.Session.CommandStack.Redo());
+        Assert.Empty(project.Document.Devices.OfType<Pole>());
+    }
+
+    [Fact]
+    public void SelectionDeletePlanner_RequiresConnectionInSelectionBoundary()
+    {
+        using TestProject project = CreateProject();
+        Pole firstPole = Assert.Single(project.Document.Devices.OfType<Pole>());
+        DeviceCommandFactory deviceFactory = new();
+        AddPoleCommand secondPoleCommand = deviceFactory.CreateAddPole(
+            project.Document,
+            project.Session.Layout,
+            new DocumentPoint(340, 40));
+        secondPoleCommand.Execute();
+        AddOverheadLineCommand lineCommand = new OverheadLineCommandFactory().CreateAdd(
+            project.Document,
+            project.Session.Layout,
+            firstPole.OverheadAnchorTerminalIds.Single(),
+            secondPoleCommand.Terminal.Id,
+            new DocumentPoint(220, 40),
+            new DocumentPoint(340, 40));
+        lineCommand.Execute();
+        Guid lineId = lineCommand.Connection.Id;
+        project.Session.SelectionManager.Replace([
+            new SelectionReference(SelectionTargetKind.Device, firstPole.Id),
+            new SelectionReference(SelectionTargetKind.Device, secondPoleCommand.Pole.Id)
+        ]);
+        var planner = new SelectionDeletePlanner();
+
+        Assert.Throws<InvalidOperationException>(() => project.Session.CommandStack.ExecuteCommand(
+            planner.Create(project.Session, project.Session.SelectionManager.SelectionSet)));
+        Assert.Equal(2, project.Document.Devices.OfType<Pole>().Count());
+        Assert.Contains(project.Document.OverheadLines, item => item.ConnectionId == lineId);
+        Assert.Equal(2, project.Session.SelectionManager.SelectionCount);
+
+        project.Session.SelectionManager.AddRange([
+            new SelectionReference(SelectionTargetKind.Connection, lineId)
+        ]);
+        project.Session.CommandStack.ExecuteCommand(planner.Create(
+            project.Session,
+            project.Session.SelectionManager.SelectionSet));
+        Assert.Empty(project.Document.Devices.OfType<Pole>());
+        Assert.Empty(project.Document.OverheadLines);
+        Assert.True(project.Session.CommandStack.Undo());
+        Assert.Equal(2, project.Document.Devices.OfType<Pole>().Count());
+        Assert.Contains(project.Document.OverheadLines, item => item.ConnectionId == lineId);
+        Assert.True(project.Session.CommandStack.Redo());
+        Assert.Empty(project.Document.Devices.OfType<Pole>());
+    }
+
+    [Fact]
+    public void SelectionDeletePlanner_RejectsStandaloneRingCabinetInterval()
+    {
+        using TestProject project = CreateProject();
+        RingCabinet cabinet = project.Cabinet;
+        RingCabinetInterval interval = cabinet.Intervals[0];
+        project.Session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.RingCabinetInterval,
+            interval.IntervalId,
+            cabinet.Id));
+
+        Assert.Throws<InvalidOperationException>(() => new SelectionDeletePlanner().Create(
+            project.Session,
+            project.Session.SelectionManager.SelectionSet));
+        Assert.Contains(cabinet, project.Document.Devices.OfType<RingCabinet>());
+    }
+
+    [Fact]
+    public void CompositeDeleteCommand_RollsBackEarlierDeleteWhenLaterDeleteFails()
+    {
+        var first = new TestDeleteCommand(true);
+        var second = new TestDeleteCommand(false);
+        var composite = new CompositeDeleteCommand([first, second]);
+
+        Assert.Throws<InvalidOperationException>(composite.Execute);
+        Assert.False(first.IsDeleted);
+        Assert.False(second.IsDeleted);
+    }
+
+    private sealed class TestDeleteCommand : ICommand
+    {
+        private readonly bool _succeeds;
+
+        public TestDeleteCommand(bool succeeds) => _succeeds = succeeds;
+
+        public bool IsDeleted { get; private set; }
+
+        public void Execute()
+        {
+            if (!_succeeds) throw new InvalidOperationException("delete failed");
+            IsDeleted = true;
+        }
+
+        public void Undo() => IsDeleted = false;
+
+        public void Redo() => Execute();
     }
 
     [Fact]

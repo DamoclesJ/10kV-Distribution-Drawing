@@ -114,7 +114,8 @@ public partial class MainWindow : Window
             _cableTerminationAttachment,
             _cableConnection,
             _cableReconnect,
-            _poleSwitchAttachment);
+            _poleSwitchAttachment,
+            () => _workspace.CurrentSession);
         _placement.SceneChanged += OnDrawingToolVisualChanged;
         _overheadLineConnection.VisualChanged += OnDrawingToolVisualChanged;
         _cableConnection.VisualChanged += OnDrawingToolVisualChanged;
@@ -302,16 +303,11 @@ public partial class MainWindow : Window
 
     private void OnDeleteRequested()
     {
-        if (_selectionManager.SelectionCount > 1)
-        {
-            ShowCommandError("无法删除对象", "当前版本暂不支持批量删除。");
-            return;
-        }
-
         try
         {
             CancelDeviceDrag();
             _drawingTools.RemoveSelected();
+            OnDrawingToolVisualChanged(this, EventArgs.Empty);
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
