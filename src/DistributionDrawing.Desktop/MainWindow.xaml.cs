@@ -44,6 +44,8 @@ public partial class MainWindow : Window
     private readonly ProfessionalCommandFactory _professionalCommandFactory = new();
     private readonly DeviceDragController _deviceDrag = new();
     private readonly CableRouteDragController _cableRouteDrag = new();
+    private SelectionRectangleController _selectionRectangle;
+    private readonly SceneSelectionQuery _sceneSelectionQuery = new();
     private SelectionObjectResolver _selectionResolver = new();
     private PropertyProjector _propertyProjector = new();
     private PropertyInspectorViewModel _propertyInspector = new();
@@ -78,6 +80,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _propertyEditor = new(_selectionResolver, _commandStack);
+        _selectionRectangle = new SelectionRectangleController(_selectionManager);
         PropertyInspectorPanel.DataContext = _propertyInspector;
         _selectionManager.SelectionChanged += OnSelectionChanged;
         _workspace = new ProjectWorkspaceController(
@@ -130,7 +133,7 @@ public partial class MainWindow : Window
             OnCancelRequested,
             () => _commandStack.CanUndo,
             () => _commandStack.CanRedo,
-            () => _selectionManager.Selected is not null,
+            () => _selectionManager.HasSingleSelection,
             OnSelectModeRequested,
             OnCreateRingCabinetModeRequested,
             OnCreatePoleModeRequested);
@@ -295,6 +298,12 @@ public partial class MainWindow : Window
 
     private void OnDeleteRequested()
     {
+        if (_selectionManager.SelectionCount > 1)
+        {
+            ShowCommandError("无法删除对象", "当前版本暂不支持批量删除。");
+            return;
+        }
+
         try
         {
             CancelDeviceDrag();
@@ -330,6 +339,13 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 return;
             }
+
+            if (e.Key == System.Windows.Input.Key.A)
+            {
+                OnSelectAllRequested();
+                e.Handled = true;
+                return;
+            }
         }
 
         if (e.Key == System.Windows.Input.Key.Delete)
@@ -341,6 +357,14 @@ public partial class MainWindow : Window
 
         if (e.Key == System.Windows.Input.Key.Escape)
         {
+            if (_selectionRectangle.Cancel())
+            {
+                DrawingSurface.ReleaseMouseCapture();
+                RenderCurrentScene();
+                e.Handled = true;
+                return;
+            }
+
             if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
             {
                 CancelDeviceDrag();
@@ -361,6 +385,18 @@ public partial class MainWindow : Window
     }
 
     private void OnCancelRequested() => _drawingTools.Cancel();
+
+    private void OnSelectAllRequested()
+    {
+        if (_currentScene is null || _drawingTools.IsActive ||
+            _deviceDrag.IsActive || _cableRouteDrag.IsActive ||
+            _viewport.IsPanning || _selectionRectangle.IsActive)
+        {
+            return;
+        }
+
+        _selectionManager.Replace(_sceneSelectionQuery.SelectAll(_currentScene.HitTestIndex));
+    }
 
     private void OnSelectModeRequested()
     {
@@ -538,6 +574,7 @@ public partial class MainWindow : Window
         if (documentSession is null)
         {
             _selectionManager = new SelectionManager();
+            _selectionRectangle = new SelectionRectangleController(_selectionManager);
             _selectionManager.SelectionChanged += OnSelectionChanged;
             _commandStack = new CommandStack();
             _selectionResolver = new SelectionObjectResolver();
@@ -553,6 +590,7 @@ public partial class MainWindow : Window
 
         ProjectRuntimeSession session = documentSession.RuntimeSession;
         _selectionManager = session.SelectionManager;
+        _selectionRectangle = new SelectionRectangleController(_selectionManager);
         _commandStack = session.CommandStack;
         _selectionResolver = session.SelectionResolver;
         _propertyProjector = session.PropertyProjector;
@@ -570,6 +608,7 @@ public partial class MainWindow : Window
     {
         _deviceDrag.Cancel();
         _cableRouteDrag.Cancel();
+        _selectionRectangle.Cancel();
         EndCanvasPan();
         DrawingSurface.ReleaseMouseCapture();
         _drawingTools.Cancel();
@@ -739,7 +778,8 @@ public partial class MainWindow : Window
                 _ when _poleSwitchAttachment.IsSelectingControlledConnection =>
                     _poleSwitchAttachment.StatusText,
                 _ => "选择"
-            });
+            },
+            _selectionManager.SelectionCount);
     }
 
     private void OnDrawingSurfaceSizeChanged(
@@ -788,6 +828,14 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseButtonEventArgs e)
     {
+        if (_selectionRectangle.Cancel())
+        {
+            DrawingSurface.ReleaseMouseCapture();
+            RenderCurrentScene();
+            e.Handled = true;
+            return;
+        }
+
         if (_drawingTools.IsActive || _placement.Mode != PlacementMode.Idle)
         {
             _drawingTools.Cancel();
@@ -823,9 +871,14 @@ public partial class MainWindow : Window
     {
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
+        bool selectionRectangleCanceled = _selectionRectangle.Cancel();
         if (changed)
         {
             RefreshDrawingScene();
+        }
+        else if (selectionRectangleCanceled)
+        {
+            RenderCurrentScene();
         }
 
         if (_viewport.IsPanning)
@@ -1398,25 +1451,47 @@ public partial class MainWindow : Window
             documentPoint,
             _viewport.Transform.ViewDistanceToDocument(4));
         SelectionReference? target = hit?.Target;
-        _selectionManager.Select(target);
+        bool shiftPressed =
+            (System.Windows.Input.Keyboard.Modifiers &
+             System.Windows.Input.ModifierKeys.Shift) != 0;
+        int selectionCountBeforeClick = _selectionManager.SelectionCount;
+        if (target is null)
+        {
+            _selectionRectangle.Begin(documentPoint, shiftPressed);
+            if (!DrawingSurface.CaptureMouse())
+            {
+                _selectionRectangle.Cancel();
+            }
 
-        ResolvedSelection? dragSelection = target is null
-            ? null
-            : _selectionResolver.Resolve(target);
+            e.Handled = true;
+            return;
+        }
+
+        if (shiftPressed)
+        {
+            _selectionManager.Toggle(target);
+            e.Handled = true;
+            return;
+        }
+
+        SelectionReference selectedTarget = target;
+        _selectionManager.Select(selectedTarget);
+
+        ResolvedSelection? dragSelection = _selectionResolver.Resolve(selectedTarget);
         Guid? orbitParentPoleId = dragSelection?.PoleAttachment is { } attachment &&
                                   _workspace.CurrentSession?.PersistenceSession.Domain.Devices
                                       .SingleOrDefault(device =>
                                           device.Id == attachment.AttachedDeviceId) is CableTermination
             ? attachment.PoleId
             : null;
-        if (target is not null &&
+        if (selectionCountBeforeClick <= 1 &&
             _workspace.CurrentSession is { } session &&
             ((hit is not null && _cableRouteDrag.TryBeginDrag(
                 hit,
-                _currentScene.HitTestIndex.FindAll(target),
+                _currentScene.HitTestIndex.FindAll(selectedTarget),
                 session.Layout)) ||
             _deviceDrag.TryBeginDrag(
-                target,
+                selectedTarget,
                 documentPoint,
                 session.Layout,
                 orbitParentPoleId)))
@@ -1472,6 +1547,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_selectionRectangle.IsActive)
+        {
+            _selectionRectangle.Update(
+                _viewport.Transform.ViewToDocument(point));
+            RenderCurrentScene();
+            e.Handled = true;
+            return;
+        }
+
         if ((!_deviceDrag.IsActive && !_cableRouteDrag.IsActive) ||
             e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
         {
@@ -1493,6 +1577,17 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseButtonEventArgs e)
     {
+        if (_selectionRectangle.IsActive)
+        {
+            _selectionRectangle.Update(
+                _viewport.Transform.ViewToDocument(e.GetPosition(DrawingSurface)));
+            _selectionRectangle.Complete(_currentScene!.HitTestIndex);
+            DrawingSurface.ReleaseMouseCapture();
+            RenderCurrentScene();
+            e.Handled = true;
+            return;
+        }
+
         if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
         {
             return;
@@ -1514,6 +1609,20 @@ public partial class MainWindow : Window
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
         _shellViewModel.RefreshCommandStates();
+        UpdateCanvasStatus();
+        if (_selectionManager.SelectionCount > 1)
+        {
+            _propertyInspector.Apply(
+                new PropertyInspectorSnapshot(
+                    null,
+                    $"已选择 {_selectionManager.SelectionCount} 个对象",
+                    "批量属性编辑将在后续版本提供。",
+                    []));
+            CollapseSingleSelectionEditors();
+            RenderCurrentScene();
+            return;
+        }
+
         _propertyInspector.Apply(
             _propertyProjector.Project(
                 _selectionResolver.Resolve(_selectionManager.Selected)));
@@ -1527,6 +1636,22 @@ public partial class MainWindow : Window
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
         RenderCurrentScene();
+    }
+
+    private void CollapseSingleSelectionEditors()
+    {
+        RingCabinetEditorPanel.Visibility = Visibility.Collapsed;
+        PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
+        PoleInstalledDevicesPanel.Visibility = Visibility.Collapsed;
+        IntervalEditorPanel.Visibility = Visibility.Collapsed;
+        AttachmentOffsetEditorPanel.Visibility = Visibility.Collapsed;
+        AttachmentLayoutEditorPanel.Visibility = Visibility.Collapsed;
+        CableTerminationDisplayNameEditorPanel.Visibility = Visibility.Collapsed;
+        GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
+        WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
+        WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
+        CablePropertyEditorPanel.Visibility = Visibility.Collapsed;
+        SwitchOperationPanel.Visibility = Visibility.Collapsed;
     }
 
     private void OnApplyPoleNumber(object sender, RoutedEventArgs e)
@@ -1980,6 +2105,12 @@ public partial class MainWindow : Window
 
     private void UpdateCablePropertyEditor()
     {
+        if (!_selectionManager.HasSingleSelection)
+        {
+            CablePropertyEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         ResolvedSelection? selection = _selectionResolver.Resolve(
             _selectionManager.Selected);
         if (selection?.Reference.Kind != SelectionTargetKind.CableSegment ||
@@ -2248,25 +2379,7 @@ public partial class MainWindow : Window
             _currentScene = runtimeSession.Scene;
             _activeSource = runtimeSession.InspectionSource;
             _selectionResolver.SetSource(_activeSource);
-            if (_selectionManager.Selected is { } runtimeSelected &&
-                _selectionResolver.Resolve(runtimeSelected) is null)
-            {
-                _selectionManager.Clear();
-            }
-
-            _propertyInspector.Apply(
-                _propertyProjector.Project(
-                    _selectionResolver.Resolve(_selectionManager.Selected)));
-            UpdateRingCabinetEditor();
-            UpdatePoleNumberEditor();
-            UpdatePoleInstalledDevicesEditor();
-            UpdateIntervalEditor();
-            UpdateAttachmentOffsetEditor();
-            UpdateAttachmentLayoutEditor();
-            UpdateCableTerminationDisplayNameEditor();
-            UpdateGroundingPointEditor();
-            UpdateWorkScopeEditor();
-            RenderCurrentScene();
+            OnSelectionChanged(this, EventArgs.Empty);
             return;
         }
 
@@ -2305,24 +2418,9 @@ public partial class MainWindow : Window
             HitTestIndex = scene.HitTestIndex
         };
         _selectionResolver.SetSource(_activeSource);
-        if (_selectionManager.Selected is { } selected &&
-            _selectionResolver.Resolve(selected) is null)
-        {
-            _selectionManager.Clear();
-        }
-        _propertyInspector.Apply(
-            _propertyProjector.Project(
-                _selectionResolver.Resolve(_selectionManager.Selected)));
-        UpdateRingCabinetEditor();
-        UpdatePoleNumberEditor();
-        UpdatePoleInstalledDevicesEditor();
-        UpdateIntervalEditor();
-        UpdateAttachmentOffsetEditor();
-        UpdateAttachmentLayoutEditor();
-        UpdateCableTerminationDisplayNameEditor();
-        UpdateGroundingPointEditor();
-        UpdateWorkScopeEditor();
-        RenderCurrentScene();
+        _selectionManager.Retain(reference =>
+            _selectionResolver.Resolve(reference) is not null);
+        OnSelectionChanged(this, EventArgs.Empty);
     }
 
     private Guid? HitTestTerminal(
@@ -2373,7 +2471,8 @@ public partial class MainWindow : Window
         elements.AddRange(
             SelectionOverlayBuilder.CreateElements(
                 _currentScene.HitTestIndex,
-                _selectionManager.Selected));
+                _selectionManager.SelectionSet));
+        elements.AddRange(_selectionRectangle.CreateOverlayElements());
         double pixelsPerDip = VisualTreeHelper.GetDpi(DrawingSurface).PixelsPerDip;
         DrawingSurface.Show(_renderer.Render(new DrawingScene(elements), pixelsPerDip));
         DrawingSurface.SetViewTransform(_viewport.Transform);
@@ -2381,6 +2480,12 @@ public partial class MainWindow : Window
 
     private void UpdateSwitchOperationEditor()
     {
+        if (!_selectionManager.HasSingleSelection)
+        {
+            SwitchOperationPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         ResolvedSelection? selection = _selectionResolver.Resolve(
             _selectionManager.Selected);
         if (selection?.SwitchDevice is not { } switchDevice)

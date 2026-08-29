@@ -78,15 +78,23 @@ public sealed class DesktopWorkspaceTests : IDisposable
         var firstSelection = new SelectionReference(
             SelectionTargetKind.Device,
             Guid.NewGuid());
+        var firstSecondarySelection = new SelectionReference(
+            SelectionTargetKind.Connection,
+            Guid.NewGuid());
         var secondSelection = new SelectionReference(
             SelectionTargetKind.RingCabinet,
             Guid.NewGuid());
 
-        first.RuntimeSession.SelectionManager.Select(firstSelection);
+        first.RuntimeSession.SelectionManager.Replace(
+            [firstSelection, firstSecondarySelection]);
         second.RuntimeSession.SelectionManager.Select(secondSelection);
 
-        Assert.Equal(firstSelection, first.RuntimeSession.SelectionManager.Selected);
+        Assert.Equal(
+            [firstSelection, firstSecondarySelection],
+            first.RuntimeSession.SelectionManager.SelectionSet.SelectedReferences);
+        Assert.Equal(firstSecondarySelection, first.RuntimeSession.SelectionManager.Selected);
         Assert.Equal(secondSelection, second.RuntimeSession.SelectionManager.Selected);
+        Assert.Single(second.RuntimeSession.SelectionManager.SelectionSet.SelectedReferences);
         Assert.NotSame(first.RuntimeSession.Scene, second.RuntimeSession.Scene);
         Assert.NotSame(
             first.RuntimeSession.SelectionManager,

@@ -9,17 +9,28 @@ public static class SelectionOverlayBuilder
         SelectionHitTestIndex hitTestIndex,
         SelectionReference? selected)
     {
-        ArgumentNullException.ThrowIfNull(hitTestIndex);
+        return CreateElements(
+            hitTestIndex,
+            selected is null ? SelectionSet.Empty : SelectionSet.Create([selected]));
+    }
 
-        if (selected is null)
+    public static IReadOnlyList<SceneElement> CreateElements(
+        SelectionHitTestIndex hitTestIndex,
+        SelectionSet selectionSet)
+    {
+        ArgumentNullException.ThrowIfNull(hitTestIndex);
+        ArgumentNullException.ThrowIfNull(selectionSet);
+
+        if (selectionSet.Count == 0)
         {
             return [];
         }
 
         const double marginMillimeters = 1.5;
-        return hitTestIndex.FindAll(selected)
-            .Select(entry =>
+        return selectionSet.SelectedReferences
+            .SelectMany(selected => hitTestIndex.FindAll(selected).Select(entry =>
             {
+                bool isPrimary = selected == selectionSet.PrimarySelection;
                 DocumentRect bounds = entry.Bounds;
                 return (SceneElement)new SceneRectangle(
                     new DocumentRect(
@@ -27,9 +38,9 @@ public static class SelectionOverlayBuilder
                         bounds.YMillimeters - marginMillimeters,
                         bounds.WidthMillimeters + marginMillimeters * 2,
                         bounds.HeightMillimeters + marginMillimeters * 2),
-                    Colors.DeepSkyBlue,
-                    1.2);
-            })
+                    isPrimary ? Colors.DeepSkyBlue : Colors.CornflowerBlue,
+                    isPrimary ? 1.2 : 0.8);
+            }))
             .ToArray();
     }
 }

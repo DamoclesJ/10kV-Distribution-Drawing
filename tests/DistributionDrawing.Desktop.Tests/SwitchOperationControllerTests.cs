@@ -18,6 +18,31 @@ namespace DistributionDrawing.Desktop.Tests;
 public sealed class SwitchOperationControllerTests
 {
     [Fact]
+    public void MultipleSelectionDoesNotOperatePrimarySwitch()
+    {
+        using TestProject project = CreateProject(CreateLoadSwitchConfiguration());
+        SwitchDevice loadSwitch = project.GetSwitch(SwitchKind.LoadSwitch);
+        var switchSelection = new SelectionReference(
+            SelectionTargetKind.Device,
+            loadSwitch.Id,
+            project.Interval.IntervalId);
+        project.Session.SelectionManager.Replace(
+        [
+            new SelectionReference(SelectionTargetKind.RingCabinet, Guid.NewGuid()),
+            switchSelection
+        ]);
+        var controller = new SwitchOperationController(() => project.Session);
+        int historyCount = project.Session.CommandStack.History.Count;
+
+        SwitchOperationResult result = controller.ToggleSelected();
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("多选", result.ErrorMessage);
+        Assert.Equal(SwitchState.Open, loadSwitch.SwitchState);
+        Assert.Equal(historyCount, project.Session.CommandStack.History.Count);
+    }
+
+    [Fact]
     public void ToggleSelected_ChangesStateAndPreservesSelection()
     {
         using TestProject project = CreateProject(CreateLoadSwitchConfiguration());

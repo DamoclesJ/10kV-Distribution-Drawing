@@ -12,6 +12,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private double _zoom = 1.0;
     private bool _gridVisible;
     private string _modeText = "选择";
+    private int _selectionCount;
 
     public MainWindowViewModel(
         DesktopShellService shellService,
@@ -60,7 +61,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string InspectorTitle => "属性检查器";
 
-    public string StatusText => $"缩放 {_zoom:0.00}x · 网格 {(_gridVisible ? "开" : "关")} · 模式 {_modeText}";
+    public string StatusText =>
+        $"缩放 {_zoom:0.00}x · 网格 {(_gridVisible ? "开" : "关")} · 模式 {_modeText} · 已选择 {_selectionCount}";
 
     public string ZoomText => $"缩放: {_zoom:0.00}x";
 
@@ -84,11 +86,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ToolboxViewModel Toolbox { get; }
 
-    public void UpdateCanvasState(double zoom, bool gridVisible, string modeText)
+    public void UpdateCanvasState(
+        double zoom,
+        bool gridVisible,
+        string modeText,
+        int selectionCount = 0)
     {
         _zoom = zoom;
         _gridVisible = gridVisible;
         _modeText = string.IsNullOrWhiteSpace(modeText) ? "选择" : modeText;
+        _selectionCount = Math.Max(0, selectionCount);
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(ZoomText));
         OnPropertyChanged(nameof(GridText));

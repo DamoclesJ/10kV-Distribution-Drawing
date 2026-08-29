@@ -90,6 +90,11 @@ public sealed class PlacementController
     public void RemoveSelected()
     {
         ProjectRuntimeSession session = RequireSession();
+        if (!session.SelectionManager.HasSingleSelection)
+        {
+            throw new InvalidOperationException("当前版本暂不支持批量删除。");
+        }
+
         SelectionReference selected = session.SelectionManager.Selected
             ?? throw new InvalidOperationException("No device is selected.");
         if (selected.Kind is not (SelectionTargetKind.Device or SelectionTargetKind.RingCabinet))

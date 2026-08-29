@@ -34,6 +34,11 @@ public sealed class SwitchOperationController
             return SwitchOperationResult.Failure("请先选择一个开关设备。");
         }
 
+        if (!session.SelectionManager.HasSingleSelection)
+        {
+            return SwitchOperationResult.Failure("多选状态下不能执行单个开关操作。");
+        }
+
         ResolvedSelection? resolved = session.SelectionResolver.Resolve(selection);
         if (resolved?.SwitchDevice is not { } switchDevice)
         {
@@ -56,6 +61,11 @@ public sealed class SwitchOperationController
         if (session is null || session.SelectionManager.Selected is not { } selection)
         {
             return SwitchOperationResult.Failure("请先选择一个开关设备。");
+        }
+
+        if (!session.SelectionManager.HasSingleSelection)
+        {
+            return SwitchOperationResult.Failure("多选状态下不能执行单个开关操作。");
         }
 
         ResolvedSelection? resolved = session.SelectionResolver.Resolve(selection);

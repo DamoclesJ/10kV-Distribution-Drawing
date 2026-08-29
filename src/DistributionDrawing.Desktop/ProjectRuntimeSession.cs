@@ -120,6 +120,7 @@ public sealed class ProjectRuntimeSession
         Scene = _sceneBuilder.Build(PersistenceSession.Domain, Layout);
         InspectionSource = CreateInspectionSource(PersistenceSession, Layout, Scene);
         SelectionResolver.SetSource(InspectionSource);
+        SelectionManager.Retain(reference => SelectionResolver.Resolve(reference) is not null);
     }
 
     public void AcceptSavedSession(ProjectSession persistenceSession)
