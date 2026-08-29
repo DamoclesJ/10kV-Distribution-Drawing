@@ -176,6 +176,9 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.Contains(session.SelectionManager.SelectionSet.SelectedReferences,
             item => item.Kind == SelectionTargetKind.Device &&
                     item.ObjectId == copiedAttachment.PoleId);
+        Assert.All(
+            session.SelectionManager.SelectionSet.SelectedReferences,
+            reference => Assert.NotEmpty(session.Scene.HitTestIndex.FindAll(reference)));
     }
 
     [Fact]

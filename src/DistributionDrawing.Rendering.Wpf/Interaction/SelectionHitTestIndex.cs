@@ -57,7 +57,7 @@ public sealed class SelectionHitTestIndex
     {
         ArgumentNullException.ThrowIfNull(target);
 
-        return _entries.FirstOrDefault(entry => entry.Target == target);
+        return _entries.FirstOrDefault(entry => HasSameIdentity(entry.Target, target));
     }
 
     public IReadOnlyList<SelectionHitTestEntry> FindAll(SelectionReference target)
@@ -65,8 +65,15 @@ public sealed class SelectionHitTestIndex
         ArgumentNullException.ThrowIfNull(target);
 
         return _entries
-            .Where(entry => entry.Target == target)
+            .Where(entry => HasSameIdentity(entry.Target, target))
             .ToArray();
+    }
+
+    private static bool HasSameIdentity(
+        SelectionReference first,
+        SelectionReference second)
+    {
+        return first.Kind == second.Kind && first.ObjectId == second.ObjectId;
     }
 
     private static bool IsHit(

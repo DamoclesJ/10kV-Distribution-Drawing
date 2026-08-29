@@ -29,4 +29,32 @@ public sealed class SelectionOverlayBuilderTests
         Assert.Equal(0.8, overlays[0].ThicknessMillimeters);
         Assert.Equal(1.2, overlays[1].ThicknessMillimeters);
     }
+
+    [Fact]
+    public void OverlayMatchesSelectionIdentityWhenParentMetadataDiffers()
+    {
+        Guid deviceId = Guid.NewGuid();
+        SelectionReference selected = new(SelectionTargetKind.Device, deviceId);
+        SelectionReference sceneTarget = new(
+            SelectionTargetKind.Device,
+            deviceId,
+            Guid.NewGuid());
+        var manager = new SelectionManager();
+        manager.Select(selected);
+        var index = new SelectionHitTestIndex(
+        [
+            new SelectionHitTestEntry(
+                sceneTarget,
+                new DocumentRect(0, 0, 10, 10),
+                10)
+        ]);
+
+        SceneRectangle[] overlays = SelectionOverlayBuilder.CreateElements(
+                index,
+                manager.SelectionSet)
+            .Cast<SceneRectangle>()
+            .ToArray();
+
+        Assert.Single(overlays);
+    }
 }
