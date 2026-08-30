@@ -33,6 +33,7 @@ using DistributionDrawing.Desktop.ViewModels;
 using DistributionDrawing.Desktop.SwitchOperation;
 using DistributionDrawing.Desktop.Actions;
 using DistributionDrawing.Desktop.Export;
+using System.Windows.Threading;
 
 namespace DistributionDrawing.Desktop;
 
@@ -68,6 +69,10 @@ public partial class MainWindow : Window
     private readonly IDesktopMessageService _messageService;
     private readonly DesktopContextMenuResolver _contextMenuResolver = new();
     private readonly ExportDrawingController _exportDrawing;
+    private readonly DispatcherTimer _statusFeedbackTimer = new()
+    {
+        Interval = TimeSpan.FromSeconds(2.5)
+    };
     private DocumentSession? _boundDocumentSession;
     private MainWindowViewModel _shellViewModel = null!;
     private bool _gridVisible;
@@ -145,11 +150,11 @@ public partial class MainWindow : Window
             {
                 New = () => _workspace.NewProject(),
                 Open = () => _workspace.OpenProject(),
-                Save = () => _workspace.SaveProject(),
-                SaveAs = () => _workspace.SaveProjectAs(),
+                Save = ExecuteSaveAction,
+                SaveAs = ExecuteSaveAsAction,
                 CloseDocument = () => _workspace.CloseCurrentProject(),
                 Exit = Close,
-                ExportPng = () => _exportDrawing.ExportPng(),
+                ExportPng = ExecuteExportPngAction,
                 Undo = OnUndoRequested,
                 Redo = OnRedoRequested,
                 Copy = ExecuteCopyAction,
@@ -194,6 +199,7 @@ public partial class MainWindow : Window
             new DesktopShellService(),
             _actions);
         _shellViewModel.Toolbox.PropertyChanged += OnToolboxPropertyChanged;
+        _statusFeedbackTimer.Tick += OnStatusFeedbackTimerTick;
         DataContext = _shellViewModel;
         UpdateCanvasStatus();
     }
@@ -403,6 +409,10 @@ public partial class MainWindow : Window
         {
             _messageService.ShowWarning("部分对象未复制", result.Message);
         }
+        else
+        {
+            ShowTransientFeedback(result.Message);
+        }
     }
 
     private void ExecutePasteAction()
@@ -415,6 +425,44 @@ public partial class MainWindow : Window
         }
 
         OnDrawingToolVisualChanged(this, EventArgs.Empty);
+        ShowTransientFeedback(result.Message);
+    }
+
+    private void ExecuteSaveAction()
+    {
+        if (_workspace.SaveProject())
+        {
+            ShowTransientFeedback("已保存");
+        }
+    }
+
+    private void ExecuteSaveAsAction()
+    {
+        if (_workspace.SaveProjectAs())
+        {
+            ShowTransientFeedback("已保存");
+        }
+    }
+
+    private void ExecuteExportPngAction()
+    {
+        if (_exportDrawing.ExportPng())
+        {
+            ShowTransientFeedback("PNG 已导出");
+        }
+    }
+
+    private void ShowTransientFeedback(string message)
+    {
+        _shellViewModel.ShowFeedback(message);
+        _statusFeedbackTimer.Stop();
+        _statusFeedbackTimer.Start();
+    }
+
+    private void OnStatusFeedbackTimerTick(object? sender, EventArgs e)
+    {
+        _statusFeedbackTimer.Stop();
+        _shellViewModel.ClearFeedback();
     }
 
     private void CancelCurrentOperation()
@@ -602,6 +650,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _statusFeedbackTimer.Stop();
         _workspace.Dispose();
         base.OnClosed(e);
     }
@@ -703,6 +752,7 @@ public partial class MainWindow : Window
         DocumentTabs.ItemsSource = null;
         DocumentTabs.ItemsSource = _workspace.Workspace.Sessions;
         DocumentTabs.SelectedItem = _workspace.ActiveDocumentSession;
+        UpdatePresentationState();
     }
 
     private void OnDocumentTabSelectionChanged(
@@ -719,8 +769,8 @@ public partial class MainWindow : Window
     private void UpdateWindowTitle()
     {
         Title = _workspace.ActiveDocumentSession is { } session
-            ? $"{session.TabTitle} - 10kV Distribution Drawing"
-            : "10kV Distribution Drawing";
+            ? $"{session.TabTitle} - 10kV 配电工作票绘图"
+            : "10kV 配电工作票绘图";
     }
 
     private void OnActiveDocumentSessionChanging(
@@ -999,7 +1049,16 @@ public partial class MainWindow : Window
                 _ => "选择对象"
             },
             _selectionManager.SelectionCount);
+        UpdatePresentationState();
         _actions.RefreshCanExecute();
+    }
+
+    private void UpdatePresentationState()
+    {
+        bool hasSession = _workspace.ActiveDocumentSession is not null;
+        bool hasDrawingContent = _currentScene?.Elements.Any(element =>
+            element.TargetId is not null) == true;
+        _shellViewModel.UpdatePresentationState(hasSession, hasDrawingContent);
     }
 
     private void SyncToolboxModeFromInteraction()
@@ -1136,9 +1195,17 @@ public partial class MainWindow : Window
                 CanOperateCurrentSwitch(),
                 CanReconnectCurrentCable());
         var menu = new ContextMenu();
+        DesktopContextActionKind? previous = null;
         foreach (DesktopContextActionKind actionKind in actionKinds)
         {
+            if (previous is DesktopContextActionKind previousKind &&
+                ContextActionGroup(previousKind) != ContextActionGroup(actionKind))
+            {
+                menu.Items.Add(new Separator());
+            }
+
             menu.Items.Add(CreateContextMenuItem(actionKind));
+            previous = actionKind;
         }
 
         return menu;
@@ -1163,14 +1230,57 @@ public partial class MainWindow : Window
                 ("修改电缆终点", _actions.ReconnectCableEnd),
             _ => throw new ArgumentOutOfRangeException(nameof(actionKind))
         };
-        return new MenuItem
+        var item = new MenuItem
         {
             Header = header,
             Command = command,
             IsCheckable = actionKind == DesktopContextActionKind.ToggleGrid,
             IsChecked = actionKind == DesktopContextActionKind.ToggleGrid && _gridVisible
         };
+        string? iconKey = actionKind switch
+        {
+            DesktopContextActionKind.Paste => "Icon.Paste",
+            DesktopContextActionKind.Copy => "Icon.Copy",
+            DesktopContextActionKind.Delete => "Icon.Delete",
+            DesktopContextActionKind.FitDrawing => "Icon.Fit",
+            _ => null
+        };
+        if (iconKey is not null && TryFindResource(iconKey) is Geometry geometry)
+        {
+            var icon = new System.Windows.Shapes.Path
+            {
+                Data = geometry,
+                Width = 16,
+                Height = 16,
+                Stretch = Stretch.Uniform,
+                StrokeThickness = 1.7,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round
+            };
+            icon.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "TextPrimaryBrush");
+            item.Icon = icon;
+        }
+
+        return item;
     }
+
+    private static int ContextActionGroup(DesktopContextActionKind actionKind) =>
+        actionKind switch
+        {
+            DesktopContextActionKind.Paste or
+            DesktopContextActionKind.SelectAll or
+            DesktopContextActionKind.Copy or
+            DesktopContextActionKind.Delete => 0,
+            DesktopContextActionKind.FitDrawing or
+            DesktopContextActionKind.ToggleGrid => 1,
+            DesktopContextActionKind.RotateLeft or
+            DesktopContextActionKind.RotateRight => 2,
+            DesktopContextActionKind.SwitchOperation => 3,
+            DesktopContextActionKind.ReconnectCableStart or
+            DesktopContextActionKind.ReconnectCableEnd => 4,
+            _ => 5
+        };
 
     private void OnDrawingSurfaceMouseUp(
         object sender,
@@ -2604,7 +2714,7 @@ public partial class MainWindow : Window
         if (selection?.GroundingPoint is { } groundingPoint)
         {
             GroundingPointEditorPanel.Visibility = Visibility.Visible;
-            GroundingPointTerminalText.Text = $"端子：{groundingPoint.TerminalId}";
+            GroundingPointTerminalText.Text = "已绑定到图面端子";
             GroundingPointLocationInput.Text = groundingPoint.Location;
             GroundingPointNumberInput.Text = groundingPoint.Number ?? string.Empty;
             GroundingPointNoteInput.Text = groundingPoint.Note ?? string.Empty;
@@ -2628,8 +2738,8 @@ public partial class MainWindow : Window
             WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
             WorkScopeEditorPanel.Visibility = Visibility.Visible;
             WorkScopeEditorBoundaryText.Text =
-                $"A: {workScope.StartBoundary.DeviceId} / {workScope.StartBoundary.TerminalId} / {workScope.StartBoundary.Side}\n" +
-                $"B: {workScope.EndBoundary.DeviceId} / {workScope.EndBoundary.TerminalId} / {workScope.EndBoundary.Side}";
+                $"边界 A：{workScope.StartBoundary.Side}\n" +
+                $"边界 B：{workScope.EndBoundary.Side}";
             WorkScopeEditorDescriptionInput.Text = workScope.Description;
             WorkScopeEditorGroundingPointIdsInput.Text =
                 string.Join(", ", workScope.GroundingPointIds);
@@ -2665,12 +2775,12 @@ public partial class MainWindow : Window
             return "未选择";
         }
 
-        return $"设备：{deviceId}\n端子：{terminalId}";
+        return "已选择图面端子";
     }
 
     private static string FormatBoundary(BoundaryPointCommandValue boundary)
     {
-        return $"设备：{boundary.DeviceId}\n端子：{boundary.TerminalId}\n侧别：{boundary.Side}";
+        return $"已选择 · 侧别：{boundary.Side}";
     }
 
     private Guid? ResolveBoundaryDeviceId(Guid terminalId)

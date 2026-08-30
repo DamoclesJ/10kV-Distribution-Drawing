@@ -4,6 +4,7 @@
         Title="图面字号设置"
         Width="420"
         Height="390"
+        Style="{StaticResource DialogWindowStyle}"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner">
   <Grid Margin="20">
@@ -22,25 +23,25 @@
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
     <TextBlock Grid.Row="0" Margin="0,6,12,12" Text="环网柜名称（mm）" />
-    <TextBox x:Name="CabinetNameFontSizeInput" Grid.Row="0" Grid.Column="1" Margin="0,0,0,12" />
+    <TextBox x:Name="CabinetNameFontSizeInput" Grid.Row="0" Grid.Column="1" Margin="0,0,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock Grid.Row="1" Margin="0,6,12,12" Text="线路名称（mm）" />
-    <TextBox x:Name="LineNameFontSizeInput" Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" />
+    <TextBox x:Name="LineNameFontSizeInput" Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock Grid.Row="2" Margin="0,6,12,12" Text="间隔编号（mm）" />
-    <TextBox x:Name="IntervalNumberFontSizeInput" Grid.Row="2" Grid.Column="1" Margin="0,0,0,12" />
+    <TextBox x:Name="IntervalNumberFontSizeInput" Grid.Row="2" Grid.Column="1" Margin="0,0,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock Grid.Row="3" Margin="0,6,12,12" Text="开关编号（mm）" />
-    <TextBox x:Name="SwitchNumberFontSizeInput" Grid.Row="3" Grid.Column="1" Margin="0,0,0,12" />
+    <TextBox x:Name="SwitchNumberFontSizeInput" Grid.Row="3" Grid.Column="1" Margin="0,0,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock Grid.Row="4" Margin="0,6,12,12" Text="杆塔编号（mm）" />
-    <TextBox x:Name="PoleNumberFontSizeInput" Grid.Row="4" Grid.Column="1" Margin="0,0,0,12" />
+    <TextBox x:Name="PoleNumberFontSizeInput" Grid.Row="4" Grid.Column="1" Margin="0,0,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock Grid.Row="5" Margin="0,6,12,12" Text="PT 标识（mm）" />
-    <TextBox x:Name="PTLabelFontSizeInput" Grid.Row="5" Grid.Column="1" Margin="0,0,0,12" />
+    <TextBox x:Name="PTLabelFontSizeInput" Grid.Row="5" Grid.Column="1" Margin="0,0,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock x:Name="ValidationMessage"
                Grid.Row="6"
                Grid.ColumnSpan="2"
-               Foreground="#C00000"
+               Foreground="{StaticResource DangerBrush}"
                TextWrapping="Wrap" />
     <StackPanel Grid.Row="7" Grid.ColumnSpan="2" HorizontalAlignment="Right" Orientation="Horizontal">
-      <Button Width="80" Content="应用" IsDefault="True" Click="OnApply" />
-      <Button Width="80" Margin="8,0,0,0" Content="取消" IsCancel="True" />
+      <Button Style="{StaticResource DialogButtonStyle}" Content="应用" IsDefault="True" Click="OnApply" />
+      <Button Style="{StaticResource DialogButtonStyle}" Margin="8,0,0,0" Content="取消" IsCancel="True" />
     </StackPanel>
   </Grid>
 </Window>

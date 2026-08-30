@@ -106,6 +106,9 @@ public sealed class IntervalTypeChangeIntegrationTests
         Assert.Contains(rows, row => row is { PropertyKey: "BayIndex", DisplayValue: "1" });
         Assert.Contains(rows, row => row is { PropertyKey: "BusinessNumber", DisplayValue: "负1" });
         Assert.Contains(rows, row => row is { PropertyKey: "Sequence", IsReadOnly: true });
+        Assert.DoesNotContain(rows, row => row.PropertyKey is
+            "IntervalId" or "ParentCabinetId" or "ExternalTerminalId" or
+            "SymbolKind" or "SymbolVisualState" or "HitBounds" or "HitPriority");
     }
 
     [Fact]

@@ -4,16 +4,17 @@
         Title="电缆参数"
         Width="360"
         Height="220"
+        Style="{StaticResource DialogWindowStyle}"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
   <StackPanel Margin="16">
     <TextBlock Text="电缆型号" />
-    <TextBox x:Name="CableTypeInput" Margin="0,4,0,10" />
+    <TextBox x:Name="CableTypeInput" Margin="0,4,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock Text="长度（米）" />
-    <TextBox x:Name="LengthInput" Margin="0,4,0,14" />
+    <TextBox x:Name="LengthInput" Margin="0,4,0,16" Style="{StaticResource DialogFieldStyle}" />
     <WrapPanel HorizontalAlignment="Right">
-      <Button Width="72" Margin="0,0,8,0" Content="确定" Click="OnConfirm" />
-      <Button Width="72" Content="取消" IsCancel="True" />
+      <Button Margin="0,0,8,0" Style="{StaticResource DialogButtonStyle}" Content="确定" Click="OnConfirm" />
+      <Button Style="{StaticResource DialogButtonStyle}" Content="取消" IsCancel="True" />
     </WrapPanel>
   </StackPanel>
 </Window>

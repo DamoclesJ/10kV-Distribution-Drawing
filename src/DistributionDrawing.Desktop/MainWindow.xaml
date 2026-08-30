@@ -2,11 +2,15 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:renderingCanvas="clr-namespace:DistributionDrawing.Rendering.Wpf.Canvas;assembly=DistributionDrawing.Rendering.Wpf"
-        Title="10kV Distribution Drawing"
+        Title="10kV 配电工作票绘图"
+        Icon="Assets/AppIcon.ico"
         Width="1200"
         Height="800"
-        MinWidth="800"
+        MinWidth="1040"
         MinHeight="600"
+        Background="{StaticResource ShellBackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
+        FontSize="{StaticResource Typography.Body}"
         PreviewKeyDown="OnWindowPreviewKeyDown"
         WindowStartupLocation="CenterScreen">
   <Window.InputBindings>
@@ -17,7 +21,9 @@
     <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseDocumentCommand}" />
   </Window.InputBindings>
   <DockPanel>
-    <Menu DockPanel.Dock="Top">
+    <Menu DockPanel.Dock="Top"
+          Background="{StaticResource PanelBackgroundBrush}"
+          Foreground="{StaticResource TextPrimaryBrush}">
       <MenuItem Header="文件">
         <MenuItem Header="新建" Command="{Binding NewProjectCommand}" InputGestureText="Ctrl+N" />
         <MenuItem Header="打开" Command="{Binding OpenProjectCommand}" InputGestureText="Ctrl+O" />
@@ -70,29 +76,71 @@
       </MenuItem>
     </Menu>
 
-    <ToolBarTray DockPanel.Dock="Top">
-      <ToolBar>
-        <Button Content="保存" Command="{Binding SaveProjectCommand}" />
-        <Button Content="撤销" Command="{Binding UndoCommand}" />
-        <Button Content="重做" Command="{Binding RedoCommand}" />
-        <Button Content="复制" Command="{Binding CopyCommand}" />
-        <Button Content="粘贴" Command="{Binding PasteCommand}" />
-        <Button Content="删除" Command="{Binding DeleteCommand}" />
-        <Button Content="适合图形" Command="{Binding FitDrawingCommand}" />
+    <ToolBarTray DockPanel.Dock="Top" Background="{StaticResource PanelBackgroundBrush}">
+      <ToolBar Background="Transparent" BorderThickness="0" Padding="8,2">
+        <Button Style="{StaticResource ToolbarButtonStyle}"
+                ToolTip="保存" Command="{Binding SaveProjectCommand}">
+          <Path Data="{StaticResource Icon.Save}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" />
+        </Button>
+        <Separator Margin="4,3" />
+        <Button Style="{StaticResource ToolbarButtonStyle}"
+                ToolTip="撤销" Command="{Binding UndoCommand}">
+          <Path Data="{StaticResource Icon.Undo}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" />
+        </Button>
+        <Button Style="{StaticResource ToolbarButtonStyle}"
+                ToolTip="重做" Command="{Binding RedoCommand}">
+          <Path Data="{StaticResource Icon.Redo}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" />
+        </Button>
+        <Separator Margin="4,3" />
+        <Button Style="{StaticResource ToolbarButtonStyle}"
+                ToolTip="复制" Command="{Binding CopyCommand}">
+          <Path Data="{StaticResource Icon.Copy}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" />
+        </Button>
+        <Button Style="{StaticResource ToolbarButtonStyle}"
+                ToolTip="粘贴" Command="{Binding PasteCommand}">
+          <Path Data="{StaticResource Icon.Paste}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" />
+        </Button>
+        <Button Style="{StaticResource ToolbarButtonStyle}"
+                ToolTip="删除" Command="{Binding DeleteCommand}">
+          <Path Data="{StaticResource Icon.Delete}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" />
+        </Button>
+        <Separator Margin="4,3" />
+        <Button Style="{StaticResource ToolbarButtonStyle}"
+                ToolTip="适合图形" Command="{Binding FitDrawingCommand}">
+          <Path Data="{StaticResource Icon.Fit}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" />
+        </Button>
       </ToolBar>
     </ToolBarTray>
 
-    <StatusBar DockPanel.Dock="Bottom">
-      <StatusBarItem Content="{Binding StatusText}" />
-      <Separator />
-      <StatusBarItem Content="{Binding SelectionStatus}" />
-      <Separator />
-      <StatusBarItem Content="{Binding ZoomText}" />
-      <StatusBarItem Content="{Binding GridText}" />
-      <StatusBarItem Content="{Binding SnapText}" />
+    <StatusBar DockPanel.Dock="Bottom"
+               Padding="8,1"
+               Background="{StaticResource PanelBackgroundBrush}"
+               BorderBrush="{StaticResource BorderBrush}"
+               BorderThickness="0,1,0,0"
+               Foreground="{StaticResource TextSecondaryBrush}">
+      <StatusBarItem HorizontalContentAlignment="Stretch">
+        <DockPanel LastChildFill="True">
+          <StackPanel DockPanel.Dock="Right" Margin="20,0,0,0" Orientation="Horizontal">
+            <TextBlock Text="{Binding ZoomText}" />
+            <TextBlock Margin="12,0,0,0" Text="{Binding GridText}" />
+            <TextBlock Margin="12,0,0,0" Text="{Binding SnapText}" />
+          </StackPanel>
+          <TextBlock DockPanel.Dock="Right" Margin="20,0,0,0" Text="{Binding SelectionStatus}" />
+          <TextBlock Text="{Binding StatusText}"
+                     TextTrimming="CharacterEllipsis"
+                     Foreground="{StaticResource TextPrimaryBrush}" />
+        </DockPanel>
+      </StatusBarItem>
     </StatusBar>
 
-    <Grid>
+    <Grid Background="{StaticResource ShellBackgroundBrush}">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="180" />
         <ColumnDefinition />
@@ -100,78 +148,133 @@
       </Grid.ColumnDefinitions>
 
       <Border Grid.Column="0"
-              Margin="12,12,0,12"
-              Padding="10"
-              Background="#FFF"
-              BorderBrush="#D0D0D0"
-              BorderThickness="1">
+              Padding="10,8"
+              Style="{StaticResource ShellPanelStyle}"
+              BorderThickness="0,0,1,0">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel>
-            <TextBlock FontSize="16" FontWeight="SemiBold" Text="专业绘图工具" />
-            <ToggleButton Margin="0,12,0,8" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="选择"
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsSelectActive, Mode=OneWay}"
-                          Command="{Binding SelectCommand}" />
-            <TextBlock Margin="0,6,0,4" Foreground="#666" FontWeight="SemiBold" Text="设备" />
-            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="杆塔"
+                          Command="{Binding SelectCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.Select}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Fill="Transparent"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="选择" />
+              </StackPanel>
+            </ToggleButton>
+            <TextBlock Style="{StaticResource ToolboxSectionStyle}" Text="设备" />
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsPoleActive, Mode=OneWay}"
-                          Command="{Binding CreatePoleCommand}" />
-            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="环网柜"
+                          Command="{Binding CreatePoleCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.Pole}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="杆塔" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsRingCabinetActive, Mode=OneWay}"
-                          Command="{Binding CreateRingCabinetCommand}" />
-            <Separator Margin="0,8" />
-            <TextBlock Margin="0,0,0,4" Foreground="#666" FontWeight="SemiBold" Text="连接" />
-            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="架空线"
+                          Command="{Binding CreateRingCabinetCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.RingCabinet}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="环网柜" />
+              </StackPanel>
+            </ToggleButton>
+            <TextBlock Style="{StaticResource ToolboxSectionStyle}" Text="连接" />
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsOverheadLineActive, Mode=OneWay}"
-                          Command="{Binding CreateOverheadLineCommand}" />
-            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="电缆"
+                          Command="{Binding CreateOverheadLineCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.OverheadLine}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="架空线" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsCableActive, Mode=OneWay}"
-                          Command="{Binding CreateCableCommand}" />
-            <Separator Margin="0,8" />
-            <TextBlock Margin="0,0,0,4" Foreground="#666" FontWeight="SemiBold" Text="附件" />
-            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="电缆终端"
+                          Command="{Binding CreateCableCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.Cable}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="电缆" />
+              </StackPanel>
+            </ToggleButton>
+            <TextBlock Style="{StaticResource ToolboxSectionStyle}" Text="附件" />
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsCableTerminationActive, Mode=OneWay}"
-                          Command="{Binding AddCableTerminationCommand}" />
-            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="柱上开关"
+                          Command="{Binding AddCableTerminationCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.CableTermination}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="电缆终端" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsPoleSwitchActive, Mode=OneWay}"
-                          Command="{Binding AddPoleSwitchCommand}" />
-            <Separator Margin="0,8" />
-            <TextBlock Margin="0,0,0,4" Foreground="#666" FontWeight="SemiBold" Text="作业" />
-            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="工作地线"
+                          Command="{Binding AddPoleSwitchCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.PoleSwitch}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="柱上开关" />
+              </StackPanel>
+            </ToggleButton>
+            <TextBlock Style="{StaticResource ToolboxSectionStyle}" Text="作业" />
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsGroundingPointActive, Mode=OneWay}"
-                          Command="{Binding AddGroundingPointCommand}" />
-            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
-                          Padding="10,0" Content="工作范围"
+                          Command="{Binding AddGroundingPointCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.WorkGrounding}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="工作地线" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsWorkScopeActive, Mode=OneWay}"
-                          Command="{Binding AddWorkScopeCommand}" />
+                          Command="{Binding AddWorkScopeCommand}">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.WorkScope}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="工作范围" />
+              </StackPanel>
+            </ToggleButton>
           </StackPanel>
         </ScrollViewer>
       </Border>
 
       <Border Grid.Column="1"
-              Margin="12"
-              Background="#FFF"
-              BorderBrush="#D0D0D0"
+              Margin="12,8"
+              Background="{StaticResource CanvasBackgroundBrush}"
+              BorderBrush="{StaticResource BorderBrush}"
               BorderThickness="1">
         <DockPanel>
           <TabControl x:Name="DocumentTabs"
                       DockPanel.Dock="Top"
-                      Height="32"
+                      Height="34"
+                      Background="{StaticResource PanelBackgroundBrush}"
+                      BorderBrush="{StaticResource BorderBrush}"
+                      BorderThickness="0,0,0,1"
+                      ItemContainerStyle="{StaticResource DocumentTabStyle}"
                       SelectionChanged="OnDocumentTabSelectionChanged">
             <TabControl.ItemTemplate>
               <DataTemplate>
-                <TextBlock Margin="8,0" Text="{Binding TabTitle}" />
+                <TextBlock Text="{Binding TabTitle}"
+                           ToolTip="{Binding FilePath}"
+                           TextTrimming="CharacterEllipsis" />
               </DataTemplate>
             </TabControl.ItemTemplate>
           </TabControl>
-          <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
+          <Grid Background="{StaticResource CanvasBackgroundBrush}">
+            <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
                                            MouseDown="OnDrawingSurfaceMouseDown"
                                            MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown"
                                            MouseRightButtonDown="OnDrawingSurfaceMouseRightButtonDown"
@@ -180,36 +283,95 @@
                                            MouseUp="OnDrawingSurfaceMouseUp"
                                            PreviewMouseWheel="OnDrawingSurfaceMouseWheel"
                                            LostMouseCapture="OnDrawingSurfaceLostMouseCapture"
-                                           SizeChanged="OnDrawingSurfaceSizeChanged" />
+                                             SizeChanged="OnDrawingSurfaceSizeChanged" />
+            <Border Padding="32"
+                    Background="{StaticResource CanvasBackgroundBrush}"
+                    Panel.ZIndex="10">
+              <Border.Style>
+                <Style TargetType="Border">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsWorkspaceEmpty}" Value="True">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
+              <StackPanel Width="360" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock HorizontalAlignment="Center"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Text="10kV 配电工作票绘图" />
+                <TextBlock Margin="0,8,0,20"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="创建或打开工程后开始绘图" />
+                <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                  <Button MinWidth="104" Height="34" Padding="14,0"
+                          Content="新建工程" Command="{Binding NewProjectCommand}" />
+                  <Button MinWidth="104" Height="34" Margin="8,0,0,0" Padding="14,0"
+                          Content="打开工程" Command="{Binding OpenProjectCommand}" />
+                </StackPanel>
+                <TextBlock Margin="0,16,0,0"
+                           HorizontalAlignment="Center"
+                           FontSize="{StaticResource Typography.Secondary}"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="Ctrl+N 新建  ·  Ctrl+O 打开" />
+              </StackPanel>
+            </Border>
+            <TextBlock Panel.ZIndex="5"
+                       Margin="24"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="从左侧工具箱选择杆塔或环网柜开始绘图">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Setter Property="Opacity" Value="0.72" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsDrawingEmpty}" Value="True">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </Grid>
         </DockPanel>
       </Border>
 
       <Border x:Name="PropertyInspectorPanel"
               Grid.Column="2"
-              Margin="0,12,12,12"
-              Padding="10"
-              Background="#FFF"
-              BorderBrush="#D0D0D0"
-              BorderThickness="1">
+              Padding="12,10"
+              Style="{StaticResource ShellPanelStyle}"
+              BorderThickness="1,0,0,0">
+        <Border.Resources>
+          <Style TargetType="TextBox" BasedOn="{StaticResource InspectorEditorStyle}" />
+          <Style TargetType="ComboBox" BasedOn="{StaticResource InspectorEditorStyle}" />
+          <Style TargetType="Button" BasedOn="{StaticResource InspectorButtonStyle}" />
+        </Border.Resources>
         <DockPanel>
           <TextBlock DockPanel.Dock="Top"
-                     FontSize="16"
+                     FontSize="{StaticResource Typography.Title}"
                      FontWeight="SemiBold"
                      Text="{Binding ObjectType}" />
           <TextBlock DockPanel.Dock="Top"
                      Margin="0,4,0,10"
-                     Foreground="#666"
+                     Foreground="{StaticResource TextSecondaryBrush}"
                      Text="{Binding ObjectTitle}"
                      TextWrapping="Wrap" />
           <StackPanel x:Name="RingCabinetEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555" Text="环网柜名称" />
+            <TextBlock Style="{StaticResource InspectorLabelStyle}" Text="环网柜名称" />
             <TextBox x:Name="RingCabinetDisplayNameInput" Margin="0,4,0,4" />
             <Button Content="应用环网柜名称"
                     Click="OnApplyRingCabinetDisplayName" />
-            <TextBlock Margin="0,8,0,0" Foreground="#555" Text="线路名称" />
+            <TextBlock Style="{StaticResource InspectorLabelStyle}" Text="线路名称" />
             <TextBox x:Name="RingCabinetLineNameInput" Margin="0,4,0,4" />
             <Button Content="应用线路名称"
                     Click="OnApplyRingCabinetLineName" />
@@ -218,19 +380,19 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="间隔名称" />
             <TextBox x:Name="IntervalDisplayNameInput"
                      Margin="0,4,0,4" />
             <Button Margin="0,0,0,8"
                     Content="应用间隔名称"
                     Click="OnApplyIntervalDisplayName" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="间隔类型" />
             <ComboBox x:Name="IntervalTypeInput"
                       SelectionChanged="OnIntervalTypeSelectionChanged"
                       Margin="0,4,0,4" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="接地结构（一二次融合间隔）" />
             <ComboBox x:Name="IntervalGroundingStructureInput"
                       Margin="0,4,0,4" />
@@ -241,11 +403,11 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="开关操作" />
             <TextBlock x:Name="SwitchOperationStateText"
                        Margin="0,4,0,4"
-                       Foreground="#666" />
+                       Foreground="{StaticResource TextSecondaryBrush}" />
             <Button x:Name="SwitchOperationButton"
                     Command="{Binding DataContext.SwitchOperationCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
           </StackPanel>
@@ -253,7 +415,7 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="杆号" />
             <TextBox x:Name="PoleNumberInput"
                      Margin="0,4,0,4" />
@@ -264,10 +426,10 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555" Text="杆塔安装设备" />
+            <TextBlock Style="{StaticResource InspectorLabelStyle}" Text="杆塔安装设备" />
             <TextBlock x:Name="PoleInstalledDevicesText"
                        Margin="0,4,0,4"
-                       Foreground="#666"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap" />
             <ListBox x:Name="PoleInstalledDevicesList"
                      Margin="0,2,0,4"
@@ -283,17 +445,17 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="电缆属性" />
             <TextBlock Margin="0,4,0,0"
-                       Foreground="#555"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        Text="电缆型号" />
             <TextBox x:Name="CableTypeInput"
                      Margin="0,2,0,2" />
             <Button Content="应用型号"
                     Click="OnApplyCableType" />
             <TextBlock Margin="0,4,0,0"
-                       Foreground="#555"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        Text="长度（m）" />
             <TextBox x:Name="CableLengthInput"
                      Margin="0,2,0,2" />
@@ -313,14 +475,14 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="附属设备相对位置（mm）" />
             <TextBlock Margin="0,4,0,0"
-                       Foreground="#555"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        Text="水平偏移 X" />
             <TextBox x:Name="AttachmentOffsetXInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="垂直偏移 Y" />
             <TextBox x:Name="AttachmentOffsetYInput"
                      Margin="0,2,0,4" />
@@ -331,22 +493,22 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="附属设备布局" />
             <TextBlock Margin="0,4,0,0"
-                       Foreground="#555"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        Text="宽度 (mm)" />
             <TextBox x:Name="AttachmentWidthInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="高度 (mm)" />
             <TextBox x:Name="AttachmentHeightInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="标签水平偏移 (mm)" />
             <TextBox x:Name="AttachmentLabelOffsetXInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="标签垂直偏移 (mm)" />
             <TextBox x:Name="AttachmentLabelOffsetYInput"
                      Margin="0,2,0,4" />
@@ -357,7 +519,7 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="电缆终端名称" />
             <TextBox x:Name="CableTerminationDisplayNameInput"
                      Margin="0,4,0,4" />
@@ -368,22 +530,22 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="工作地线编辑" />
             <TextBlock x:Name="GroundingPointTerminalText"
                        Margin="0,4,0,0"
-                       Foreground="#666"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap" />
             <TextBlock Margin="0,4,0,0"
-                       Foreground="#555"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        Text="位置说明" />
             <TextBox x:Name="GroundingPointLocationInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="编号" />
             <TextBox x:Name="GroundingPointNumberInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="备注" />
             <TextBox x:Name="GroundingPointNoteInput"
                      Margin="0,2,0,4" />
@@ -399,18 +561,18 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="添加工作范围" />
             <TextBlock x:Name="WorkScopePickStateText"
                        Margin="0,4,0,4"
-                       Foreground="#666" />
-            <TextBlock Foreground="#555"
+                       Foreground="{StaticResource TextSecondaryBrush}" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="边界 A" />
             <TextBlock x:Name="WorkScopeBoundaryAText"
                        Margin="0,2,0,2"
-                       Foreground="#666"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="边界 A 侧别（人工输入）" />
             <TextBox x:Name="WorkScopeBoundaryASideInput"
                      Margin="0,2,0,2"
@@ -418,13 +580,13 @@
             <Button Content="确认边界 A"
                     Margin="0,0,0,4"
                     Click="OnConfirmWorkScopeBoundaryA" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="边界 B" />
             <TextBlock x:Name="WorkScopeBoundaryBText"
                        Margin="0,2,0,2"
-                       Foreground="#666"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="边界 B 侧别（人工输入）" />
             <TextBox x:Name="WorkScopeBoundaryBSideInput"
                      Margin="0,2,0,2"
@@ -432,14 +594,15 @@
             <Button Content="确认边界 B"
                     Margin="0,0,0,4"
                     Click="OnConfirmWorkScopeBoundaryB" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="说明" />
             <TextBox x:Name="WorkScopeDescriptionInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="#555"
-                       Text="工作地线 ID（可选，逗号分隔）" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="高级关联：工作地线 ID（兼容输入）" />
             <TextBox x:Name="WorkScopeGroundingPointIdsInput"
                      Margin="0,2,0,4"
+                     ToolTip="当前版本使用稳定 ID 关联已有工作地线"
                      TextWrapping="Wrap" />
             <WrapPanel>
               <Button Content="创建工作范围"
@@ -453,20 +616,21 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="工作范围编辑" />
             <TextBlock x:Name="WorkScopeEditorBoundaryText"
                        Margin="0,4,0,4"
-                       Foreground="#666"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap" />
-            <TextBlock Foreground="#555"
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="说明" />
             <TextBox x:Name="WorkScopeEditorDescriptionInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="#555"
-                       Text="工作地线 ID（可选，逗号分隔）" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="高级关联：工作地线 ID（兼容输入）" />
             <TextBox x:Name="WorkScopeEditorGroundingPointIdsInput"
                      Margin="0,2,0,4"
+                     ToolTip="当前版本使用稳定 ID 关联已有工作地线"
                      TextWrapping="Wrap" />
             <WrapPanel>
               <Button Content="应用工作范围"
@@ -481,21 +645,25 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <Expander Header="{Binding Title}"
+                            Style="{StaticResource InspectorExpanderStyle}"
                             IsExpanded="True"
-                            Margin="0,0,0,6">
+                            Margin="0,0,0,8">
                     <ItemsControl ItemsSource="{Binding Properties}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                          <Grid Margin="0,2">
+                          <Grid Margin="0,3,0,5">
                             <Grid.ColumnDefinitions>
-                              <ColumnDefinition Width="110" />
-                              <ColumnDefinition />
+                              <ColumnDefinition Width="2*" />
+                              <ColumnDefinition Width="3*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0"
-                                       Foreground="#555"
+                                       Margin="0,0,8,0"
+                                       FontSize="{StaticResource Typography.Secondary}"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
                                        Text="{Binding DisplayName}"
                                        TextWrapping="Wrap" />
                             <TextBlock Grid.Column="1"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        Text="{Binding DisplayValue}"
                                        TextWrapping="Wrap" />
                           </Grid>

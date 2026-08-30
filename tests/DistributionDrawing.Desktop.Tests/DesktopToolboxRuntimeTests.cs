@@ -74,4 +74,41 @@ public sealed class DesktopToolboxRuntimeTests
         Assert.True(toolbox.IsSelectActive);
         Assert.False(toolbox.IsCableActive);
     }
+
+    [Fact]
+    public void ViewModelProjectsEmptyWorkspaceAndEmptyDrawingWithoutChangingActions()
+    {
+        var actions = DesktopCommandRuntimeTests.CreateActions(() => null);
+        var viewModel = new MainWindowViewModel(new DesktopShellService(), actions);
+
+        Assert.True(viewModel.IsWorkspaceEmpty);
+        Assert.False(viewModel.IsDrawingEmpty);
+
+        viewModel.UpdatePresentationState(hasActiveSession: true, hasDrawingContent: false);
+        Assert.False(viewModel.IsWorkspaceEmpty);
+        Assert.True(viewModel.IsDrawingEmpty);
+
+        viewModel.UpdatePresentationState(hasActiveSession: true, hasDrawingContent: true);
+        Assert.False(viewModel.IsWorkspaceEmpty);
+        Assert.False(viewModel.IsDrawingEmpty);
+        Assert.Same(actions.New, viewModel.NewProjectCommand);
+        Assert.Same(actions.Open, viewModel.OpenProjectCommand);
+    }
+
+    [Fact]
+    public void FeedbackTemporarilyOverridesStatusAndRestoresLatestToolHint()
+    {
+        var actions = DesktopCommandRuntimeTests.CreateActions(() => null);
+        var viewModel = new MainWindowViewModel(new DesktopShellService(), actions);
+
+        viewModel.UpdateCanvasState(1, false, "选择对象");
+        viewModel.ShowFeedback("  已保存  ");
+        Assert.Equal("已保存", viewModel.StatusText);
+
+        viewModel.UpdateCanvasState(1, false, "绘制电缆：请选择终点");
+        Assert.Equal("已保存", viewModel.StatusText);
+
+        viewModel.ClearFeedback();
+        Assert.Equal("绘制电缆：请选择终点", viewModel.StatusText);
+    }
 }

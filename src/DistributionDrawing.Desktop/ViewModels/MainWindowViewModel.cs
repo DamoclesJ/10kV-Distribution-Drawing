@@ -10,7 +10,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private double _zoom = 1.0;
     private bool _gridVisible;
     private string _modeText = "就绪";
+    private string? _feedbackText;
     private int _selectionCount;
+    private bool _isWorkspaceEmpty = true;
+    private bool _isDrawingEmpty;
 
     public MainWindowViewModel(
         DesktopShellService shellService,
@@ -30,9 +33,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public string InspectorTitle => "属性检查器";
 
-    public string StatusText => _modeText;
+    public string StatusText => _feedbackText ?? _modeText;
 
-    public string SelectionStatus => $"已选择: {_selectionCount}";
+    public string SelectionStatus => _selectionCount == 0
+        ? string.Empty
+        : $"已选择 {_selectionCount} 个对象";
 
     public string ZoomText => $"缩放: {_zoom:0.00}x";
 
@@ -41,6 +46,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string SnapText => "吸附: 开";
 
     public bool GridVisible => _gridVisible;
+
+    public bool IsWorkspaceEmpty => _isWorkspaceEmpty;
+
+    public bool IsDrawingEmpty => _isDrawingEmpty;
 
     public ICommand NewProjectCommand => Actions.New;
     public ICommand OpenProjectCommand => Actions.Open;
@@ -96,6 +105,40 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public void RefreshCommandStates() => Actions.RefreshCanExecute();
+
+    public void UpdatePresentationState(bool hasActiveSession, bool hasDrawingContent)
+    {
+        bool workspaceEmpty = !hasActiveSession;
+        bool drawingEmpty = hasActiveSession && !hasDrawingContent;
+        if (_isWorkspaceEmpty != workspaceEmpty)
+        {
+            _isWorkspaceEmpty = workspaceEmpty;
+            OnPropertyChanged(nameof(IsWorkspaceEmpty));
+        }
+
+        if (_isDrawingEmpty != drawingEmpty)
+        {
+            _isDrawingEmpty = drawingEmpty;
+            OnPropertyChanged(nameof(IsDrawingEmpty));
+        }
+    }
+
+    public void ShowFeedback(string message)
+    {
+        _feedbackText = string.IsNullOrWhiteSpace(message) ? null : message.Trim();
+        OnPropertyChanged(nameof(StatusText));
+    }
+
+    public void ClearFeedback()
+    {
+        if (_feedbackText is null)
+        {
+            return;
+        }
+
+        _feedbackText = null;
+        OnPropertyChanged(nameof(StatusText));
+    }
 
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

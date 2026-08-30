@@ -5,7 +5,6 @@ using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
-using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
 namespace DistributionDrawing.Rendering.Wpf.PropertyInspector;
 
@@ -86,7 +85,6 @@ public sealed class PropertyProjector
         {
             Section(
                 "基本信息",
-                DomainRow("Id", "标识", cabinet.Id),
                 EditableDomainRow(
                     PropertyCommandFactory.RingCabinetDisplayNamePropertyKey,
                     "环网柜名称",
@@ -96,10 +94,8 @@ public sealed class PropertyProjector
                     "线路名称",
                     cabinet.LineName),
                 DomainRow("CompositionKind", "组成类型", cabinet.CompositionKind),
-                DomainRow("MainBusNodeId", "主母线节点", cabinet.MainBusNodeId),
                 DomainRow("IntervalCount", "间隔数量", cabinet.Intervals.Count)),
-            LayoutSection(selection.RingCabinetLayout),
-            RenderingSection(selection, SymbolKind.RingCabinet)
+            LayoutSection(selection.RingCabinetLayout)
         };
         return Snapshot(selection, "环网柜", cabinet.DisplayName ?? "环网柜", sections);
     }
@@ -114,8 +110,6 @@ public sealed class PropertyProjector
             [
                 Section(
                     "专业属性",
-                    DomainRow("GroundingPointId", "标识", groundingPoint.GroundingPointId),
-                    DomainRow("TerminalId", "端子", groundingPoint.TerminalId),
                     DomainRow("Location", "位置说明", groundingPoint.Location),
                     DomainRow("Number", "编号", groundingPoint.Number),
                     DomainRow("Note", "备注", groundingPoint.Note))
@@ -127,15 +121,10 @@ public sealed class PropertyProjector
         WorkScope workScope = selection.WorkScope!;
         var rows = new List<PropertyRowViewModel>
         {
-            DomainRow("WorkScopeId", "标识", workScope.WorkScopeId),
             DomainRow("Description", "说明", workScope.Description),
-            DomainRow("StartBoundary.DeviceId", "起始设备", workScope.StartBoundary.DeviceId),
-            DomainRow("StartBoundary.TerminalId", "起始端子", workScope.StartBoundary.TerminalId),
             DomainRow("StartBoundary.Side", "起始侧别", workScope.StartBoundary.Side),
-            DomainRow("EndBoundary.DeviceId", "终止设备", workScope.EndBoundary.DeviceId),
-            DomainRow("EndBoundary.TerminalId", "终止端子", workScope.EndBoundary.TerminalId),
             DomainRow("EndBoundary.Side", "终止侧别", workScope.EndBoundary.Side),
-            DomainRow("GroundingPointIds", "关联工作地线", string.Join(", ", workScope.GroundingPointIds))
+            DomainRow("GroundingPointCount", "关联工作地线", $"{workScope.GroundingPointIds.Count} 个")
         };
         return Snapshot(
             selection,
@@ -154,9 +143,7 @@ public sealed class PropertyProjector
             [
                 Section(
                     "端子信息",
-                    DomainRow("TerminalId", "标识", terminal.Id),
                     DomainRow("OwnerType", "所有者类型", terminal.OwnerType),
-                    DomainRow("OwnerId", "所有者", terminal.OwnerId),
                     DomainRow("Role", "角色", terminal.Role),
                     DomainRow("VoltageLevel", "电压等级", terminal.VoltageLevel),
                     DomainRow("IsExternal", "外部端子", terminal.IsExternal))
@@ -168,8 +155,6 @@ public sealed class PropertyProjector
         RingCabinetInterval interval = selection.RingCabinetInterval!;
         var rows = new List<PropertyRowViewModel>
         {
-            DomainRow("IntervalId", "标识", interval.IntervalId),
-            DomainRow("ParentCabinetId", "所属环网柜", interval.ParentCabinetId),
             DomainRow("Sequence", "序号", interval.Sequence),
             DomainRow("BayIndex", "业务位置", interval.BayIndex),
             DomainRow("BusinessNumber", "业务编号", interval.BusinessNumber),
@@ -179,7 +164,6 @@ public sealed class PropertyProjector
                 interval.DisplayName),
             DomainRow("IntervalKind", "间隔类型", interval.IntervalKind),
             DomainRow("GroundingStructureKind", "接地结构", interval.GroundingStructureKind),
-            DomainRow("ExternalTerminalId", "外部端子", interval.ExternalTerminalId),
             DomainRow("SwitchCount", "开关数量", interval.SwitchDevices.Count)
         };
         foreach (SwitchDevice switchDevice in interval.SwitchDevices)
@@ -193,8 +177,7 @@ public sealed class PropertyProjector
         var sections = new List<PropertySectionViewModel>
         {
             new("专业属性", rows),
-            LayoutSection(selection.RingCabinetIntervalLayout),
-            RenderingSection(selection, SymbolKind.RingCabinetInterval)
+            LayoutSection(selection.RingCabinetIntervalLayout)
         };
         return Snapshot(selection, "环网柜间隔", interval.DisplayName, sections);
     }
@@ -208,7 +191,6 @@ public sealed class PropertyProjector
         {
             Section(
                 "专业属性",
-                DomainRow("Id", "标识", switchDevice.Id),
                 DomainRow("DisplayName", "名称", switchDevice.DisplayName),
                 DomainRow("SwitchKind", "开关类型", switchDevice.SwitchKind),
                 DomainRow("BusinessNumber", "业务编号", switchBusinessNumber),
@@ -216,13 +198,8 @@ public sealed class PropertyProjector
                     "SwitchState",
                     "机械状态",
                     switchDevice.SwitchState == SwitchState.Closed ? "合" : "分"),
-                DomainRow("DispatchNumber", "调度编号", switchDevice.DispatchNumber),
-                DomainRow("TerminalIds", "端子", string.Join(", ", switchDevice.TerminalIds))),
-            LayoutSection(selection.RingCabinetIntervalLayout),
-            RenderingSection(
-                selection,
-                SymbolLibrary.ResolveSwitchKind(switchDevice),
-                SymbolLibrary.ResolveVisualState(switchDevice.SwitchState))
+                DomainRow("DispatchNumber", "调度编号", switchDevice.DispatchNumber)),
+            LayoutSection(selection.RingCabinetIntervalLayout)
         };
         return Snapshot(selection, "开关设备", switchDevice.DisplayName ?? "开关设备", sections);
     }
@@ -234,13 +211,10 @@ public sealed class PropertyProjector
         {
             Section(
                 "基本信息",
-                DomainRow("Id", "标识", pole.Id),
                 DomainRow("PoleNumber", "杆号", pole.PoleNumber),
                 DomainRow("DisplayName", "名称", pole.DisplayName),
-                DomainRow("PoleType", "杆型", pole.PoleType),
-                DomainRow("AnchorCount", "架空锚点数量", pole.OverheadAnchorTerminalIds.Count)),
-            LayoutSection(selection.PoleLayout),
-            RenderingSection(selection, SymbolKind.Pole)
+                DomainRow("PoleType", "杆型", pole.PoleType)),
+            LayoutSection(selection.PoleLayout)
         };
         return Snapshot(selection, "杆塔", pole.DisplayName ?? pole.PoleNumber, sections);
     }
@@ -250,12 +224,9 @@ public sealed class PropertyProjector
         OverheadLine line = selection.OverheadLine!;
         var domainRows = new List<PropertyRowViewModel>
         {
-            DomainRow("ConnectionId", "连接标识", line.ConnectionId),
             DomainRow("LineModel", "线路型号", line.LineModel),
             DomainRow("LengthMeters", "长度", line.LengthMeters is double length ? $"{length:0.###} m" : "未设置"),
-            DomainRow("SupportPoleIds", "支撑杆塔", string.Join(" → ", line.SupportPoleIds)),
             DomainRow("IsContinued", "是否延续", line.IsContinued),
-            DomainRow("ContinuationState", "延续状态", line.ContinuationState),
             DomainRow("ContinuationDescription", "延续说明", line.ContinuationDescription)
         };
         if (selection.Connection is not null)
@@ -267,8 +238,7 @@ public sealed class PropertyProjector
         var sections = new List<PropertySectionViewModel>
         {
             new("专业属性", domainRows),
-            LayoutSection(selection.OverheadLineLayout),
-            RenderingSection(selection, SymbolKind.OverheadLine)
+            LayoutSection(selection.OverheadLineLayout)
         };
         return Snapshot(selection, "架空线路", line.LineModel, sections);
     }
@@ -283,7 +253,6 @@ public sealed class PropertyProjector
             [
                 Section(
                     "电缆属性",
-                    DomainRow("Id", "标识", cable.Id),
                     EditableDomainRow(
                         "CableSegment.CableType",
                         "电缆型号",
@@ -291,10 +260,7 @@ public sealed class PropertyProjector
                     EditableDomainRow(
                         "CableSegment.Length",
                         "长度（m）",
-                        $"{cable.Length:0.###}"),
-                    DomainRow("StartTerminalId", "起点端子", cable.StartTerminalId),
-                    DomainRow("EndTerminalId", "终点端子", cable.EndTerminalId),
-                    DomainRow("ConnectionId", "连接标识", cable.ConnectionId))
+                        $"{cable.Length:0.###}"))
             ]);
     }
 
@@ -304,31 +270,29 @@ public sealed class PropertyProjector
         Device? attachedDevice = selection.AttachedDevice;
         var domainRows = new List<PropertyRowViewModel>
         {
-            DomainRow("AttachmentId", "标识", attachment.AttachmentId),
-            DomainRow("PoleId", "所属杆塔", attachment.PoleId),
-            DomainRow("AttachedDeviceId", "附属设备", attachment.AttachedDeviceId)
+            DomainRow(
+                "AttachmentKind",
+                "安装类型",
+                attachedDevice switch
+                {
+                    CableTermination => "电缆终端",
+                    SwitchDevice => "柱上开关",
+                    _ => "杆塔附件"
+                })
         };
 
         if (attachedDevice is CableTermination cableTermination)
         {
             domainRows.AddRange(
             [
-                DomainRow("DisplayName", "名称", cableTermination.DisplayName),
-                DomainRow("CableTerminationId", "电缆终端标识", cableTermination.Id),
-                DomainRow("CableSideTerminalId", "电缆侧端子", cableTermination.CableSideTerminalId),
-                DomainRow("OverheadSideTerminalId", "架空侧端子", cableTermination.OverheadSideTerminalId),
-                DomainRow("InternalNodeId", "内部节点", cableTermination.InternalNodeId)
+                DomainRow("DisplayName", "名称", cableTermination.DisplayName)
             ]);
         }
 
-        SymbolKind symbolKind = attachedDevice is not null
-            ? SymbolLibrary.ResolveAttachmentKind(attachedDevice)
-            : SymbolKind.Pole;
         var sections = new List<PropertySectionViewModel>
         {
             new("基本信息", domainRows),
-            LayoutSection(selection.AttachmentLayout),
-            RenderingSection(selection, symbolKind)
+            LayoutSection(selection.AttachmentLayout)
         };
         string title = attachedDevice?.DisplayName ??
             (attachedDevice is CableTermination ? "电缆终端" : "杆塔附属关系");
@@ -391,25 +355,6 @@ public sealed class PropertyProjector
         };
     }
 
-    private static PropertySectionViewModel RenderingSection(
-        ResolvedSelection selection,
-        SymbolKind symbolKind,
-        SymbolVisualState state = SymbolVisualState.None)
-    {
-        var rows = new List<PropertyRowViewModel>
-        {
-            RenderingRow("SymbolKind", "图元类型", symbolKind),
-            RenderingRow("SymbolVisualState", "显示状态", state)
-        };
-        if (selection.HitTestEntry is { } hit)
-        {
-            rows.Add(RenderingRow("HitBounds", "命中范围", FormatRect(hit.Bounds)));
-            rows.Add(RenderingRow("HitPriority", "命中优先级", hit.Priority));
-        }
-
-        return new PropertySectionViewModel("显示信息", rows);
-    }
-
     private static PropertyRowViewModel DomainRow(string key, string name, object? value) =>
         new(key, name, FormatValue(value), PropertyValueSource.Domain);
 
@@ -418,9 +363,6 @@ public sealed class PropertyProjector
 
     private static PropertyRowViewModel LayoutRow(string key, string name, object? value) =>
         new(key, name, FormatValue(value), PropertyValueSource.Layout);
-
-    private static PropertyRowViewModel RenderingRow(string key, string name, object? value) =>
-        new(key, name, FormatValue(value), PropertyValueSource.Rendering);
 
     private static string FormatValue(object? value)
     {
@@ -437,7 +379,4 @@ public sealed class PropertyProjector
     private static string FormatPoint(DistributionDrawing.Rendering.Wpf.Scene.DocumentPoint point) =>
         $"({point.XMillimeters:0.###}, {point.YMillimeters:0.###}) mm";
 
-    private static string FormatRect(DistributionDrawing.Rendering.Wpf.Scene.DocumentRect rect) =>
-        $"({rect.XMillimeters:0.###}, {rect.YMillimeters:0.###}) / " +
-        $"{rect.WidthMillimeters:0.###} × {rect.HeightMillimeters:0.###} mm";
 }

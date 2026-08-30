@@ -8,7 +8,7 @@ namespace DistributionDrawing.Rendering.Wpf.Tests;
 public sealed class CablePropertyEditingTests
 {
     [Fact]
-    public void Projector_ExposesCablePropertiesAndKeepsTopologyFieldsReadOnly()
+    public void Projector_ExposesBusinessPropertiesAndHidesTopologyIdentifiers()
     {
         CableSegment cable = CreateCable();
         PropertyInspectorSnapshot snapshot = new PropertyProjector().Project(
@@ -26,9 +26,8 @@ public sealed class CablePropertyEditingTests
 
         Assert.False(rows.Single(row => row.PropertyKey == EditPropertyCommand.CableTypeProperty).IsReadOnly);
         Assert.False(rows.Single(row => row.PropertyKey == EditPropertyCommand.CableLengthProperty).IsReadOnly);
-        Assert.True(rows.Single(row => row.DisplayName == "起点端子").IsReadOnly);
-        Assert.True(rows.Single(row => row.DisplayName == "终点端子").IsReadOnly);
-        Assert.True(rows.Single(row => row.DisplayName == "连接标识").IsReadOnly);
+        Assert.DoesNotContain(rows, row => row.PropertyKey is
+            "Id" or "StartTerminalId" or "EndTerminalId" or "ConnectionId");
     }
 
     [Fact]
