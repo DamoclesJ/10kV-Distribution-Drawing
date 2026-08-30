@@ -8,7 +8,11 @@ public enum DesktopToolMode
     CreateRingCabinet,
     CreatePole,
     CreateOverheadLine,
-    CreateCable
+    CreateCable,
+    AddCableTermination,
+    AddPoleSwitch,
+    AddGroundingPoint,
+    AddWorkScope
 }
 
 public sealed class ToolboxViewModel : INotifyPropertyChanged
@@ -31,8 +35,19 @@ public sealed class ToolboxViewModel : INotifyPropertyChanged
             PropertyChanged?.Invoke(
                 this,
                 new PropertyChangedEventArgs(nameof(SelectedMode)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
         }
     }
 
     public void SetSelectedMode(DesktopToolMode mode) => SelectedMode = mode;
+
+    public bool IsSelectActive => SelectedMode == DesktopToolMode.Select;
+    public bool IsPoleActive => SelectedMode == DesktopToolMode.CreatePole;
+    public bool IsRingCabinetActive => SelectedMode == DesktopToolMode.CreateRingCabinet;
+    public bool IsOverheadLineActive => SelectedMode == DesktopToolMode.CreateOverheadLine;
+    public bool IsCableActive => SelectedMode == DesktopToolMode.CreateCable;
+    public bool IsCableTerminationActive => SelectedMode == DesktopToolMode.AddCableTermination;
+    public bool IsPoleSwitchActive => SelectedMode == DesktopToolMode.AddPoleSwitch;
+    public bool IsGroundingPointActive => SelectedMode == DesktopToolMode.AddGroundingPoint;
+    public bool IsWorkScopeActive => SelectedMode == DesktopToolMode.AddWorkScope;
 }

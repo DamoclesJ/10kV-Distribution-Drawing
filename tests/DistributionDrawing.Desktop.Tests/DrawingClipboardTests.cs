@@ -54,6 +54,25 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
+    public void ClipboardFragmentCanPasteAcrossDocumentSessions()
+    {
+        ProjectRuntimeSession source = CreateSession("源工程");
+        ProjectRuntimeSession target = CreateSession("目标工程");
+        AddPoleCommand pole = AddPole(source, new DocumentPoint(20, 30));
+        source.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            pole.Pole.Id));
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(source).IsSuccess);
+        Assert.True(clipboard.Paste(target).IsSuccess);
+
+        Pole pasted = Assert.Single(target.PersistenceSession.Domain.Devices.OfType<Pole>());
+        Assert.NotEqual(pole.Pole.Id, pasted.Id);
+        Assert.Equal(new DocumentPoint(30, 40), target.Layout.DrawingLayout.Poles[pasted.Id].Position);
+    }
+
+    [Fact]
     public void PolePaste_RemapsIdsOffsetsAndSelectsNewPole()
     {
         ProjectRuntimeSession session = CreateSession("杆塔复制");

@@ -48,6 +48,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand SaveProjectAsCommand => Actions.SaveAs;
     public ICommand CloseDocumentCommand => Actions.CloseDocument;
     public ICommand ExitCommand => Actions.Exit;
+    public ICommand ExportPngCommand => Actions.ExportPng;
     public ICommand UndoCommand => Actions.Undo;
     public ICommand RedoCommand => Actions.Redo;
     public ICommand CopyCommand => Actions.Copy;

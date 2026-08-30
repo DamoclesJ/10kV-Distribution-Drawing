@@ -36,7 +36,7 @@ public sealed class ProjectWorkflowRuntimeTests
     }
 
     [Fact]
-    public void SaveAndOpen_PersistsAndReplacesSession()
+    public void SaveAndOpenSamePath_ActivatesExistingSession()
     {
         using var files = new TemporaryProjectFiles();
         string path = files.Next();
@@ -62,7 +62,7 @@ public sealed class ProjectWorkflowRuntimeTests
 
         dialogs.OpenPath = path;
         Assert.True(controller.OpenProject());
-        Assert.NotSame(originalSession, controller.CurrentSession);
+        Assert.Same(originalSession, controller.CurrentSession);
         Assert.Single(controller.Workspace.Sessions);
         activeDocument = Assert.IsType<DocumentSession>(
             controller.Workspace.ActiveSession);
@@ -122,6 +122,7 @@ public sealed class ProjectWorkflowRuntimeTests
             .IntervalLayouts[pt.IntervalId]
             .PTSymbolPosition!.Value;
         dialogs.OpenPath = path;
+        Assert.True(controller.CloseCurrentProject());
         Assert.True(controller.OpenProject());
         ProjectRuntimeSession reopened = controller.CurrentSession!;
         RingCabinet restored = Assert.Single(
@@ -179,6 +180,7 @@ public sealed class ProjectWorkflowRuntimeTests
 
         Assert.True(controller.SaveProject());
         dialogs.OpenPath = path;
+        Assert.True(controller.CloseCurrentProject());
         Assert.True(controller.OpenProject());
         ProjectRuntimeSession reopened = controller.CurrentSession!;
         SwitchDevice restoredSwitch = Assert.Single(

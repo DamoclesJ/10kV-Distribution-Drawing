@@ -31,6 +31,8 @@
         <MenuItem Header="另存为" Command="{Binding SaveProjectAsCommand}" InputGestureText="Ctrl+Shift+S" />
         <MenuItem Header="关闭当前工程" Command="{Binding CloseDocumentCommand}" InputGestureText="Ctrl+W" />
         <Separator />
+        <MenuItem Header="导出 PNG..." Command="{Binding ExportPngCommand}" />
+        <Separator />
         <MenuItem Header="退出" Command="{Binding ExitCommand}" />
       </MenuItem>
       <MenuItem Header="编辑">
@@ -76,12 +78,6 @@
 
     <ToolBarTray DockPanel.Dock="Top">
       <ToolBar>
-        <Button Content="选择" Command="{Binding SelectCommand}" />
-        <Button Content="杆塔" Command="{Binding CreatePoleCommand}" />
-        <Button Content="环网柜" Command="{Binding CreateRingCabinetCommand}" />
-        <Button Content="架空线" Command="{Binding CreateOverheadLineCommand}" />
-        <Button Content="电缆" Command="{Binding CreateCableCommand}" />
-        <Separator />
         <Button Content="保存" Command="{Binding SaveProjectCommand}" />
         <Button Content="撤销" Command="{Binding UndoCommand}" />
         <Button Content="重做" Command="{Binding RedoCommand}" />
@@ -104,16 +100,84 @@
 
     <Grid>
       <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="180" />
         <ColumnDefinition />
         <ColumnDefinition Width="300" />
       </Grid.ColumnDefinitions>
 
       <Border Grid.Column="0"
+              Margin="12,12,0,12"
+              Padding="10"
+              Background="#FFF"
+              BorderBrush="#D0D0D0"
+              BorderThickness="1">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel>
+            <TextBlock FontSize="16" FontWeight="SemiBold" Text="专业绘图工具" />
+            <ToggleButton Margin="0,12,0,8" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="选择"
+                          IsChecked="{Binding Toolbox.IsSelectActive, Mode=OneWay}"
+                          Command="{Binding SelectCommand}" />
+            <TextBlock Margin="0,6,0,4" Foreground="#666" FontWeight="SemiBold" Text="设备" />
+            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="杆塔"
+                          IsChecked="{Binding Toolbox.IsPoleActive, Mode=OneWay}"
+                          Command="{Binding CreatePoleCommand}" />
+            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="环网柜"
+                          IsChecked="{Binding Toolbox.IsRingCabinetActive, Mode=OneWay}"
+                          Command="{Binding CreateRingCabinetCommand}" />
+            <Separator Margin="0,8" />
+            <TextBlock Margin="0,0,0,4" Foreground="#666" FontWeight="SemiBold" Text="连接" />
+            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="架空线"
+                          IsChecked="{Binding Toolbox.IsOverheadLineActive, Mode=OneWay}"
+                          Command="{Binding CreateOverheadLineCommand}" />
+            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="电缆"
+                          IsChecked="{Binding Toolbox.IsCableActive, Mode=OneWay}"
+                          Command="{Binding CreateCableCommand}" />
+            <Separator Margin="0,8" />
+            <TextBlock Margin="0,0,0,4" Foreground="#666" FontWeight="SemiBold" Text="附件" />
+            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="电缆终端"
+                          IsChecked="{Binding Toolbox.IsCableTerminationActive, Mode=OneWay}"
+                          Command="{Binding AddCableTerminationCommand}" />
+            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="柱上开关"
+                          IsChecked="{Binding Toolbox.IsPoleSwitchActive, Mode=OneWay}"
+                          Command="{Binding AddPoleSwitchCommand}" />
+            <Separator Margin="0,8" />
+            <TextBlock Margin="0,0,0,4" Foreground="#666" FontWeight="SemiBold" Text="作业" />
+            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="工作地线"
+                          IsChecked="{Binding Toolbox.IsGroundingPointActive, Mode=OneWay}"
+                          Command="{Binding AddGroundingPointCommand}" />
+            <ToggleButton Margin="0,2" Height="34" HorizontalContentAlignment="Left"
+                          Padding="10,0" Content="工作范围"
+                          IsChecked="{Binding Toolbox.IsWorkScopeActive, Mode=OneWay}"
+                          Command="{Binding AddWorkScopeCommand}" />
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <Border Grid.Column="1"
               Margin="12"
               Background="#FFF"
               BorderBrush="#D0D0D0"
               BorderThickness="1">
-        <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
+        <DockPanel>
+          <TabControl x:Name="DocumentTabs"
+                      DockPanel.Dock="Top"
+                      Height="32"
+                      SelectionChanged="OnDocumentTabSelectionChanged">
+            <TabControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Margin="8,0" Text="{Binding TabTitle}" />
+              </DataTemplate>
+            </TabControl.ItemTemplate>
+          </TabControl>
+          <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
                                            MouseDown="OnDrawingSurfaceMouseDown"
                                            MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown"
                                            MouseRightButtonDown="OnDrawingSurfaceMouseRightButtonDown"
@@ -123,10 +187,11 @@
                                            PreviewMouseWheel="OnDrawingSurfaceMouseWheel"
                                            LostMouseCapture="OnDrawingSurfaceLostMouseCapture"
                                            SizeChanged="OnDrawingSurfaceSizeChanged" />
+        </DockPanel>
       </Border>
 
       <Border x:Name="PropertyInspectorPanel"
-              Grid.Column="1"
+              Grid.Column="2"
               Margin="0,12,12,12"
               Padding="10"
               Background="#FFF"
@@ -172,7 +237,7 @@
                       SelectionChanged="OnIntervalTypeSelectionChanged"
                       Margin="0,4,0,4" />
             <TextBlock Foreground="#555"
-                       Text="接地结构（IntegratedFeeder）" />
+                       Text="接地结构（一二次融合间隔）" />
             <ComboBox x:Name="IntervalGroundingStructureInput"
                       Margin="0,4,0,4" />
             <Button Content="应用间隔配置"
@@ -258,11 +323,11 @@
                        Text="附属设备相对位置（mm）" />
             <TextBlock Margin="0,4,0,0"
                        Foreground="#555"
-                       Text="Offset X" />
+                       Text="水平偏移 X" />
             <TextBox x:Name="AttachmentOffsetXInput"
                      Margin="0,2,0,2" />
             <TextBlock Foreground="#555"
-                       Text="Offset Y" />
+                       Text="垂直偏移 Y" />
             <TextBox x:Name="AttachmentOffsetYInput"
                      Margin="0,2,0,4" />
             <Button Content="应用位置"
@@ -276,19 +341,19 @@
                        Text="附属设备布局" />
             <TextBlock Margin="0,4,0,0"
                        Foreground="#555"
-                       Text="Width (mm)" />
+                       Text="宽度 (mm)" />
             <TextBox x:Name="AttachmentWidthInput"
                      Margin="0,2,0,2" />
             <TextBlock Foreground="#555"
-                       Text="Height (mm)" />
+                       Text="高度 (mm)" />
             <TextBox x:Name="AttachmentHeightInput"
                      Margin="0,2,0,2" />
             <TextBlock Foreground="#555"
-                       Text="LabelOffset X (mm)" />
+                       Text="标签水平偏移 (mm)" />
             <TextBox x:Name="AttachmentLabelOffsetXInput"
                      Margin="0,2,0,2" />
             <TextBlock Foreground="#555"
-                       Text="LabelOffset Y (mm)" />
+                       Text="标签垂直偏移 (mm)" />
             <TextBox x:Name="AttachmentLabelOffsetYInput"
                      Margin="0,2,0,4" />
             <Button Content="应用布局"
@@ -352,10 +417,10 @@
                        Foreground="#666"
                        TextWrapping="Wrap" />
             <TextBlock Foreground="#555"
-                       Text="Side A（人工输入）" />
+                       Text="边界 A 侧别（人工输入）" />
             <TextBox x:Name="WorkScopeBoundaryASideInput"
                      Margin="0,2,0,2"
-                     ToolTip="请输入边界 A 的 Side" />
+                     ToolTip="请输入边界 A 的侧别" />
             <Button Content="确认边界 A"
                     Margin="0,0,0,4"
                     Click="OnConfirmWorkScopeBoundaryA" />
@@ -366,10 +431,10 @@
                        Foreground="#666"
                        TextWrapping="Wrap" />
             <TextBlock Foreground="#555"
-                       Text="Side B（人工输入）" />
+                       Text="边界 B 侧别（人工输入）" />
             <TextBox x:Name="WorkScopeBoundaryBSideInput"
                      Margin="0,2,0,2"
-                     ToolTip="请输入边界 B 的 Side" />
+                     ToolTip="请输入边界 B 的侧别" />
             <Button Content="确认边界 B"
                     Margin="0,0,0,4"
                     Click="OnConfirmWorkScopeBoundaryB" />
@@ -378,7 +443,7 @@
             <TextBox x:Name="WorkScopeDescriptionInput"
                      Margin="0,2,0,2" />
             <TextBlock Foreground="#555"
-                       Text="GroundingPointId（可选，逗号分隔）" />
+                       Text="工作地线 ID（可选，逗号分隔）" />
             <TextBox x:Name="WorkScopeGroundingPointIdsInput"
                      Margin="0,2,0,4"
                      TextWrapping="Wrap" />
@@ -405,7 +470,7 @@
             <TextBox x:Name="WorkScopeEditorDescriptionInput"
                      Margin="0,2,0,2" />
             <TextBlock Foreground="#555"
-                       Text="GroundingPointId（可选，逗号分隔）" />
+                       Text="工作地线 ID（可选，逗号分隔）" />
             <TextBox x:Name="WorkScopeEditorGroundingPointIdsInput"
                      Margin="0,2,0,4"
                      TextWrapping="Wrap" />

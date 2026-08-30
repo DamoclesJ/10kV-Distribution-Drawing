@@ -1,5 +1,7 @@
 using DistributionDrawing.Desktop.Viewport;
 using DistributionDrawing.Infrastructure.Persistence;
+using System.ComponentModel;
+using System.IO;
 
 namespace DistributionDrawing.Desktop.Workspace;
 
@@ -8,14 +10,18 @@ namespace DistributionDrawing.Desktop.Workspace;
 /// Domain, layout, scene, command history, and selection remain owned by the
 /// single <see cref="ProjectRuntimeSession"/> instance.
 /// </summary>
-public sealed class DocumentSession
+public sealed class DocumentSession : INotifyPropertyChanged
 {
     private bool _lastDirty;
+    private bool _isUntitled;
+    private readonly string? _untitledName;
 
     public DocumentSession(
         ProjectService projectService,
         ProjectRuntimeSession runtimeSession,
-        DocumentViewState? viewState = null)
+        DocumentViewState? viewState = null,
+        bool isUntitled = false,
+        string? untitledName = null)
     {
         ProjectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
         RuntimeSession = runtimeSession ?? throw new ArgumentNullException(nameof(runtimeSession));
@@ -30,6 +36,10 @@ public sealed class DocumentSession
         }
 
         ViewState = viewState ?? DocumentViewState.Default;
+        _isUntitled = isUntitled;
+        _untitledName = isUntitled
+            ? string.IsNullOrWhiteSpace(untitledName) ? "未命名" : untitledName.Trim()
+            : null;
         _lastDirty = IsDirty;
         RuntimeSession.CommandStack.StateChanged += OnCommandStackStateChanged;
     }
@@ -42,6 +52,14 @@ public sealed class DocumentSession
 
     public string DisplayTitle => RuntimeSession.PersistenceSession.Domain.Title;
 
+    public bool IsUntitled => _isUntitled;
+
+    public string DocumentName => IsUntitled
+        ? _untitledName!
+        : Path.GetFileName(FilePath);
+
+    public string TabTitle => $"{DocumentName}{(IsDirty ? " *" : string.Empty)}";
+
     public bool IsDirty => RuntimeSession.IsDirty;
 
     public DocumentViewState ViewState { get; private set; }
@@ -49,6 +67,20 @@ public sealed class DocumentSession
     public event EventHandler? StateChanged;
 
     public event EventHandler? DirtyChanged;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void MarkPersisted()
+    {
+        if (!_isUntitled)
+        {
+            NotifyDisplayStateChanged();
+            return;
+        }
+
+        _isUntitled = false;
+        NotifyDisplayStateChanged();
+    }
 
     public void UpdateViewState(DocumentViewState viewState)
     {
@@ -66,10 +98,19 @@ public sealed class DocumentSession
     {
         bool isDirty = IsDirty;
         StateChanged?.Invoke(this, EventArgs.Empty);
+        NotifyDisplayStateChanged();
         if (_lastDirty != isDirty)
         {
             _lastDirty = isDirty;
             DirtyChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private void NotifyDisplayStateChanged()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsUntitled)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DocumentName)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TabTitle)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FilePath)));
     }
 }

@@ -49,7 +49,7 @@ public sealed class DesktopWorkspace
             throw new InvalidOperationException("The document session is already open.");
         }
 
-        if (FindByCanonicalPath(session.FilePath) is not null)
+        if (!session.IsUntitled && FindByCanonicalPath(session.FilePath) is not null)
         {
             throw new InvalidOperationException(
                 $"The document '{session.FilePath}' is already open.");
@@ -110,6 +110,7 @@ public sealed class DesktopWorkspace
     {
         string canonicalPath = CanonicalizePath(path);
         return _sessions.FirstOrDefault(session =>
+            !session.IsUntitled &&
             StringComparer.OrdinalIgnoreCase.Equals(
                 CanonicalizePath(session.FilePath),
                 canonicalPath));

@@ -146,6 +146,7 @@ public sealed class DesktopCommandRuntimeTests : IDisposable
                 SaveAs = noOp,
                 CloseDocument = noOp,
                 Exit = noOp,
+                ExportPng = noOp,
                 Undo = undo ?? noOp,
                 Redo = redo ?? noOp,
                 Copy = copy ?? noOp,
@@ -208,5 +209,8 @@ public sealed class DesktopCommandRuntimeTests : IDisposable
         public void ShowError(string title, string message) { }
         public void ShowWarning(string title, string message) { }
         public bool Confirm(string title, string message) => true;
+        public DistributionDrawing.Desktop.Workspace.DirtyDecision ConfirmSaveChanges(
+            string documentName) =>
+            DistributionDrawing.Desktop.Workspace.DirtyDecision.Cancel;
     }
 }

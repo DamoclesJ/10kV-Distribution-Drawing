@@ -1,39 +1,26 @@
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
+using DistributionDrawing.Desktop.Actions;
 
 namespace DistributionDrawing.Desktop.Workspace;
 
 public sealed class WpfProjectWorkspaceDialogs : IProjectWorkspaceDialogs
 {
     private readonly Window _owner;
+    private readonly IDesktopMessageService? _messages;
 
-    public WpfProjectWorkspaceDialogs(Window owner)
+    public WpfProjectWorkspaceDialogs(
+        Window owner,
+        IDesktopMessageService? messages = null)
     {
         _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+        _messages = messages;
     }
 
     public NewProjectRequest? RequestNewProject()
     {
-        var dialog = new NewProjectDialog { Owner = _owner };
-        if (dialog.ShowDialog() != true)
-        {
-            return null;
-        }
-
-        var save = new SaveFileDialog
-        {
-            Filter = "10kV 配电工程 (*.kvdrawing)|*.kvdrawing",
-            DefaultExt = ".kvdrawing",
-            AddExtension = true,
-            Title = "保存新工程"
-        };
-        if (save.ShowDialog(_owner) != true)
-        {
-            return null;
-        }
-
-        return new NewProjectRequest(save.FileName, dialog.ProjectTitle, dialog.Description);
+        return new NewProjectRequest(string.Empty, string.Empty, null);
     }
 
     public string? ChooseOpenProject()
@@ -79,8 +66,19 @@ public sealed class WpfProjectWorkspaceDialogs : IProjectWorkspaceDialogs
         };
     }
 
+    public DirtyDecision ConfirmDirtyDocument(string documentName, string operation)
+    {
+        return _messages?.ConfirmSaveChanges(documentName) ?? ConfirmDirty(operation);
+    }
+
     public void ShowError(string title, string message)
     {
+        if (_messages is not null)
+        {
+            _messages.ShowError(title, message);
+            return;
+        }
+
         MessageBox.Show(_owner, message, title, MessageBoxButton.OK, MessageBoxImage.Error);
     }
 }

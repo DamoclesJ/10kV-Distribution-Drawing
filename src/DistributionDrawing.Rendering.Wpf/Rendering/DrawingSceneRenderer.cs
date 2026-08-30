@@ -22,8 +22,16 @@ public sealed class DrawingSceneRenderer
     public DrawingVisual Render(DrawingScene scene, double pixelsPerDip)
     {
         var visual = new DrawingVisual();
-
         using DrawingContext context = visual.RenderOpen();
+        context.DrawDrawing(RenderDrawing(scene, pixelsPerDip));
+        return visual;
+    }
+
+    public DrawingGroup RenderDrawing(DrawingScene scene, double pixelsPerDip)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        var drawing = new DrawingGroup();
+        using DrawingContext context = drawing.Open();
 
         foreach (SceneElement element in scene.Elements)
         {
@@ -50,7 +58,8 @@ public sealed class DrawingSceneRenderer
             }
         }
 
-        return visual;
+        drawing.Freeze();
+        return drawing;
     }
 
     private void DrawLine(DrawingContext context, SceneLine line)

@@ -19,5 +19,8 @@ public interface IProjectWorkspaceDialogs
 
     DirtyDecision ConfirmDirty(string operation);
 
+    DirtyDecision ConfirmDirtyDocument(string documentName, string operation) =>
+        ConfirmDirty(operation);
+
     void ShowError(string title, string message);
 }

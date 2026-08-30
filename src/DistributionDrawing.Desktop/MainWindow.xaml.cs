@@ -32,6 +32,7 @@ using DistributionDrawing.Desktop.Services;
 using DistributionDrawing.Desktop.ViewModels;
 using DistributionDrawing.Desktop.SwitchOperation;
 using DistributionDrawing.Desktop.Actions;
+using DistributionDrawing.Desktop.Export;
 
 namespace DistributionDrawing.Desktop;
 
@@ -66,6 +67,7 @@ public partial class MainWindow : Window
     private readonly DesktopUserActions _actions;
     private readonly IDesktopMessageService _messageService;
     private readonly DesktopContextMenuResolver _contextMenuResolver = new();
+    private readonly ExportDrawingController _exportDrawing;
     private DocumentSession? _boundDocumentSession;
     private MainWindowViewModel _shellViewModel = null!;
     private bool _gridVisible;
@@ -86,15 +88,17 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _messageService = new DesktopMessageService(this);
         _propertyEditor = new(_selectionResolver, _commandStack);
         _selectionRectangle = new SelectionRectangleController(_selectionManager);
         PropertyInspectorPanel.DataContext = _propertyInspector;
         _selectionManager.SelectionChanged += OnSelectionChanged;
         _workspace = new ProjectWorkspaceController(
-            new WpfProjectWorkspaceDialogs(this),
+            new WpfProjectWorkspaceDialogs(this, _messageService),
             _sceneBuilder,
             EnsureTransientEditsCommitted);
         _workspace.Workspace.ActiveSessionChanging += OnActiveDocumentSessionChanging;
+        _workspace.Workspace.SessionsChanged += OnWorkspaceSessionsChanged;
         _workspace.SessionChanged += OnWorkspaceSessionChanged;
         _placement = new PlacementController(() => _workspace.CurrentSession);
         _overheadLineConnection = new OverheadLineConnectionController(
@@ -121,7 +125,11 @@ public partial class MainWindow : Window
             _cableReconnect,
             _poleSwitchAttachment,
             () => _workspace.CurrentSession);
-        _messageService = new DesktopMessageService(this);
+        _exportDrawing = new ExportDrawingController(
+            () => _workspace.CurrentSession,
+            () => _workspace.ActiveDocumentSession?.DocumentName ?? "图纸",
+            new WpfExportDrawingDialog(this),
+            _messageService);
         _actions = new DesktopUserActions(
             new DesktopActionContext
             {
@@ -141,6 +149,7 @@ public partial class MainWindow : Window
                 SaveAs = () => _workspace.SaveProjectAs(),
                 CloseDocument = () => _workspace.CloseCurrentProject(),
                 Exit = Close,
+                ExportPng = () => _exportDrawing.ExportPng(),
                 Undo = OnUndoRequested,
                 Redo = OnRedoRequested,
                 Copy = ExecuteCopyAction,
@@ -225,9 +234,11 @@ public partial class MainWindow : Window
 
     private void OnAddCableTermination(object sender, RoutedEventArgs e)
     {
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.AddCableTermination);
         var dialog = new CableTerminationCreationDialog { Owner = this };
         if (dialog.ShowDialog() != true)
         {
+            _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
             return;
         }
 
@@ -243,13 +254,20 @@ public partial class MainWindow : Window
         {
             _messageService.ShowError("无法添加电缆终端", exception.Message);
         }
+        finally
+        {
+            _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
+            UpdateCanvasStatus();
+        }
     }
 
     private void OnAddPoleSwitch(object sender, RoutedEventArgs e)
     {
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.AddPoleSwitch);
         var dialog = new PoleSwitchCreationDialog { Owner = this };
         if (dialog.ShowDialog() != true)
         {
+            _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
             return;
         }
 
@@ -260,6 +278,11 @@ public partial class MainWindow : Window
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
             _messageService.ShowError("无法添加柱上开关", exception.Message);
+        }
+        finally
+        {
+            SyncToolboxModeFromInteraction();
+            UpdateCanvasStatus();
         }
     }
 
@@ -523,6 +546,7 @@ public partial class MainWindow : Window
         UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
         UpdateWorkScopeEditor();
+        SyncToolboxModeFromInteraction();
         UpdateCanvasStatus();
         _actions.RefreshCanExecute();
         RenderCurrentScene();
@@ -624,6 +648,36 @@ public partial class MainWindow : Window
         _viewport.SetViewportSize(
             new Size(DrawingSurface.ActualWidth, DrawingSurface.ActualHeight));
         BindActiveSession(_workspace.ActiveDocumentSession);
+        RefreshDocumentTabs();
+        UpdateWindowTitle();
+    }
+
+    private void OnWorkspaceSessionsChanged(object? sender, EventArgs e) =>
+        RefreshDocumentTabs();
+
+    private void RefreshDocumentTabs()
+    {
+        DocumentTabs.ItemsSource = null;
+        DocumentTabs.ItemsSource = _workspace.Workspace.Sessions;
+        DocumentTabs.SelectedItem = _workspace.ActiveDocumentSession;
+    }
+
+    private void OnDocumentTabSelectionChanged(
+        object sender,
+        System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (DocumentTabs.SelectedItem is DocumentSession session &&
+            !ReferenceEquals(session, _workspace.ActiveDocumentSession))
+        {
+            _workspace.Workspace.ActivateSession(session);
+        }
+    }
+
+    private void UpdateWindowTitle()
+    {
+        Title = _workspace.ActiveDocumentSession is { } session
+            ? $"{session.TabTitle} - 10kV Distribution Drawing"
+            : "10kV Distribution Drawing";
     }
 
     private void OnActiveDocumentSessionChanging(
@@ -693,7 +747,14 @@ public partial class MainWindow : Window
     }
 
     private void OnBoundDocumentSessionStateChanged(object? sender, EventArgs e) =>
+        RefreshBoundSessionState();
+
+    private void RefreshBoundSessionState()
+    {
         _actions.RefreshCanExecute();
+        DocumentTabs.Items.Refresh();
+        UpdateWindowTitle();
+    }
 
     private void CancelTransientInteraction()
     {
@@ -709,6 +770,8 @@ public partial class MainWindow : Window
         DrawingSurface.ReleaseMouseCapture();
         _drawingTools.Cancel();
         CancelProfessionalPicking();
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
+        UpdateCanvasStatus();
     }
 
     private void OnDrawTestContent(object sender, RoutedEventArgs e)
@@ -882,12 +945,35 @@ public partial class MainWindow : Window
                     "添加工作范围：请选择边界 A",
                 _ when _workScopePickState is WorkScopePickState.PickingBoundaryB =>
                     "添加工作范围：请选择边界 B",
-                DesktopToolMode.CreateRingCabinet => "创建环网柜",
-                DesktopToolMode.CreatePole => "创建杆塔",
-                _ => "选择"
+                _ when _workScopePickState is WorkScopePickState.BoundaryAReady =>
+                    "添加工作范围：请确认边界 A",
+                _ when _workScopePickState is WorkScopePickState.BoundaryBReady =>
+                    "添加工作范围：请确认边界 B",
+                DesktopToolMode.CreateRingCabinet =>
+                    "环网柜：单击图面放置，Esc 或右键退出",
+                DesktopToolMode.CreatePole =>
+                    "杆塔：单击图面连续放置，Esc 或右键退出",
+                _ => "选择对象"
             },
             _selectionManager.SelectionCount);
         _actions.RefreshCanExecute();
+    }
+
+    private void SyncToolboxModeFromInteraction()
+    {
+        DesktopToolMode mode = _placement.Mode switch
+        {
+            PlacementMode.PlacingPole => DesktopToolMode.CreatePole,
+            PlacementMode.PlacingRingCabinet => DesktopToolMode.CreateRingCabinet,
+            _ when _overheadLineConnection.IsActive => DesktopToolMode.CreateOverheadLine,
+            _ when _cableConnection.IsActive => DesktopToolMode.CreateCable,
+            _ when _poleSwitchAttachment.IsSelectingControlledConnection =>
+                DesktopToolMode.AddPoleSwitch,
+            _ when _groundingPointPickMode => DesktopToolMode.AddGroundingPoint,
+            _ when _workScopePickState != WorkScopePickState.Idle => DesktopToolMode.AddWorkScope,
+            _ => DesktopToolMode.Select
+        };
+        _shellViewModel.Toolbox.SetSelectedMode(mode);
     }
 
     private void OnDrawingSurfaceSizeChanged(
@@ -954,6 +1040,7 @@ public partial class MainWindow : Window
         if (_drawingTools.IsActive || _placement.Mode != PlacementMode.Idle)
         {
             _drawingTools.Cancel();
+            SyncToolboxModeFromInteraction();
             UpdateCanvasStatus();
             e.Handled = true;
             return;
@@ -962,6 +1049,7 @@ public partial class MainWindow : Window
         if (_groundingPointPickMode || _workScopePickState != WorkScopePickState.Idle)
         {
             CancelProfessionalPicking();
+            SyncToolboxModeFromInteraction();
             UpdateCanvasStatus();
             e.Handled = true;
             return;
@@ -1305,6 +1393,7 @@ public partial class MainWindow : Window
         _drawingTools.Cancel();
         ResetWorkScopePick();
         _groundingPointPickMode = true;
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.AddGroundingPoint);
         _pendingGroundingPointTerminalId = null;
         _selectionManager.Clear();
         GroundingPointEditorPanel.Visibility = Visibility.Visible;
@@ -1331,6 +1420,7 @@ public partial class MainWindow : Window
         _pendingGroundingPointTerminalId = null;
         ResetWorkScopePick();
         _workScopePickState = WorkScopePickState.PickingBoundaryA;
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.AddWorkScope);
         WorkScopeBoundaryASideInput.Text = string.Empty;
         WorkScopeBoundaryBSideInput.Text = string.Empty;
         WorkScopeDescriptionInput.Text = string.Empty;

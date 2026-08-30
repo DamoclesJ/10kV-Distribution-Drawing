@@ -27,6 +27,7 @@ public sealed class DesktopUserActionHandlers
     public required Action SaveAs { get; init; }
     public required Action CloseDocument { get; init; }
     public required Action Exit { get; init; }
+    public required Action ExportPng { get; init; }
     public required Action Undo { get; init; }
     public required Action Redo { get; init; }
     public required Action Copy { get; init; }
@@ -78,6 +79,7 @@ public sealed class DesktopUserActions
         SaveAs = Create("工程另存为失败", handlers.SaveAs, messages, HasSession);
         CloseDocument = Create("关闭工程失败", handlers.CloseDocument, messages, HasSession);
         Exit = Create("退出程序失败", handlers.Exit, messages);
+        ExportPng = Create("导出 PNG 失败", handlers.ExportPng, messages, HasSession);
         Undo = Create(
             "撤销失败",
             handlers.Undo,
@@ -178,7 +180,7 @@ public sealed class DesktopUserActions
 
         _all =
         [
-            New, Open, Save, SaveAs, CloseDocument, Exit,
+            New, Open, Save, SaveAs, CloseDocument, ExportPng, Exit,
             Undo, Redo, Copy, Paste, SelectAll, Delete, CancelCurrentOperation,
             Select, CreatePole, CreateRingCabinet, CreateOverheadLine, CreateCable,
             AddCableTermination, AddPoleSwitch, AddGroundingPoint, AddWorkScope,
@@ -194,6 +196,7 @@ public sealed class DesktopUserActions
     public DesktopAction SaveAs { get; }
     public DesktopAction CloseDocument { get; }
     public DesktopAction Exit { get; }
+    public DesktopAction ExportPng { get; }
     public DesktopAction Undo { get; }
     public DesktopAction Redo { get; }
     public DesktopAction Copy { get; }

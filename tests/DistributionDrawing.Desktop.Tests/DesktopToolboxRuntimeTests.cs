@@ -31,4 +31,47 @@ public sealed class DesktopToolboxRuntimeTests
         Assert.Same(actions.Delete, viewModel.DeleteCommand);
         Assert.Same(actions.FitDrawing, viewModel.FitDrawingCommand);
     }
+
+    [Theory]
+    [InlineData(DesktopToolMode.Select)]
+    [InlineData(DesktopToolMode.CreatePole)]
+    [InlineData(DesktopToolMode.CreateRingCabinet)]
+    [InlineData(DesktopToolMode.CreateOverheadLine)]
+    [InlineData(DesktopToolMode.CreateCable)]
+    [InlineData(DesktopToolMode.AddCableTermination)]
+    [InlineData(DesktopToolMode.AddPoleSwitch)]
+    [InlineData(DesktopToolMode.AddGroundingPoint)]
+    [InlineData(DesktopToolMode.AddWorkScope)]
+    public void ToolboxExposesOneActiveProfessionalTool(DesktopToolMode mode)
+    {
+        var toolbox = new ToolboxViewModel();
+
+        toolbox.SetSelectedMode(mode);
+
+        bool[] states =
+        [
+            toolbox.IsSelectActive,
+            toolbox.IsPoleActive,
+            toolbox.IsRingCabinetActive,
+            toolbox.IsOverheadLineActive,
+            toolbox.IsCableActive,
+            toolbox.IsCableTerminationActive,
+            toolbox.IsPoleSwitchActive,
+            toolbox.IsGroundingPointActive,
+            toolbox.IsWorkScopeActive
+        ];
+        Assert.Single(states, active => active);
+    }
+
+    [Fact]
+    public void CancelOrSessionSwitchCanRestoreSelectState()
+    {
+        var toolbox = new ToolboxViewModel();
+        toolbox.SetSelectedMode(DesktopToolMode.CreateCable);
+
+        toolbox.SetSelectedMode(DesktopToolMode.Select);
+
+        Assert.True(toolbox.IsSelectActive);
+        Assert.False(toolbox.IsCableActive);
+    }
 }
