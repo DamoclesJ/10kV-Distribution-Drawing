@@ -93,6 +93,7 @@ public sealed class DesktopWorkspace
         if (!ReferenceEquals(ActiveSession, session))
         {
             _sessions.RemoveAt(index);
+            session.Dispose();
             SessionsChanged?.Invoke(this, EventArgs.Empty);
             return true;
         }
@@ -102,6 +103,7 @@ public sealed class DesktopWorkspace
             : _sessions[index == _sessions.Count - 1 ? index - 1 : index + 1];
         SetActiveSession(next);
         _sessions.RemoveAt(index);
+        session.Dispose();
         SessionsChanged?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -127,6 +129,9 @@ public sealed class DesktopWorkspace
         DocumentSession? previous = ActiveSession;
         var args = new ActiveDocumentSessionChangedEventArgs(previous, session);
         ActiveSessionChanging?.Invoke(this, args);
+        DocumentSession[] removed = _sessions
+            .Where(existing => !ReferenceEquals(existing, session))
+            .ToArray();
         _sessions.Clear();
         if (session is not null)
         {
@@ -134,6 +139,11 @@ public sealed class DesktopWorkspace
         }
 
         ActiveSession = session;
+        foreach (DocumentSession removedSession in removed)
+        {
+            removedSession.Dispose();
+        }
+
         SessionsChanged?.Invoke(this, EventArgs.Empty);
         ActiveSessionChanged?.Invoke(this, args);
     }

@@ -142,6 +142,22 @@ public sealed class DesktopWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public void DirtyNotificationTracksUndoToAndRedoAwayFromSavePoint()
+    {
+        DocumentSession session = CreateSession("保存点通知");
+        session.RuntimeSession.CommandStack.ExecuteCommand(new CounterCommand());
+        session.RuntimeSession.CommandStack.MarkSaved();
+        var dirtyStates = new List<bool>();
+        session.DirtyChanged += (_, _) => dirtyStates.Add(session.IsDirty);
+        session.RuntimeSession.CommandStack.ExecuteCommand(new CounterCommand());
+
+        Assert.True(session.RuntimeSession.CommandStack.Undo());
+        Assert.True(session.RuntimeSession.CommandStack.Redo());
+
+        Assert.Equal([true, false, true], dirtyStates);
+    }
+
+    [Fact]
     public void RemoveInactiveActiveAndLastSessionSelectsDeterministicFallback()
     {
         DocumentSession first = CreateSession("工程 A");
@@ -242,6 +258,22 @@ public sealed class DesktopWorkspaceTests : IDisposable
         workspace.ActivateSession(first);
         Assert.Equal(firstView, viewport.CaptureState());
         Assert.Equal(new DocumentViewState(0.9, -12, 33), second.ViewState);
+    }
+
+    [Fact]
+    public void RemovingSessionDetachesDocumentFromCommandStackNotifications()
+    {
+        DocumentSession session = CreateSession("释放工程");
+        var workspace = new DesktopWorkspace();
+        workspace.AddSession(session);
+        int stateChanges = 0;
+        session.StateChanged += (_, _) => stateChanges++;
+
+        Assert.True(workspace.RemoveSession(session));
+        session.RuntimeSession.CommandStack.ExecuteCommand(new CounterCommand());
+
+        Assert.Equal(0, stateChanges);
+        Assert.Null(workspace.ActiveSession);
     }
 
     private DocumentSession CreateSession(string title)

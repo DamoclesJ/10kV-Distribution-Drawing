@@ -4,6 +4,7 @@ bin/
 obj/
 
 # Build output
+/artifacts/
 *.user
 *.suo
 

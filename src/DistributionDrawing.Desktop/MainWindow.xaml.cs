@@ -445,6 +445,43 @@ public partial class MainWindow : Window
         _actions.RefreshCanExecute();
     }
 
+    private void OnWindowPreviewKeyDown(
+        object sender,
+        System.Windows.Input.KeyEventArgs e)
+    {
+        DesktopShortcutAction shortcut = DesktopShortcutPolicy.Resolve(
+            e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key,
+            System.Windows.Input.Keyboard.Modifiers,
+            IsTextInputFocused(),
+            IsInteractionIdle());
+        DesktopAction? action = shortcut switch
+        {
+            DesktopShortcutAction.Undo => _actions.Undo,
+            DesktopShortcutAction.Redo => _actions.Redo,
+            DesktopShortcutAction.Copy => _actions.Copy,
+            DesktopShortcutAction.Paste => _actions.Paste,
+            DesktopShortcutAction.SelectAll => _actions.SelectAll,
+            DesktopShortcutAction.Delete => _actions.Delete,
+            DesktopShortcutAction.Cancel => _actions.CancelCurrentOperation,
+            _ => null
+        };
+        if (action?.CanExecute(null) != true)
+        {
+            return;
+        }
+
+        action.Execute(null);
+        e.Handled = true;
+    }
+
+    private static bool IsTextInputFocused()
+    {
+        return System.Windows.Input.Keyboard.FocusedElement is
+            System.Windows.Controls.Primitives.TextBoxBase or
+            PasswordBox or
+            ComboBox { IsEditable: true };
+    }
+
     private bool IsInteractionIdle()
     {
         return !_drawingTools.IsActive &&
@@ -561,6 +598,12 @@ public partial class MainWindow : Window
         }
 
         base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _workspace.Dispose();
+        base.OnClosed(e);
     }
 
     private bool EnsureTransientEditsCommitted()

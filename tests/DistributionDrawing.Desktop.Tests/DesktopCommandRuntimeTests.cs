@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows.Input;
 using DistributionDrawing.Desktop.Actions;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -110,6 +111,68 @@ public sealed class DesktopCommandRuntimeTests : IDisposable
         actions.CancelCurrentOperation.Execute(null);
 
         Assert.Equal(1, cancellations);
+    }
+
+    [Theory]
+    [InlineData(Key.A, ModifierKeys.Control)]
+    [InlineData(Key.C, ModifierKeys.Control)]
+    [InlineData(Key.V, ModifierKeys.Control)]
+    [InlineData(Key.Delete, ModifierKeys.None)]
+    [InlineData(Key.Z, ModifierKeys.Control)]
+    [InlineData(Key.Y, ModifierKeys.Control)]
+    public void TextInputFocusKeepsEditingShortcutsOutOfDrawingCommands(
+        Key key,
+        ModifierKeys modifiers)
+    {
+        Assert.Equal(
+            DesktopShortcutAction.None,
+            DesktopShortcutPolicy.Resolve(
+                key,
+                modifiers,
+                textInputFocused: true,
+                interactionIdle: true));
+    }
+
+    [Fact]
+    public void EscapeCancelsActiveDrawingEvenWhenTextInputIsFocused()
+    {
+        Assert.Equal(
+            DesktopShortcutAction.Cancel,
+            DesktopShortcutPolicy.Resolve(
+                Key.Escape,
+                ModifierKeys.None,
+                textInputFocused: true,
+                interactionIdle: false));
+        Assert.Equal(
+            DesktopShortcutAction.None,
+            DesktopShortcutPolicy.Resolve(
+                Key.Escape,
+                ModifierKeys.None,
+                textInputFocused: true,
+                interactionIdle: true));
+    }
+
+    [Fact]
+    public void SessionDependentActionsTrackCurrentWorkspaceStateWithoutRecreation()
+    {
+        ProjectRuntimeSession? active = null;
+        DesktopUserActions actions = CreateActions(() => active);
+
+        Assert.False(actions.Save.CanExecute(null));
+        Assert.False(actions.CreatePole.CanExecute(null));
+        Assert.False(actions.ExportPng.CanExecute(null));
+
+        active = CreateSession("激活工程");
+
+        Assert.True(actions.Save.CanExecute(null));
+        Assert.True(actions.CreatePole.CanExecute(null));
+        Assert.True(actions.ExportPng.CanExecute(null));
+
+        active = null;
+
+        Assert.False(actions.Save.CanExecute(null));
+        Assert.False(actions.CreatePole.CanExecute(null));
+        Assert.False(actions.ExportPng.CanExecute(null));
     }
 
     internal static DesktopUserActions CreateActions(

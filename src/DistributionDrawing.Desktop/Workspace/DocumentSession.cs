@@ -10,11 +10,13 @@ namespace DistributionDrawing.Desktop.Workspace;
 /// Domain, layout, scene, command history, and selection remain owned by the
 /// single <see cref="ProjectRuntimeSession"/> instance.
 /// </summary>
-public sealed class DocumentSession : INotifyPropertyChanged
+public sealed class DocumentSession : INotifyPropertyChanged, IDisposable
 {
     private bool _lastDirty;
     private bool _isUntitled;
     private readonly string? _untitledName;
+    private string? _untitledBackingFilePath;
+    private bool _disposed;
 
     public DocumentSession(
         ProjectService projectService,
@@ -40,6 +42,7 @@ public sealed class DocumentSession : INotifyPropertyChanged
         _untitledName = isUntitled
             ? string.IsNullOrWhiteSpace(untitledName) ? "未命名" : untitledName.Trim()
             : null;
+        _untitledBackingFilePath = isUntitled ? runtimeSession.PersistenceSession.FilePath : null;
         _lastDirty = IsDirty;
         RuntimeSession.CommandStack.StateChanged += OnCommandStackStateChanged;
     }
@@ -79,7 +82,23 @@ public sealed class DocumentSession : INotifyPropertyChanged
         }
 
         _isUntitled = false;
+        TryDeleteUntitledBackingFile();
         NotifyDisplayStateChanged();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        RuntimeSession.CommandStack.StateChanged -= OnCommandStackStateChanged;
+        TryDeleteUntitledBackingFile();
+        StateChanged = null;
+        DirtyChanged = null;
+        PropertyChanged = null;
     }
 
     public void UpdateViewState(DocumentViewState viewState)
@@ -112,5 +131,33 @@ public sealed class DocumentSession : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DocumentName)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TabTitle)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FilePath)));
+    }
+
+    private void TryDeleteUntitledBackingFile()
+    {
+        if (_untitledBackingFilePath is null)
+        {
+            return;
+        }
+
+        if (!_isUntitled &&
+            StringComparer.OrdinalIgnoreCase.Equals(
+                Path.GetFullPath(_untitledBackingFilePath),
+                Path.GetFullPath(FilePath)))
+        {
+            _untitledBackingFilePath = null;
+            return;
+        }
+
+        try
+        {
+            File.Delete(_untitledBackingFilePath);
+            _untitledBackingFilePath = null;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            // Temporary-file cleanup is best effort and must not block close or save.
+        }
     }
 }

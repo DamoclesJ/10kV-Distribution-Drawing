@@ -73,8 +73,7 @@ public sealed class ExportDrawingController
 
         try
         {
-            using FileStream stream = File.Create(path);
-            _renderer.RenderPng(session.Scene, stream);
+            ExportToTemporaryFile(session, path);
             return true;
         }
         catch (Exception exception) when (
@@ -87,6 +86,45 @@ public sealed class ExportDrawingController
         {
             _messages.ShowError("导出 PNG 失败", "图纸范围过大，无法按当前分辨率导出。");
             return false;
+        }
+    }
+
+    private void ExportToTemporaryFile(ProjectRuntimeSession session, string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string directory = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
+        string temporaryPath = Path.Combine(
+            directory,
+            $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(
+                       temporaryPath,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None))
+            {
+                _renderer.RenderPng(session.Scene, stream);
+            }
+
+            File.Move(temporaryPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            TryDeleteTemporaryFile(temporaryPath);
+        }
+    }
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            // Cleanup failure must not hide the primary export outcome.
         }
     }
 }

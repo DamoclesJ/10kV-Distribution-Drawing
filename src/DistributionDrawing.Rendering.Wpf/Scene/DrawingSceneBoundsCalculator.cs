@@ -38,7 +38,7 @@ public static class DrawingSceneBoundsCalculator
                 case SceneText text:
                     double textWidth = Math.Max(
                         text.FontSizeMillimeters,
-                        text.Text.Length * text.FontSizeMillimeters * 0.65);
+                        text.Text.Length * text.FontSizeMillimeters);
                     double textHeight = Math.Max(1, text.FontSizeMillimeters * 1.3);
                     accumulator.Include(
                         new DocumentRect(

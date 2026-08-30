@@ -123,6 +123,133 @@ public sealed class DrawingSceneBitmapRendererTests
         });
     }
 
+    [Fact]
+    public void RenderPng_HandlesNegativeFarAndVerySmallSceneCoordinates()
+    {
+        RunOnSta(() =>
+        {
+            var renderer = new DrawingSceneBitmapRenderer();
+            var negative = new DrawingScene(
+            [
+                new SceneRectangle(new DocumentRect(-120, -80, 5, 3), Colors.Black, 0.5)
+            ]);
+            var farPositive = new DrawingScene(
+            [
+                new SceneRectangle(new DocumentRect(1_000_000, 2_000_000, 5, 3), Colors.Black, 0.5)
+            ]);
+            var tiny = new DrawingScene(
+            [
+                new SceneLine(
+                    new DocumentPoint(0, 0),
+                    new DocumentPoint(0.001, 0),
+                    Colors.Black,
+                    0.001)
+            ]);
+            using var negativeOutput = new MemoryStream();
+            using var farOutput = new MemoryStream();
+            using var tinyOutput = new MemoryStream();
+
+            DrawingSceneBitmapResult negativeResult = renderer.RenderPng(negative, negativeOutput);
+            DrawingSceneBitmapResult farResult = renderer.RenderPng(farPositive, farOutput);
+            DrawingSceneBitmapResult tinyResult = renderer.RenderPng(tiny, tinyOutput);
+
+            Assert.Equal(negativeResult.WidthPixels, farResult.WidthPixels);
+            Assert.Equal(negativeResult.HeightPixels, farResult.HeightPixels);
+            Assert.True(tinyResult.WidthPixels > 0);
+            Assert.True(tinyResult.HeightPixels > 0);
+        });
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void RenderPng_RejectsNonFiniteSceneCoordinates(double coordinate)
+    {
+        var scene = new DrawingScene(
+        [
+            new SceneLine(
+                new DocumentPoint(coordinate, 0),
+                new DocumentPoint(10, 0),
+                Colors.Black,
+                1)
+        ]);
+        using var output = new MemoryStream();
+
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            _ = new DrawingSceneBitmapRenderer().RenderPng(scene, output);
+        });
+    }
+
+    [Fact]
+    public void RenderPng_ContentBoundsIncludeTextAndThickStrokeEdges()
+    {
+        RunOnSta(() =>
+        {
+            var scene = new DrawingScene(
+            [
+                new SceneLine(
+                    new DocumentPoint(0, 0),
+                    new DocumentPoint(1, 0),
+                    Colors.Black,
+                    10),
+                new SceneText(new DocumentPoint(10, 0), "边界文字", Colors.Black, 4)
+            ]);
+            using var output = new MemoryStream();
+
+            DrawingSceneBitmapResult result = new DrawingSceneBitmapRenderer().RenderPng(scene, output);
+
+            Assert.True(result.ContentBounds.XMillimeters <= -5);
+            Assert.True(
+                result.ContentBounds.XMillimeters + result.ContentBounds.WidthMillimeters >= 26);
+        });
+    }
+
+    [Fact]
+    public void RenderPng_RejectsExtremePixelBudgetWithoutOverflow()
+    {
+        var scene = new DrawingScene(
+        [
+            new SceneRectangle(
+                new DocumentRect(0, 0, 169_000_000, 169_000_000),
+                Colors.Black,
+                1)
+        ]);
+        using var output = new MemoryStream();
+
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            _ = new DrawingSceneBitmapRenderer().RenderPng(
+                scene,
+                output,
+                new DrawingSceneBitmapOptions(
+                    Dpi: 300,
+                    MarginMillimeters: 0,
+                    MaximumDimensionPixels: int.MaxValue,
+                    MaximumPixelCount: long.MaxValue,
+                    MaximumEstimatedBytes: long.MaxValue));
+        });
+    }
+
+    [Fact]
+    public void RenderPng_PropagatesOutputStreamWriteFailure()
+    {
+        RunOnSta(() =>
+        {
+            var scene = new DrawingScene(
+            [
+                new SceneRectangle(new DocumentRect(0, 0, 10, 10), Colors.Black, 1)
+            ]);
+            using var output = new ThrowingWriteStream();
+
+            Assert.Throws<IOException>(() =>
+            {
+                _ = new DrawingSceneBitmapRenderer().RenderPng(scene, output);
+            });
+        });
+    }
+
     private static void RunOnSta(Action action)
     {
         Exception? exception = null;
@@ -144,5 +271,14 @@ public sealed class DrawingSceneBitmapRendererTests
         {
             ExceptionDispatchInfo.Capture(exception).Throw();
         }
+    }
+
+    private sealed class ThrowingWriteStream : MemoryStream
+    {
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new IOException("Simulated write failure.");
+
+        public override void Write(ReadOnlySpan<byte> buffer) =>
+            throw new IOException("Simulated write failure.");
     }
 }

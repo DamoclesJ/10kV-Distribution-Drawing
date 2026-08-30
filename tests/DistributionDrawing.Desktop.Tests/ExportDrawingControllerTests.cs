@@ -46,6 +46,33 @@ public sealed class ExportDrawingControllerTests : IDisposable
         });
     }
 
+    [Fact]
+    public void FailedRenderPreservesExistingOutputFileAndSessionState()
+    {
+        ProjectRuntimeSession session = CreateSession("空图工程");
+        string outputPath = NextPath(".png");
+        byte[] original = "existing-png-placeholder"u8.ToArray();
+        File.WriteAllBytes(outputPath, original);
+        bool dirtyBefore = session.IsDirty;
+        var messages = new TestMessages();
+        var controller = new ExportDrawingController(
+            () => session,
+            () => "空图工程",
+            new TestExportDialog(outputPath),
+            messages);
+
+        Assert.False(controller.ExportPng());
+
+        Assert.Equal(original, File.ReadAllBytes(outputPath));
+        Assert.Equal(dirtyBefore, session.IsDirty);
+        Assert.Single(messages.Errors);
+        Assert.DoesNotContain(
+            Directory.EnumerateFiles(
+                Path.GetDirectoryName(outputPath)!,
+                $".{Path.GetFileName(outputPath)}.*.tmp"),
+            _ => true);
+    }
+
     private ProjectRuntimeSession CreateSession(string title)
     {
         string path = NextPath(".kvdrawing");

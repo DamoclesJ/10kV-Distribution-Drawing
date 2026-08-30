@@ -38,8 +38,14 @@ public sealed class DrawingSceneBitmapRenderer
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(output);
+        if (!output.CanWrite)
+        {
+            throw new ArgumentException("PNG 输出流不可写。", nameof(output));
+        }
+
         DrawingSceneBitmapOptions settings = options ?? new DrawingSceneBitmapOptions();
         ValidateOptions(settings);
+        ValidateSceneGeometry(scene);
         if (!DrawingSceneBoundsCalculator.TryCalculate(scene, out DocumentRect contentBounds))
         {
             throw new InvalidOperationException("当前图纸没有可导出的内容。");
@@ -54,12 +60,20 @@ public sealed class DrawingSceneBitmapRenderer
         double heightDips = heightPixels * DipsPerInch / settings.Dpi;
         double offsetXDips = -exportBounds.XMillimeters * DipsPerInch / MillimetersPerInch;
         double offsetYDips = -exportBounds.YMillimeters * DipsPerInch / MillimetersPerInch;
+        if (!IsPositiveFinite(widthDips) ||
+            !IsPositiveFinite(heightDips) ||
+            !IsFinite(offsetXDips) ||
+            !IsFinite(offsetYDips))
+        {
+            throw TooLarge();
+        }
+
         var exportVisual = new DrawingVisual();
         using (DrawingContext context = exportVisual.RenderOpen())
         {
             context.DrawRectangle(Brushes.White, null, new Rect(0, 0, widthDips, heightDips));
             context.PushTransform(new TranslateTransform(offsetXDips, offsetYDips));
-            context.DrawDrawing(_sceneRenderer.RenderDrawing(scene, 1));
+            context.DrawDrawing(_sceneRenderer.RenderDrawing(scene, settings.Dpi / DipsPerInch));
             context.Pop();
         }
 
@@ -95,6 +109,47 @@ public sealed class DrawingSceneBitmapRenderer
         }
     }
 
+    private static void ValidateSceneGeometry(DrawingScene scene)
+    {
+        foreach (SceneElement element in scene.Elements)
+        {
+            bool valid = element switch
+            {
+                SceneLogicalBounds logical => IsValidRect(logical.Bounds, allowEmpty: true),
+                SceneLine line =>
+                    IsValidPoint(line.Start) &&
+                    IsValidPoint(line.End) &&
+                    IsPositiveFinite(line.ThicknessMillimeters),
+                SceneRectangle rectangle =>
+                    IsValidRect(rectangle.Bounds) &&
+                    IsPositiveFinite(rectangle.ThicknessMillimeters),
+                SceneEllipse ellipse =>
+                    IsValidRect(ellipse.Bounds) &&
+                    IsPositiveFinite(ellipse.ThicknessMillimeters),
+                ScenePolyline polyline =>
+                    polyline.Points.All(IsValidPoint) &&
+                    IsValidRect(polyline.Bounds, allowEmpty: true) &&
+                    IsPositiveFinite(polyline.ThicknessMillimeters),
+                SceneArc arc =>
+                    IsValidPoint(arc.Center) &&
+                    IsPositiveFinite(arc.RadiusMillimeters) &&
+                    IsFinite(arc.StartAngleDegrees) &&
+                    IsFinite(arc.SweepAngleDegrees) &&
+                    IsValidRect(arc.Bounds) &&
+                    IsPositiveFinite(arc.ThicknessMillimeters),
+                SceneText text =>
+                    IsValidPoint(text.Origin) &&
+                    text.Text is not null &&
+                    IsPositiveFinite(text.FontSizeMillimeters),
+                _ => true
+            };
+            if (!valid)
+            {
+                throw new InvalidOperationException("图纸包含无效的几何坐标，无法导出。");
+            }
+        }
+    }
+
     private static DocumentRect Expand(DocumentRect bounds, double margin)
     {
         return new DocumentRect(
@@ -120,12 +175,24 @@ public sealed class DrawingSceneBitmapRenderer
         int heightPixels,
         DrawingSceneBitmapOptions options)
     {
-        long pixelCount = checked((long)widthPixels * heightPixels);
-        long estimatedBytes = checked(pixelCount * 4);
         if (widthPixels > options.MaximumDimensionPixels ||
-            heightPixels > options.MaximumDimensionPixels ||
-            pixelCount > options.MaximumPixelCount ||
-            estimatedBytes > options.MaximumEstimatedBytes)
+            heightPixels > options.MaximumDimensionPixels)
+        {
+            throw TooLarge();
+        }
+
+        long pixelCount;
+        try
+        {
+            pixelCount = checked((long)widthPixels * heightPixels);
+        }
+        catch (OverflowException)
+        {
+            throw TooLarge();
+        }
+
+        if (pixelCount > options.MaximumPixelCount ||
+            pixelCount > options.MaximumEstimatedBytes / 4)
         {
             throw TooLarge();
         }
@@ -135,5 +202,19 @@ public sealed class DrawingSceneBitmapRenderer
         new("图纸范围过大，无法按当前分辨率导出。");
 
     private static bool IsPositiveFinite(double value) =>
-        value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
+        value > 0 && IsFinite(value);
+
+    private static bool IsValidPoint(DocumentPoint point) =>
+        IsFinite(point.XMillimeters) && IsFinite(point.YMillimeters);
+
+    private static bool IsValidRect(DocumentRect rect, bool allowEmpty = false) =>
+        IsFinite(rect.XMillimeters) &&
+        IsFinite(rect.YMillimeters) &&
+        IsFinite(rect.WidthMillimeters) &&
+        IsFinite(rect.HeightMillimeters) &&
+        (allowEmpty ? rect.WidthMillimeters >= 0 : rect.WidthMillimeters > 0) &&
+        (allowEmpty ? rect.HeightMillimeters >= 0 : rect.HeightMillimeters > 0);
+
+    private static bool IsFinite(double value) =>
+        !double.IsNaN(value) && !double.IsInfinity(value);
 }

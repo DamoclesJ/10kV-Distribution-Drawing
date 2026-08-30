@@ -4,7 +4,7 @@ using System.IO;
 
 namespace DistributionDrawing.Desktop.Workspace;
 
-public sealed class ProjectWorkspaceController
+public sealed class ProjectWorkspaceController : IDisposable
 {
     private readonly IProjectWorkspaceDialogs _dialogs;
     private readonly DrawingSceneBuilder _sceneBuilder;
@@ -73,14 +73,14 @@ public sealed class ProjectWorkspaceController
     {
         string? path = _dialogs.ChooseOpenProject();
         if (path is null) return false;
-        if (Workspace.FindByCanonicalPath(path) is { } existing)
-        {
-            Workspace.ActivateSession(existing);
-            return true;
-        }
-
         try
         {
+            if (Workspace.FindByCanonicalPath(path) is { } existing)
+            {
+                Workspace.ActivateSession(existing);
+                return true;
+            }
+
             var service = new ProjectService();
             ProjectSession persisted = service.LoadProject(path);
             Workspace.AddSession(new DocumentSession(
@@ -127,15 +127,15 @@ public sealed class ProjectWorkspaceController
                 ? documentSession.DocumentName
                 : documentSession.FilePath);
         if (path is null) return false;
-        DocumentSession? conflict = Workspace.FindByCanonicalPath(path);
-        if (conflict is not null && !ReferenceEquals(conflict, documentSession))
-        {
-            _dialogs.ShowError("工程另存为失败", "该文件已在另一个工程标签页中打开。");
-            return false;
-        }
-
         try
         {
+            DocumentSession? conflict = Workspace.FindByCanonicalPath(path);
+            if (conflict is not null && !ReferenceEquals(conflict, documentSession))
+            {
+                _dialogs.ShowError("工程另存为失败", "该文件已在另一个工程标签页中打开。");
+                return false;
+            }
+
             ProjectLayoutSnapshot layout = ProjectLayoutRuntimeMapper.ToSnapshot(
                 documentSession.RuntimeSession.PersistenceSession.Domain,
                 documentSession.RuntimeSession.Layout);
@@ -178,6 +178,15 @@ public sealed class ProjectWorkspaceController
         }
 
         return true;
+    }
+
+    public void Dispose()
+    {
+        Workspace.ActiveSessionChanged -= OnActiveSessionChanged;
+        foreach (DocumentSession session in Workspace.Sessions.ToArray())
+        {
+            Workspace.RemoveSession(session);
+        }
     }
 
     private bool PrepareSessionForClose(DocumentSession session, string operation)
