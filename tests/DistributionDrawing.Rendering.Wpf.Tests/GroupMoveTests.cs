@@ -120,7 +120,7 @@ public sealed class GroupMoveTests
     }
 
     [Fact]
-    public void AttachmentOnlyGroupMove_TranslatesOffsetAndPreservesRotation()
+    public void PoleSwitchOnlyGroupMove_IsRejectedAndPreservesLayout()
     {
         GroupFixture fixture = CreateFixture(includeAttachment: true);
         AttachmentLayout before = fixture.Layout.DrawingLayout.Attachments[
@@ -129,20 +129,16 @@ public sealed class GroupMoveTests
         SelectionSet selection = SelectionSet.Create([switchDevice]);
         var controller = new DeviceDragController();
 
-        Assert.True(controller.TryBeginGroupDrag(
+        Assert.False(controller.TryBeginGroupDrag(
             selection,
             switchDevice,
             before.Offset,
             fixture.Document,
             fixture.Layout));
-        Assert.True(controller.UpdatePreview(new DocumentPoint(
-            before.Offset.XMillimeters + 12,
-            before.Offset.YMillimeters - 8)));
 
-        AttachmentLayout moved = fixture.Layout.DrawingLayout.Attachments[
+        AttachmentLayout unchanged = fixture.Layout.DrawingLayout.Attachments[
             fixture.Attachment.AttachmentId];
-        Assert.Equal(new DocumentPoint(27, -8), moved.Offset);
-        Assert.Equal(before.RotationQuarterTurns, moved.RotationQuarterTurns);
+        Assert.Equal(before, unchanged);
     }
 
     [Fact]

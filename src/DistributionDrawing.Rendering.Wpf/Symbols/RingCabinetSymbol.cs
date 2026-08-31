@@ -237,15 +237,31 @@ public sealed class RingCabinetSymbol
 
         double baseline = (top + bottom + fontSize) / 2;
         bool fitsRight = right + gap + estimatedWidth <= intervalRight;
-        return fitsRight
-            ? (
+        if (fitsRight)
+        {
+            return (
                 new DocumentPoint(right, baseline),
                 new DocumentPoint(gap, 0),
-                LabelAlignment.Left)
-            : (
+                LabelAlignment.Left);
+        }
+
+        bool fitsLeft = left - gap - estimatedWidth >= intervalLeft;
+        if (fitsLeft)
+        {
+            return (
                 new DocumentPoint(left, baseline),
                 new DocumentPoint(-gap, 0),
                 LabelAlignment.Right);
+        }
+
+        double centeredX = Math.Clamp(
+            (left + right) / 2,
+            intervalLeft + estimatedWidth / 2,
+            intervalRight - estimatedWidth / 2);
+        return (
+            new DocumentPoint(centeredX, top),
+            new DocumentPoint(0, -gap),
+            LabelAlignment.Center);
     }
 
     private (DocumentPoint Anchor, DocumentPoint Offset) GetIntervalNumberPlacement(
