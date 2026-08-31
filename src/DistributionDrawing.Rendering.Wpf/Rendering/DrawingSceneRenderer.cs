@@ -23,7 +23,12 @@ public sealed class DrawingSceneRenderer
     {
         var visual = new DrawingVisual();
         using DrawingContext context = visual.RenderOpen();
-        context.DrawDrawing(RenderDrawing(scene, pixelsPerDip));
+        DrawingGroup drawing = RenderDrawing(scene, pixelsPerDip);
+        foreach (Drawing child in drawing.Children)
+        {
+            context.DrawDrawing(child);
+        }
+
         return visual;
     }
 

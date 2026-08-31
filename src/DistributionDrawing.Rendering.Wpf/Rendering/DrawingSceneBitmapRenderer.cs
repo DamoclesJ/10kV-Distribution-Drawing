@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.IO;
+using System.Runtime.InteropServices;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Rendering;
@@ -86,13 +87,35 @@ public sealed class DrawingSceneBitmapRenderer
         bitmap.Render(exportVisual);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
-        encoder.Save(output);
+        try
+        {
+            encoder.Save(output);
+        }
+        catch (InvalidOperationException exception) when (IsOutputWriteFailure(exception))
+        {
+            throw new IOException("无法写入 PNG 输出流。", exception);
+        }
+
         return new DrawingSceneBitmapResult(
             widthPixels,
             heightPixels,
             settings.Dpi,
             contentBounds,
             exportBounds);
+    }
+
+    private static bool IsOutputWriteFailure(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is IOException ||
+                current is COMException { HResult: unchecked((int)0x88982F71) })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void ValidateOptions(DrawingSceneBitmapOptions options)
