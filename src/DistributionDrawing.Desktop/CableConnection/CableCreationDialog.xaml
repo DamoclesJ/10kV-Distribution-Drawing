@@ -3,11 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="电缆参数"
         Width="360"
-        Height="220"
+        SizeToContent="Height"
         Style="{StaticResource DialogWindowStyle}"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
-  <StackPanel Margin="16">
+  <StackPanel Margin="16,16,16,20">
     <TextBlock Text="电缆型号" />
     <TextBox x:Name="CableTypeInput" Margin="0,4,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock Text="长度（米）" />

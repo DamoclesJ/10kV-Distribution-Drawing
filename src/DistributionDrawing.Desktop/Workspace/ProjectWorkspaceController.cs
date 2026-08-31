@@ -155,8 +155,27 @@ public sealed class ProjectWorkspaceController : IDisposable
     public bool CloseCurrentProject()
     {
         if (ActiveDocumentSession is not { } session) return false;
-        if (!PrepareSessionForClose(session, "关闭工程")) return false;
+        return CloseProject(session);
+    }
+
+    public bool CloseProject(DocumentSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!Workspace.Contains(session)) return false;
+        DocumentSession? original = ActiveDocumentSession;
+        if (!ReferenceEquals(original, session) && !session.IsDirty)
+        {
+            return Workspace.RemoveSession(session);
+        }
+
+        if (!PrepareSessionForClose(session, "关闭工程"))
+        {
+            RestoreActiveSession(original);
+            return false;
+        }
+
         Workspace.RemoveSession(session);
+        RestoreActiveSession(original);
         return true;
     }
 
@@ -204,6 +223,15 @@ public sealed class ProjectWorkspaceController : IDisposable
             DirtyDecision.Discard => true,
             _ => false
         };
+    }
+
+    private void RestoreActiveSession(DocumentSession? session)
+    {
+        if (session is not null && Workspace.Contains(session) &&
+            !ReferenceEquals(ActiveDocumentSession, session))
+        {
+            Workspace.ActivateSession(session);
+        }
     }
 
     private void OnActiveSessionChanged(

@@ -156,6 +156,8 @@ public sealed class SelectionMovePlanner
 
                 PoleAttachment? attachment = ResolvePoleAttachment(reference, document);
                 if (attachment is not null &&
+                    document.Devices.SingleOrDefault(item =>
+                        item.Id == attachment.AttachedDeviceId) is not SwitchDevice &&
                     layout.DrawingLayout.Attachments.ContainsKey(attachment.AttachmentId))
                 {
                     attachmentIds.Add(attachment.AttachmentId);
@@ -170,7 +172,11 @@ public sealed class SelectionMovePlanner
                 return;
 
             case SelectionTargetKind.PoleAttachment:
-                if (layout.DrawingLayout.Attachments.ContainsKey(reference.ObjectId))
+                PoleAttachment? selectedAttachment = ResolvePoleAttachment(reference, document);
+                if (selectedAttachment is not null &&
+                    document.Devices.SingleOrDefault(item =>
+                        item.Id == selectedAttachment.AttachedDeviceId) is not SwitchDevice &&
+                    layout.DrawingLayout.Attachments.ContainsKey(reference.ObjectId))
                 {
                     attachmentIds.Add(reference.ObjectId);
                 }

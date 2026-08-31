@@ -3,6 +3,7 @@ namespace DistributionDrawing.Desktop.Actions;
 public enum DesktopContextActionKind
 {
     Paste,
+    PasteAtCursor,
     SelectAll,
     FitDrawing,
     ToggleGrid,
@@ -34,7 +35,7 @@ public sealed class DesktopContextMenuResolver
         {
             return
             [
-                DesktopContextActionKind.Paste,
+                DesktopContextActionKind.PasteAtCursor,
                 DesktopContextActionKind.SelectAll,
                 DesktopContextActionKind.FitDrawing,
                 DesktopContextActionKind.ToggleGrid

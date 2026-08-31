@@ -3,11 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="添加电缆终端"
         Width="420"
-        Height="170"
+        SizeToContent="Height"
         Style="{StaticResource DialogWindowStyle}"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner">
-  <DockPanel Margin="16">
+  <DockPanel Margin="16,16,16,20">
     <StackPanel DockPanel.Dock="Bottom"
                 Margin="0,16,0,0"
                 HorizontalAlignment="Right"

@@ -40,11 +40,24 @@ public sealed class PoleAttachmentManagementController
     {
         ProjectRuntimeSession session = _getSession()
             ?? throw new InvalidOperationException("当前没有打开工程。");
-        RemovePoleSwitchAndBypassCommand command = _commandFactory
-            .CreateRemovePoleSwitchAndBypass(
+        PoleAttachment attachment = session.PersistenceSession.Domain.PoleAttachments
+            .SingleOrDefault(item => item.AttachmentId == attachmentId)
+            ?? throw new InvalidOperationException("所选附着设备不存在。");
+        Device attachedDevice = session.PersistenceSession.Domain.Devices
+            .SingleOrDefault(item => item.Id == attachment.AttachedDeviceId)
+            ?? throw new InvalidOperationException("所选附着设备缺少设备对象。");
+        ICommand command = attachedDevice switch
+        {
+            SwitchDevice => _commandFactory.CreateRemovePoleSwitchAndBypass(
                 session.PersistenceSession.Domain,
                 session.Layout,
-                attachmentId);
+                attachmentId),
+            CableTermination => _commandFactory.CreateRemoveCableTerminationAttachment(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                attachmentId),
+            _ => throw new InvalidOperationException("当前杆塔安装设备不支持删除。")
+        };
         session.CommandStack.ExecuteCommand(command, session.RebuildScene);
         session.SelectionManager.Clear();
         SceneChanged?.Invoke(this, EventArgs.Empty);

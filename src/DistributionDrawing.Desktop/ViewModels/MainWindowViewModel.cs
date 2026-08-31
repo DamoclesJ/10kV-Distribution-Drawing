@@ -5,6 +5,12 @@ using DistributionDrawing.Desktop.Services;
 
 namespace DistributionDrawing.Desktop.ViewModels;
 
+public enum ToolPalettePlacement
+{
+    Left,
+    Top
+}
+
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private double _zoom = 1.0;
@@ -14,6 +20,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private int _selectionCount;
     private bool _isWorkspaceEmpty = true;
     private bool _isDrawingEmpty;
+    private ToolPalettePlacement _toolPalettePlacement = ToolPalettePlacement.Left;
 
     public MainWindowViewModel(
         DesktopShellService shellService,
@@ -50,6 +57,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool IsWorkspaceEmpty => _isWorkspaceEmpty;
 
     public bool IsDrawingEmpty => _isDrawingEmpty;
+
+    public bool IsLeftToolPalette => _toolPalettePlacement == ToolPalettePlacement.Left;
+
+    public bool IsTopToolPalette => _toolPalettePlacement == ToolPalettePlacement.Top;
 
     public ICommand NewProjectCommand => Actions.New;
     public ICommand OpenProjectCommand => Actions.Open;
@@ -138,6 +149,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         _feedbackText = null;
         OnPropertyChanged(nameof(StatusText));
+    }
+
+    public void SetToolPalettePlacement(ToolPalettePlacement placement)
+    {
+        if (_toolPalettePlacement == placement)
+        {
+            return;
+        }
+
+        _toolPalettePlacement = placement;
+        OnPropertyChanged(nameof(IsLeftToolPalette));
+        OnPropertyChanged(nameof(IsTopToolPalette));
     }
 
     private void OnPropertyChanged(string propertyName) =>

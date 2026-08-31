@@ -34,7 +34,7 @@ public sealed class SelectionMovePlannerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Create_MapsAttachmentOrAttachedSwitchToAttachmentRoot(bool selectDevice)
+    public void Create_DoesNotCreateIndependentMoveRootForPoleSwitch(bool selectDevice)
     {
         PlannerFixture fixture = CreateFixture();
         SelectionReference reference = selectDevice
@@ -47,10 +47,8 @@ public sealed class SelectionMovePlannerTests
             fixture.Document,
             fixture.Layout);
 
-        SelectionMoveRoot root = Assert.Single(plan.Roots);
-        Assert.Equal(SelectionMoveRootKind.PoleAttachment, root.Kind);
-        Assert.Equal(fixture.Attachment.AttachmentId, root.ObjectId);
-        Assert.Equal(fixture.Pole.Id, root.ParentPoleId);
+        Assert.False(plan.CanMove);
+        Assert.Empty(plan.Roots);
     }
 
     [Fact]

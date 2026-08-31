@@ -32,6 +32,7 @@ public sealed class DesktopUserActionHandlers
     public required Action Redo { get; init; }
     public required Action Copy { get; init; }
     public required Action Paste { get; init; }
+    public Action? PasteAtCursor { get; init; }
     public required Action SelectAll { get; init; }
     public required Action Delete { get; init; }
     public required Action CancelCurrentOperation { get; init; }
@@ -98,6 +99,11 @@ public sealed class DesktopUserActions
         Paste = Create(
             "粘贴对象失败",
             handlers.Paste,
+            messages,
+            () => HasSession() && context.HasClipboardContent() && context.IsInteractionIdle());
+        PasteAtCursor = Create(
+            "粘贴对象失败",
+            handlers.PasteAtCursor ?? handlers.Paste,
             messages,
             () => HasSession() && context.HasClipboardContent() && context.IsInteractionIdle());
         SelectAll = Create(
@@ -181,7 +187,7 @@ public sealed class DesktopUserActions
         _all =
         [
             New, Open, Save, SaveAs, CloseDocument, ExportPng, Exit,
-            Undo, Redo, Copy, Paste, SelectAll, Delete, CancelCurrentOperation,
+            Undo, Redo, Copy, Paste, PasteAtCursor, SelectAll, Delete, CancelCurrentOperation,
             Select, CreatePole, CreateRingCabinet, CreateOverheadLine, CreateCable,
             AddCableTermination, AddPoleSwitch, AddGroundingPoint, AddWorkScope,
             ZoomIn, ZoomOut, FitDrawing, ToggleGrid, TypographySettings,
@@ -201,6 +207,7 @@ public sealed class DesktopUserActions
     public DesktopAction Redo { get; }
     public DesktopAction Copy { get; }
     public DesktopAction Paste { get; }
+    public DesktopAction PasteAtCursor { get; }
     public DesktopAction SelectAll { get; }
     public DesktopAction Delete { get; }
     public DesktopAction CancelCurrentOperation { get; }

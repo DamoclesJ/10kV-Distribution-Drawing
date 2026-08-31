@@ -111,4 +111,23 @@ public sealed class DesktopToolboxRuntimeTests
         viewModel.ClearFeedback();
         Assert.Equal("绘制电缆：请选择终点", viewModel.StatusText);
     }
+
+    [Fact]
+    public void ToolPalettePlacementChangesPresentationWithoutChangingActiveTool()
+    {
+        var actions = DesktopCommandRuntimeTests.CreateActions(() => null);
+        var viewModel = new MainWindowViewModel(new DesktopShellService(), actions);
+        viewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateOverheadLine);
+
+        viewModel.SetToolPalettePlacement(ToolPalettePlacement.Top);
+
+        Assert.True(viewModel.IsTopToolPalette);
+        Assert.False(viewModel.IsLeftToolPalette);
+        Assert.Equal(DesktopToolMode.CreateOverheadLine, viewModel.Toolbox.SelectedMode);
+        Assert.Same(actions.CreateOverheadLine, viewModel.CreateOverheadLineCommand);
+
+        viewModel.SetToolPalettePlacement(ToolPalettePlacement.Left);
+        Assert.True(viewModel.IsLeftToolPalette);
+        Assert.Equal(DesktopToolMode.CreateOverheadLine, viewModel.Toolbox.SelectedMode);
+    }
 }

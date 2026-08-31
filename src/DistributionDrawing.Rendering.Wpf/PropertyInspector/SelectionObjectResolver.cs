@@ -242,6 +242,7 @@ public sealed class SelectionObjectResolver
         return new ResolvedSelection
         {
             Reference = reference,
+            SwitchDevice = attachedDevice as SwitchDevice,
             PoleAttachment = attachment,
             AttachedDevice = attachedDevice,
             CableTermination = attachedDevice as CableTermination,

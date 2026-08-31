@@ -5,7 +5,7 @@
         Style="{StaticResource DialogWindowStyle}"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner">
-  <StackPanel Margin="16">
+  <StackPanel Margin="16,16,16,20">
     <TextBlock Text="开关类型" />
     <ComboBox x:Name="SwitchKindInput" Margin="0,6,0,16" MinWidth="220" Style="{StaticResource DialogFieldStyle}" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

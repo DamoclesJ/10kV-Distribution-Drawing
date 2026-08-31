@@ -199,9 +199,15 @@ public sealed class PropertyProjector
                     "机械状态",
                     switchDevice.SwitchState == SwitchState.Closed ? "合" : "分"),
                 DomainRow("DispatchNumber", "调度编号", switchDevice.DispatchNumber)),
-            LayoutSection(selection.RingCabinetIntervalLayout)
+            LayoutSection(selection.PoleAttachment is not null
+                ? selection.AttachmentLayout
+                : selection.RingCabinetIntervalLayout)
         };
-        return Snapshot(selection, "开关设备", switchDevice.DisplayName ?? "开关设备", sections);
+        return Snapshot(
+            selection,
+            selection.PoleAttachment is null ? "开关设备" : "柱上开关",
+            switchDevice.DisplayName ?? "开关设备",
+            sections);
     }
 
     private static PropertyInspectorSnapshot ProjectPole(ResolvedSelection selection)

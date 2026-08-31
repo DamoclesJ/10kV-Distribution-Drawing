@@ -72,6 +72,15 @@
         <MenuItem Header="显示网格" IsCheckable="True"
                   IsChecked="{Binding GridVisible, Mode=OneWay}" Command="{Binding ToggleGridCommand}" />
         <Separator />
+        <MenuItem Header="工具布局">
+          <MenuItem Header="左侧工具箱" IsCheckable="True"
+                    IsChecked="{Binding IsLeftToolPalette, Mode=OneWay}"
+                    Click="OnUseLeftToolPalette" />
+          <MenuItem Header="顶部工具栏" IsCheckable="True"
+                    IsChecked="{Binding IsTopToolPalette, Mode=OneWay}"
+                    Click="OnUseTopToolPalette" />
+        </MenuItem>
+        <Separator />
         <MenuItem Header="图面字号设置" Command="{Binding TypographySettingsCommand}" />
       </MenuItem>
     </Menu>
@@ -119,6 +128,63 @@
       </ToolBar>
     </ToolBarTray>
 
+    <Border DockPanel.Dock="Top"
+            Padding="8,4"
+            Background="{StaticResource PanelBackgroundBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="0,0,0,1">
+      <Border.Style>
+        <Style TargetType="Border">
+          <Setter Property="Visibility" Value="Collapsed" />
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding IsTopToolPalette}" Value="True">
+              <Setter Property="Visibility" Value="Visible" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </Border.Style>
+      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <StackPanel Orientation="Horizontal">
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="选择"
+                        IsChecked="{Binding Toolbox.IsSelectActive, Mode=OneWay}" Command="{Binding SelectCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.Select}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Fill="Transparent" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="选择" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="杆塔"
+                        IsChecked="{Binding Toolbox.IsPoleActive, Mode=OneWay}" Command="{Binding CreatePoleCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.Pole}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="杆塔" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="环网柜"
+                        IsChecked="{Binding Toolbox.IsRingCabinetActive, Mode=OneWay}" Command="{Binding CreateRingCabinetCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.RingCabinet}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="环网柜" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="架空线"
+                        IsChecked="{Binding Toolbox.IsOverheadLineActive, Mode=OneWay}" Command="{Binding CreateOverheadLineCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.OverheadLine}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="架空线" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="电缆"
+                        IsChecked="{Binding Toolbox.IsCableActive, Mode=OneWay}" Command="{Binding CreateCableCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.Cable}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="电缆" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="电缆终端"
+                        IsChecked="{Binding Toolbox.IsCableTerminationActive, Mode=OneWay}" Command="{Binding AddCableTerminationCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.CableTermination}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="电缆终端" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="柱上开关"
+                        IsChecked="{Binding Toolbox.IsPoleSwitchActive, Mode=OneWay}" Command="{Binding AddPoleSwitchCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.PoleSwitch}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="柱上开关" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="工作地线"
+                        IsChecked="{Binding Toolbox.IsGroundingPointActive, Mode=OneWay}" Command="{Binding AddGroundingPointCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.WorkGrounding}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="工作地线" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="工作范围"
+                        IsChecked="{Binding Toolbox.IsWorkScopeActive, Mode=OneWay}" Command="{Binding AddWorkScopeCommand}">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.WorkScope}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="工作范围" /></StackPanel>
+          </ToggleButton>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
     <StatusBar DockPanel.Dock="Bottom"
                Padding="8,1"
                Background="{StaticResource PanelBackgroundBrush}"
@@ -142,15 +208,25 @@
 
     <Grid Background="{StaticResource ShellBackgroundBrush}">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="180" />
+        <ColumnDefinition Width="Auto" />
         <ColumnDefinition />
         <ColumnDefinition Width="300" />
       </Grid.ColumnDefinitions>
 
       <Border Grid.Column="0"
+              Width="180"
               Padding="10,8"
-              Style="{StaticResource ShellPanelStyle}"
               BorderThickness="0,0,1,0">
+        <Border.Style>
+          <Style TargetType="Border" BasedOn="{StaticResource ShellPanelStyle}">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsLeftToolPalette}" Value="False">
+                <Setter Property="Visibility" Value="Collapsed" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </Border.Style>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel>
             <ToggleButton Style="{StaticResource ToolboxItemStyle}"
@@ -257,22 +333,44 @@
               BorderBrush="{StaticResource BorderBrush}"
               BorderThickness="1">
         <DockPanel>
-          <TabControl x:Name="DocumentTabs"
-                      DockPanel.Dock="Top"
-                      Height="34"
-                      Background="{StaticResource PanelBackgroundBrush}"
-                      BorderBrush="{StaticResource BorderBrush}"
-                      BorderThickness="0,0,0,1"
-                      ItemContainerStyle="{StaticResource DocumentTabStyle}"
-                      SelectionChanged="OnDocumentTabSelectionChanged">
-            <TabControl.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding TabTitle}"
-                           ToolTip="{Binding FilePath}"
-                           TextTrimming="CharacterEllipsis" />
-              </DataTemplate>
-            </TabControl.ItemTemplate>
-          </TabControl>
+          <Grid DockPanel.Dock="Top" Height="34"
+                Background="{StaticResource PanelBackgroundBrush}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TabControl x:Name="DocumentTabs"
+                        Grid.Column="0"
+                        Style="{StaticResource HeaderOnlyDocumentTabControlStyle}"
+                        Background="{StaticResource PanelBackgroundBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="0,0,0,1"
+                        ItemContainerStyle="{StaticResource DocumentTabStyle}"
+                        SelectionChanged="OnDocumentTabSelectionChanged">
+              <TabControl.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock MaxWidth="180"
+                               VerticalAlignment="Center"
+                               Text="{Binding TabTitle}"
+                               ToolTip="{Binding FilePath}"
+                               TextTrimming="CharacterEllipsis" />
+                    <Button Style="{StaticResource DocumentTabCloseButtonStyle}"
+                            Tag="{Binding}"
+                            PreviewMouseLeftButtonDown="OnCloseDocumentTabPreview"
+                            Click="OnCloseDocumentTab" />
+                  </StackPanel>
+                </DataTemplate>
+              </TabControl.ItemTemplate>
+            </TabControl>
+            <Button Grid.Column="1"
+                    Width="34" Height="34"
+                    Padding="0"
+                    FontSize="18"
+                    Content="+"
+                    ToolTip="新建工程"
+                    Command="{Binding NewProjectCommand}" />
+          </Grid>
           <Grid Background="{StaticResource CanvasBackgroundBrush}">
             <renderingCanvas:DrawingVisualHost x:Name="DrawingSurface"
                                            MouseDown="OnDrawingSurfaceMouseDown"

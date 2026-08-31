@@ -103,6 +103,38 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
+    public void PasteAtWorldPointUsesFragmentCenterAndRemainsOneUndoUnit()
+    {
+        ProjectRuntimeSession session = CreateSession("定位粘贴");
+        AddPoleCommand source = AddPole(session, new DocumentPoint(20, 30));
+        PoleLayout sourceLayout = session.Layout.DrawingLayout.Poles[source.Pole.Id];
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            source.Pole.Id));
+        var clipboard = new DrawingClipboardService();
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        int historyBefore = session.CommandStack.History.Count;
+        var target = new DocumentPoint(100, 120);
+
+        Assert.True(clipboard.PasteAt(session, target).IsSuccess);
+
+        Pole pasted = Assert.Single(
+            session.PersistenceSession.Domain.Devices.OfType<Pole>(),
+            item => item.Id != source.Pole.Id);
+        PoleLayout pastedLayout = session.Layout.DrawingLayout.Poles[pasted.Id];
+        Assert.Equal(
+            target.XMillimeters - sourceLayout.WidthMillimeters / 2,
+            pastedLayout.Position.XMillimeters);
+        Assert.Equal(
+            target.YMillimeters - sourceLayout.HeightMillimeters / 2,
+            pastedLayout.Position.YMillimeters);
+        Assert.Equal(historyBefore + 1, session.CommandStack.History.Count);
+        Assert.Equal(pasted.Id, session.SelectionManager.Selected?.ObjectId);
+        Assert.True(session.CommandStack.Undo());
+        Assert.DoesNotContain(session.PersistenceSession.Domain.Devices, item => item.Id == pasted.Id);
+    }
+
+    [Fact]
     public void RepeatedPaste_IncrementsOffsetAndNewCopyResetsSequence()
     {
         ProjectRuntimeSession session = CreateSession("偏移序列");

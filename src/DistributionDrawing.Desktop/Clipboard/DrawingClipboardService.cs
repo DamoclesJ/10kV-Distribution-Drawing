@@ -83,6 +83,53 @@ public sealed class DrawingClipboardService
         _successfulPasteCount++;
         return ClipboardActionResult.Success("已粘贴所选对象。");
     }
+
+    public ClipboardActionResult PasteAt(
+        ProjectRuntimeSession? target,
+        DocumentPoint worldPoint)
+    {
+        if (target is null)
+        {
+            return ClipboardActionResult.Failure("当前没有打开的工程。");
+        }
+
+        if (_fragment is null)
+        {
+            return ClipboardActionResult.Failure("剪贴板中没有可粘贴的绘图对象。");
+        }
+
+        DocumentPoint anchor = GetAnchor(_fragment);
+        DocumentPoint offset = new(
+            worldPoint.XMillimeters - anchor.XMillimeters,
+            worldPoint.YMillimeters - anchor.YMillimeters);
+        MaterializedPaste paste = _materializer.Materialize(_fragment, target, offset);
+        target.CommandStack.ExecuteCommand(paste.Command, target.RebuildScene);
+        _successfulPasteCount++;
+        return ClipboardActionResult.Success("已粘贴到指定位置。");
+    }
+
+    private static DocumentPoint GetAnchor(ClipboardDrawingFragment fragment)
+    {
+        var bounds = new List<(double Left, double Top, double Right, double Bottom)>();
+        bounds.AddRange(fragment.Poles.Select(item => (
+            item.Layout.Position.XMillimeters,
+            item.Layout.Position.YMillimeters,
+            item.Layout.Position.XMillimeters + item.Layout.WidthMillimeters,
+            item.Layout.Position.YMillimeters + item.Layout.HeightMillimeters)));
+        bounds.AddRange(fragment.RingCabinets.Select(item => (
+            item.Layout.Position.XMillimeters,
+            item.Layout.Position.YMillimeters,
+            item.Layout.Position.XMillimeters + item.Layout.WidthMillimeters,
+            item.Layout.Position.YMillimeters + item.Layout.HeightMillimeters)));
+        if (bounds.Count == 0)
+        {
+            throw new InvalidOperationException("剪贴板中没有可定位的绘图对象。");
+        }
+
+        return new DocumentPoint(
+            (bounds.Min(item => item.Left) + bounds.Max(item => item.Right)) / 2,
+            (bounds.Min(item => item.Top) + bounds.Max(item => item.Bottom)) / 2);
+    }
 }
 
 public sealed class DrawingClipboardController
@@ -106,4 +153,7 @@ public sealed class DrawingClipboardController
     public ClipboardActionResult Copy() => _service.Copy(_activeSession());
 
     public ClipboardActionResult Paste() => _service.Paste(_activeSession());
+
+    public ClipboardActionResult PasteAt(DocumentPoint worldPoint) =>
+        _service.PasteAt(_activeSession(), worldPoint);
 }

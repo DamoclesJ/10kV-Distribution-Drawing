@@ -18,7 +18,7 @@ public sealed class DesktopContextMenuResolverTests
     {
         Assert.Equal(
             [
-                DesktopContextActionKind.Paste,
+                DesktopContextActionKind.PasteAtCursor,
                 DesktopContextActionKind.SelectAll,
                 DesktopContextActionKind.FitDrawing,
                 DesktopContextActionKind.ToggleGrid

@@ -525,6 +525,63 @@ public sealed class RingCabinetProfessionalSymbolTests
             intervalNumber.Anchor.YMillimeters);
     }
 
+    [Theory]
+    [InlineData(GroundingStructureKind.UpperIsolationGrounding)]
+    [InlineData(GroundingStructureKind.UpperLowerGrounding)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding)]
+    public void SwitchBusinessNumbersStayInsideTheirOwnIntervalAndBesideOwnSymbol(
+        GroundingStructureKind structure)
+    {
+        RingCabinet cabinet = CreateIntegratedCabinet(4, structure);
+        RingCabinetLayout layout = CreateLayout(cabinet);
+        IReadOnlyList<LabelRequest> requests =
+            new RingCabinetSymbol(new SymbolLibrary()).CreateLabelRequests(cabinet, layout);
+
+        foreach (RingCabinetInterval interval in cabinet.Intervals)
+        {
+            RingCabinetIntervalLayout intervalLayout = layout.IntervalLayouts[interval.IntervalId];
+            double intervalLeft = layout.Position.XMillimeters +
+                                  intervalLayout.RelativePosition.XMillimeters;
+            double intervalRight = intervalLeft + intervalLayout.WidthMillimeters;
+            foreach (SwitchDevice device in interval.SwitchDevices)
+            {
+                LabelRequest? request = requests.SingleOrDefault(item =>
+                    item.TargetKind == LabelTargetKind.SwitchDevice &&
+                    item.TargetId == device.Id);
+                if (request is null) continue;
+
+                double x = request.Anchor.XMillimeters + request.Offset.XMillimeters;
+                double y = request.Anchor.YMillimeters + request.Offset.YMillimeters;
+                double width = Math.Max(
+                    request.FontSizeMillimeters,
+                    request.Text.Length * request.FontSizeMillimeters * 0.6);
+                double labelLeft = request.PreferredAlignment switch
+                {
+                    LabelAlignment.Left => x,
+                    LabelAlignment.Right => x - width,
+                    _ => x - width / 2
+                };
+                var labelBounds = new DocumentRect(
+                    labelLeft,
+                    y - request.FontSizeMillimeters,
+                    width,
+                    request.FontSizeMillimeters);
+                RingCabinetSwitchLayout switchLayout = intervalLayout.SwitchLayouts[device.Id];
+                var switchBounds = new DocumentRect(
+                    intervalLeft + switchLayout.RelativePosition.XMillimeters,
+                    layout.Position.YMillimeters +
+                    intervalLayout.RelativePosition.YMillimeters +
+                    switchLayout.RelativePosition.YMillimeters,
+                    switchLayout.WidthMillimeters,
+                    switchLayout.HeightMillimeters);
+
+                Assert.True(labelBounds.XMillimeters >= intervalLeft);
+                Assert.True(labelBounds.XMillimeters + labelBounds.WidthMillimeters <= intervalRight);
+                Assert.False(Overlaps(labelBounds, switchBounds));
+            }
+        }
+    }
+
     [Fact]
     public void SceneSelection_PreservesCabinetIntervalAndEverySwitchTarget()
     {
@@ -656,6 +713,12 @@ public sealed class RingCabinetProfessionalSymbolTests
                 .ToArray());
         return new RingCabinetRenderer().Render(cabinet, CreateLayout(cabinet));
     }
+
+    private static bool Overlaps(DocumentRect left, DocumentRect right) =>
+        left.XMillimeters < right.XMillimeters + right.WidthMillimeters &&
+        left.XMillimeters + left.WidthMillimeters > right.XMillimeters &&
+        left.YMillimeters < right.YMillimeters + right.HeightMillimeters &&
+        left.YMillimeters + left.HeightMillimeters > right.YMillimeters;
 
     private static RingCabinet CreateLoadSwitchCabinet(
         int intervalCount,

@@ -171,35 +171,27 @@ public sealed class RingCabinetSymbol
                 }
 
                 string? switchBusinessNumber = interval.GetSwitchBusinessNumber(switchDevice.Id);
-                DocumentPoint switchOrigin = new(
-                    origin.XMillimeters + switchLayout.RelativePosition.XMillimeters,
-                    origin.YMillimeters + switchLayout.RelativePosition.YMillimeters);
-
                 if (!string.IsNullOrWhiteSpace(switchBusinessNumber) &&
                     !string.Equals(
                         switchBusinessNumber,
                         interval.BusinessNumber,
                         StringComparison.Ordinal))
                 {
-                    double labelGap = _metrics.Switch.ContactRadius + 1;
-                    DocumentPoint labelOffset = switchDevice.SwitchKind switch
-                    {
-                        SwitchKind.GroundSwitch when
-                            interval.GroundingStructureKind ==
-                            GroundingStructureKind.UpperLowerGrounding =>
-                            new DocumentPoint(0, -labelGap),
-                        SwitchKind.GroundSwitch =>
-                            new DocumentPoint(0, switchLayout.HeightMillimeters + labelGap),
-                        _ => new DocumentPoint(
-                            switchLayout.WidthMillimeters + labelGap,
-                            -labelGap)
-                    };
+                    (DocumentPoint labelAnchor, DocumentPoint labelOffset, LabelAlignment alignment) =
+                        GetSwitchNumberPlacement(
+                            interval,
+                            intervalLayout,
+                            origin,
+                            switchDevice,
+                            switchLayout,
+                            switchBusinessNumber);
                     requests.Add(new LabelRequest(
                         LabelTargetKind.SwitchDevice,
                         switchDevice.Id,
                         switchBusinessNumber,
-                        switchOrigin,
+                        labelAnchor,
                         labelOffset,
+                        alignment,
                         priority: 70,
                         fontSizeMillimeters: _metrics.Typography.SwitchNumberFontSize));
                 }
@@ -208,6 +200,52 @@ public sealed class RingCabinetSymbol
         }
 
         return requests;
+    }
+
+    private (DocumentPoint Anchor, DocumentPoint Offset, LabelAlignment Alignment)
+        GetSwitchNumberPlacement(
+            RingCabinetInterval interval,
+            RingCabinetIntervalLayout intervalLayout,
+            DocumentPoint intervalOrigin,
+            SwitchDevice switchDevice,
+            RingCabinetSwitchLayout switchLayout,
+            string label)
+    {
+        double gap = _metrics.Switch.ContactRadius + 1;
+        double fontSize = _metrics.Typography.SwitchNumberFontSize;
+        double estimatedWidth = Math.Max(fontSize, label.Length * fontSize * 0.6);
+        double left = intervalOrigin.XMillimeters + switchLayout.RelativePosition.XMillimeters;
+        double top = intervalOrigin.YMillimeters + switchLayout.RelativePosition.YMillimeters;
+        double right = left + switchLayout.WidthMillimeters;
+        double bottom = top + switchLayout.HeightMillimeters;
+        double intervalLeft = intervalOrigin.XMillimeters + 1;
+        double intervalRight = intervalOrigin.XMillimeters + intervalLayout.WidthMillimeters - 1;
+
+        if (switchDevice.SwitchKind == SwitchKind.GroundSwitch)
+        {
+            double centerX = Math.Clamp(
+                (left + right) / 2,
+                intervalLeft + estimatedWidth / 2,
+                intervalRight - estimatedWidth / 2);
+            bool placeAbove = interval.GroundingStructureKind ==
+                GroundingStructureKind.UpperLowerGrounding;
+            return (
+                new DocumentPoint(centerX, placeAbove ? top : bottom),
+                new DocumentPoint(0, placeAbove ? -gap : gap + fontSize),
+                LabelAlignment.Center);
+        }
+
+        double baseline = (top + bottom + fontSize) / 2;
+        bool fitsRight = right + gap + estimatedWidth <= intervalRight;
+        return fitsRight
+            ? (
+                new DocumentPoint(right, baseline),
+                new DocumentPoint(gap, 0),
+                LabelAlignment.Left)
+            : (
+                new DocumentPoint(left, baseline),
+                new DocumentPoint(-gap, 0),
+                LabelAlignment.Right);
     }
 
     private (DocumentPoint Anchor, DocumentPoint Offset) GetIntervalNumberPlacement(

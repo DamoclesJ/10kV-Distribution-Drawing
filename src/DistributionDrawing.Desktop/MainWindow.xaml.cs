@@ -81,6 +81,7 @@ public partial class MainWindow : Window
     private bool _groundingPointPickMode;
     private Guid? _pendingGroundingPointTerminalId;
     private WorkScopePickState _workScopePickState;
+    private DocumentPoint? _contextMenuWorldPoint;
     private BoundaryPointCommandValue? _pendingWorkScopeStartBoundary;
     private BoundaryPointCommandValue? _pendingWorkScopeEndBoundary;
     private Guid? _pendingWorkScopeTerminalId;
@@ -159,6 +160,7 @@ public partial class MainWindow : Window
                 Redo = OnRedoRequested,
                 Copy = ExecuteCopyAction,
                 Paste = ExecutePasteAction,
+                PasteAtCursor = ExecutePasteAtCursorAction,
                 SelectAll = OnSelectAllRequested,
                 Delete = OnDeleteRequested,
                 CancelCurrentOperation = CancelCurrentOperation,
@@ -418,6 +420,25 @@ public partial class MainWindow : Window
     private void ExecutePasteAction()
     {
         ClipboardActionResult result = _clipboard.Paste();
+        if (!result.IsSuccess)
+        {
+            _messageService.ShowError("无法粘贴对象", result.Message);
+            return;
+        }
+
+        OnDrawingToolVisualChanged(this, EventArgs.Empty);
+        ShowTransientFeedback(result.Message);
+    }
+
+    private void ExecutePasteAtCursorAction()
+    {
+        if (_contextMenuWorldPoint is not DocumentPoint target)
+        {
+            ExecutePasteAction();
+            return;
+        }
+
+        ClipboardActionResult result = _clipboard.PasteAt(target);
         if (!result.IsSuccess)
         {
             _messageService.ShowError("无法粘贴对象", result.Message);
@@ -765,6 +786,34 @@ public partial class MainWindow : Window
             _workspace.Workspace.ActivateSession(session);
         }
     }
+
+    private void OnCloseDocumentTab(object sender, RoutedEventArgs e)
+    {
+        CloseDocumentTab(sender);
+        e.Handled = true;
+    }
+
+    private void OnCloseDocumentTabPreview(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        CloseDocumentTab(sender);
+        e.Handled = true;
+    }
+
+    private void CloseDocumentTab(object sender)
+    {
+        if (sender is Button { Tag: DocumentSession session })
+        {
+            _workspace.CloseProject(session);
+        }
+    }
+
+    private void OnUseLeftToolPalette(object sender, RoutedEventArgs e) =>
+        _shellViewModel.SetToolPalettePlacement(ToolPalettePlacement.Left);
+
+    private void OnUseTopToolPalette(object sender, RoutedEventArgs e) =>
+        _shellViewModel.SetToolPalettePlacement(ToolPalettePlacement.Top);
 
     private void UpdateWindowTitle()
     {
@@ -1165,6 +1214,7 @@ public partial class MainWindow : Window
 
         DocumentPoint point = _viewport.Transform.ViewToDocument(
             e.GetPosition(DrawingSurface));
+        _contextMenuWorldPoint = point;
         SelectionReference? target = _currentScene.HitTestIndex.HitTest(
             point,
             _viewport.Transform.ViewDistanceToDocument(4));
@@ -1216,6 +1266,7 @@ public partial class MainWindow : Window
         (string header, System.Windows.Input.ICommand command) = actionKind switch
         {
             DesktopContextActionKind.Paste => ("粘贴", _actions.Paste),
+            DesktopContextActionKind.PasteAtCursor => ("粘贴到此处", _actions.PasteAtCursor),
             DesktopContextActionKind.SelectAll => ("全选", _actions.SelectAll),
             DesktopContextActionKind.FitDrawing => ("适合图形", _actions.FitDrawing),
             DesktopContextActionKind.ToggleGrid => ("显示网格", _actions.ToggleGrid),
@@ -1239,7 +1290,7 @@ public partial class MainWindow : Window
         };
         string? iconKey = actionKind switch
         {
-            DesktopContextActionKind.Paste => "Icon.Paste",
+            DesktopContextActionKind.Paste or DesktopContextActionKind.PasteAtCursor => "Icon.Paste",
             DesktopContextActionKind.Copy => "Icon.Copy",
             DesktopContextActionKind.Delete => "Icon.Delete",
             DesktopContextActionKind.FitDrawing => "Icon.Fit",
@@ -1269,6 +1320,7 @@ public partial class MainWindow : Window
         actionKind switch
         {
             DesktopContextActionKind.Paste or
+            DesktopContextActionKind.PasteAtCursor or
             DesktopContextActionKind.SelectAll or
             DesktopContextActionKind.Copy or
             DesktopContextActionKind.Delete => 0,
@@ -1942,15 +1994,17 @@ public partial class MainWindow : Window
                 : session.PersistenceSession.Domain.Devices.SingleOrDefault(device =>
                     device.Id == attachment.AttachedDeviceId);
             dragStarted = attachment is not null &&
-                          attachedDevice is CableTermination or SwitchDevice
+                          attachedDevice is CableTermination
                 ? _deviceDrag.TryBeginAttachmentDrag(
                     target,
                     attachment.AttachmentId,
                     documentPoint,
                     session.Layout,
                     attachment.PoleId,
-                    attachedDevice is CableTermination)
-                : (hit is not null && _cableRouteDrag.TryBeginDrag(
+                    true)
+                : attachedDevice is SwitchDevice
+                    ? false
+                    : (hit is not null && _cableRouteDrag.TryBeginDrag(
                        hit,
                        _currentScene.HitTestIndex.FindAll(target),
                        session.Layout)) ||

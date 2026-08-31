@@ -133,6 +133,44 @@ public sealed class ProjectWorkspaceMultiDocumentTests : IDisposable
     }
 
     [Fact]
+    public void ClosingNonActiveSessionTargetsThatTabAndKeepsActiveSession()
+    {
+        var dialogs = new TestDialogs();
+        dialogs.NewRequests.Enqueue(new NewProjectRequest(NextPath(), "工程 A", null));
+        dialogs.NewRequests.Enqueue(new NewProjectRequest(NextPath(), "工程 B", null));
+        ProjectWorkspaceController controller = CreateController(dialogs);
+        Assert.True(controller.NewProject());
+        DocumentSession first = controller.ActiveDocumentSession!;
+        Assert.True(controller.NewProject());
+        DocumentSession active = controller.ActiveDocumentSession!;
+
+        Assert.True(controller.CloseProject(first));
+
+        Assert.Same(active, controller.ActiveDocumentSession);
+        Assert.DoesNotContain(first, controller.Workspace.Sessions);
+    }
+
+    [Fact]
+    public void CancellingDirtyNonActiveTabCloseRestoresOriginalActiveSession()
+    {
+        var dialogs = new TestDialogs();
+        dialogs.NewRequests.Enqueue(new NewProjectRequest(NextPath(), "工程 A", null));
+        dialogs.NewRequests.Enqueue(new NewProjectRequest(NextPath(), "工程 B", null));
+        dialogs.DirtyDecisions.Enqueue(DirtyDecision.Cancel);
+        ProjectWorkspaceController controller = CreateController(dialogs);
+        Assert.True(controller.NewProject());
+        DocumentSession first = controller.ActiveDocumentSession!;
+        first.RuntimeSession.CommandStack.ExecuteCommand(new TestCommand());
+        Assert.True(controller.NewProject());
+        DocumentSession active = controller.ActiveDocumentSession!;
+
+        Assert.False(controller.CloseProject(first));
+
+        Assert.Same(active, controller.ActiveDocumentSession);
+        Assert.Contains(first, controller.Workspace.Sessions);
+    }
+
+    [Fact]
     public void ExitChecksEveryDirtySessionAndCancelStopsExit()
     {
         var dialogs = new TestDialogs();
