@@ -31,30 +31,31 @@ public sealed class DrawingSceneRenderer
     {
         ArgumentNullException.ThrowIfNull(scene);
         var drawing = new DrawingGroup();
-        using DrawingContext context = drawing.Open();
-
-        foreach (SceneElement element in scene.Elements)
+        using (DrawingContext context = drawing.Open())
         {
-            switch (element)
+            foreach (SceneElement element in scene.Elements)
             {
-                case SceneLine line:
-                    DrawLine(context, line);
-                    break;
-                case SceneEllipse ellipse:
-                    DrawEllipse(context, ellipse);
-                    break;
-                case ScenePolyline polyline:
-                    DrawPolyline(context, polyline);
-                    break;
-                case SceneArc arc:
-                    DrawArc(context, arc);
-                    break;
-                case SceneRectangle rectangle:
-                    DrawRectangle(context, rectangle);
-                    break;
-                case SceneText text:
-                    DrawText(context, text, pixelsPerDip);
-                    break;
+                switch (element)
+                {
+                    case SceneLine line:
+                        DrawLine(context, line);
+                        break;
+                    case SceneEllipse ellipse:
+                        DrawEllipse(context, ellipse);
+                        break;
+                    case ScenePolyline polyline:
+                        DrawPolyline(context, polyline);
+                        break;
+                    case SceneArc arc:
+                        DrawArc(context, arc);
+                        break;
+                    case SceneRectangle rectangle:
+                        DrawRectangle(context, rectangle);
+                        break;
+                    case SceneText text:
+                        DrawText(context, text, pixelsPerDip);
+                        break;
+                }
             }
         }
 
