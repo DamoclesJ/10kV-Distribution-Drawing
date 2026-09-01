@@ -100,6 +100,7 @@ PT 不是独立柜体，而是一二次融合环网柜内部的特殊间隔。DT
 | [`docs/ring-cabinet-design.md`](docs/ring-cabinet-design.md) | 两类环网柜、普通间隔、PT 间隔及 DTU 联动设计。 |
 | [`docs/drawing-rule.md`](docs/drawing-rule.md) | 配电工作票和现场勘察附图的专业绘图规则及软件模型映射。 |
 | [`docs/implementation-plan.md`](docs/implementation-plan.md) | .NET/WPF 技术路线、项目边界、工程文件、绘制输出和实施顺序。 |
+| [`docs/v1-release-checklist.md`](docs/v1-release-checklist.md) | V1 Windows 功能回归与 portable clean-machine 离线验收清单。 |
 | `reference/` | 项目使用的原始规范资料，仅作为专业规则和图元核对依据。 |
 
 如文档之间出现 MVP 范围差异，以 `docs/requirements.md` 为第一阶段范围判断依据；专业图面表达以确认后的规范整理结果为准。
