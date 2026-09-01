@@ -566,6 +566,75 @@ public sealed class RingCabinetProfessionalSymbolTests
     }
 
     [Fact]
+    public void BusinessNumbersSupportMultiDigitBayIndicesWithinSemanticGutters()
+    {
+        RingCabinet cabinet = CreateCabinet(
+            "Multi-digit business numbers",
+            RingCabinetIntervalDefinition.CreateLoadSwitch(
+                10,
+                SwitchState.Open,
+                SwitchState.Open),
+            RingCabinetIntervalDefinition.CreateLoadSwitch(
+                3,
+                SwitchState.Open,
+                SwitchState.Open),
+            RingCabinetIntervalDefinition.CreateLoadSwitch(
+                8,
+                SwitchState.Open,
+                SwitchState.Open));
+        RingCabinetLayout layout = CreateLayout(cabinet);
+        RingCabinetInterval interval = cabinet.Intervals[0];
+        RingCabinetIntervalLayout intervalLayout =
+            layout.IntervalLayouts[interval.IntervalId];
+        IReadOnlyList<LabelRequest> requests =
+            new RingCabinetSymbol(new SymbolLibrary()).CreateLabelRequests(cabinet, layout);
+        double intervalLeft = layout.Position.XMillimeters +
+                              intervalLayout.RelativePosition.XMillimeters;
+        double intervalRight = intervalLeft + intervalLayout.WidthMillimeters;
+
+        LabelRequest intervalNumber = Assert.Single(requests, request =>
+            request.TargetKind == LabelTargetKind.Interval &&
+            request.TargetId == interval.IntervalId);
+        SwitchDevice mainSwitch = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.LoadSwitch);
+        DocumentRect mainBounds = MeasureLabel(intervalNumber);
+        DocumentRect mainSwitchBounds = CreateVisualBounds(
+            interval,
+            intervalLayout,
+            layout,
+            mainSwitch);
+        AssertSemanticSide(
+            mainBounds,
+            mainSwitchBounds,
+            TestSemanticLabelSide.Right);
+        Assert.True(
+            mainBounds.XMillimeters + mainBounds.WidthMillimeters <=
+            intervalRight + DrawingMetrics.Default.RingCabinet.IntervalSpacing + 0.001);
+
+        SwitchDevice groundSwitch = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.GroundSwitch);
+        LabelRequest groundNumber = Assert.Single(requests, request =>
+            request.TargetKind == LabelTargetKind.SwitchDevice &&
+            request.TargetId == groundSwitch.Id);
+        DocumentRect groundBounds = MeasureLabel(groundNumber);
+        DocumentRect groundSwitchBounds = CreateVisualBounds(
+            interval,
+            intervalLayout,
+            layout,
+            groundSwitch);
+        AssertSemanticSide(
+            groundBounds,
+            groundSwitchBounds,
+            TestSemanticLabelSide.Below);
+        Assert.True(groundBounds.XMillimeters >= intervalLeft + 1 - 0.001);
+        Assert.True(
+            groundBounds.XMillimeters + groundBounds.WidthMillimeters <=
+            intervalRight - 1 + 0.001);
+
+        _ = new DrawingSceneBuilder().Build(cabinet, layout);
+    }
+
+    [Fact]
     public void SwitchBusinessNumberPlacementIsDeterministicAcrossSceneRebuilds()
     {
         RingCabinet cabinet = CreateIntegratedCabinet(

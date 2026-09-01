@@ -245,12 +245,6 @@ public sealed class RingCabinetSymbol
         double busbarY = intervalOrigin.YMillimeters +
                          _metrics.RingCabinet.BusbarOffset -
                          _metrics.RingCabinet.CabinetPadding;
-        var allowedBounds = new DocumentRect(
-            intervalOrigin.XMillimeters + BusinessNumberBoundaryInset,
-            busbarY + BusbarLabelClearance,
-            intervalLayout.WidthMillimeters - BusinessNumberBoundaryInset * 2,
-            intervalOrigin.YMillimeters + intervalLayout.HeightMillimeters -
-            BusinessNumberBoundaryInset - busbarY - BusbarLabelClearance);
         DocumentRect ownBounds = CreateSwitchVisualBounds(
             interval,
             intervalLayout,
@@ -261,7 +255,17 @@ public sealed class RingCabinetSymbol
             interval,
             switchDevice,
             isIntervalNumber);
+        double rightAllowance = side == SemanticLabelSide.Right
+            ? _metrics.RingCabinet.IntervalSpacing
+            : 0;
         double circuitX = intervalOrigin.XMillimeters + intervalLayout.WidthMillimeters / 2;
+        var allowedBounds = new DocumentRect(
+            intervalOrigin.XMillimeters + BusinessNumberBoundaryInset,
+            busbarY + BusbarLabelClearance,
+            intervalLayout.WidthMillimeters - BusinessNumberBoundaryInset * 2 +
+            rightAllowance,
+            intervalOrigin.YMillimeters + intervalLayout.HeightMillimeters -
+            BusinessNumberBoundaryInset - busbarY - BusbarLabelClearance);
         var obstacles = interval.SwitchDevices
             .Select(device => CreateSwitchVisualBounds(
                 interval,
@@ -343,6 +347,13 @@ public sealed class RingCabinetSymbol
         };
 
         yield return (nominal, alignment);
+        if (side is SemanticLabelSide.Above or SemanticLabelSide.Below)
+        {
+            yield return (
+                new DocumentPoint(circuitX, nominal.YMillimeters),
+                LabelAlignment.Center);
+        }
+
         foreach (double adjustment in new[] { 2d, BusinessNumberLocalAdjustment })
         {
             if (side is SemanticLabelSide.Left or SemanticLabelSide.Right)
@@ -366,6 +377,11 @@ public sealed class RingCabinetSymbol
                         nominal.XMillimeters,
                         nominal.YMillimeters + direction * adjustment),
                     alignment);
+                yield return (
+                    new DocumentPoint(
+                        circuitX,
+                        nominal.YMillimeters + direction * adjustment),
+                    LabelAlignment.Center);
             }
         }
     }
