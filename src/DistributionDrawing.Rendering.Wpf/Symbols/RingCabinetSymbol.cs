@@ -12,6 +12,10 @@ namespace DistributionDrawing.Rendering.Wpf.Symbols;
 
 public sealed class RingCabinetSymbol
 {
+    private const double BusinessNumberGap = 2;
+    private const double BusinessNumberLocalAdjustment = 4;
+    private const double BusinessNumberBoundaryInset = 1;
+    private const double BusbarLabelClearance = 2;
     private readonly IntervalSymbol _intervalSymbol;
     private readonly DrawingMetrics _metrics;
 
@@ -149,18 +153,31 @@ public sealed class RingCabinetSymbol
                 layout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters,
                 layout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters);
 
-            (DocumentPoint intervalNumberAnchor, DocumentPoint intervalNumberOffset) =
-                GetIntervalNumberPlacement(interval, intervalLayout, origin);
+            var placedBusinessNumberBounds = new List<DocumentRect>();
+            SwitchDevice intervalNumberOwner = ResolveIntervalNumberOwner(interval);
+            BusinessNumberPlacement intervalNumberPlacement = GetSwitchNumberPlacement(
+                interval,
+                intervalLayout,
+                origin,
+                intervalNumberOwner,
+                intervalLayout.SwitchLayouts[intervalNumberOwner.Id],
+                interval.BusinessNumber,
+                _metrics.Typography.IntervalNumberFontSize,
+                isIntervalNumber: true,
+                placedBusinessNumberBounds);
             requests.Add(new LabelRequest(
                 LabelTargetKind.Interval,
                 interval.IntervalId,
                 interval.BusinessNumber,
-                intervalNumberAnchor,
-                intervalNumberOffset,
+                intervalNumberPlacement.Position,
+                new DocumentPoint(0, 0),
+                intervalNumberPlacement.Alignment,
                 priority: 80,
-                fontSizeMillimeters: _metrics.Typography.IntervalNumberFontSize));
+                fontSizeMillimeters: _metrics.Typography.IntervalNumberFontSize,
+                allowCollisionAdjustment: false,
+                measuredWidthMillimeters: intervalNumberPlacement.Bounds.WidthMillimeters));
+            placedBusinessNumberBounds.Add(intervalNumberPlacement.Bounds);
 
-            var placedSwitchLabelBounds = new List<DocumentRect>();
             foreach (SwitchDevice switchDevice in interval.SwitchDevices
                          .OrderBy(device => intervalLayout.SwitchLayouts[device.Id]
                              .RelativePosition.YMillimeters)
@@ -183,26 +200,28 @@ public sealed class RingCabinetSymbol
                         interval.BusinessNumber,
                         StringComparison.Ordinal))
                 {
-                    (DocumentPoint labelAnchor, DocumentPoint labelOffset,
-                        LabelAlignment alignment, DocumentRect labelBounds) =
-                        GetSwitchNumberPlacement(
-                            intervalLayout,
-                            origin,
-                            switchLayout,
-                            switchBusinessNumber,
-                            placedSwitchLabelBounds);
+                    BusinessNumberPlacement placement = GetSwitchNumberPlacement(
+                        interval,
+                        intervalLayout,
+                        origin,
+                        switchDevice,
+                        switchLayout,
+                        switchBusinessNumber,
+                        _metrics.Typography.SwitchNumberFontSize,
+                        isIntervalNumber: false,
+                        placedBusinessNumberBounds);
                     requests.Add(new LabelRequest(
                         LabelTargetKind.SwitchDevice,
                         switchDevice.Id,
                         switchBusinessNumber,
-                        labelAnchor,
-                        labelOffset,
-                        alignment,
+                        placement.Position,
+                        new DocumentPoint(0, 0),
+                        placement.Alignment,
                         priority: 70,
                         fontSizeMillimeters: _metrics.Typography.SwitchNumberFontSize,
                         allowCollisionAdjustment: false,
-                        measuredWidthMillimeters: labelBounds.WidthMillimeters));
-                    placedSwitchLabelBounds.Add(labelBounds);
+                        measuredWidthMillimeters: placement.Bounds.WidthMillimeters));
+                    placedBusinessNumberBounds.Add(placement.Bounds);
                 }
 
             }
@@ -211,126 +230,144 @@ public sealed class RingCabinetSymbol
         return requests;
     }
 
-    private (DocumentPoint Anchor, DocumentPoint Offset, LabelAlignment Alignment,
-        DocumentRect Bounds)
-        GetSwitchNumberPlacement(
+    private BusinessNumberPlacement GetSwitchNumberPlacement(
+            RingCabinetInterval interval,
             RingCabinetIntervalLayout intervalLayout,
             DocumentPoint intervalOrigin,
+            SwitchDevice switchDevice,
             RingCabinetSwitchLayout switchLayout,
             string label,
+            double fontSize,
+            bool isIntervalNumber,
             IReadOnlyList<DocumentRect> placedLabelBounds)
     {
-        const double safetyMargin = 2;
-        double gap = _metrics.Switch.ContactRadius + safetyMargin;
-        double fontSize = _metrics.Typography.SwitchNumberFontSize;
         double estimatedWidth = MeasureTextWidth(label, fontSize);
-        double left = intervalOrigin.XMillimeters + switchLayout.RelativePosition.XMillimeters;
-        double top = intervalOrigin.YMillimeters + switchLayout.RelativePosition.YMillimeters;
-        double right = left + switchLayout.WidthMillimeters;
-        double bottom = top + switchLayout.HeightMillimeters;
-        var intervalBounds = new DocumentRect(
-            intervalOrigin.XMillimeters + 1,
-            intervalOrigin.YMillimeters + 1,
-            intervalLayout.WidthMillimeters - 2,
-            intervalLayout.HeightMillimeters - 2);
-        var ownBounds = new DocumentRect(
-            left,
-            top,
-            switchLayout.WidthMillimeters,
-            switchLayout.HeightMillimeters);
-        var obstacles = intervalLayout.SwitchLayouts.Values
-            .Select(layout => new DocumentRect(
-                intervalOrigin.XMillimeters + layout.RelativePosition.XMillimeters,
-                intervalOrigin.YMillimeters + layout.RelativePosition.YMillimeters,
-                layout.WidthMillimeters,
-                layout.HeightMillimeters))
-            .Select(bounds => Expand(bounds, safetyMargin))
-            .ToList();
         double busbarY = intervalOrigin.YMillimeters +
                          _metrics.RingCabinet.BusbarOffset -
                          _metrics.RingCabinet.CabinetPadding;
-        obstacles.Add(Expand(new DocumentRect(
-            intervalOrigin.XMillimeters,
-            busbarY - _metrics.RingCabinet.BusbarHeight / 2,
-            intervalLayout.WidthMillimeters,
-            _metrics.RingCabinet.BusbarHeight), 1));
-        obstacles.Add(CreateCableTerminalBounds(intervalOrigin, intervalLayout, safetyMargin));
+        var allowedBounds = new DocumentRect(
+            intervalOrigin.XMillimeters + BusinessNumberBoundaryInset,
+            busbarY + BusbarLabelClearance,
+            intervalLayout.WidthMillimeters - BusinessNumberBoundaryInset * 2,
+            intervalOrigin.YMillimeters + intervalLayout.HeightMillimeters -
+            BusinessNumberBoundaryInset - busbarY - BusbarLabelClearance);
+        DocumentRect ownBounds = CreateSwitchVisualBounds(
+            interval,
+            intervalLayout,
+            intervalOrigin,
+            switchDevice,
+            switchLayout);
+        SemanticLabelSide side = ResolveSemanticLabelSide(
+            interval,
+            switchDevice,
+            isIntervalNumber);
+        double circuitX = intervalOrigin.XMillimeters + intervalLayout.WidthMillimeters / 2;
+        var obstacles = interval.SwitchDevices
+            .Select(device => CreateSwitchVisualBounds(
+                interval,
+                intervalLayout,
+                intervalOrigin,
+                device,
+                intervalLayout.SwitchLayouts[device.Id]))
+            .Select(bounds => Expand(bounds, _metrics.General.StandardStrokeThickness / 2))
+            .ToList();
+        obstacles.Add(CreateCableTerminalBounds(
+            intervalOrigin,
+            intervalLayout,
+            BusinessNumberBoundaryInset));
         if (intervalLayout.PTSymbolPosition is DocumentPoint pt)
         {
             obstacles.Add(Expand(new DocumentRect(
                 intervalOrigin.XMillimeters + pt.XMillimeters,
                 intervalOrigin.YMillimeters + pt.YMillimeters,
                 _metrics.PT.CoilRadius * 2,
-                _metrics.PT.CoilRadius * 4 - _metrics.PT.CoilSpacing), safetyMargin));
+                _metrics.PT.CoilRadius * 4 - _metrics.PT.CoilSpacing),
+                BusinessNumberBoundaryInset));
         }
 
-        double centerX = (left + right) / 2;
-        double centerBaseline = (top + bottom + fontSize) / 2;
-        var candidates = new List<(DocumentPoint Position, LabelAlignment Alignment)>
-        {
-            (new DocumentPoint(right + gap, centerBaseline), LabelAlignment.Left),
-            (new DocumentPoint(left - gap, centerBaseline), LabelAlignment.Right)
-        };
-        for (int ring = 0; ring < 12; ring++)
-        {
-            double verticalDistance = gap + ring * (fontSize + 1);
-            candidates.Add((
-                new DocumentPoint(centerX, top - verticalDistance),
-                LabelAlignment.Center));
-            candidates.Add((
-                new DocumentPoint(centerX, bottom + verticalDistance + fontSize),
-                LabelAlignment.Center));
-            candidates.Add((
-                new DocumentPoint(right + gap, top - verticalDistance),
-                LabelAlignment.Left));
-            candidates.Add((
-                new DocumentPoint(left - gap, top - verticalDistance),
-                LabelAlignment.Right));
-            candidates.Add((
-                new DocumentPoint(right + gap, bottom + verticalDistance + fontSize),
-                LabelAlignment.Left));
-            candidates.Add((
-                new DocumentPoint(left - gap, bottom + verticalDistance + fontSize),
-                LabelAlignment.Right));
-        }
-
-        var legal = candidates
-            .Select((candidate, index) => new
-            {
+        BusinessNumberPlacement? legal = CreateLocalCandidates(
+                side,
+                ownBounds,
+                circuitX,
+                fontSize)
+            .Select(candidate => new BusinessNumberPlacement(
                 candidate.Position,
                 candidate.Alignment,
-                Bounds = MeasureLabel(
+                MeasureLabel(
                     candidate.Position,
                     candidate.Alignment,
                     estimatedWidth,
-                    fontSize),
-                Index = index
-            })
-            .Where(candidate => Contains(intervalBounds, candidate.Bounds))
-            .Where(candidate => obstacles.All(obstacle => !Overlaps(candidate.Bounds, obstacle)))
+                    fontSize)))
+            .Where(candidate => Contains(allowedBounds, candidate.Bounds))
+            .Where(candidate => obstacles.All(obstacle =>
+                !Overlaps(candidate.Bounds, obstacle)))
             .Where(candidate => placedLabelBounds.All(bounds =>
-                !Overlaps(candidate.Bounds, Expand(bounds, 1))))
-            .OrderBy(candidate => Distance(candidate.Bounds, ownBounds))
-            .ThenBy(candidate => candidate.Index)
+                !Overlaps(candidate.Bounds, Expand(bounds, BusinessNumberBoundaryInset))))
             .FirstOrDefault();
-        if (legal is null)
-        {
-            double fallbackX = Math.Clamp(
-                centerX,
-                intervalBounds.XMillimeters + estimatedWidth / 2,
-                intervalBounds.XMillimeters + intervalBounds.WidthMillimeters -
-                estimatedWidth / 2);
-            DocumentPoint fallbackPosition = new(fallbackX, top - gap);
-            DocumentRect fallbackBounds = MeasureLabel(
-                fallbackPosition,
-                LabelAlignment.Center,
-                estimatedWidth,
-                fontSize);
-            return (fallbackPosition, new DocumentPoint(0, 0),
-                LabelAlignment.Center, fallbackBounds);
-        }
+        return legal ?? throw new InvalidOperationException(
+            $"No semantic business-number placement exists for switch '{switchDevice.Id}'.");
+    }
 
-        return (legal.Position, new DocumentPoint(0, 0), legal.Alignment, legal.Bounds);
+    private IEnumerable<(DocumentPoint Position, LabelAlignment Alignment)>
+        CreateLocalCandidates(
+            SemanticLabelSide side,
+            DocumentRect ownerBounds,
+            double circuitX,
+            double height)
+    {
+        (DocumentPoint nominal, LabelAlignment alignment) = side switch
+        {
+            SemanticLabelSide.Left => (
+                new DocumentPoint(
+                    ownerBounds.XMillimeters - BusinessNumberGap,
+                    ownerBounds.YMillimeters + ownerBounds.HeightMillimeters / 2 + height / 2),
+                LabelAlignment.Right),
+            SemanticLabelSide.Right => (
+                new DocumentPoint(
+                    ownerBounds.XMillimeters + ownerBounds.WidthMillimeters +
+                    BusinessNumberGap,
+                    ownerBounds.YMillimeters + ownerBounds.HeightMillimeters / 2 + height / 2),
+                LabelAlignment.Left),
+            SemanticLabelSide.Above => (
+                new DocumentPoint(
+                    circuitX - BusinessNumberGap,
+                    ownerBounds.YMillimeters - BusinessNumberGap),
+                LabelAlignment.Right),
+            SemanticLabelSide.Below => (
+                new DocumentPoint(
+                    circuitX - BusinessNumberGap,
+                    ownerBounds.YMillimeters + ownerBounds.HeightMillimeters +
+                    BusinessNumberGap + height),
+                LabelAlignment.Right),
+            _ => throw new ArgumentOutOfRangeException(nameof(side))
+        };
+
+        yield return (nominal, alignment);
+        foreach (double adjustment in new[] { 2d, BusinessNumberLocalAdjustment })
+        {
+            if (side is SemanticLabelSide.Left or SemanticLabelSide.Right)
+            {
+                yield return (
+                    new DocumentPoint(
+                        nominal.XMillimeters,
+                        nominal.YMillimeters - adjustment),
+                    alignment);
+                yield return (
+                    new DocumentPoint(
+                        nominal.XMillimeters,
+                        nominal.YMillimeters + adjustment),
+                    alignment);
+            }
+            else
+            {
+                double direction = side == SemanticLabelSide.Above ? -1 : 1;
+                yield return (
+                    new DocumentPoint(
+                        nominal.XMillimeters,
+                        nominal.YMillimeters + direction * adjustment),
+                    alignment);
+            }
+        }
     }
 
     private DocumentRect CreateCableTerminalBounds(
@@ -382,15 +419,112 @@ public sealed class RingCabinetSymbol
         left.YMillimeters < right.YMillimeters + right.HeightMillimeters &&
         left.YMillimeters + left.HeightMillimeters > right.YMillimeters;
 
-    private static double Distance(DocumentRect first, DocumentRect second)
+    private SwitchDevice ResolveIntervalNumberOwner(RingCabinetInterval interval)
     {
-        double dx = Math.Max(0, Math.Max(
-            second.XMillimeters - (first.XMillimeters + first.WidthMillimeters),
-            first.XMillimeters - (second.XMillimeters + second.WidthMillimeters)));
-        double dy = Math.Max(0, Math.Max(
-            second.YMillimeters - (first.YMillimeters + first.HeightMillimeters),
-            first.YMillimeters - (second.YMillimeters + second.HeightMillimeters)));
-        return Math.Sqrt(dx * dx + dy * dy);
+        SwitchKind ownerKind = interval.IntervalKind switch
+        {
+            IntervalKind.LoadSwitchInterval => SwitchKind.LoadSwitch,
+            IntervalKind.IntegratedFeederInterval => SwitchKind.CircuitBreaker,
+            IntervalKind.PTInterval => SwitchKind.IsolationSwitch,
+            _ => throw new ArgumentOutOfRangeException(nameof(interval))
+        };
+        return interval.SwitchDevices.Single(device => device.SwitchKind == ownerKind);
+    }
+
+    private static SemanticLabelSide ResolveSemanticLabelSide(
+        RingCabinetInterval interval,
+        SwitchDevice switchDevice,
+        bool isIntervalNumber)
+    {
+        if (isIntervalNumber)
+        {
+            return SemanticLabelSide.Right;
+        }
+
+        return switchDevice.SwitchKind switch
+        {
+            SwitchKind.IsolationSwitch when interval.GroundingStructureKind ==
+                GroundingStructureKind.UpperLowerGrounding => SemanticLabelSide.Left,
+            SwitchKind.IsolationSwitch => SemanticLabelSide.Above,
+            SwitchKind.GroundSwitch when interval.GroundingStructureKind ==
+                GroundingStructureKind.UpperLowerGrounding =>
+                SemanticLabelSide.Above,
+            SwitchKind.GroundSwitch => SemanticLabelSide.Below,
+            SwitchKind.LoadSwitch or SwitchKind.CircuitBreaker => SemanticLabelSide.Right,
+            _ => throw new InvalidOperationException(
+                $"Switch kind '{switchDevice.SwitchKind}' has no business-number anchor.")
+        };
+    }
+
+    private DocumentRect CreateSwitchVisualBounds(
+        RingCabinetInterval interval,
+        RingCabinetIntervalLayout intervalLayout,
+        DocumentPoint intervalOrigin,
+        SwitchDevice switchDevice,
+        RingCabinetSwitchLayout switchLayout)
+    {
+        double scale = _metrics.RingCabinet.SwitchSymbolScale;
+        double contactRadius = _metrics.Switch.ContactRadius * scale;
+        double layoutLeft = intervalOrigin.XMillimeters +
+                            switchLayout.RelativePosition.XMillimeters;
+        double layoutTop = intervalOrigin.YMillimeters +
+                           switchLayout.RelativePosition.YMillimeters;
+        double circuitX = intervalOrigin.XMillimeters + intervalLayout.WidthMillimeters / 2;
+
+        if (switchDevice.SwitchKind == SwitchKind.GroundSwitch)
+        {
+            double centerY = layoutTop + switchLayout.HeightMillimeters / 2;
+            double left;
+            if (interval.GroundingStructureKind == GroundingStructureKind.UpperLowerGrounding)
+            {
+                double right = circuitX - switchLayout.WidthMillimeters * 3 / 16;
+                double contact = right - switchLayout.WidthMillimeters / 4;
+                left = contact - contactRadius * 3.5;
+            }
+            else
+            {
+                double groundContactInset = Math.Max(
+                    contactRadius,
+                    Math.Min(
+                        switchLayout.WidthMillimeters / 4,
+                        _metrics.Switch.GroundSwitchLength * scale / 4));
+                double contact = layoutLeft + switchLayout.WidthMillimeters -
+                                 groundContactInset;
+                left = contact - contactRadius * 5;
+            }
+
+            double verticalRadius = contactRadius * 3;
+            return new DocumentRect(
+                left,
+                centerY - verticalRadius,
+                circuitX - left,
+                verticalRadius * 2);
+        }
+
+        double centerX = layoutLeft + switchLayout.WidthMillimeters / 2;
+        double contactInset = Math.Max(
+            contactRadius,
+            Math.Min(
+                switchLayout.HeightMillimeters / 4,
+                _metrics.Switch.StandardSwitchLength * scale / 4));
+        double top = layoutTop + contactInset;
+        double bottom = layoutTop + switchLayout.HeightMillimeters - contactInset;
+        double leftRadius = switchDevice.SwitchKind == SwitchKind.CircuitBreaker
+            ? Math.Max(
+                contactRadius,
+                Math.Min(
+                    switchLayout.WidthMillimeters / 4,
+                    _metrics.PoleAttachment.ContactCrossSize / 2))
+            : contactRadius;
+        double rightRadius = Math.Max(contactRadius, contactRadius * 2);
+        double topRadius = switchDevice.SwitchKind == SwitchKind.CircuitBreaker
+            ? leftRadius
+            : 0;
+        return new DocumentRect(
+            centerX - leftRadius,
+            top - topRadius,
+            leftRadius + rightRadius,
+            bottom - top + topRadius);
     }
 
     private static double MeasureTextWidth(string text, double fontSizeMillimeters)
@@ -407,50 +541,16 @@ public sealed class RingCabinetSymbol
         return formatted.WidthIncludingTrailingWhitespace / dipsPerMillimeter;
     }
 
-    private (DocumentPoint Anchor, DocumentPoint Offset) GetIntervalNumberPlacement(
-        RingCabinetInterval interval,
-        RingCabinetIntervalLayout intervalLayout,
-        DocumentPoint origin)
+    private sealed record BusinessNumberPlacement(
+        DocumentPoint Position,
+        LabelAlignment Alignment,
+        DocumentRect Bounds);
+
+    private enum SemanticLabelSide
     {
-        if (interval.IntervalKind == IntervalKind.PTInterval)
-        {
-            double secondaryY =
-                _metrics.RingCabinet.BusbarOffset -
-                _metrics.RingCabinet.CabinetPadding +
-                _metrics.RingCabinet.DeviceVerticalSpacing +
-                _metrics.Switch.LogicalHitHeight *
-                _metrics.RingCabinet.SwitchSymbolScale +
-                _metrics.RingCabinet.DeviceVerticalSpacing;
-            return (
-                new DocumentPoint(origin.XMillimeters, origin.YMillimeters + secondaryY),
-                new DocumentPoint(
-                    _metrics.RingCabinet.StandardIntervalWidth / 2 + 3,
-                    -2));
-        }
-
-        SwitchDevice? primarySwitch = interval.SwitchDevices
-            .OrderBy(device => device.SwitchKind switch
-            {
-                SwitchKind.CircuitBreaker => 0,
-                SwitchKind.LoadSwitch => 1,
-                SwitchKind.IsolationSwitch => 2,
-                _ => 3
-            })
-            .FirstOrDefault(device => device.SwitchKind is
-                SwitchKind.CircuitBreaker or
-                SwitchKind.LoadSwitch or
-                SwitchKind.IsolationSwitch);
-
-        if (primarySwitch is not null &&
-            intervalLayout.SwitchLayouts.TryGetValue(primarySwitch.Id, out RingCabinetSwitchLayout? primaryLayout) &&
-            primaryLayout is not null)
-        {
-            DocumentPoint anchor = new(
-                origin.XMillimeters + primaryLayout.RelativePosition.XMillimeters,
-                origin.YMillimeters + primaryLayout.RelativePosition.YMillimeters);
-            return (anchor, new DocumentPoint(primaryLayout.WidthMillimeters + 3, -2));
-        }
-
-        return (origin, intervalLayout.SequenceLabelOffset);
+        Left,
+        Right,
+        Above,
+        Below
     }
 }

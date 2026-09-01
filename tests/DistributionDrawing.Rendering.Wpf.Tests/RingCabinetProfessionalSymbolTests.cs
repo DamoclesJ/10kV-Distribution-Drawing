@@ -132,7 +132,7 @@ public sealed class RingCabinetProfessionalSymbolTests
     }
 
     [Fact]
-    public void IntegratedAndPTIntervalNumbersShareBreakerLevel()
+    public void IntegratedAndPTIntervalNumbersFollowTheirSemanticOwners()
     {
         RingCabinet cabinet = CreateCabinet(
             "Integrated with PT",
@@ -169,19 +169,32 @@ public sealed class RingCabinetProfessionalSymbolTests
             interval.IntervalKind == IntervalKind.PTInterval);
         SwitchDevice breaker = integrated.SwitchDevices.Single(device =>
             device.SwitchKind == SwitchKind.CircuitBreaker);
-        RingCabinetSwitchLayout breakerLayout = layout.IntervalLayouts[integrated.IntervalId]
-            .SwitchLayouts[breaker.Id];
+        SwitchDevice ptIsolation = pt.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.IsolationSwitch);
         LabelRequest integratedLabel = Assert.Single(labels, label =>
             label.TargetId == integrated.IntervalId);
         LabelRequest ptLabel = Assert.Single(labels, label =>
             label.TargetId == pt.IntervalId);
+        DocumentRect integratedOwner = CreateVisualBounds(
+            integrated,
+            layout.IntervalLayouts[integrated.IntervalId],
+            layout,
+            breaker);
+        DocumentRect ptOwner = CreateVisualBounds(
+            pt,
+            layout.IntervalLayouts[pt.IntervalId],
+            layout,
+            ptIsolation);
 
         Assert.Equal(
-            layout.Position.YMillimeters +
-            layout.IntervalLayouts[integrated.IntervalId].RelativePosition.YMillimeters +
-            breakerLayout.RelativePosition.YMillimeters,
-            integratedLabel.Anchor.YMillimeters);
-        Assert.Equal(integratedLabel.Anchor.YMillimeters, ptLabel.Anchor.YMillimeters);
+            integratedOwner.XMillimeters + integratedOwner.WidthMillimeters + 2,
+            MeasureLabel(integratedLabel).XMillimeters,
+            3);
+        Assert.Equal(
+            ptOwner.XMillimeters + ptOwner.WidthMillimeters + 2,
+            MeasureLabel(ptLabel).XMillimeters,
+            3);
+        Assert.NotEqual(integratedLabel.Anchor.YMillimeters, ptLabel.Anchor.YMillimeters);
     }
 
     [Fact]
@@ -506,84 +519,50 @@ public sealed class RingCabinetProfessionalSymbolTests
         LabelRequest intervalNumber = Assert.Single(
             new RingCabinetSymbol(new SymbolLibrary()).CreateLabelRequests(cabinet, layout),
             request => request.TargetKind == LabelTargetKind.Interval);
+        SwitchDevice isolation = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.IsolationSwitch);
+        DocumentRect isolationBounds = CreateVisualBounds(
+            interval,
+            intervalLayout,
+            layout,
+            isolation);
+        DocumentRect numberBounds = MeasureLabel(intervalNumber);
+        Assert.Equal(LabelAlignment.Left, intervalNumber.PreferredAlignment);
         Assert.Equal(
-            layout.Position.YMillimeters +
-            intervalLayout.RelativePosition.YMillimeters +
-            DrawingMetrics.Default.RingCabinet.BusbarOffset -
-            DrawingMetrics.Default.RingCabinet.CabinetPadding +
-            DrawingMetrics.Default.RingCabinet.DeviceVerticalSpacing +
-            DrawingMetrics.Default.Switch.LogicalHitHeight *
-            DrawingMetrics.Default.RingCabinet.SwitchSymbolScale +
-            DrawingMetrics.Default.RingCabinet.DeviceVerticalSpacing,
-            intervalNumber.Anchor.YMillimeters);
+            isolationBounds.XMillimeters + isolationBounds.WidthMillimeters + 2,
+            numberBounds.XMillimeters,
+            3);
+        AssertBusinessNumberLayout(cabinet, layout);
     }
 
     [Theory]
-    [InlineData(GroundingStructureKind.UpperIsolationGrounding)]
-    [InlineData(GroundingStructureKind.UpperLowerGrounding)]
-    [InlineData(GroundingStructureKind.LowerLowerGrounding)]
-    public void SwitchBusinessNumbersStayInsideTheirOwnIntervalAndBesideOwnSymbol(
-        GroundingStructureKind structure)
+    [InlineData(GroundingStructureKind.UpperIsolationGrounding, 5)]
+    [InlineData(GroundingStructureKind.UpperIsolationGrounding, 7)]
+    [InlineData(GroundingStructureKind.UpperLowerGrounding, 5)]
+    [InlineData(GroundingStructureKind.UpperLowerGrounding, 7)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding, 5)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding, 7)]
+    public void BusinessNumbersUseStableSemanticAnchorsInsideTheirOwnInterval(
+        GroundingStructureKind structure,
+        int intervalCount)
     {
-        RingCabinet cabinet = CreateIntegratedCabinet(4, structure);
+        RingCabinet cabinet = CreateIntegratedCabinet(intervalCount, structure);
+        cabinet.RenameLineName("10kV 测试线路");
         RingCabinetLayout layout = CreateLayout(cabinet);
-        IReadOnlyList<LabelRequest> requests =
-            new RingCabinetSymbol(new SymbolLibrary()).CreateLabelRequests(cabinet, layout);
 
-        foreach (RingCabinetInterval interval in cabinet.Intervals)
-        {
-            RingCabinetIntervalLayout intervalLayout = layout.IntervalLayouts[interval.IntervalId];
-            double intervalLeft = layout.Position.XMillimeters +
-                                  intervalLayout.RelativePosition.XMillimeters;
-            double intervalRight = intervalLeft + intervalLayout.WidthMillimeters;
-            foreach (SwitchDevice device in interval.SwitchDevices)
-            {
-                LabelRequest? request = requests.SingleOrDefault(item =>
-                    item.TargetKind == LabelTargetKind.SwitchDevice &&
-                    item.TargetId == device.Id);
-                if (request is null) continue;
+        AssertBusinessNumberLayout(cabinet, layout);
+    }
 
-                double x = request.Anchor.XMillimeters + request.Offset.XMillimeters;
-                double y = request.Anchor.YMillimeters + request.Offset.YMillimeters;
-                double width = request.MeasuredWidthMillimeters ?? Math.Max(
-                    request.FontSizeMillimeters,
-                    request.Text.Length * request.FontSizeMillimeters * 0.6);
-                double labelLeft = request.PreferredAlignment switch
-                {
-                    LabelAlignment.Left => x,
-                    LabelAlignment.Right => x - width,
-                    _ => x - width / 2
-                };
-                var labelBounds = new DocumentRect(
-                    labelLeft,
-                    y - request.FontSizeMillimeters,
-                    width,
-                    request.FontSizeMillimeters);
-                RingCabinetSwitchLayout switchLayout = intervalLayout.SwitchLayouts[device.Id];
-                var switchBounds = new DocumentRect(
-                    intervalLeft + switchLayout.RelativePosition.XMillimeters,
-                    layout.Position.YMillimeters +
-                    intervalLayout.RelativePosition.YMillimeters +
-                    switchLayout.RelativePosition.YMillimeters,
-                    switchLayout.WidthMillimeters,
-                    switchLayout.HeightMillimeters);
+    [Theory]
+    [InlineData(5)]
+    [InlineData(7)]
+    public void LoadSwitchBusinessNumbersUseTheSameSemanticContract(
+        int intervalCount)
+    {
+        RingCabinet cabinet = CreateLoadSwitchCabinet(intervalCount);
+        cabinet.RenameLineName("10kV 测试线路");
 
-                Assert.True(labelBounds.XMillimeters >= intervalLeft);
-                Assert.True(labelBounds.XMillimeters + labelBounds.WidthMillimeters <= intervalRight);
-                Assert.All(intervalLayout.SwitchLayouts.Values, otherLayout =>
-                {
-                    var otherBounds = new DocumentRect(
-                        intervalLeft + otherLayout.RelativePosition.XMillimeters,
-                        layout.Position.YMillimeters +
-                        intervalLayout.RelativePosition.YMillimeters +
-                        otherLayout.RelativePosition.YMillimeters,
-                        otherLayout.WidthMillimeters,
-                        otherLayout.HeightMillimeters);
-                    Assert.False(Overlaps(labelBounds, otherBounds));
-                });
-                Assert.True(Distance(labelBounds, switchBounds) <= 24);
-            }
-        }
+        AssertBusinessNumberLayout(cabinet, CreateLayout(cabinet));
     }
 
     [Fact]
@@ -640,7 +619,7 @@ public sealed class RingCabinetProfessionalSymbolTests
     }
 
     [Fact]
-    public void RenderedSwitchBusinessNumbersUseTheCollisionCheckedBoundsOrigin()
+    public void RenderedSwitchBusinessNumbersUseTheSemanticBoundsOrigin()
     {
         RingCabinet cabinet = CreateIntegratedCabinet(
             4,
@@ -798,6 +777,250 @@ public sealed class RingCabinetProfessionalSymbolTests
         return new RingCabinetRenderer().Render(cabinet, CreateLayout(cabinet));
     }
 
+    private static void AssertBusinessNumberLayout(
+        RingCabinet cabinet,
+        RingCabinetLayout layout)
+    {
+        IReadOnlyList<LabelRequest> requests =
+            new RingCabinetSymbol(new SymbolLibrary()).CreateLabelRequests(cabinet, layout);
+        double busbarY = layout.Position.YMillimeters + layout.MainBusYMillimeters;
+        var relativeAnchors = new Dictionary<string, DocumentPoint>();
+
+        foreach (RingCabinetInterval interval in cabinet.Intervals)
+        {
+            RingCabinetIntervalLayout intervalLayout = layout.IntervalLayouts[interval.IntervalId];
+            DocumentPoint origin = new(
+                layout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters,
+                layout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters);
+            double intervalRight = origin.XMillimeters + intervalLayout.WidthMillimeters;
+            HashSet<Guid> switchIds = interval.SwitchDevices.Select(device => device.Id).ToHashSet();
+            LabelRequest[] intervalRequests = requests.Where(request =>
+                    request.TargetKind == LabelTargetKind.Interval &&
+                    request.TargetId == interval.IntervalId ||
+                    request.TargetKind == LabelTargetKind.SwitchDevice &&
+                    switchIds.Contains(request.TargetId))
+                .ToArray();
+            int expectedRequestCount = 1 + interval.SwitchDevices.Count(device =>
+                !string.IsNullOrWhiteSpace(interval.GetSwitchBusinessNumber(device.Id)) &&
+                interval.GetSwitchBusinessNumber(device.Id) != interval.BusinessNumber);
+            Assert.Equal(expectedRequestCount, intervalRequests.Length);
+            var labelBounds = new List<DocumentRect>();
+
+            foreach (LabelRequest request in intervalRequests)
+            {
+                SwitchDevice owner = request.TargetKind == LabelTargetKind.Interval
+                    ? ResolveIntervalNumberOwner(interval)
+                    : interval.SwitchDevices.Single(device => device.Id == request.TargetId);
+                DocumentRect ownerBounds = CreateVisualBounds(
+                    interval,
+                    intervalLayout,
+                    layout,
+                    owner);
+                DocumentRect bounds = MeasureLabel(request);
+                TestSemanticLabelSide side = ResolveSemanticSide(
+                    interval,
+                    owner,
+                    request.TargetKind == LabelTargetKind.Interval);
+
+                Assert.False(request.AllowCollisionAdjustment);
+                Assert.True(bounds.XMillimeters >= origin.XMillimeters + 1 - 0.001);
+                Assert.True(bounds.XMillimeters + bounds.WidthMillimeters <=
+                            intervalRight - 1 + 0.001);
+                Assert.True(bounds.YMillimeters >= busbarY + 2 - 0.001);
+                Assert.InRange(Distance(bounds, ownerBounds), 1.999, 6.001);
+                AssertSemanticSide(bounds, ownerBounds, side);
+                Assert.All(interval.SwitchDevices, device => Assert.False(Overlaps(
+                    bounds,
+                    CreateVisualBounds(interval, intervalLayout, layout, device))));
+
+                string role = request.TargetKind == LabelTargetKind.Interval
+                    ? "Main"
+                    : owner.SwitchKind.ToString();
+                var relativeAnchor = new DocumentPoint(
+                    request.Anchor.XMillimeters + request.Offset.XMillimeters -
+                    origin.XMillimeters,
+                    request.Anchor.YMillimeters + request.Offset.YMillimeters -
+                    origin.YMillimeters);
+                if (relativeAnchors.TryGetValue(role, out DocumentPoint expectedAnchor))
+                {
+                    Assert.Equal(expectedAnchor.XMillimeters, relativeAnchor.XMillimeters, 6);
+                    Assert.Equal(expectedAnchor.YMillimeters, relativeAnchor.YMillimeters, 6);
+                }
+                else
+                {
+                    relativeAnchors.Add(role, relativeAnchor);
+                }
+
+                labelBounds.Add(bounds);
+            }
+
+            for (int first = 0; first < labelBounds.Count; first++)
+            {
+                for (int second = first + 1; second < labelBounds.Count; second++)
+                {
+                    Assert.False(Overlaps(labelBounds[first], labelBounds[second]));
+                }
+            }
+        }
+    }
+
+    private static SwitchDevice ResolveIntervalNumberOwner(RingCabinetInterval interval)
+    {
+        SwitchKind kind = interval.IntervalKind switch
+        {
+            IntervalKind.LoadSwitchInterval => SwitchKind.LoadSwitch,
+            IntervalKind.IntegratedFeederInterval => SwitchKind.CircuitBreaker,
+            IntervalKind.PTInterval => SwitchKind.IsolationSwitch,
+            _ => throw new ArgumentOutOfRangeException(nameof(interval))
+        };
+        return interval.SwitchDevices.Single(device => device.SwitchKind == kind);
+    }
+
+    private static TestSemanticLabelSide ResolveSemanticSide(
+        RingCabinetInterval interval,
+        SwitchDevice owner,
+        bool isIntervalNumber)
+    {
+        if (isIntervalNumber)
+        {
+            return TestSemanticLabelSide.Right;
+        }
+
+        return owner.SwitchKind switch
+        {
+            SwitchKind.IsolationSwitch when interval.GroundingStructureKind ==
+                GroundingStructureKind.UpperLowerGrounding => TestSemanticLabelSide.Left,
+            SwitchKind.IsolationSwitch => TestSemanticLabelSide.Above,
+            SwitchKind.GroundSwitch when interval.GroundingStructureKind ==
+                GroundingStructureKind.UpperLowerGrounding => TestSemanticLabelSide.Above,
+            SwitchKind.GroundSwitch => TestSemanticLabelSide.Below,
+            _ => TestSemanticLabelSide.Right
+        };
+    }
+
+    private static void AssertSemanticSide(
+        DocumentRect label,
+        DocumentRect owner,
+        TestSemanticLabelSide side)
+    {
+        const double minimumGap = 1.999;
+        switch (side)
+        {
+            case TestSemanticLabelSide.Left:
+                Assert.True(label.XMillimeters + label.WidthMillimeters <=
+                            owner.XMillimeters - minimumGap);
+                break;
+            case TestSemanticLabelSide.Right:
+                Assert.True(label.XMillimeters >=
+                            owner.XMillimeters + owner.WidthMillimeters + minimumGap);
+                break;
+            case TestSemanticLabelSide.Above:
+                Assert.True(label.YMillimeters + label.HeightMillimeters <=
+                            owner.YMillimeters - minimumGap);
+                break;
+            case TestSemanticLabelSide.Below:
+                Assert.True(label.YMillimeters >=
+                            owner.YMillimeters + owner.HeightMillimeters + minimumGap);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(side));
+        }
+    }
+
+    private static DocumentRect MeasureLabel(LabelRequest request)
+    {
+        double x = request.Anchor.XMillimeters + request.Offset.XMillimeters;
+        double y = request.Anchor.YMillimeters + request.Offset.YMillimeters;
+        double width = request.MeasuredWidthMillimeters ?? Math.Max(
+            request.FontSizeMillimeters,
+            request.Text.Length * request.FontSizeMillimeters * 0.6);
+        double left = request.PreferredAlignment switch
+        {
+            LabelAlignment.Left => x,
+            LabelAlignment.Right => x - width,
+            _ => x - width / 2
+        };
+        return new DocumentRect(
+            left,
+            y - request.FontSizeMillimeters,
+            width,
+            request.FontSizeMillimeters);
+    }
+
+    private static DocumentRect CreateVisualBounds(
+        RingCabinetInterval interval,
+        RingCabinetIntervalLayout intervalLayout,
+        RingCabinetLayout cabinetLayout,
+        SwitchDevice device)
+    {
+        DrawingMetrics metrics = DrawingMetrics.Default;
+        RingCabinetSwitchLayout switchLayout = intervalLayout.SwitchLayouts[device.Id];
+        DocumentPoint origin = new(
+            cabinetLayout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters,
+            cabinetLayout.Position.YMillimeters + intervalLayout.RelativePosition.YMillimeters);
+        double scale = metrics.RingCabinet.SwitchSymbolScale;
+        double contactRadius = metrics.Switch.ContactRadius * scale;
+        double layoutLeft = origin.XMillimeters +
+                            switchLayout.RelativePosition.XMillimeters;
+        double layoutTop = origin.YMillimeters +
+                           switchLayout.RelativePosition.YMillimeters;
+        double circuitX = origin.XMillimeters + intervalLayout.WidthMillimeters / 2;
+
+        if (device.SwitchKind == SwitchKind.GroundSwitch)
+        {
+            double centerY = layoutTop + switchLayout.HeightMillimeters / 2;
+            double left;
+            if (interval.GroundingStructureKind == GroundingStructureKind.UpperLowerGrounding)
+            {
+                double right = circuitX - switchLayout.WidthMillimeters * 3 / 16;
+                double contact = right - switchLayout.WidthMillimeters / 4;
+                left = contact - contactRadius * 3.5;
+            }
+            else
+            {
+                double inset = Math.Max(
+                    contactRadius,
+                    Math.Min(
+                        switchLayout.WidthMillimeters / 4,
+                        metrics.Switch.GroundSwitchLength * scale / 4));
+                double contact = layoutLeft + switchLayout.WidthMillimeters - inset;
+                left = contact - contactRadius * 5;
+            }
+
+            double verticalRadius = contactRadius * 3;
+            return new DocumentRect(
+                left,
+                centerY - verticalRadius,
+                circuitX - left,
+                verticalRadius * 2);
+        }
+
+        double centerX = layoutLeft + switchLayout.WidthMillimeters / 2;
+        double contactInset = Math.Max(
+            contactRadius,
+            Math.Min(
+                switchLayout.HeightMillimeters / 4,
+                metrics.Switch.StandardSwitchLength * scale / 4));
+        double top = layoutTop + contactInset;
+        double bottom = layoutTop + switchLayout.HeightMillimeters - contactInset;
+        double leftRadius = device.SwitchKind == SwitchKind.CircuitBreaker
+            ? Math.Max(
+                contactRadius,
+                Math.Min(
+                    switchLayout.WidthMillimeters / 4,
+                    metrics.PoleAttachment.ContactCrossSize / 2))
+            : contactRadius;
+        double rightRadius = contactRadius * 2;
+        double topRadius = device.SwitchKind == SwitchKind.CircuitBreaker
+            ? leftRadius
+            : 0;
+        return new DocumentRect(
+            centerX - leftRadius,
+            top - topRadius,
+            leftRadius + rightRadius,
+            bottom - top + topRadius);
+    }
+
     private static bool Overlaps(DocumentRect left, DocumentRect right) =>
         left.XMillimeters < right.XMillimeters + right.WidthMillimeters &&
         left.XMillimeters + left.WidthMillimeters > right.XMillimeters &&
@@ -813,6 +1036,14 @@ public sealed class RingCabinetProfessionalSymbolTests
             second.YMillimeters - (first.YMillimeters + first.HeightMillimeters),
             first.YMillimeters - (second.YMillimeters + second.HeightMillimeters)));
         return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    private enum TestSemanticLabelSide
+    {
+        Left,
+        Right,
+        Above,
+        Below
     }
 
     private static void AssertSceneElementEqual(
