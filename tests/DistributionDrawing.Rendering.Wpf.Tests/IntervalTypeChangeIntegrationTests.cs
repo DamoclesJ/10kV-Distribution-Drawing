@@ -418,9 +418,11 @@ public sealed class IntervalTypeChangeIntegrationTests
     }
 
     [Fact]
-    public void IntervalTypeFactory_RejectsSecondPTWithoutCreatingACommand()
+    public void IntervalTypeFactory_CreatesAtomicPTMigrationCommand()
     {
         RingCabinet cabinet = CreateCabinetWithPTAndFeeder();
+        RingCabinetInterval originalPT = cabinet.Intervals.Single(
+            interval => interval.IntervalKind == IntervalKind.PTInterval);
         RingCabinetInterval candidate = cabinet.Intervals.Single(
             interval => interval.BayIndex == 2 &&
                         interval.IntervalKind == IntervalKind.IntegratedFeederInterval);
@@ -444,10 +446,18 @@ public sealed class IntervalTypeChangeIntegrationTests
             out ICommand? command,
             out _));
         Assert.NotNull(command);
-        Assert.Throws<InvalidOperationException>(() => command!.Execute());
-        Assert.Equal(IntervalKind.IntegratedFeederInterval, candidate.IntervalKind);
-        Assert.Null(runtimeLayout.RingCabinetLayouts[cabinet.Id]
+        command!.Execute();
+
+        Assert.Equal(IntervalKind.PTInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == candidate.IntervalId).IntervalKind);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == originalPT.IntervalId).IntervalKind);
+        Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        Assert.NotNull(runtimeLayout.RingCabinetLayouts[cabinet.Id]
             .IntervalLayouts[candidate.IntervalId].PTSymbolPosition);
+        Assert.Null(runtimeLayout.RingCabinetLayouts[cabinet.Id]
+            .IntervalLayouts[originalPT.IntervalId].PTSymbolPosition);
     }
 
     [Fact]

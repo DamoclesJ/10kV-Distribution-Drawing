@@ -205,17 +205,16 @@ public sealed class RingCabinetTemplateBuildCoordinatorTests
     }
 
     [Fact]
-    public void Build_MapsTwoBayFailureFromDomainStage()
+    public void Build_MapsOversizedCabinetFailureFromDomainStage()
     {
         RingCabinetTemplate template = CreateLoadSwitchTemplate(
             RingCabinetLayoutRule.Default,
-            1,
-            2);
+            Enumerable.Range(1, 25).ToArray());
 
         RingCabinetTemplateBuildOutcome outcome = _coordinator.Build(
             new RingCabinetTemplateBuildRequest(
                 template,
-                "两间隔柜",
+                "超大间隔柜",
                 new DocumentPoint(0, 0)));
 
         AssertFailure(

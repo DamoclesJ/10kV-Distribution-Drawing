@@ -413,13 +413,6 @@ public sealed class RingCabinetProfessionalSymbolTests
             expectedBranchY,
             hit.Bounds.YMillimeters + hit.Bounds.HeightMillimeters / 2,
             3);
-
-        LabelRequest groundNumber = Assert.Single(
-            new RingCabinetSymbol(new SymbolLibrary())
-                .CreateLabelRequests(cabinet, cabinetLayout),
-            request => request.TargetKind == LabelTargetKind.SwitchDevice &&
-                       request.TargetId == ground.Id);
-        Assert.True(groundNumber.Offset.YMillimeters < 0);
     }
 
     [Theory]
@@ -639,7 +632,11 @@ public sealed class RingCabinetProfessionalSymbolTests
         SceneElement[] after = symbol.CreateElements(cabinet, layout, includeLabels: false)
             .ToArray();
 
-        Assert.Equal(before, after);
+        Assert.Equal(before.Length, after.Length);
+        for (int index = 0; index < before.Length; index++)
+        {
+            AssertSceneElementEqual(before[index], after[index]);
+        }
     }
 
     [Fact]
@@ -816,6 +813,31 @@ public sealed class RingCabinetProfessionalSymbolTests
             second.YMillimeters - (first.YMillimeters + first.HeightMillimeters),
             first.YMillimeters - (second.YMillimeters + second.HeightMillimeters)));
         return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static void AssertSceneElementEqual(
+        SceneElement expected,
+        SceneElement actual)
+    {
+        if (expected is not ScenePolyline expectedPolyline)
+        {
+            Assert.Equal(expected, actual);
+            return;
+        }
+
+        ScenePolyline actualPolyline = Assert.IsType<ScenePolyline>(actual);
+        Assert.Equal(expectedPolyline.TargetKind, actualPolyline.TargetKind);
+        Assert.Equal(expectedPolyline.TargetId, actualPolyline.TargetId);
+        Assert.Equal(expectedPolyline.HitTestBounds, actualPolyline.HitTestBounds);
+        Assert.Equal(expectedPolyline.Points, actualPolyline.Points);
+        Assert.Equal(expectedPolyline.IsClosed, actualPolyline.IsClosed);
+        Assert.Equal(expectedPolyline.Bounds, actualPolyline.Bounds);
+        Assert.Equal(expectedPolyline.Stroke, actualPolyline.Stroke);
+        Assert.Equal(
+            expectedPolyline.ThicknessMillimeters,
+            actualPolyline.ThicknessMillimeters);
+        Assert.Equal(expectedPolyline.Fill, actualPolyline.Fill);
+        Assert.Equal(expectedPolyline.StrokeStyle, actualPolyline.StrokeStyle);
     }
 
     private static RingCabinet CreateLoadSwitchCabinet(

@@ -83,6 +83,7 @@ public sealed class RingCabinetCreationViewModelTests
         var viewModel = new RingCabinetCreationViewModel
         {
             DisplayName = "PT 位置测试",
+            LineName = "10kV 测试线路",
             CabinetType = RingCabinetTemplateType.PrimarySecondaryIntegrated,
             BusinessIntervalCount = 5,
             IncludePTInterval = true,
@@ -110,6 +111,7 @@ public sealed class RingCabinetCreationViewModelTests
         var viewModel = new RingCabinetCreationViewModel
         {
             DisplayName = "默认右 PT",
+            LineName = "10kV 测试线路",
             BusinessIntervalCount = 6,
             IncludePTInterval = true
         };
