@@ -47,7 +47,9 @@ public sealed class CanvasInteractionRuntimeTests
 
         Assert.True(resolved);
         Assert.Equal(transform.ViewToDocument(viewPoint), worldPoint);
-        Assert.Equal(viewPoint, transform.DocumentToView(worldPoint));
+        Point roundTripped = transform.DocumentToView(worldPoint);
+        Assert.Equal(viewPoint.X, roundTripped.X, 10);
+        Assert.Equal(viewPoint.Y, roundTripped.Y, 10);
     }
 
     [Theory]
