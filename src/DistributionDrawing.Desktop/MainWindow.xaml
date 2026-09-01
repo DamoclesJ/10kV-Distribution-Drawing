@@ -377,6 +377,7 @@
                                            MouseLeftButtonDown="OnDrawingSurfaceMouseLeftButtonDown"
                                            MouseRightButtonDown="OnDrawingSurfaceMouseRightButtonDown"
                                            MouseMove="OnDrawingSurfaceMouseMove"
+                                           MouseLeave="OnDrawingSurfaceMouseLeave"
                                            MouseLeftButtonUp="OnDrawingSurfaceMouseLeftButtonUp"
                                            MouseUp="OnDrawingSurfaceMouseUp"
                                            PreviewMouseWheel="OnDrawingSurfaceMouseWheel"
@@ -493,8 +494,10 @@
             <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
                        Text="接地结构（一二次融合间隔）" />
             <ComboBox x:Name="IntervalGroundingStructureInput"
+                      SelectionChanged="OnIntervalGroundingStructureSelectionChanged"
                       Margin="0,4,0,4" />
-            <Button Content="应用间隔配置"
+            <Button x:Name="ApplyIntervalConfigurationButton"
+                    Content="应用间隔配置"
                     Click="OnApplyIntervalConfiguration" />
           </StackPanel>
           <StackPanel x:Name="SwitchOperationPanel"

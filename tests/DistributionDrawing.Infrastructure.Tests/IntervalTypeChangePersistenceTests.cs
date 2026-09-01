@@ -38,6 +38,7 @@ public sealed class IntervalTypeChangePersistenceTests
         RingCabinet cabinet = GetCabinet(document);
         RingCabinetInterval source = GetInterval(cabinet, 3);
         cabinet.ChangeIntervalType(source.IntervalId, IntervalKind.PTInterval);
+        document.SynchronizeRingCabinetAggregate(cabinet);
         RingCabinetInterval expected = GetInterval(cabinet, 3);
         string filePath = CreateTemporaryPath();
 
@@ -76,6 +77,7 @@ public sealed class IntervalTypeChangePersistenceTests
             source.IntervalId,
             IntervalKind.IntegratedFeederInterval,
             GroundingStructureKind.UpperLowerGrounding);
+        document.SynchronizeRingCabinetAggregate(cabinet);
         RingCabinetInterval expected = GetInterval(cabinet, 3);
         string filePath = CreateTemporaryPath();
 
@@ -109,6 +111,7 @@ public sealed class IntervalTypeChangePersistenceTests
             source.IntervalId,
             IntervalKind.IntegratedFeederInterval,
             GroundingStructureKind.LowerLowerGrounding);
+        document.SynchronizeRingCabinetAggregate(cabinet);
         RingCabinetInterval expected = GetInterval(cabinet, 3);
         string filePath = CreateTemporaryPath();
 
@@ -136,6 +139,7 @@ public sealed class IntervalTypeChangePersistenceTests
         RingCabinet cabinet = GetCabinet(document);
         RingCabinetInterval source = GetInterval(cabinet, 3);
         cabinet.ChangeIntervalType(source.IntervalId, IntervalKind.LoadSwitchInterval);
+        document.SynchronizeRingCabinetAggregate(cabinet);
         RingCabinetInterval expected = GetInterval(cabinet, 3);
         string filePath = CreateTemporaryPath();
 
@@ -148,6 +152,87 @@ public sealed class IntervalTypeChangePersistenceTests
             Assert.Equal(IntervalKind.LoadSwitchInterval, actual.IntervalKind);
             Assert.Equal("负3-7", NumberFor(actual, SwitchKind.GroundSwitch));
             Assert.Null(NumberFor(actual, SwitchKind.LoadSwitch));
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
+    public void IntervalApply_SaveValidationPassesImmediatelyAfterTypeChange()
+    {
+        DrawingDocument document = CreateIntegratedDocument();
+        RingCabinet cabinet = GetCabinet(document);
+        RingCabinetInterval source = GetInterval(cabinet, 3);
+        string filePath = CreateTemporaryPath();
+
+        try
+        {
+            cabinet.ChangeIntervalType(source.IntervalId, IntervalKind.LoadSwitchInterval);
+            document.SynchronizeRingCabinetAggregate(cabinet);
+
+            RingCabinet restored = RoundTrip(document, filePath);
+
+            Assert.Equal(
+                IntervalKind.LoadSwitchInterval,
+                GetInterval(restored, 3).IntervalKind);
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
+    public void IntervalApply_SaveValidationPassesAfterChangingBackToOriginalType()
+    {
+        DrawingDocument document = CreateIntegratedDocument();
+        RingCabinet cabinet = GetCabinet(document);
+        RingCabinetInterval source = GetInterval(cabinet, 3);
+        string filePath = CreateTemporaryPath();
+
+        try
+        {
+            cabinet.ChangeIntervalType(source.IntervalId, IntervalKind.LoadSwitchInterval);
+            document.SynchronizeRingCabinetAggregate(cabinet);
+            cabinet.ChangeIntervalType(
+                source.IntervalId,
+                IntervalKind.IntegratedFeederInterval,
+                GroundingStructureKind.UpperIsolationGrounding);
+            document.SynchronizeRingCabinetAggregate(cabinet);
+
+            RingCabinet restored = RoundTrip(document, filePath);
+
+            Assert.Equal(
+                IntervalKind.IntegratedFeederInterval,
+                GetInterval(restored, 3).IntervalKind);
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
+    public void PTMigration_SaveValidationPreservesOnePTAndRestoredStandardInterval()
+    {
+        DrawingDocument document = CreatePTDocument();
+        RingCabinet cabinet = GetCabinet(document);
+        RingCabinetInterval destination = GetInterval(cabinet, 5);
+        string filePath = CreateTemporaryPath();
+
+        try
+        {
+            cabinet.ChangeIntervalType(destination.IntervalId, IntervalKind.PTInterval);
+            document.SynchronizeRingCabinetAggregate(cabinet);
+
+            RingCabinet restored = RoundTrip(document, filePath);
+
+            Assert.Equal(IntervalKind.LoadSwitchInterval, GetInterval(restored, 3).IntervalKind);
+            Assert.Equal(IntervalKind.PTInterval, GetInterval(restored, 5).IntervalKind);
+            Assert.Single(restored.Intervals, interval =>
+                interval.IntervalKind == IntervalKind.PTInterval);
         }
         finally
         {

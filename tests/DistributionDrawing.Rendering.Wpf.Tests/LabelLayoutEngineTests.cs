@@ -7,6 +7,22 @@ namespace DistributionDrawing.Rendering.Wpf.Tests;
 public sealed class LabelLayoutEngineTests
 {
     [Fact]
+    public void Layout_UsesProvidedMeasuredWidthForProfessionalLabels()
+    {
+        var request = new LabelRequest(
+            LabelTargetKind.SwitchDevice,
+            Guid.NewGuid(),
+            "负4-47",
+            new DocumentPoint(20, 20),
+            new DocumentPoint(0, 0),
+            measuredWidthMillimeters: 24);
+
+        LabelLayoutResult result = Assert.Single(new LabelLayoutEngine().Layout([request]));
+
+        Assert.Equal(24, result.Bounds.WidthMillimeters);
+    }
+
+    [Fact]
     public void LayoutSingleLabelAppliesAnchorAndOffset()
     {
         Guid targetId = Guid.NewGuid();

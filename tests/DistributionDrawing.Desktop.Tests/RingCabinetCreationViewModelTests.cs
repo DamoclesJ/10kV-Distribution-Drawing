@@ -1,4 +1,5 @@
 using DistributionDrawing.Application.Templates.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.RingCabinetCreation;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
@@ -14,6 +15,7 @@ public sealed class RingCabinetCreationViewModelTests
     [InlineData(4)]
     [InlineData(5)]
     [InlineData(6)]
+    [InlineData(7)]
     public void ConventionalTemplate_AutomaticallyCreatesNamedLoadSwitchIntervals(int count)
     {
         RingCabinet cabinet = CreateCabinet(
@@ -34,7 +36,9 @@ public sealed class RingCabinetCreationViewModelTests
 
     [Theory]
     [InlineData(4)]
+    [InlineData(5)]
     [InlineData(6)]
+    [InlineData(7)]
     public void IntegratedTemplate_AutomaticallyCreatesNamedFeederIntervals(int count)
     {
         RingCabinet cabinet = CreateCabinet(
@@ -62,9 +66,79 @@ public sealed class RingCabinetCreationViewModelTests
 
         RingCabinetInterval pt = Assert.Single(cabinet.Intervals.Where(interval =>
             interval.IntervalKind == IntervalKind.PTInterval));
+        Assert.Equal(4, cabinet.Intervals.Count);
+        Assert.Equal(4, pt.BayIndex);
         Assert.Equal("PT", pt.DisplayName);
         Assert.Contains(pt.SwitchDevices, device => device.SwitchKind == SwitchKind.IsolationSwitch);
         Assert.Contains(pt.SwitchDevices, device => device.SwitchKind == SwitchKind.GroundSwitch);
+    }
+
+    [Theory]
+    [InlineData(RingCabinetPTPlacement.Left, 1)]
+    [InlineData(RingCabinetPTPlacement.Right, 5)]
+    public void IncludePT_CreatesTheRequestedEndWithoutAnIntermediateEdit(
+        RingCabinetPTPlacement placement,
+        int expectedBayIndex)
+    {
+        var viewModel = new RingCabinetCreationViewModel
+        {
+            DisplayName = "PT 位置测试",
+            CabinetType = RingCabinetTemplateType.PrimarySecondaryIntegrated,
+            BusinessIntervalCount = 5,
+            IncludePTInterval = true,
+            PTPlacement = placement
+        };
+
+        Assert.True(viewModel.TryCreateConfiguration(
+            out RingCabinetCreationConfiguration? configuration,
+            out string error), error);
+        RingCabinet cabinet = new RingCabinetCreationFactory().Create(configuration!);
+
+        RingCabinetInterval pt = Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        Assert.Equal(expectedBayIndex, pt.BayIndex);
+        Assert.Equal(5, cabinet.Intervals.Count);
+        Assert.All(cabinet.Intervals.Where(interval => interval.IntervalId != pt.IntervalId),
+            interval => Assert.Equal(
+                IntervalKind.IntegratedFeederInterval,
+                interval.IntervalKind));
+    }
+
+    [Fact]
+    public void IncludePT_DefaultPlacementRemainsRight()
+    {
+        var viewModel = new RingCabinetCreationViewModel
+        {
+            DisplayName = "默认右 PT",
+            BusinessIntervalCount = 6,
+            IncludePTInterval = true
+        };
+
+        Assert.Equal(RingCabinetPTPlacement.Right, viewModel.PTPlacement);
+        Assert.True(viewModel.TryCreateConfiguration(
+            out RingCabinetCreationConfiguration? configuration,
+            out string error), error);
+        RingCabinet cabinet = new RingCabinetCreationFactory().Create(configuration!);
+        Assert.Equal(6, Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval).BayIndex);
+    }
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("25")]
+    [InlineData("not-a-number")]
+    public void CustomIntervalCount_RejectsValuesOutsideTheSupportedProductRange(string input)
+    {
+        var viewModel = new RingCabinetCreationViewModel
+        {
+            DisplayName = "数量校验",
+            IntervalCountText = input
+        };
+
+        Assert.False(viewModel.TryCreateConfiguration(
+            out RingCabinetCreationConfiguration? _,
+            out string error));
+        Assert.NotEmpty(error);
     }
 
     private static RingCabinet CreateCabinet(

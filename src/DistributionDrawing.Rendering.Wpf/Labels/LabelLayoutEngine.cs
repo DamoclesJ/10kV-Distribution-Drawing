@@ -20,12 +20,14 @@ public sealed class LabelLayoutEngine
                      .OrderByDescending(item => item.value.Priority)
                      .ThenBy(item => item.value.TargetId)
                      .ThenBy(item => item.index)
-                     .Select(item => item.value))
+            .Select(item => item.value))
         {
             DocumentPoint preferredPosition = Add(request.Anchor, request.Offset);
             DocumentRect preferredBounds = Measure(request, preferredPosition);
             (DocumentPoint position, DocumentRect bounds, bool adjusted, bool collision) =
-                FindPlacement(request, preferredPosition, preferredBounds, results);
+                request.AllowCollisionAdjustment
+                    ? FindPlacement(request, preferredPosition, preferredBounds, results)
+                    : (preferredPosition, preferredBounds, false, false);
 
             results.Add(new LabelLayoutResult(
                 request,
@@ -102,7 +104,7 @@ public sealed class LabelLayoutEngine
 
     private static DocumentRect Measure(LabelRequest request, DocumentPoint position)
     {
-        double width = Math.Max(
+        double width = request.MeasuredWidthMillimeters ?? Math.Max(
             request.FontSizeMillimeters,
             request.Text.Length * request.FontSizeMillimeters * CharacterWidthFactor);
 

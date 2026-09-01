@@ -55,15 +55,18 @@ public sealed class ChangeIntervalTypeCommand : ICommand
                 $"No layout exists for ring cabinet '{_cabinet.Id}'.");
         try
         {
+            Guid[] affectedIntervalIds = ResolveAffectedIntervalIds();
             _cabinet.ChangeIntervalType(
                 _intervalId,
                 _targetIntervalKind,
                 _targetGroundingStructureKind);
             _document?.SynchronizeRingCabinetAggregate(_cabinet);
-            _afterLayout = _layoutFactory.RebuildInterval(
-                _cabinet,
+            _afterLayout = affectedIntervalIds.Aggregate(
                 _beforeLayout,
-                _intervalId);
+                (current, affectedIntervalId) => _layoutFactory.RebuildInterval(
+                    _cabinet,
+                    current,
+                    affectedIntervalId));
             _runtimeLayout.ReplaceRingCabinet(_afterLayout);
             _after = _cabinet.CaptureRestoreDefinition();
         }
@@ -87,6 +90,20 @@ public sealed class ChangeIntervalTypeCommand : ICommand
     }
 
     public void Redo() => Execute();
+
+    private Guid[] ResolveAffectedIntervalIds()
+    {
+        Guid? existingPTId = _targetIntervalKind == IntervalKind.PTInterval
+            ? _cabinet.Intervals
+                .Where(interval => interval.IntervalKind == IntervalKind.PTInterval &&
+                                   interval.IntervalId != _intervalId)
+                .Select(interval => (Guid?)interval.IntervalId)
+                .SingleOrDefault()
+            : null;
+        return existingPTId is Guid ptId
+            ? [_intervalId, ptId]
+            : [_intervalId];
+    }
 
     private void RestoreState(
         RingCabinetRestoreDefinition definition,

@@ -1,5 +1,7 @@
 using DistributionDrawing.Application.Templates.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Application.Templates.RingCabinets.Building;
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
@@ -179,6 +181,197 @@ public sealed class IntervalTypeChangeIntegrationTests
         Assert.Equal(changed.ExternalTerminalId, redone.ExternalTerminalId);
         Assert.Contains(document.Terminals, terminal =>
             terminal.Id == redone.ExternalTerminalId);
+    }
+
+    [Fact]
+    public void ChangeIntervalTypeCommand_ReplacesDeviceOwnedTopologyWithTheInternalSwitches()
+    {
+        RingCabinet cabinet = CreateCabinet();
+        var document = new DrawingDocument(Guid.NewGuid(), "Project");
+        document.AddDevice(cabinet);
+        RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
+        Guid[] oldDeviceIds = interval.SwitchDevices.Select(device => device.Id).ToArray();
+        RuntimeLayoutDocument runtimeLayout = CreateLayout(cabinet);
+        var command = new ChangeIntervalTypeCommand(
+            cabinet,
+            runtimeLayout,
+            interval.IntervalId,
+            IntervalKind.LoadSwitchInterval,
+            null,
+            document: document);
+
+        command.Execute();
+
+        RingCabinetInterval replacement = cabinet.Intervals.Single(item =>
+            item.IntervalId == interval.IntervalId);
+        Guid[] replacementDeviceIds = replacement.SwitchDevices
+            .Select(device => device.Id)
+            .ToArray();
+        Assert.DoesNotContain(document.Devices, device => oldDeviceIds.Contains(device.Id));
+        Assert.DoesNotContain(document.Terminals, terminal =>
+            terminal.OwnerType == TopologyOwnerType.Device &&
+            oldDeviceIds.Contains(terminal.OwnerId));
+        Assert.All(replacementDeviceIds, replacementId =>
+            Assert.Contains(document.Devices, device => device.Id == replacementId));
+        Assert.All(document.Terminals.Where(terminal =>
+                terminal.OwnerType == TopologyOwnerType.Device),
+            terminal => Assert.Contains(document.Devices, device =>
+                device.Id == terminal.OwnerId));
+    }
+
+    [Fact]
+    public void ChangeIntervalTypeCommand_ChangeAndChangeBackLeavesNoStaleDeviceOwner()
+    {
+        RingCabinet cabinet = CreateCabinet();
+        var document = new DrawingDocument(Guid.NewGuid(), "Project");
+        document.AddDevice(cabinet);
+        RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
+        RuntimeLayoutDocument runtimeLayout = CreateLayout(cabinet);
+
+        new ChangeIntervalTypeCommand(
+            cabinet,
+            runtimeLayout,
+            interval.IntervalId,
+            IntervalKind.LoadSwitchInterval,
+            null,
+            document: document).Execute();
+        new ChangeIntervalTypeCommand(
+            cabinet,
+            runtimeLayout,
+            interval.IntervalId,
+            IntervalKind.IntegratedFeederInterval,
+            GroundingStructureKind.UpperIsolationGrounding,
+            document: document).Execute();
+
+        Assert.All(document.Terminals.Where(terminal =>
+                terminal.OwnerType == TopologyOwnerType.Device),
+            terminal => Assert.Contains(document.Devices, device =>
+                device.Id == terminal.OwnerId));
+        Assert.All(document.ElectricalNodes.Where(node =>
+                node.OwnerType == TopologyOwnerType.Device),
+            node => Assert.Contains(document.Devices, device => device.Id == node.OwnerId));
+    }
+
+    [Theory]
+    [InlineData(RingCabinetPTPlacement.Left, 1)]
+    [InlineData(RingCabinetPTPlacement.Right, 5)]
+    public void PTMigration_FromEitherEndIsAtomicAndTopologyValidAcrossUndoRedo(
+        RingCabinetPTPlacement placement,
+        int originalPTBay)
+    {
+        RingCabinet cabinet = CreateCabinetWithPTAt(placement);
+        var document = new DrawingDocument(Guid.NewGuid(), "Project");
+        document.AddDevice(cabinet);
+        RingCabinetInterval target = cabinet.Intervals.Single(interval => interval.BayIndex == 3);
+        Guid originalPTId = cabinet.Intervals.Single(interval =>
+            interval.IntervalKind == IntervalKind.PTInterval).IntervalId;
+        RuntimeLayoutDocument runtimeLayout = CreateLayout(cabinet);
+        var stack = new CommandStack();
+
+        stack.ExecuteCommand(new ChangeIntervalTypeCommand(
+            cabinet,
+            runtimeLayout,
+            target.IntervalId,
+            IntervalKind.PTInterval,
+            null,
+            document: document));
+
+        Assert.Single(stack.History);
+        Assert.Equal(IntervalKind.PTInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == target.IntervalId).IntervalKind);
+        RingCabinetInterval restored = cabinet.Intervals.Single(interval =>
+            interval.IntervalId == originalPTId);
+        Assert.Equal(originalPTBay, restored.BayIndex);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, restored.IntervalKind);
+        Assert.Equal(
+            GroundingStructureKind.UpperIsolationGrounding,
+            restored.GroundingStructureKind);
+        Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        AssertDeviceTopologyOwnersExist(document);
+
+        Assert.True(stack.Undo());
+        Assert.Equal(IntervalKind.PTInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == originalPTId).IntervalKind);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == target.IntervalId).IntervalKind);
+        AssertDeviceTopologyOwnersExist(document);
+
+        Assert.True(stack.Redo());
+        Assert.Equal(IntervalKind.PTInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == target.IntervalId).IntervalKind);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == originalPTId).IntervalKind);
+        AssertDeviceTopologyOwnersExist(document);
+    }
+
+    [Fact]
+    public void PTMigration_FromMiddleToAnotherIntervalKeepsOnePTAndValidOwners()
+    {
+        RingCabinet cabinet = CreateCabinetWithPTAt(RingCabinetPTPlacement.Right);
+        var document = new DrawingDocument(Guid.NewGuid(), "Project");
+        document.AddDevice(cabinet);
+        RuntimeLayoutDocument runtimeLayout = CreateLayout(cabinet);
+        RingCabinetInterval middle = cabinet.Intervals.Single(interval => interval.BayIndex == 3);
+        RingCabinetInterval destination = cabinet.Intervals.Single(interval => interval.BayIndex == 2);
+
+        new ChangeIntervalTypeCommand(
+            cabinet,
+            runtimeLayout,
+            middle.IntervalId,
+            IntervalKind.PTInterval,
+            null,
+            document: document).Execute();
+        new ChangeIntervalTypeCommand(
+            cabinet,
+            runtimeLayout,
+            destination.IntervalId,
+            IntervalKind.PTInterval,
+            null,
+            document: document).Execute();
+
+        Assert.Equal(IntervalKind.PTInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == destination.IntervalId).IntervalKind);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == middle.IntervalId).IntervalKind);
+        Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        AssertDeviceTopologyOwnersExist(document);
+    }
+
+    [Fact]
+    public void PTMigration_RejectsConnectedRetiredExternalTerminalWithoutDeletingConnection()
+    {
+        RingCabinet cabinet = CreateCabinetWithPTAt(RingCabinetPTPlacement.Right);
+        var document = new DrawingDocument(Guid.NewGuid(), "Project");
+        document.AddDevice(cabinet);
+        RingCabinetInterval target = cabinet.Intervals.Single(interval => interval.BayIndex == 3);
+        RingCabinetInterval peer = cabinet.Intervals.Single(interval => interval.BayIndex == 2);
+        var connection = new Connection(
+            Guid.NewGuid(),
+            ConnectionType.Cable,
+            target.ExternalTerminalId,
+            peer.ExternalTerminalId,
+            "Protected cable",
+            "10kV");
+        document.AddConnection(connection);
+        RuntimeLayoutDocument runtimeLayout = CreateLayout(cabinet);
+        var stack = new CommandStack();
+
+        Assert.Throws<InvalidOperationException>(() => stack.ExecuteCommand(
+            new ChangeIntervalTypeCommand(
+                cabinet,
+                runtimeLayout,
+                target.IntervalId,
+                IntervalKind.PTInterval,
+                null,
+                document: document)));
+
+        Assert.Empty(stack.History);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, cabinet.Intervals.Single(interval =>
+            interval.IntervalId == target.IntervalId).IntervalKind);
+        Assert.Contains(document.Connections, item => item.Id == connection.Id);
+        AssertDeviceTopologyOwnersExist(document);
     }
 
     [Fact]
@@ -373,5 +566,30 @@ public sealed class IntervalTypeChangeIntegrationTests
             IntervalKind.PTInterval,
             null);
         return cabinet;
+    }
+
+    private static RingCabinet CreateCabinetWithPTAt(RingCabinetPTPlacement placement)
+    {
+        RingCabinetTemplate template = new RingCabinetCreationTemplateFactory().Create(
+            RingCabinetTemplateType.PrimarySecondaryIntegrated,
+            5,
+            includePTInterval: true,
+            ptPlacement: placement);
+        RingCabinetDomainBuildOutcome outcome = new RingCabinetTemplateDomainBuilder().Build(
+            template,
+            "Cabinet");
+        Assert.NotNull(outcome.Result);
+        return outcome.Result!.Cabinet;
+    }
+
+    private static void AssertDeviceTopologyOwnersExist(DrawingDocument document)
+    {
+        Assert.All(document.ElectricalNodes.Where(node =>
+                node.OwnerType == TopologyOwnerType.Device),
+            node => Assert.Contains(document.Devices, device => device.Id == node.OwnerId));
+        Assert.All(document.Terminals.Where(terminal =>
+                terminal.OwnerType == TopologyOwnerType.Device),
+            terminal => Assert.Contains(document.Devices, device =>
+                device.Id == terminal.OwnerId));
     }
 }

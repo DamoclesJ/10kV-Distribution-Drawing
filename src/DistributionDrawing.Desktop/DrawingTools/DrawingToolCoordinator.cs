@@ -104,7 +104,8 @@ public sealed class DrawingToolCoordinator
     public bool HandleClick(
         DocumentPoint point,
         double terminalToleranceMillimeters,
-        SelectionReference? hitTarget = null)
+        SelectionReference? hitTarget = null,
+        bool snapPlacement = false)
     {
         if (_poleSwitchAttachment.IsSelectingControlledConnection)
         {
@@ -135,11 +136,12 @@ public sealed class DrawingToolCoordinator
             return true;
         }
 
-        return _placement.Place(point);
+        return _placement.Place(point, snapPlacement);
     }
 
-    public void UpdatePointer(DocumentPoint point)
+    public void UpdatePointer(DocumentPoint point, bool snapPlacement = false)
     {
+        _placement.UpdatePointer(point, snapPlacement);
         _overheadLine.UpdatePointer(point);
         _cableConnection.UpdatePointer(point);
     }
@@ -157,7 +159,8 @@ public sealed class DrawingToolCoordinator
 
     public IReadOnlyList<SceneElement> CreateTransientElements()
     {
-        return _overheadLine.CreatePreviewElements()
+        return _placement.CreatePreviewElements()
+            .Concat(_overheadLine.CreatePreviewElements())
             .Concat(_cableConnection.CreatePreviewElements())
             .ToArray();
     }

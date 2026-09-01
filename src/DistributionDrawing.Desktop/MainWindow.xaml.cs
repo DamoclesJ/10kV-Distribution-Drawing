@@ -27,6 +27,7 @@ using DistributionDrawing.Desktop.PoleAttachmentManagement;
 using DistributionDrawing.Desktop.Demo;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.RingCabinetCreation;
+using DistributionDrawing.Desktop.RingCabinetEditing;
 using DistributionDrawing.Desktop.Viewport;
 using DistributionDrawing.Desktop.Services;
 using DistributionDrawing.Desktop.ViewModels;
@@ -69,6 +70,7 @@ public partial class MainWindow : Window
     private readonly IDesktopMessageService _messageService;
     private readonly DesktopContextMenuResolver _contextMenuResolver = new();
     private readonly ExportDrawingController _exportDrawing;
+    private readonly IntervalConfigurationPreviewController _intervalPreview = new();
     private readonly DispatcherTimer _statusFeedbackTimer = new()
     {
         Interval = TimeSpan.FromSeconds(2.5)
@@ -76,6 +78,7 @@ public partial class MainWindow : Window
     private DocumentSession? _boundDocumentSession;
     private MainWindowViewModel _shellViewModel = null!;
     private bool _gridVisible;
+    private bool _updatingIntervalEditor;
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
@@ -488,6 +491,13 @@ public partial class MainWindow : Window
 
     private void CancelCurrentOperation()
     {
+        if (_intervalPreview.Cancel())
+        {
+            UpdateIntervalEditor();
+            RenderCurrentScene();
+            return;
+        }
+
         if (_selectionRectangle.Cancel())
         {
             DrawingSurface.ReleaseMouseCapture();
@@ -900,6 +910,7 @@ public partial class MainWindow : Window
 
     private void CancelTransientInteraction()
     {
+        _intervalPreview.Cancel();
         bool layoutChanged = _deviceDrag.Cancel();
         layoutChanged |= _cableRouteDrag.Cancel();
         if (layoutChanged && _workspace.CurrentSession is { } session)
@@ -1421,6 +1432,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        _intervalPreview.Cancel();
         RefreshDrawingScene();
     }
 
@@ -1435,6 +1447,50 @@ public partial class MainWindow : Window
         {
             IntervalGroundingStructureInput.SelectedItem =
                 GroundingStructureKind.UpperIsolationGrounding;
+        }
+
+        UpdateIntervalConfigurationPreview();
+    }
+
+    private void OnIntervalGroundingStructureSelectionChanged(
+        object sender,
+        System.Windows.Controls.SelectionChangedEventArgs e) =>
+        UpdateIntervalConfigurationPreview();
+
+    private void UpdateIntervalConfigurationPreview()
+    {
+        if (_updatingIntervalEditor ||
+            _selectionManager.Selected is not
+                { Kind: SelectionTargetKind.RingCabinetInterval } target ||
+            _selectionResolver.Resolve(target) is not
+                { RingCabinet: { } cabinet, RingCabinetInterval: { } } ||
+            _workspace.CurrentSession?.Layout.RingCabinetLayouts
+                .GetValueOrDefault(cabinet.Id) is not { } layout ||
+            IntervalTypeInput.SelectedItem is not IntervalKind intervalKind)
+        {
+            return;
+        }
+
+        GroundingStructureKind? groundingStructure =
+            intervalKind == IntervalKind.IntegratedFeederInterval &&
+            IntervalGroundingStructureInput.SelectedItem is GroundingStructureKind selectedStructure
+                ? selectedStructure
+                : null;
+        try
+        {
+            _intervalPreview.Update(
+                cabinet,
+                layout,
+                target.ObjectId,
+                intervalKind,
+                groundingStructure);
+            ApplyIntervalConfigurationButton.IsEnabled = _intervalPreview.IsActive;
+            RenderCurrentScene();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            _intervalPreview.Cancel();
+            ApplyIntervalConfigurationButton.IsEnabled = false;
         }
     }
 
@@ -1847,7 +1903,8 @@ public partial class MainWindow : Window
                 _drawingTools.HandleClick(
                     documentPoint,
                     _viewport.Transform.ViewDistanceToDocument(8),
-                    activeHitTarget);
+                    activeHitTarget,
+                    _gridVisible);
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
@@ -2038,6 +2095,14 @@ public partial class MainWindow : Window
         System.Windows.Input.MouseEventArgs e)
     {
         System.Windows.Point point = e.GetPosition(DrawingSurface);
+        if (_placement.Mode != PlacementMode.Idle)
+        {
+            _drawingTools.UpdatePointer(
+                _viewport.Transform.ViewToDocument(point),
+                _gridVisible);
+            e.Handled = true;
+            return;
+        }
         if (_viewport.IsPanning)
         {
             _viewport.UpdatePan(point);
@@ -2102,6 +2167,11 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void OnDrawingSurfaceMouseLeave(
+        object sender,
+        System.Windows.Input.MouseEventArgs e) =>
+        _placement.HidePreview();
+
     private void OnDrawingSurfaceMouseLeftButtonUp(
         object sender,
         System.Windows.Input.MouseButtonEventArgs e)
@@ -2165,6 +2235,10 @@ public partial class MainWindow : Window
 
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
+        if (_intervalPreview.TargetIntervalId != _selectionManager.Selected?.ObjectId)
+        {
+            _intervalPreview.Cancel();
+        }
         _shellViewModel.RefreshCommandStates();
         UpdateCanvasStatus();
         if (_selectionManager.SelectionCount > 1)
@@ -2197,6 +2271,7 @@ public partial class MainWindow : Window
 
     private void CollapseSingleSelectionEditors()
     {
+        _intervalPreview.Cancel();
         RingCabinetEditorPanel.Visibility = Visibility.Collapsed;
         PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
         PoleInstalledDevicesPanel.Visibility = Visibility.Collapsed;
@@ -2690,18 +2765,28 @@ public partial class MainWindow : Window
         if (selection?.Reference.Kind != SelectionTargetKind.RingCabinetInterval ||
             selection.RingCabinetInterval is not { } interval)
         {
+            _intervalPreview.Cancel();
             IntervalEditorPanel.Visibility = Visibility.Collapsed;
             return;
         }
 
         IntervalEditorPanel.Visibility = Visibility.Visible;
-        IntervalDisplayNameInput.Text = interval.DisplayName;
-        IntervalTypeInput.ItemsSource = SupportedIntervalKinds;
-        IntervalGroundingStructureInput.ItemsSource = SupportedGroundingStructures;
-        IntervalTypeInput.SelectedItem = interval.IntervalKind;
-        IntervalGroundingStructureInput.SelectedItem = interval.GroundingStructureKind;
-        IntervalGroundingStructureInput.IsEnabled =
-            interval.IntervalKind == IntervalKind.IntegratedFeederInterval;
+        _updatingIntervalEditor = true;
+        try
+        {
+            IntervalDisplayNameInput.Text = interval.DisplayName;
+            IntervalTypeInput.ItemsSource = SupportedIntervalKinds;
+            IntervalGroundingStructureInput.ItemsSource = SupportedGroundingStructures;
+            IntervalTypeInput.SelectedItem = interval.IntervalKind;
+            IntervalGroundingStructureInput.SelectedItem = interval.GroundingStructureKind;
+            IntervalGroundingStructureInput.IsEnabled =
+                interval.IntervalKind == IntervalKind.IntegratedFeederInterval;
+            ApplyIntervalConfigurationButton.IsEnabled = false;
+        }
+        finally
+        {
+            _updatingIntervalEditor = false;
+        }
     }
 
     private void UpdateAttachmentOffsetEditor()
@@ -3024,6 +3109,7 @@ public partial class MainWindow : Window
         UpdateCablePropertyEditor();
 
         var elements = _currentScene.Elements.ToList();
+        elements.AddRange(_intervalPreview.Elements);
         elements.AddRange(_drawingTools.CreateTransientElements());
         elements.AddRange(
             SelectionOverlayBuilder.CreateElements(

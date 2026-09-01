@@ -24,6 +24,8 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
     private GroundingStructureKind _integratedGroundingStructureKind =
         GroundingStructureKind.UpperIsolationGrounding;
     private bool _includePTInterval;
+    private RingCabinetPTPlacement _ptPlacement = RingCabinetPTPlacement.Right;
+    private string _intervalCountText = "3";
 
     public RingCabinetCreationViewModel(
         RingCabinetCreationTemplateFactory? templateFactory = null)
@@ -57,27 +59,17 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
                 return;
             }
 
-            int[] supported = SupportedBusinessIntervalCounts.ToArray();
-            if (!supported.Contains(BusinessIntervalCount))
+            if (IsPrimarySecondaryIntegrated && BusinessIntervalCount == 3)
             {
-                BusinessIntervalCount = supported[0];
+                BusinessIntervalCount = 4;
             }
 
-            if (!IsPrimarySecondaryIntegrated)
-            {
-                IncludePTInterval = false;
-            }
-
-            OnPropertyChanged(nameof(SupportedBusinessIntervalCounts));
             OnPropertyChanged(nameof(IsPrimarySecondaryIntegrated));
             OnPropertyChanged(nameof(GeneratedIntervalNames));
         }
     }
 
-    public IReadOnlyList<int> SupportedBusinessIntervalCounts =>
-        CabinetType == RingCabinetTemplateType.Conventional
-            ? [3, 4, 5, 6]
-            : [4, 6];
+    public IReadOnlyList<int> CommonIntervalCounts => [4, 6];
 
     public int BusinessIntervalCount
     {
@@ -86,6 +78,23 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _businessIntervalCount, value))
             {
+                _intervalCountText = value.ToString();
+                OnPropertyChanged(nameof(IntervalCountText));
+                OnPropertyChanged(nameof(GeneratedIntervalNames));
+            }
+        }
+    }
+
+    public string IntervalCountText
+    {
+        get => _intervalCountText;
+        set
+        {
+            if (SetField(ref _intervalCountText, value) &&
+                int.TryParse(value, out int count))
+            {
+                _businessIntervalCount = count;
+                OnPropertyChanged(nameof(BusinessIntervalCount));
                 OnPropertyChanged(nameof(GeneratedIntervalNames));
             }
         }
@@ -110,8 +119,43 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _includePTInterval, value))
             {
+                OnPropertyChanged(nameof(IsPTPlacementEnabled));
                 OnPropertyChanged(nameof(GeneratedIntervalNames));
             }
+        }
+    }
+
+    public bool IsPTPlacementEnabled => IncludePTInterval;
+
+    public RingCabinetPTPlacement PTPlacement
+    {
+        get => _ptPlacement;
+        set
+        {
+            if (SetField(ref _ptPlacement, value))
+            {
+                OnPropertyChanged(nameof(IsPTLeft));
+                OnPropertyChanged(nameof(IsPTRight));
+                OnPropertyChanged(nameof(GeneratedIntervalNames));
+            }
+        }
+    }
+
+    public bool IsPTLeft
+    {
+        get => PTPlacement == RingCabinetPTPlacement.Left;
+        set
+        {
+            if (value) PTPlacement = RingCabinetPTPlacement.Left;
+        }
+    }
+
+    public bool IsPTRight
+    {
+        get => PTPlacement == RingCabinetPTPlacement.Right;
+        set
+        {
+            if (value) PTPlacement = RingCabinetPTPlacement.Right;
         }
     }
 
@@ -119,14 +163,16 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
     {
         get
         {
-            IEnumerable<string> names = Enumerable.Range(1, BusinessIntervalCount)
-                .Select(index => $"负{index}");
-            if (IncludePTInterval)
-            {
-                names = names.Append("PT");
-            }
-
-            return string.Join("、", names);
+            int count = int.TryParse(IntervalCountText, out int parsed) &&
+                        parsed is >= RingCabinetCreationTemplateFactory.MinimumIntervalCount and
+                            <= RingCabinetCreationTemplateFactory.MaximumIntervalCount
+                ? parsed
+                : 0;
+            int ptIndex = PTPlacement == RingCabinetPTPlacement.Left ? 1 : count;
+            return string.Join("、", Enumerable.Range(1, count)
+                .Select(index => IncludePTInterval && index == ptIndex
+                    ? "PT"
+                    : $"负{index}"));
         }
     }
 
@@ -147,13 +193,20 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
             return false;
         }
 
+        if (!int.TryParse(IntervalCountText, out int intervalCount))
+        {
+            errorMessage = "请输入有效的间隔数量。";
+            return false;
+        }
+
         try
         {
             RingCabinetTemplate template = _templateFactory.Create(
                 CabinetType,
-                BusinessIntervalCount,
+                intervalCount,
                 IntegratedGroundingStructureKind,
-                IncludePTInterval);
+                IncludePTInterval,
+                PTPlacement);
             configuration = new RingCabinetCreationConfiguration(
                 DisplayName.Trim(),
                 template,

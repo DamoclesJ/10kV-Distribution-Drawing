@@ -12,7 +12,9 @@ public sealed record LabelRequest
         DocumentPoint offset,
         LabelAlignment preferredAlignment = LabelAlignment.Center,
         int priority = 0,
-        double fontSizeMillimeters = 3)
+        double fontSizeMillimeters = 3,
+        bool allowCollisionAdjustment = true,
+        double? measuredWidthMillimeters = null)
     {
         if (targetId == Guid.Empty)
         {
@@ -31,6 +33,14 @@ public sealed record LabelRequest
                 "Label font size must be greater than zero.");
         }
 
+        if (measuredWidthMillimeters is <= 0 ||
+            measuredWidthMillimeters is double measuredWidth && !double.IsFinite(measuredWidth))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(measuredWidthMillimeters),
+                "Measured label width must be finite and greater than zero.");
+        }
+
         TargetKind = targetKind;
         TargetId = targetId;
         Text = text;
@@ -39,6 +49,8 @@ public sealed record LabelRequest
         PreferredAlignment = preferredAlignment;
         Priority = priority;
         FontSizeMillimeters = fontSizeMillimeters;
+        AllowCollisionAdjustment = allowCollisionAdjustment;
+        MeasuredWidthMillimeters = measuredWidthMillimeters;
     }
 
     public LabelTargetKind TargetKind { get; }
@@ -56,4 +68,8 @@ public sealed record LabelRequest
     public int Priority { get; }
 
     public double FontSizeMillimeters { get; }
+
+    public bool AllowCollisionAdjustment { get; }
+
+    public double? MeasuredWidthMillimeters { get; }
 }

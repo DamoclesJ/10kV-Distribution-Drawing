@@ -146,20 +146,18 @@ public sealed class RingCabinetTemplateDomainBuilderTests
     }
 
     [Fact]
-    public void Build_ReturnsDomainCreationFailureForTwoLoadSwitchBays()
+    public void Build_AllowsTwoLoadSwitchBaysAsTheMinimumSupportedCount()
     {
         RingCabinetTemplate template = CreateTemplate(
             RingCabinetTemplateType.Conventional,
             new BayTemplate(1, new LoadSwitchConfiguration()),
             new BayTemplate(2, new LoadSwitchConfiguration()));
 
-        RingCabinetDomainBuildOutcome outcome = _builder.Build(template, "两间隔柜");
+        RingCabinetDomainBuildResult result = BuildSuccessfully(template);
 
-        Assert.False(outcome.IsSuccess);
-        Assert.Equal(
-            RingCabinetDomainBuildFailureKind.DomainCreationFailure,
-            outcome.Failure!.Kind);
-        Assert.IsType<InvalidOperationException>(outcome.Failure.Cause);
+        Assert.Equal(2, result.Cabinet.Intervals.Count);
+        Assert.All(result.Cabinet.Intervals, interval =>
+            Assert.Equal(IntervalKind.LoadSwitchInterval, interval.IntervalKind));
     }
 
     [Fact]

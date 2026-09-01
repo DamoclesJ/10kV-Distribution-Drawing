@@ -127,13 +127,39 @@ public sealed class RingCabinet : Device
             return;
         }
 
+        RingCabinetInterval? migratedPT = targetIntervalKind == IntervalKind.PTInterval
+            ? _intervals.SingleOrDefault(interval =>
+                interval.IntervalKind == IntervalKind.PTInterval &&
+                interval.IntervalId != currentInterval.IntervalId)
+            : null;
         RingCabinetIntervalRestoreDefinition[] definitions = _intervals
-            .Select(interval => interval.IntervalId == intervalId
-                ? CreateTypeChangeIntervalDefinition(
-                    interval,
-                    targetIntervalKind,
-                    targetGroundingStructureKind)
-                : CreateRestoreDefinition(interval))
+            .Select(interval =>
+            {
+                if (interval.IntervalId == intervalId)
+                {
+                    RingCabinetIntervalRestoreDefinition target =
+                        CreateTypeChangeIntervalDefinition(
+                            interval,
+                            targetIntervalKind,
+                            targetGroundingStructureKind);
+                    return migratedPT is null
+                        ? target
+                        : target with { DisplayName = migratedPT.DisplayName };
+                }
+
+                if (migratedPT is not null && interval.IntervalId == migratedPT.IntervalId)
+                {
+                    return CreateTypeChangeIntervalDefinition(
+                        interval,
+                        currentInterval.IntervalKind,
+                        currentInterval.GroundingStructureKind) with
+                    {
+                        DisplayName = currentInterval.DisplayName
+                    };
+                }
+
+                return CreateRestoreDefinition(interval);
+            })
             .ToArray();
 
         RingCabinet candidate = Restore(new RingCabinetRestoreDefinition(
@@ -375,13 +401,10 @@ public sealed class RingCabinet : Device
                 nameof(targetGroundingStructureKind));
         }
 
-        bool alreadyContainsPT = _intervals.Any(interval =>
-            interval.IntervalKind == IntervalKind.PTInterval &&
-            interval.IntervalId != currentInterval.IntervalId);
-        if (targetIntervalKind == IntervalKind.PTInterval && alreadyContainsPT)
+        if (targetIntervalKind == IntervalKind.PTInterval &&
+            currentInterval.IntervalKind == IntervalKind.PTInterval)
         {
-            throw new InvalidOperationException(
-                "A ring cabinet can contain at most one PT interval.");
+            return;
         }
     }
 
@@ -1762,24 +1785,27 @@ public sealed class RingCabinet : Device
 
     private void ValidatePureTemplateIntervalCount()
     {
-        if (CompositionKind == CabinetCompositionKind.LoadSwitchOnly &&
-            _intervals.Count is < 3 or > 6)
+        if (_intervals.Count > 24)
         {
             throw new InvalidOperationException(
-                "A load-switch-only cabinet must contain 3, 4, 5, or 6 intervals.");
+                "A ring cabinet cannot contain more than 24 intervals.");
         }
 
-        if (CompositionKind == CabinetCompositionKind.IntegratedFeederOnly &&
-            _intervals.Count is not (4 or 6))
+        if (CompositionKind == CabinetCompositionKind.PTOnly)
         {
-            throw new InvalidOperationException(
-                "An integrated-feeder-only cabinet must contain 4 or 6 intervals.");
+            if (_intervals.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    "A PT-only cabinet must contain exactly one interval.");
+            }
+
+            return;
         }
 
-        if (CompositionKind == CabinetCompositionKind.PTOnly && _intervals.Count != 1)
+        if (_intervals.Count < 2)
         {
             throw new InvalidOperationException(
-                "A PT-only cabinet must contain exactly one interval.");
+                "A ring cabinet must contain at least two intervals.");
         }
     }
 

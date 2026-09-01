@@ -552,7 +552,7 @@ public sealed class RingCabinetProfessionalSymbolTests
 
                 double x = request.Anchor.XMillimeters + request.Offset.XMillimeters;
                 double y = request.Anchor.YMillimeters + request.Offset.YMillimeters;
-                double width = Math.Max(
+                double width = request.MeasuredWidthMillimeters ?? Math.Max(
                     request.FontSizeMillimeters,
                     request.Text.Length * request.FontSizeMillimeters * 0.6);
                 double labelLeft = request.PreferredAlignment switch
@@ -577,9 +577,96 @@ public sealed class RingCabinetProfessionalSymbolTests
 
                 Assert.True(labelBounds.XMillimeters >= intervalLeft);
                 Assert.True(labelBounds.XMillimeters + labelBounds.WidthMillimeters <= intervalRight);
-                Assert.False(Overlaps(labelBounds, switchBounds));
+                Assert.All(intervalLayout.SwitchLayouts.Values, otherLayout =>
+                {
+                    var otherBounds = new DocumentRect(
+                        intervalLeft + otherLayout.RelativePosition.XMillimeters,
+                        layout.Position.YMillimeters +
+                        intervalLayout.RelativePosition.YMillimeters +
+                        otherLayout.RelativePosition.YMillimeters,
+                        otherLayout.WidthMillimeters,
+                        otherLayout.HeightMillimeters);
+                    Assert.False(Overlaps(labelBounds, otherBounds));
+                });
+                Assert.True(Distance(labelBounds, switchBounds) <= 24);
             }
         }
+    }
+
+    [Fact]
+    public void SwitchBusinessNumberPlacementIsDeterministicAcrossSceneRebuilds()
+    {
+        RingCabinet cabinet = CreateIntegratedCabinet(
+            5,
+            GroundingStructureKind.UpperLowerGrounding);
+        RingCabinetLayout layout = CreateLayout(cabinet);
+        var symbol = new RingCabinetSymbol(new SymbolLibrary());
+
+        var first = symbol.CreateLabelRequests(cabinet, layout)
+            .Where(request => request.TargetKind == LabelTargetKind.SwitchDevice)
+            .Select(request => (
+                request.TargetId,
+                request.Text,
+                request.Anchor,
+                request.Offset,
+                request.PreferredAlignment))
+            .ToArray();
+        var second = symbol.CreateLabelRequests(cabinet, layout)
+            .Where(request => request.TargetKind == LabelTargetKind.SwitchDevice)
+            .Select(request => (
+                request.TargetId,
+                request.Text,
+                request.Anchor,
+                request.Offset,
+                request.PreferredAlignment))
+            .ToArray();
+
+        Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void BusinessNumberLayoutDoesNotMoveProfessionalSymbolGeometry()
+    {
+        RingCabinet cabinet = CreateIntegratedCabinet(
+            4,
+            GroundingStructureKind.LowerLowerGrounding);
+        RingCabinetLayout layout = CreateLayout(cabinet);
+        var symbol = new RingCabinetSymbol(new SymbolLibrary());
+        SceneElement[] before = symbol.CreateElements(cabinet, layout, includeLabels: false)
+            .ToArray();
+
+        _ = symbol.CreateLabelRequests(cabinet, layout);
+        SceneElement[] after = symbol.CreateElements(cabinet, layout, includeLabels: false)
+            .ToArray();
+
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void RenderedSwitchBusinessNumbersUseTheCollisionCheckedBoundsOrigin()
+    {
+        RingCabinet cabinet = CreateIntegratedCabinet(
+            4,
+            GroundingStructureKind.UpperIsolationGrounding);
+        RingCabinetLayout layout = CreateLayout(cabinet);
+        var symbol = new RingCabinetSymbol(new SymbolLibrary());
+        RingCabinetInterval interval = cabinet.Intervals[0];
+        SwitchDevice target = interval.SwitchDevices.First(device =>
+            !string.IsNullOrWhiteSpace(interval.GetSwitchBusinessNumber(device.Id)) &&
+            interval.GetSwitchBusinessNumber(device.Id) != interval.BusinessNumber);
+        LabelRequest request = Assert.Single(
+            symbol.CreateLabelRequests(cabinet, layout),
+            item => item.TargetKind == LabelTargetKind.SwitchDevice &&
+                    item.TargetId == target.Id);
+        LabelLayoutResult result = Assert.Single(
+            new LabelLayoutEngine().Layout([request]));
+
+        SceneText rendered = Assert.Single(
+            new RingCabinetRenderer().Render(cabinet, layout).OfType<SceneText>(),
+            text => text.Text == request.Text);
+
+        Assert.Equal(result.Bounds.XMillimeters, rendered.Origin.XMillimeters);
+        Assert.Equal(result.Bounds.YMillimeters, rendered.Origin.YMillimeters);
     }
 
     [Fact]
@@ -719,6 +806,17 @@ public sealed class RingCabinetProfessionalSymbolTests
         left.XMillimeters + left.WidthMillimeters > right.XMillimeters &&
         left.YMillimeters < right.YMillimeters + right.HeightMillimeters &&
         left.YMillimeters + left.HeightMillimeters > right.YMillimeters;
+
+    private static double Distance(DocumentRect first, DocumentRect second)
+    {
+        double dx = Math.Max(0, Math.Max(
+            second.XMillimeters - (first.XMillimeters + first.WidthMillimeters),
+            first.XMillimeters - (second.XMillimeters + second.WidthMillimeters)));
+        double dy = Math.Max(0, Math.Max(
+            second.YMillimeters - (first.YMillimeters + first.HeightMillimeters),
+            first.YMillimeters - (second.YMillimeters + second.HeightMillimeters)));
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
 
     private static RingCabinet CreateLoadSwitchCabinet(
         int intervalCount,

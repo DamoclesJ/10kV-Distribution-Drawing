@@ -1,5 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Topology;
 using Xunit;
 
 namespace DistributionDrawing.Domain.Tests;
@@ -65,27 +67,23 @@ public sealed class RingCabinetIntervalTypeChangeTests
     }
 
     [Fact]
-    public void PTUniqueness_RejectsSecondPTWithoutChangingEitherInterval()
+    public void PTMigration_MovesTheSinglePTAndRestoresTheReplacedStandardType()
     {
         RingCabinet cabinet = CreatePTAndIntegratedCabinet();
         RingCabinetInterval existingPT = GetInterval(cabinet, 2);
         RingCabinetInterval candidate = GetInterval(cabinet, 4);
-        Guid[] candidateSwitchIds = candidate.SwitchDevices.Select(device => device.Id).ToArray();
-        Guid[] candidateTerminalIds = candidate.SwitchDevices.SelectMany(device => device.TerminalIds).ToArray();
-        Guid[] candidateNodeIds = [candidate.IntermediateNodeId!.Value, candidate.CircuitNodeId, candidate.EarthNodeId];
 
-        Assert.Throws<InvalidOperationException>(() =>
-            cabinet.ChangeIntervalType(candidate.IntervalId, IntervalKind.PTInterval));
+        cabinet.ChangeIntervalType(candidate.IntervalId, IntervalKind.PTInterval);
 
-        Assert.Equal(IntervalKind.PTInterval, GetInterval(cabinet, 2).IntervalKind);
-        Assert.Equal(existingPT.IntervalId, GetInterval(cabinet, 2).IntervalId);
-        RingCabinetInterval unchanged = GetInterval(cabinet, 4);
-        Assert.Equal(IntervalKind.IntegratedFeederInterval, unchanged.IntervalKind);
-        Assert.Equal(candidateSwitchIds, unchanged.SwitchDevices.Select(device => device.Id));
-        Assert.Equal(candidateTerminalIds, unchanged.SwitchDevices.SelectMany(device => device.TerminalIds));
-        Assert.Equal(candidateNodeIds[0], unchanged.IntermediateNodeId);
-        Assert.Equal(candidateNodeIds[1], unchanged.CircuitNodeId);
-        Assert.Equal(candidateNodeIds[2], unchanged.EarthNodeId);
+        RingCabinetInterval restored = GetInterval(cabinet, 2);
+        Assert.Equal(existingPT.IntervalId, restored.IntervalId);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, restored.IntervalKind);
+        Assert.Equal(
+            GroundingStructureKind.UpperIsolationGrounding,
+            restored.GroundingStructureKind);
+        Assert.Equal(IntervalKind.PTInterval, GetInterval(cabinet, 4).IntervalKind);
+        Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
     }
 
     [Fact]
@@ -107,6 +105,19 @@ public sealed class RingCabinetIntervalTypeChangeTests
         Assert.Equal(IntervalKind.PTInterval, newPT.IntervalKind);
         Assert.Equal("负4-2", NumberFor(newPT, SwitchKind.IsolationSwitch));
         Assert.Equal("负4-7", NumberFor(newPT, SwitchKind.GroundSwitch));
+    }
+
+    [Fact]
+    public void PTMigration_InConventionalCabinetRestoresLoadSwitchStandardType()
+    {
+        RingCabinet cabinet = CreateLoadSwitchAndPTCabinet();
+
+        cabinet.ChangeIntervalType(GetInterval(cabinet, 3).IntervalId, IntervalKind.PTInterval);
+
+        Assert.Equal(IntervalKind.PTInterval, GetInterval(cabinet, 3).IntervalKind);
+        Assert.Equal(IntervalKind.LoadSwitchInterval, GetInterval(cabinet, 5).IntervalKind);
+        Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
     }
 
     [Fact]
@@ -213,19 +224,19 @@ public sealed class RingCabinetIntervalTypeChangeTests
     }
 
     [Fact]
-    public void PTUniquenessFailure_PreservesExistingPTAndCandidateCompletely()
+    public void PTMigration_ReplacesBothIntervalsAtomicallyWithoutChangingOtherIntervals()
     {
         RingCabinet cabinet = CreatePTAndIntegratedCabinet();
-        RingCabinetInterval existingPT = GetInterval(cabinet, 2);
-        RingCabinetInterval candidate = GetInterval(cabinet, 4);
-        IntervalSnapshot existingSnapshot = Snapshot(existingPT);
-        IntervalSnapshot candidateSnapshot = Snapshot(candidate);
+        RingCabinetInterval untouched = GetInterval(cabinet, 1);
+        IntervalSnapshot untouchedSnapshot = Snapshot(untouched);
 
-        Assert.Throws<InvalidOperationException>(() =>
-            cabinet.ChangeIntervalType(candidate.IntervalId, IntervalKind.PTInterval));
+        cabinet.ChangeIntervalType(GetInterval(cabinet, 4).IntervalId, IntervalKind.PTInterval);
 
-        AssertSnapshotEqual(existingSnapshot, Snapshot(GetInterval(cabinet, 2)));
-        AssertSnapshotEqual(candidateSnapshot, Snapshot(GetInterval(cabinet, 4)));
+        AssertSnapshotEqual(untouchedSnapshot, Snapshot(GetInterval(cabinet, 1)));
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, GetInterval(cabinet, 2).IntervalKind);
+        Assert.Equal(IntervalKind.PTInterval, GetInterval(cabinet, 4).IntervalKind);
+        Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
     }
 
     [Fact]
@@ -290,6 +301,68 @@ public sealed class RingCabinetIntervalTypeChangeTests
         Assert.Equal(IntervalKind.PTInterval, GetInterval(cabinet, 3).IntervalKind);
     }
 
+    [Fact]
+    public void DocumentSynchronization_TypeChangeAndChangeBackLeaveNoDeviceOwnerOrphans()
+    {
+        RingCabinet cabinet = CreateMixedCabinet();
+        var document = new DrawingDocument(Guid.NewGuid(), "Topology invariant");
+        document.AddDevice(cabinet);
+        Guid intervalId = GetInterval(cabinet, 3).IntervalId;
+
+        cabinet.ChangeIntervalType(intervalId, IntervalKind.LoadSwitchInterval);
+        document.SynchronizeRingCabinetAggregate(cabinet);
+        AssertDeviceTopologyOwnersExist(document);
+
+        cabinet.ChangeIntervalType(
+            intervalId,
+            IntervalKind.IntegratedFeederInterval,
+            GroundingStructureKind.UpperIsolationGrounding);
+        document.SynchronizeRingCabinetAggregate(cabinet);
+        AssertDeviceTopologyOwnersExist(document);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    public void DocumentSynchronization_PTMigrationFromEitherEndLeavesNoDeviceOwnerOrphans(
+        int originalPTBay)
+    {
+        RingCabinet cabinet = CreateIntegratedCabinetWithPTAt(originalPTBay);
+        var document = new DrawingDocument(Guid.NewGuid(), "Topology invariant");
+        document.AddDevice(cabinet);
+        RingCabinetInterval target = GetInterval(cabinet, 3);
+
+        cabinet.ChangeIntervalType(target.IntervalId, IntervalKind.PTInterval);
+        document.SynchronizeRingCabinetAggregate(cabinet);
+
+        Assert.Equal(IntervalKind.PTInterval, GetInterval(cabinet, 3).IntervalKind);
+        Assert.Equal(
+            IntervalKind.IntegratedFeederInterval,
+            GetInterval(cabinet, originalPTBay).IntervalKind);
+        Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        AssertDeviceTopologyOwnersExist(document);
+    }
+
+    [Fact]
+    public void DocumentSynchronization_MiddlePTCanMigrateAgainWithoutOwnerOrphans()
+    {
+        RingCabinet cabinet = CreateIntegratedCabinetWithPTAt(5);
+        var document = new DrawingDocument(Guid.NewGuid(), "Topology invariant");
+        document.AddDevice(cabinet);
+
+        cabinet.ChangeIntervalType(GetInterval(cabinet, 3).IntervalId, IntervalKind.PTInterval);
+        document.SynchronizeRingCabinetAggregate(cabinet);
+        cabinet.ChangeIntervalType(GetInterval(cabinet, 2).IntervalId, IntervalKind.PTInterval);
+        document.SynchronizeRingCabinetAggregate(cabinet);
+
+        Assert.Equal(IntervalKind.PTInterval, GetInterval(cabinet, 2).IntervalKind);
+        Assert.Equal(IntervalKind.IntegratedFeederInterval, GetInterval(cabinet, 3).IntervalKind);
+        Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        AssertDeviceTopologyOwnersExist(document);
+    }
+
     private static RingCabinet CreateMixedCabinet()
     {
         return RingCabinet.Create(RingCabinetDefinition.Create(
@@ -333,6 +406,38 @@ public sealed class RingCabinetIntervalTypeChangeTests
                     SwitchState.Open,
                     SwitchState.Open)
             ]));
+    }
+
+    private static RingCabinet CreateIntegratedCabinetWithPTAt(int ptBay)
+    {
+        RingCabinetIntervalDefinition[] definitions = Enumerable.Range(1, 5)
+            .Select(index => index == ptBay
+                ? RingCabinetIntervalDefinition.CreatePT(
+                    index,
+                    SwitchState.Open,
+                    SwitchState.Open)
+                : RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                    index,
+                    GroundingStructureKind.UpperIsolationGrounding,
+                    SwitchState.Open,
+                    SwitchState.Open,
+                    SwitchState.Open))
+            .ToArray();
+        return RingCabinet.Create(RingCabinetDefinition.Create(
+            Guid.NewGuid(),
+            "Integrated cabinet with PT",
+            definitions));
+    }
+
+    private static void AssertDeviceTopologyOwnersExist(DrawingDocument document)
+    {
+        Assert.All(document.ElectricalNodes.Where(node =>
+                node.OwnerType == TopologyOwnerType.Device),
+            node => Assert.Contains(document.Devices, device => device.Id == node.OwnerId));
+        Assert.All(document.Terminals.Where(terminal =>
+                terminal.OwnerType == TopologyOwnerType.Device),
+            terminal => Assert.Contains(document.Devices, device =>
+                device.Id == terminal.OwnerId));
     }
 
     private static RingCabinet CreateLoadSwitchAndPTCabinet()

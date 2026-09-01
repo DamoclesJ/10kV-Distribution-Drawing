@@ -141,27 +141,45 @@ public sealed class DrawingDocument
         SwitchDevice[] previousSwitches = _devices.OfType<SwitchDevice>()
             .Where(device => device.ParentId is Guid parentId && intervalIds.Contains(parentId))
             .ToArray();
+        HashSet<Guid> previousSwitchIds = previousSwitches
+            .Select(device => device.Id)
+            .ToHashSet();
         SwitchAssembly[] previousAssemblies = _switchAssemblies
             .Where(assembly => intervalIds.Contains(assembly.ParentIntervalId))
             .ToArray();
         ElectricalNode[] previousNodes = _electricalNodes
-            .Where(node => node.OwnerType == TopologyOwnerType.InternalAggregate &&
-                intervalIds.Contains(node.OwnerId))
+            .Where(node =>
+                (node.OwnerType == TopologyOwnerType.InternalAggregate &&
+                 intervalIds.Contains(node.OwnerId)) ||
+                (node.OwnerType == TopologyOwnerType.Device &&
+                 previousSwitchIds.Contains(node.OwnerId)))
             .ToArray();
         Terminal[] previousTerminals = _terminals
-            .Where(terminal => terminal.OwnerType == TopologyOwnerType.InternalAggregate &&
-                intervalIds.Contains(terminal.OwnerId))
+            .Where(terminal =>
+                (terminal.OwnerType == TopologyOwnerType.InternalAggregate &&
+                 intervalIds.Contains(terminal.OwnerId)) ||
+                (terminal.OwnerType == TopologyOwnerType.Device &&
+                 previousSwitchIds.Contains(terminal.OwnerId)))
             .ToArray();
 
         SwitchDevice[] replacementSwitches = ringCabinet.InternalSwitchDevices.ToArray();
+        HashSet<Guid> replacementSwitchIds = replacementSwitches
+            .Select(device => device.Id)
+            .ToHashSet();
         SwitchAssembly[] replacementAssemblies = ringCabinet.InternalSwitchAssemblies.ToArray();
         ElectricalNode[] replacementNodes = ringCabinet.ElectricalNodes
-            .Where(node => node.OwnerType == TopologyOwnerType.InternalAggregate &&
-                intervalIds.Contains(node.OwnerId))
+            .Where(node =>
+                (node.OwnerType == TopologyOwnerType.InternalAggregate &&
+                 intervalIds.Contains(node.OwnerId)) ||
+                (node.OwnerType == TopologyOwnerType.Device &&
+                 replacementSwitchIds.Contains(node.OwnerId)))
             .ToArray();
         Terminal[] replacementTerminals = ringCabinet.Terminals
-            .Where(terminal => terminal.OwnerType == TopologyOwnerType.InternalAggregate &&
-                intervalIds.Contains(terminal.OwnerId))
+            .Where(terminal =>
+                (terminal.OwnerType == TopologyOwnerType.InternalAggregate &&
+                 intervalIds.Contains(terminal.OwnerId)) ||
+                (terminal.OwnerType == TopologyOwnerType.Device &&
+                 replacementSwitchIds.Contains(terminal.OwnerId)))
             .ToArray();
 
         HashSet<Guid> replacementTerminalIds = replacementTerminals
