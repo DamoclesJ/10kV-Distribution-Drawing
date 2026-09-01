@@ -132,6 +132,9 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.Equal(pasted.Id, session.SelectionManager.Selected?.ObjectId);
         Assert.True(session.CommandStack.Undo());
         Assert.DoesNotContain(session.PersistenceSession.Domain.Devices, item => item.Id == pasted.Id);
+        Assert.True(session.CommandStack.Redo());
+        Assert.Contains(session.PersistenceSession.Domain.Devices, item => item.Id == pasted.Id);
+        Assert.Equal(pasted.Id, session.SelectionManager.Selected?.ObjectId);
     }
 
     [Fact]

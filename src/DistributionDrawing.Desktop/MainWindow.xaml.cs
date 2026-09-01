@@ -422,26 +422,28 @@ public partial class MainWindow : Window
 
     private void ExecutePasteAction()
     {
-        ClipboardActionResult result = _clipboard.Paste();
-        if (!result.IsSuccess)
-        {
-            _messageService.ShowError("无法粘贴对象", result.Message);
-            return;
-        }
-
-        OnDrawingToolVisualChanged(this, EventArgs.Empty);
-        ShowTransientFeedback(result.Message);
+        Point mousePosition = System.Windows.Input.Mouse.GetPosition(DrawingSurface);
+        DocumentPoint? target = CanvasPasteTargetResolver.TryResolve(
+            DrawingSurface.IsMouseOver,
+            mousePosition,
+            new Size(DrawingSurface.ActualWidth, DrawingSurface.ActualHeight),
+            _viewport.Transform,
+            out DocumentPoint worldPoint)
+            ? worldPoint
+            : null;
+        ExecutePaste(target);
     }
 
     private void ExecutePasteAtCursorAction()
     {
-        if (_contextMenuWorldPoint is not DocumentPoint target)
-        {
-            ExecutePasteAction();
-            return;
-        }
+        ExecutePaste(_contextMenuWorldPoint);
+    }
 
-        ClipboardActionResult result = _clipboard.PasteAt(target);
+    private void ExecutePaste(DocumentPoint? target)
+    {
+        ClipboardActionResult result = target is DocumentPoint worldPoint
+            ? _clipboard.PasteAt(worldPoint)
+            : _clipboard.Paste();
         if (!result.IsSuccess)
         {
             _messageService.ShowError("无法粘贴对象", result.Message);

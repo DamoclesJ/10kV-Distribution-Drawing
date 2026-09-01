@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Runtime.ExceptionServices;
+using DistributionDrawing.Desktop.Clipboard;
 using DistributionDrawing.Desktop.Viewport;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Infrastructure.Persistence;
@@ -13,6 +14,63 @@ namespace DistributionDrawing.Desktop.Tests;
 
 public sealed class CanvasInteractionRuntimeTests
 {
+    [Fact]
+    public void PasteTarget_MouseInsideCanvasResolvesCurrentWorldPoint()
+    {
+        var transform = new CanvasViewTransform();
+        var viewPoint = new Point(240, 160);
+
+        bool resolved = CanvasPasteTargetResolver.TryResolve(
+            isMouseOverCanvas: true,
+            viewPoint,
+            new Size(800, 600),
+            transform,
+            out DocumentPoint worldPoint);
+
+        Assert.True(resolved);
+        Assert.Equal(transform.ViewToDocument(viewPoint), worldPoint);
+    }
+
+    [Fact]
+    public void PasteTarget_UsesZoomAndPanWhenResolvingWorldPoint()
+    {
+        var transform = new CanvasViewTransform();
+        transform.Restore(2.5, 80, -35);
+        var viewPoint = new Point(420, 275);
+
+        bool resolved = CanvasPasteTargetResolver.TryResolve(
+            isMouseOverCanvas: true,
+            viewPoint,
+            new Size(900, 700),
+            transform,
+            out DocumentPoint worldPoint);
+
+        Assert.True(resolved);
+        Assert.Equal(transform.ViewToDocument(viewPoint), worldPoint);
+        Assert.Equal(viewPoint, transform.DocumentToView(worldPoint));
+    }
+
+    [Theory]
+    [InlineData(false, 200, 150)]
+    [InlineData(true, -1, 150)]
+    [InlineData(true, 801, 150)]
+    [InlineData(true, 200, -1)]
+    [InlineData(true, 200, 601)]
+    public void PasteTarget_MouseOutsideCanvasUsesExistingPasteFallback(
+        bool isMouseOverCanvas,
+        double x,
+        double y)
+    {
+        bool resolved = CanvasPasteTargetResolver.TryResolve(
+            isMouseOverCanvas,
+            new Point(x, y),
+            new Size(800, 600),
+            new CanvasViewTransform(),
+            out _);
+
+        Assert.False(resolved);
+    }
+
     [Fact]
     public void MouseWheelZoom_ChangesOnlyViewTransform()
     {
