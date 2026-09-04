@@ -1,8 +1,21 @@
-# V1 Release Checklist
+# V1.0 Release Checklist
 
-正式分发目标：Windows x64、self-contained portable folder，无安装程序、无管理员权限要求、无需预装 .NET、离线解压即用。
+## Final baseline
 
-发布命令：
+- Version: V1.0
+- Project format: `FormatVersion = V6`
+- Standard package: `win-x64-portable`
+- Legacy package: `win-x64-portable-win10-legacy`
+- Distribution: Windows x64 self-contained portable folder
+- No installer, no .NET prerequisite, no Internet, and no administrator privilege required
+
+The legacy profile sets `CetCompat=false` for selected older or insufficiently serviced Windows 10 environments. It is a compatibility option, not a universal requirement.
+
+The legacy package has been launch-validated on Windows 10 Enterprise 22H2, OS Build 19045.2364. The standard package and both package variants still require final target-machine validation before release sign-off.
+
+## Publish commands
+
+标准 portable：
 
 ```powershell
 dotnet restore src/DistributionDrawing.Desktop/DistributionDrawing.Desktop.csproj -r win-x64
@@ -10,6 +23,15 @@ dotnet publish src/DistributionDrawing.Desktop/DistributionDrawing.Desktop.cspro
 ```
 
 输出目录：`artifacts/publish/desktop/win-x64-portable/`。
+
+Windows 10 legacy portable：
+
+```powershell
+dotnet restore src/DistributionDrawing.Desktop/DistributionDrawing.Desktop.csproj -r win-x64
+dotnet publish src/DistributionDrawing.Desktop/DistributionDrawing.Desktop.csproj -c Release -p:PublishProfile=win-x64-portable-win10-legacy
+```
+
+Legacy 输出目录：`artifacts/publish/desktop/win-x64-portable-win10-legacy/`。
 
 ## Windows 功能回归
 
