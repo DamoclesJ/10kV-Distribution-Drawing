@@ -165,14 +165,25 @@ public sealed class GroundingPresentationAnchorResolverTests
     {
         PoleCreationResult result = new PoleCreationFactory().Create("P-missing");
         DrawingDocument document = CreateDocument(result);
-        Guid terminalId = Assert.Single(result.Pole.OverheadAnchorTerminalIds);
+        var layout = new DrawingLayout();
+        layout.Add(new PoleLayout(result.Pole.Id, new DocumentPoint(20, 30)));
+        Guid terminalId = Guid.NewGuid();
+        document.AddTerminal(new Terminal(
+            terminalId,
+            TopologyOwnerType.Device,
+            result.Pole.Id,
+            "unindexed grounding terminal",
+            "10kV",
+            isExternal: true,
+            allowsMultipleConnections: false,
+            allowedConnectionTypes: [ConnectionType.OverheadLine]));
         GroundingPoint groundingPoint = document.CreateGroundingPoint(
             Guid.NewGuid(), terminalId, "缺失布局");
 
         DrawingScene scene = new DrawingSceneBuilder().Build(
             document,
             new RuntimeLayoutDocument(
-                new DrawingLayout(),
+                layout,
                 new Dictionary<Guid, RingCabinetLayout>()));
 
         SceneBuildDiagnostic diagnostic = Assert.Single(scene.Diagnostics);
