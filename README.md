@@ -90,6 +90,7 @@ dotnet publish src/DistributionDrawing.Desktop/DistributionDrawing.Desktop.cspro
 
 ## 文档
 
+- [`docs/project/`](docs/project/)：当前项目状态、路线图和开发工作流。
 - [`docs/v1-release-checklist.md`](docs/v1-release-checklist.md)：V1.0 发布、Windows 回归和 clean-machine 验证清单。
 - [`docs/requirements.md`](docs/requirements.md)：产品范围和验收边界。
 - [`docs/architecture.md`](docs/architecture.md)：高层架构和模块边界。
