@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / Implementation Not Started
+> 状态：Scope Frozen / WP-EM-01 Completed / Grounding Scope Amendment Pending
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
 
@@ -234,6 +234,8 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 
 ### WP-EM-01 — Grounding Presentation Anchor Separation
 
+**状态：Completed**
+
 目标：
 
 - 分离 electrical anchor 与 grounding presentation anchor；
@@ -293,10 +295,11 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 
 ## 9. 阶段执行状态
 
-Scope Freeze 完成后：
+当前执行状态：
 
 - Post-V1 Requirement Reassessment / Planning 结束；
 - Post-V1 Electrical Model Closure 成为当前开发目标；
-- 功能实现尚未开始；
-- 下一个 Work Package 是 WP-EM-01 Grounding Presentation Anchor Separation；
+- WP-EM-01 Grounding Presentation Anchor Separation 已完成代码 Review、自动验证和 Windows 实机验证；
+- 下一步是 Post-V1 Grounding Scope Amendment；
+- Scope Amendment 完成后的下一个实施 Work Package 是尚未开始的 WP-EM-02 V7 Format & Migration Foundation；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-07 顺序推进，任何范围变化需重新治理确认。
