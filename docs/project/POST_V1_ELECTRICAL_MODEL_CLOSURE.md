@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / Grounding Scope Amendment Pending
+> 状态：Scope Frozen / WP-EM-01 Completed / Grounding Scope Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
 
@@ -93,19 +93,33 @@ OverheadLine
 
 当前不建立两个 feeder 之间的内部电气连接，也不建模用户站内部母线、母联或站内网络。
 
-### 3.4 GroundingAccessPoint 与 GroundingTarget
+### 3.4 GroundingAccessPoint 与架空接地合同
 
-验电接地环 / 接地线夹正式建模为 `GroundingAccessPoint`。它是具有 Stable ID 的轻量 Electrical / Professional entity，不是 Device、SwitchDevice、Terminal 或 Annotation。
+验电接地环 / 接地线夹正式建模为 `GroundingAccessPoint`。它是具有 Stable ID 的永久、轻量 Electrical / Professional entity，不是 Device、`SwitchDevice`、`Terminal` 或 Annotation。架空侧新建工作地线统一采用：
 
-`GroundingAccessPoint` 引用：
+```text
+Overhead conductor
+    ↓
+GroundingAccessPoint
+    ↓
+GroundingPoint
+```
 
-- `OverheadLine` / `Connection`；
-- `Pole`；
-- `LineSide`，只使用 `SmallerNumberSide` / `LargerNumberSide` 专业语义，不保存画布 Left / Right。
+该规则适用于普通支撑杆，以及存在柱上 `SwitchDevice`、隔离刀闸、跌落式熔断器、`CableTermination` 或其它柱上设备的杆塔；不得因现场存在设备 `Terminal`，就将该 Terminal 作为新建架空工作地线的主要目标。
 
-它不截断 `OverheadLine`，不分割 `Connection`，不创建 `ElectricalNode`，不改变正常线路导通，并可在没有 `GroundingPoint` 时独立存在。同一 `OverheadLine + Pole + LineSide` 当前最多一个 `GroundingAccessPoint`。
+`GroundingAccessPoint` 至少稳定引用：
 
-`GroundingPoint` 的目标扩展为单一类型化引用：
+- associated `OverheadLine` / `Connection`；按当前模型以其 stable `ConnectionId` 表达；
+- `PoleId`；
+- `LineSide`，值仅为 `SmallerNumberSide` / `LargerNumberSide`。
+
+同一 `ConnectionId + PoleId + LineSide` 最多一个 `GroundingAccessPoint`。`Left`、`Right`、`Up`、`Down` 只是 Rendering 结果，不得持久化为业务事实。
+
+`GroundingAccessPoint` 不创建新的 `ElectricalNode`，不分割 `OverheadLine` / `Connection`，不改变 conduction，不成为 Switch 或 Terminal。它与临时 `GroundingPoint` 生命周期独立，可在没有 `GroundingPoint` 时存在；删除 `GroundingPoint` 不得自动删除 `GroundingAccessPoint`。
+
+### 3.5 GroundingTarget 与 Terminal compatibility
+
+V7 中 `GroundingPoint` 的目标为单一类型化引用：
 
 ```text
 GroundingTarget
@@ -113,23 +127,71 @@ GroundingTarget
 └── GroundingAccessPoint
 ```
 
-不得使用两个 nullable target ID。当前一个 `GroundingTarget` 最多对应一个 `GroundingPoint`。
+不得使用两个 nullable target ID。一个 `GroundingTarget` 最多对应一个 `GroundingPoint`。
 
-### 3.5 Pole-mounted equipment grounding presentation
-
-对于柱上 `SwitchDevice`，`GroundingPoint` 的 Electrical target 继续使用真实 Switch Terminal，但明确：
+V7 persistence 的最小 typed contract 为：
 
 ```text
-Electrical anchor != Grounding presentation anchor
+ProjectGroundingTargetDto
+├── Kind: Terminal | GroundingAccessPoint
+└── TargetId
+
+ProjectGroundingAccessPointDto
+├── GroundingAccessPointId
+├── ConnectionId
+├── PoleId
+└── LineSide: SmallerNumberSide | LargerNumberSide
 ```
 
-接地线图面表达必须位于 `Pole + attached Switch` 整个专业组合图元的外侧，不得机械使用 raw Terminal coordinate 而将地线画在 Pole 与 Switch 之间。
+`ProjectGroundingPointDto` 以单一 `GroundingTarget` 取代 V6 的 `TerminalId`。V7 顶层 schema 必须为 `GroundingAccessPoint` 保留 typed collection；不得用自由字典、两个 nullable target ID 或 rendering direction 代替这些字段。
 
-本阶段增加派生的专业 grounding presentation anchor 机制，默认不持久化人工显示坐标。若 persisted `GroundingPoint` 无法解析专业显示 anchor：
+`Terminal` target 继续合法，但只承担：
 
-- 必须产生显式诊断；
-- 不得静默不显示；
-- 正式导出不得无声遗漏安全相关专业事实。
+- V1.0 / V6 legacy compatibility；
+- 明确建模的真实电缆侧接地场景；
+- 必要的特殊 Terminal grounding。
+
+允许新建接地的 Terminal 类型必须由相应 Vertical Slice 按真实设备语义明确，不得把所有 Terminal 自动视为合法创建目标。当前确认的电缆侧目标包括 `CableTermination.CableSideTerminalId`，以及后续模型中的 `RingCabinet` cable-side terminal 和 `CustomerStation` incoming cable-side terminal。
+
+对于 `CableTermination`，必须区分两侧：
+
+```text
+Cable side grounding    → CableSideTerminal (`Terminal` target)
+Overhead side grounding → adjacent `GroundingAccessPoint`
+```
+
+`CableTermination.OverheadSideTerminalId` 不作为未来架空工作地线的主要创建目标。
+
+WP-EM-01 已实现的 `Pole + Switch` legacy Terminal-target presentation anchor 必须保留，用于旧文件、既有 Terminal-target `GroundingPoint` 和特殊 Terminal grounding。该 resolver 继续遵守 `Electrical anchor != Grounding presentation anchor`，但不再代表未来架空接地的主要创建工作流。若 persisted `GroundingPoint` 无法解析专业显示 anchor，必须产生显式诊断，不得静默不显示或在正式导出中无声遗漏。
+
+### 3.6 Grounding professional presentation 与交互
+
+`GroundingAccessPoint` 的默认专业位置由 `Pole + associated overhead segment + LineSide` 派生。存在柱上设备时，位置仍在设备外侧的真实架空导线上：从 Pole 或 `Pole + relevant device` 专业组合外边界，沿该侧导线方向向外保留约 1～2 mm 间距，推荐视觉目标约 1.5 mm。最终数值由 Rendering `DrawingMetrics` 中的 `GroundingAccessClearance` 或等价 typed metric 决定，不进入 Domain，也不持久化 screen / physical pixel 坐标。
+
+工作地线使用标准矢量 grounding symbol：一根竖向主 stem，下端三条以 stem 为中心、由上到下逐渐变短的水平横线。不得继续使用含义不明确的小方框或 bitmap。符号尺度与 Pole 保持合理专业比例，并由 Rendering metric 控制；用户调整 leader 时符号本身大小固定，不保存 symbol scale。
+
+架空 GAP-target `GroundingPoint` 的默认路径从架空导线接地点引至 grounding symbol。用户选择后可拖动 symbol，以增减 leader 长度并在水平、竖直方向避让标签和其它专业信息；该操作只修改 `GroundingPointLayout`，不得改变 `GroundingTarget`、`GroundingAccessPoint` 或 topology。
+
+Cable-side Terminal-target 路径必须支持：
+
+```text
+Terminal → horizontal / outward leader → orthogonal bend
+         → vertical leader → Grounding Symbol
+```
+
+outward 方向由设备 orientation 与 Rendering geometry 派生，不持久化 screen `Left` / `Right`；人工调整可同时影响水平和竖直方向。
+
+Grounding leader 穿过其它线路时，应优先复用当前 `LineJumpDecorator` 或等价的月牙式 / bridge crossing 表达。crossing 由当前 geometry 派生，不创建 electrical node、不改变 topology、不持久化假连接，原则上不单独保存 crossing waypoint；不得借此扩展为通用 diagram routing engine。
+
+### 3.7 Grounding 创建与字段交互
+
+WP-EM-04 必须提供可用的 `GroundingAccessPoint` 创建、删除、选择和展示，并允许在合法 GAP 上创建 `GroundingPoint`。Grounding workflow 可在实现审计时采用“缺少时快捷创建 GAP”的最小 UX，但 GAP 不得成为 `GroundingPoint` 的瞬态内部对象。
+
+对于仍允许的 Cable-side Terminal grounding，后续交互应提供合理 hit tolerance、target affordance / highlight 和 nearest-target resolution；不得把任意 device body 或 line geometry 隐式映射为不确定的 Terminal，也不得为旧架空 Terminal workflow 建立复杂的通用 picking framework。
+
+`GroundingPoint.Location` 继续是工作票文字 / 位置说明。UI 提供“小号侧 / 大号侧 / 自定义”，默认“小号侧”。GAP target 的默认显示值直接由唯一结构事实 `GroundingAccessPoint.LineSide` 派生：`SmallerNumberSide` → “小号侧”，`LargerNumberSide` → “大号侧”；不得再持久化第二套 side enum。只有选择“自定义”时输入自定义文本。Terminal target 的 `Location` 仅为 descriptive text，不因这些文字创造 Electrical `LineSide` 语义。
+
+新建 `GroundingPoint` 的 `Number` 默认 `L01`；创建输入为 null、empty 或 whitespace 时归一化为 `L01`，且用户可修改。本阶段不引入 `L02`、`L03` 自动递增或通用 numbering framework。
 
 ## 4. FormatVersion 7 与迁移合同
 
@@ -144,19 +206,21 @@ V7 至少容纳：
 - `GroundingAccessPoint`；
 - typed `GroundingTarget`；
 - `TransformerLayout`；
-- `CustomerStationLayout`。
+- `CustomerStationLayout`；
+- typed `GroundingPointLayout`。
 
 ### 4.1 V6 → V7 无损迁移
 
 | V6 事实 | V7 迁移结果 |
 | --- | --- |
 | 普通 interval `ExternalTerminalId` | `CableTerminalId = existing ExternalTerminalId`，即所有 V6 普通间隔默认有电缆终端 |
-| `GroundingPoint.TerminalId` | `GroundingTarget.Kind = Terminal`，`GroundingTarget.TargetId = existing TerminalId` |
+| `GroundingPoint.TerminalId` | `GroundingTarget.Kind = Terminal`，`GroundingTarget.TargetId = existing TerminalId`；保持 GroundingPoint stable ID、Location、Number、Note，不推断 GAP |
 | cabinet switch `ParentId` | typed owner = `RingCabinetInterval(existing ParentId)` |
 | pole switch | aggregate owner = none；`PoleAttachment` 原样保留 |
 | 新增顶层集合 | `Transformers = []`、`CustomerStations = []`、`GroundingAccessPoints = []` |
+| V6 无 `GroundingPointLayout` | 无人工 override，使用默认派生布局；不得生成随机 offset |
 
-迁移必须保持所有已有 `DeviceId`、`IntervalId`、`SwitchId`、`TerminalId`、`ElectricalNodeId`、`ConnectionId`、`SwitchState`、`GroundingPoint`、`WorkScope` 和 Layout 原值。
+迁移必须保持所有已有 `DeviceId`、`IntervalId`、`SwitchId`、`TerminalId`、`ElectricalNodeId`、`ConnectionId`、`SwitchState`、`GroundingPoint`、`WorkScope` 和 Layout 原值。旧 Switch Terminal grounding 不得自动转换为 GAP，也不得猜测现场真实位置并重写电气语义。
 
 ### 4.2 V6 文件升级保存行为
 
@@ -194,11 +258,22 @@ SwitchOwnerReference?
 不建立任意 `DeviceLayout` property bag。本阶段仅使用明确的 typed layout：
 
 - `TransformerLayout`；
-- `CustomerStationLayout`。
+- `CustomerStationLayout`；
+- `GroundingPointLayout`。
 
 `PublicIndoor` 的 Horizontal / Vertical orientation 属于 `TransformerLayout`，不是 Transformer Domain 业务类型。
 
 CustomerStation 内部 feeder 排布由 `StationKind + IncomingFeeder.Count + DrawingMetrics` 派生，默认不保存每个 feeder 的自由坐标。
+
+按当前 `ProjectLayoutDto`、`ProjectPointDto` 和毫米逻辑坐标风格，V7 冻结以下最小 Grounding layout 合同：
+
+```text
+ProjectGroundingPointLayoutDto
+├── GroundingPointId
+└── SymbolOffset: ProjectPointDto   // drawing logical-space, mm
+```
+
+运行时等价 typed layout 使用 `GroundingPointId + SymbolOffset`。无对应 layout record 表示无人工 override，Rendering 使用自动派生位置；人工拖动后只保存相对默认位置的 `SymbolOffset`。不得保存 Terminal / GAP 的假坐标、`Left` / `Right`、symbol scale、crossing waypoint 或电气事实。Undo 恢复前一 offset，Redo 重用同一 `GroundingPointId`，不得产生新 identity；Save / reopen 必须保持人工 offset。
 
 继续保留：
 
@@ -225,6 +300,8 @@ CustomerStation 内部 feeder 排布由 `StationKind + IncomingFeeder.Count + Dr
 - arbitrary N-feeder infrastructure；
 - arbitrary line accessory framework；
 - generic presentation property bag。
+
+Grounding 所需的最小 typed leader adjustment 与派生 bridge crossing 是已确认范围，不将 `advanced manual routing / waypoint` 的排除项扩展为通用 routing 能力。
 
 Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 Electrical Model Closure。
 
@@ -256,11 +333,12 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 - nullable CableTerminal DTO contract；
 - `GroundingTarget` persistence contract；
 - Transformer / CustomerStation / GroundingAccessPoint 顶层 schema slots；
-- typed layout schema；
+- typed `TransformerLayout`、`CustomerStationLayout` 和 `GroundingPointLayout` schema；
+- V6 `GroundingPoint.TerminalId` → V7 `GroundingTarget.Terminal` migration；
 - V7 serialization / round-trip foundation；
 - V6 first-save-as-V7 所需 persistence / session 基础。
 
-不包含 Transformer UI / professional symbol、CustomerStation UI / professional symbol、GroundingAccessPoint interaction、OptionalTerminal Inspector 或各 feature 的完整 Domain behavior。
+不包含 Transformer UI / professional symbol、CustomerStation UI / professional symbol、GroundingAccessPoint interaction、GroundingPoint drag UI、grounding symbol、grounding leader routing、crossing bridge、OptionalTerminal Inspector 或各 feature 的完整 Domain behavior。
 
 ### WP-EM-03 — RingCabinet Optional CableTerminal Vertical Slice
 
@@ -268,17 +346,21 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 
 ### WP-EM-04 — GroundingAccessPoint & GroundingTarget Vertical Slice
 
-完成 Domain behavior、create/delete、GroundingPoint target binding、Pole / OverheadLine deletion guards、selection、inspector、rendering、clipboard、Undo / Redo 和 V7 integration。不得分割 `OverheadLine`。
+完成 GAP Domain behavior、stable identity、唯一性、create/delete、`GroundingTarget` behavior、GroundingPoint target binding、Pole / OverheadLine deletion guards、commands、selection、Inspector、basic GAP rendering、clipboard、Undo / Redo、V7 integration 和 legacy Terminal-target compatibility。不得分割 `OverheadLine`，不得将复杂 presentation layout 塞入本 WP。
 
-### WP-EM-05 — Transformer Vertical Slice
+### WP-EM-05 — Grounding Layout & Interaction Closure
+
+完成 standard grounding symbol、`GroundingAccessClearance`、`GroundingPointLayout`、drag / leader adjustment、架空 GAP professional placement、Cable-side Terminal elbow route、Location selector、Number 默认 `L01`、target affordance / tolerance、crossing bridge、Canvas / PNG consistency，以及 Windows professional visual acceptance。
+
+### WP-EM-06 — Transformer Vertical Slice
 
 完成 three Transformer kinds、10kV terminal、create/delete、Cable / OverheadLine endpoint validation、professional symbols、`PublicIndoor` orientation、layout、selection、inspector、clipboard、Undo / Redo、V7 integration、topology graph compatibility，以及完整 `DropoutFuse → OverheadLine → Transformer` 场景。
 
-### WP-EM-06 — CustomerStation Vertical Slice
+### WP-EM-07 — CustomerStation Vertical Slice
 
 完成 `BoxStation`、`IndoorStation`、one/two `IncomingFeeder`、feeder-owned `IsolationSwitch`、cable-only connection、independent feeder topology、GroundingPoint integration、aggregate create/delete、professional rendering、selection、inspector、clipboard、Undo / Redo 和 V7 integration。
 
-### WP-EM-07 — Electrical Model Closure Integration
+### WP-EM-08 — Electrical Model Closure Integration
 
 只进行：
 
@@ -286,12 +368,12 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 - save/open、copy/paste、undo/redo；
 - delete dependency；
 - topology graph；
-- grounding diagnostics；
+- grounding diagnostics、layout 与 interaction regression；
 - Windows runtime 与 professional visual validation；
 - file upgrade validation；
 - integration defect fixes。
 
-不得在 WP-EM-07 扩展新业务范围。
+不得在 WP-EM-08 扩展新业务范围。
 
 ## 9. 阶段执行状态
 
@@ -300,6 +382,7 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 - Post-V1 Requirement Reassessment / Planning 结束；
 - Post-V1 Electrical Model Closure 成为当前开发目标；
 - WP-EM-01 Grounding Presentation Anchor Separation 已完成代码 Review、自动验证和 Windows 实机验证；
-- 下一步是 Post-V1 Grounding Scope Amendment；
-- Scope Amendment 完成后的下一个实施 Work Package 是尚未开始的 WP-EM-02 V7 Format & Migration Foundation；
-- 后续 WP 必须按 WP-EM-01 → WP-EM-07 顺序推进，任何范围变化需重新治理确认。
+- Post-V1 Grounding Scope Amendment 已完成并冻结；
+- 下一个实施 Work Package 是尚未开始的 WP-EM-02 V7 Format & Migration Foundation；
+- 当前生产实现和工程文件格式仍为 V6；`GroundingAccessPoint`、typed `GroundingTarget` 与 `GroundingPointLayout` 尚未实现；
+- 后续 WP 必须按 WP-EM-01 → WP-EM-08 顺序推进，任何范围变化需重新治理确认。
