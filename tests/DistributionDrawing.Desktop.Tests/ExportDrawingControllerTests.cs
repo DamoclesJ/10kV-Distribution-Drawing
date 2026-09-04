@@ -1,8 +1,11 @@
 using System.IO;
 using System.Runtime.ExceptionServices;
+using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Desktop.Actions;
 using DistributionDrawing.Desktop.Export;
 using DistributionDrawing.Desktop.Workspace;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Rendering;
@@ -71,6 +74,42 @@ public sealed class ExportDrawingControllerTests : IDisposable
                 Path.GetDirectoryName(outputPath)!,
                 $".{Path.GetFileName(outputPath)}.*.tmp"),
             _ => true);
+    }
+
+    [Fact]
+    public void GroundingPresentationDiagnostic_BlocksExportWithExplicitError()
+    {
+        ProjectRuntimeSession session = CreateSession("接地锚点缺失");
+        PoleCreationResult result = new PoleCreationFactory().Create("P-missing");
+        session.PersistenceSession.Domain.AddDevice(result.Pole);
+        foreach (ElectricalNode node in result.ElectricalNodes)
+        {
+            session.PersistenceSession.Domain.AddElectricalNode(node);
+        }
+
+        foreach (Terminal terminal in result.Terminals)
+        {
+            session.PersistenceSession.Domain.AddTerminal(terminal);
+        }
+
+        session.PersistenceSession.Domain.CreateGroundingPoint(
+            Guid.NewGuid(),
+            Assert.Single(result.Pole.OverheadAnchorTerminalIds),
+            "缺失布局");
+        session.RebuildScene();
+        string outputPath = NextPath(".png");
+        var messages = new TestMessages();
+        var controller = new ExportDrawingController(
+            () => session,
+            () => "接地锚点缺失",
+            new TestExportDialog(outputPath),
+            messages);
+
+        Assert.False(controller.ExportPng());
+
+        Assert.False(File.Exists(outputPath));
+        Assert.Single(messages.Errors);
+        Assert.Contains("无法解析专业显示锚点", messages.Errors[0]);
     }
 
     private ProjectRuntimeSession CreateSession(string title)

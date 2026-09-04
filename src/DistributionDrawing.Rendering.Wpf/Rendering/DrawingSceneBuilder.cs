@@ -159,7 +159,10 @@ public sealed class DrawingSceneBuilder
         elements.AddRange(professionalScene.Elements);
         hitTestEntries.AddRange(professionalScene.HitTestEntries);
 
-        return new DrawingScene(elements, new SelectionHitTestIndex(hitTestEntries));
+        return new DrawingScene(
+            elements,
+            new SelectionHitTestIndex(hitTestEntries),
+            professionalScene.Diagnostics);
     }
 
     public DrawingScene Build(

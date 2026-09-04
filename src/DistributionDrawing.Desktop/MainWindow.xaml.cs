@@ -1108,6 +1108,8 @@ public partial class MainWindow : Window
                     "环网柜：单击图面放置，Esc 或右键退出",
                 DesktopToolMode.CreatePole =>
                     "杆塔：单击图面连续放置，Esc 或右键退出",
+                _ when _currentScene?.Diagnostics.Count > 0 =>
+                    $"专业显示错误：{_currentScene.Diagnostics[0].Message}",
                 _ => "选择对象"
             },
             _selectionManager.SelectionCount);

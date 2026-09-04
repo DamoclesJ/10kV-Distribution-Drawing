@@ -3,6 +3,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
@@ -10,7 +11,8 @@ namespace DistributionDrawing.Rendering.Wpf.Professional;
 
 public sealed record ProfessionalSceneResult(
     IReadOnlyList<SceneElement> Elements,
-    IReadOnlyList<SelectionHitTestEntry> HitTestEntries);
+    IReadOnlyList<SelectionHitTestEntry> HitTestEntries,
+    IReadOnlyList<SceneBuildDiagnostic> Diagnostics);
 
 /// <summary>
 /// Projects existing Professional facts into transient scene elements and
@@ -19,11 +21,13 @@ public sealed record ProfessionalSceneResult(
 public sealed class ProfessionalSceneBuilder
 {
     private readonly SymbolLibrary _symbolLibrary;
+    private readonly GroundingPresentationAnchorResolver _groundingAnchorResolver;
 
     public ProfessionalSceneBuilder(SymbolLibrary symbolLibrary)
     {
         ArgumentNullException.ThrowIfNull(symbolLibrary);
         _symbolLibrary = symbolLibrary;
+        _groundingAnchorResolver = new GroundingPresentationAnchorResolver();
     }
 
     public ProfessionalSceneResult Build(
@@ -41,11 +45,22 @@ public sealed class ProfessionalSceneBuilder
             ringCabinetLayouts);
         var elements = new List<SceneElement>();
         var hitTestEntries = new List<SelectionHitTestEntry>();
+        var diagnostics = new List<SceneBuildDiagnostic>();
 
         foreach (GroundingPoint groundingPoint in document.GroundingPoints)
         {
-            if (!anchors.TryGet(groundingPoint.TerminalId, out TerminalAnchor anchor))
+            if (!_groundingAnchorResolver.TryResolve(
+                    groundingPoint,
+                    document,
+                    drawingLayout,
+                    anchors,
+                    out GroundingPresentationAnchor anchor))
             {
+                diagnostics.Add(new SceneBuildDiagnostic(
+                    "GroundingPresentationAnchorMissing",
+                    $"工作地线 '{groundingPoint.GroundingPointId}' 无法解析专业显示锚点。",
+                    SelectionTargetKind.GroundingPoint,
+                    groundingPoint.GroundingPointId));
                 continue;
             }
 
@@ -99,16 +114,17 @@ public sealed class ProfessionalSceneBuilder
                     65));
         }
 
-        return new ProfessionalSceneResult(elements, hitTestEntries);
+        return new ProfessionalSceneResult(elements, hitTestEntries, diagnostics);
     }
 
     private IReadOnlyList<SceneElement> CreateGroundingPointElements(
         GroundingPoint groundingPoint,
-        TerminalAnchor anchor)
+        GroundingPresentationAnchor anchor)
     {
-        DocumentPoint end = new(
-            anchor.Position.XMillimeters + 8,
-            anchor.Position.YMillimeters);
+        DocumentPoint end = Move(
+            anchor.Position,
+            anchor.Direction,
+            DrawingMetrics.Default.Routing.PortStubLength);
         string? label = groundingPoint.Number ?? groundingPoint.Location;
         var elements = new List<SceneElement>
         {
@@ -121,6 +137,25 @@ public sealed class ProfessionalSceneBuilder
             _symbolLibrary.CreateGroundingLine(anchor.Position, end, label));
         return elements;
     }
+
+    private static DocumentPoint Move(
+        DocumentPoint start,
+        TerminalAnchorDirection direction,
+        double distance) => direction switch
+        {
+            TerminalAnchorDirection.Left => new DocumentPoint(
+                start.XMillimeters - distance,
+                start.YMillimeters),
+            TerminalAnchorDirection.Up => new DocumentPoint(
+                start.XMillimeters,
+                start.YMillimeters - distance),
+            TerminalAnchorDirection.Down => new DocumentPoint(
+                start.XMillimeters,
+                start.YMillimeters + distance),
+            _ => new DocumentPoint(
+                start.XMillimeters + distance,
+                start.YMillimeters)
+        };
 
     private static IReadOnlyList<SceneElement> CreateBoundaryElements(
         DocumentPoint position,

@@ -91,6 +91,12 @@ public sealed class ExportDrawingController
 
     private void ExportToTemporaryFile(ProjectRuntimeSession session, string path)
     {
+        if (session.Scene.Diagnostics.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"图纸存在无法导出的专业显示错误：{session.Scene.Diagnostics[0].Message}");
+        }
+
         string fullPath = Path.GetFullPath(path);
         string directory = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
         string temporaryPath = Path.Combine(

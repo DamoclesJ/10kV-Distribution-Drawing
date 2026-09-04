@@ -9,15 +9,19 @@ public sealed class DrawingScene
 {
     public DrawingScene(
         IEnumerable<SceneElement> elements,
-        SelectionHitTestIndex? hitTestIndex = null)
+        SelectionHitTestIndex? hitTestIndex = null,
+        IEnumerable<SceneBuildDiagnostic>? diagnostics = null)
     {
         Elements = elements.ToArray();
         HitTestIndex = hitTestIndex ?? new SelectionHitTestIndex();
+        Diagnostics = diagnostics?.ToArray() ?? [];
     }
 
     public IReadOnlyList<SceneElement> Elements { get; }
 
     public SelectionHitTestIndex HitTestIndex { get; }
+
+    public IReadOnlyList<SceneBuildDiagnostic> Diagnostics { get; }
 }
 
 public abstract record SceneElement
