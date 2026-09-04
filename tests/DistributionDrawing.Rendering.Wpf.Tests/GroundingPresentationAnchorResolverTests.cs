@@ -163,27 +163,35 @@ public sealed class GroundingPresentationAnchorResolverTests
     [Fact]
     public void MissingAnchor_ProducesExplicitSceneDiagnostic()
     {
-        PoleCreationResult result = new PoleCreationFactory().Create("P-missing");
-        DrawingDocument document = CreateDocument(result);
-        var layout = new DrawingLayout();
-        layout.Add(new PoleLayout(result.Pole.Id, new DocumentPoint(20, 30)));
-        Guid terminalId = Guid.NewGuid();
-        document.AddTerminal(new Terminal(
-            terminalId,
-            TopologyOwnerType.Device,
-            result.Pole.Id,
-            "unindexed grounding terminal",
-            "10kV",
-            isExternal: true,
-            allowsMultipleConnections: false,
-            allowedConnectionTypes: [ConnectionType.OverheadLine]));
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P-missing",
+            PoleType.Cement,
+            null,
+            [SwitchKind.IsolationSwitch],
+            includeCableTerminal: false);
+        SwitchDevice switchDevice = Assert.Single(result.Devices.OfType<SwitchDevice>());
+        var document = new DrawingDocument(Guid.NewGuid(), "Missing grounding anchor");
+        document.AddDevice(switchDevice);
+        foreach (ElectricalNode node in result.ElectricalNodes.Where(
+                     node => node.OwnerId == switchDevice.Id))
+        {
+            document.AddElectricalNode(node);
+        }
+
+        foreach (Terminal terminal in result.Terminals.Where(
+                     terminal => terminal.OwnerId == switchDevice.Id))
+        {
+            document.AddTerminal(terminal);
+        }
+
+        Guid terminalId = switchDevice.TerminalIds[0];
         GroundingPoint groundingPoint = document.CreateGroundingPoint(
             Guid.NewGuid(), terminalId, "缺失布局");
 
         DrawingScene scene = new DrawingSceneBuilder().Build(
             document,
             new RuntimeLayoutDocument(
-                layout,
+                new DrawingLayout(),
                 new Dictionary<Guid, RingCabinetLayout>()));
 
         SceneBuildDiagnostic diagnostic = Assert.Single(scene.Diagnostics);

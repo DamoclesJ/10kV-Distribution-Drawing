@@ -80,21 +80,29 @@ public sealed class ExportDrawingControllerTests : IDisposable
     public void GroundingPresentationDiagnostic_BlocksExportWithExplicitError()
     {
         ProjectRuntimeSession session = CreateSession("接地锚点缺失");
-        PoleCreationResult result = new PoleCreationFactory().Create("P-missing");
-        session.PersistenceSession.Domain.AddDevice(result.Pole);
-        foreach (ElectricalNode node in result.ElectricalNodes)
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P-missing",
+            PoleType.Cement,
+            null,
+            [SwitchKind.IsolationSwitch],
+            includeCableTerminal: false);
+        SwitchDevice switchDevice = Assert.Single(result.Devices.OfType<SwitchDevice>());
+        session.PersistenceSession.Domain.AddDevice(switchDevice);
+        foreach (ElectricalNode node in result.ElectricalNodes.Where(
+                     node => node.OwnerId == switchDevice.Id))
         {
             session.PersistenceSession.Domain.AddElectricalNode(node);
         }
 
-        foreach (Terminal terminal in result.Terminals)
+        foreach (Terminal terminal in result.Terminals.Where(
+                     terminal => terminal.OwnerId == switchDevice.Id))
         {
             session.PersistenceSession.Domain.AddTerminal(terminal);
         }
 
         session.PersistenceSession.Domain.CreateGroundingPoint(
             Guid.NewGuid(),
-            Assert.Single(result.Pole.OverheadAnchorTerminalIds),
+            switchDevice.TerminalIds[0],
             "缺失布局");
         session.RebuildScene();
         string outputPath = NextPath(".png");
