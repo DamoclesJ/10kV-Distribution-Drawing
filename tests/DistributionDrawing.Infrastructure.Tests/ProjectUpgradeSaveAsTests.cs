@@ -71,6 +71,7 @@ public sealed class ProjectUpgradeSaveAsTests : IDisposable
     public void FailedUpgradeSaveAs_DoesNotTransitionSessionToV7()
     {
         string sourcePath = CreateVersion6Project();
+        byte[] originalBytes = File.ReadAllBytes(sourcePath);
         string invalidTarget = NextPath();
         Directory.CreateDirectory(invalidTarget);
         var service = new ProjectService();
@@ -78,8 +79,13 @@ public sealed class ProjectUpgradeSaveAsTests : IDisposable
 
         try
         {
-            Assert.ThrowsAny<IOException>(() =>
+            Exception? exception = Record.Exception(() =>
                 service.SaveProjectAs(invalidTarget, opened.Layout));
+
+            Assert.NotNull(exception);
+            Assert.True(
+                exception is IOException or UnauthorizedAccessException,
+                $"Expected a file-system Save As failure, got {exception.GetType().FullName}.");
         }
         finally
         {
@@ -90,6 +96,7 @@ public sealed class ProjectUpgradeSaveAsTests : IDisposable
         Assert.Equal(sourcePath, service.Current!.FilePath);
         Assert.Equal(ProjectFileFormat.Version6, service.Current.OpenedFormatVersion);
         Assert.True(service.Current.RequiresUpgradeSaveAs);
+        Assert.Equal(originalBytes, File.ReadAllBytes(sourcePath));
     }
 
     [Fact]
