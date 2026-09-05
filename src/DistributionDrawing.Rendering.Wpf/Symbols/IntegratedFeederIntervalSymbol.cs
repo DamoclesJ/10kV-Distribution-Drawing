@@ -155,13 +155,14 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
                 compactEarth: true);
         }
 
+        elements.Add(new SceneLine(
+            lowerBottom,
+            new DocumentPoint(centerX, terminalTop),
+            Colors.Black,
+            _metrics.General.StandardStrokeThickness));
+
         if (interval.HasCableTerminal)
         {
-            elements.Add(new SceneLine(
-                lowerBottom,
-                new DocumentPoint(centerX, terminalTop),
-                Colors.Black,
-                _metrics.General.StandardStrokeThickness));
             RingCabinetProfessionalGeometry.AddCableTerminationMarker(
                 elements,
                 terminalTip,
