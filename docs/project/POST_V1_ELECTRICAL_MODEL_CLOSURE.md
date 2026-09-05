@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Next / Grounding Scope Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Next / Grounding Scope Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
 
@@ -344,7 +344,19 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 
 ### WP-EM-03 — RingCabinet Optional CableTerminal Vertical Slice
 
+**状态：Closed**
+
 完成 Domain behavior、structural command、dependency guard、Inspector、rendering、TerminalAnchor、Cable picking、interval type-change interaction、Clipboard、Undo / Redo、V7 integration 和 regression tests。
+
+Closure evidence:
+
+- Implementation commit: `979c55fd405ccc1d2dd6f9481758f00e72ef7249` — `feat(electrical-model): support optional interval cable terminals`
+- Rendering fix commit: `f60ea9aa299dfb8151c60ff62ba5aff0e2c7b7d6` — `fix(electrical-model): preserve interval lead without cable terminal`
+- Windows build: passed.
+- Windows automated tests: Domain.Tests 101/101, Infrastructure.Tests 76/76, Rendering.Wpf.Tests 358/358, Desktop.Tests 173/173, ProjectPersistenceRoundTrip 24/24; failed = 0, skipped = 0.
+- Windows manual validation: passed. With no external cable, present → absent removes only the terminal triangle and preserves the interval internal lead; absent → present restores the triangle with stable lead geometry. With an external Cable / Connection, terminal removal remains blocked and Cable / topology are preserved. GroundingPoint and WorkScope dependency protection also remains enforced.
+- Absent-terminal rendering produces no triangle, terminal anchor, or cable target.
+- FormatVersion remains V7; no new migration was added; WP-EM-04 implementation has not started.
 
 ### WP-EM-04 — GroundingAccessPoint & GroundingTarget Vertical Slice
 
@@ -386,6 +398,7 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 - WP-EM-01 Grounding Presentation Anchor Separation 已完成代码 Review、自动验证和 Windows 实机验证；
 - Post-V1 Grounding Scope Amendment 已完成并冻结；
 - WP-EM-02 V7 Format & Migration Foundation 已完成代码 Review、自动验证和 Windows 最终验证；
-- 下一个实施 Work Package 是尚未开始的 WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice；
-- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer、CustomerStation 及 Optional CableTerminal feature behavior 尚未实现；
+- WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice 已完成并 Closed，包含 Windows 最终验证；
+- 下一个阶段为 WP-EM-04 requirements refinement / planning only，尚未开始实现；
+- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer、CustomerStation 尚未实现；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-08 顺序推进，任何范围变化需重新治理确认。

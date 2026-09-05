@@ -18,8 +18,8 @@ The Grounding Scope Amendment is complete and frozen. The confirmed Work Package
 
 1. WP-EM-01 Grounding Presentation Anchor Separation — Completed
 2. WP-EM-02 V7 Format & Migration Foundation — Completed
-3. WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice — Next / Planned
-4. WP-EM-04 GroundingAccessPoint & GroundingTarget Vertical Slice
+3. WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice — Completed / Closed
+4. WP-EM-04 GroundingAccessPoint & GroundingTarget Vertical Slice — Next / Planned
 5. WP-EM-05 Grounding Layout & Interaction Closure
 6. WP-EM-06 Transformer Vertical Slice
 7. WP-EM-07 CustomerStation Vertical Slice
