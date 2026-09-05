@@ -5,6 +5,10 @@ using System.Text.Json.Nodes;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
+public sealed record ProjectFileOpenResult(
+    ProjectFileDocument Document,
+    int OpenedFormatVersion);
+
 public sealed class ProjectFileContainer
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -104,6 +108,11 @@ public sealed class ProjectFileContainer
 
     public ProjectFileDocument Open(string filePath)
     {
+        return OpenWithSource(filePath).Document;
+    }
+
+    public ProjectFileOpenResult OpenWithSource(string filePath)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
         string targetPath = Path.GetFullPath(filePath);
@@ -173,12 +182,14 @@ public sealed class ProjectFileContainer
             FormatVersion = ProjectFileFormat.CurrentVersion
         };
 
-        return new ProjectFileDocument(
-            effectiveManifest,
-            payload.Metadata,
-            payload.Domain,
-            payload.Layout,
-            professional);
+        return new ProjectFileOpenResult(
+            new ProjectFileDocument(
+                effectiveManifest,
+                payload.Metadata,
+                payload.Domain,
+                payload.Layout,
+                professional),
+            manifest.FormatVersion);
     }
 
     private static void WriteJsonEntry<T>(ZipArchive archive, string entryName, T value)

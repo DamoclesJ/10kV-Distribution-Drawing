@@ -2,6 +2,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
+using System.Text.Json.Serialization;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
@@ -17,13 +18,17 @@ public sealed record ProjectDomainDto(
     IReadOnlyList<ProjectPoleAttachmentDto>? PoleAttachments = null,
     IReadOnlyList<ProjectSwitchDeviceDto>? SwitchDevices = null,
     IReadOnlyList<ProjectCableSegmentDto>? CableSegments = null,
-    IReadOnlyList<ProjectIntermediateTerminalDto>? IntermediateTerminals = null)
+    IReadOnlyList<ProjectIntermediateTerminalDto>? IntermediateTerminals = null,
+    [property: JsonRequired] IReadOnlyList<ProjectTransformerDto>? Transformers = null,
+    [property: JsonRequired] IReadOnlyList<ProjectCustomerStationDto>? CustomerStations = null)
 {
     public static ProjectDomainDto Empty(Guid documentId, string title)
     {
         return new ProjectDomainDto(
             documentId,
             title,
+            [],
+            [],
             [],
             [],
             [],
@@ -75,7 +80,7 @@ public sealed record ProjectRingCabinetIntervalDto(
     Guid? IntermediateNodeId,
     Guid CircuitNodeId,
     Guid EarthNodeId,
-    Guid ExternalTerminalId,
+    [property: JsonRequired] Guid? CableTerminalId,
     Guid SwitchAssemblyId,
     IReadOnlyList<ProjectSwitchDeviceDto> Switches);
 
@@ -88,7 +93,130 @@ public sealed record ProjectSwitchDeviceDto(
     string SwitchState,
     string? DisplayName,
     string VoltageLevel,
-    string? DispatchNumber);
+    string? DispatchNumber,
+    ProjectSwitchOwnerReferenceDto? Owner = null);
+
+[JsonConverter(typeof(StrictStringEnumConverter<ProjectSwitchOwnerKind>))]
+public enum ProjectSwitchOwnerKind
+{
+    RingCabinetInterval,
+    CustomerStationIncomingFeeder
+}
+
+public sealed record ProjectSwitchOwnerReferenceDto(
+    [property: JsonRequired] ProjectSwitchOwnerKind OwnerKind,
+    [property: JsonRequired] Guid OwnerId);
+
+[JsonConverter(typeof(StrictStringEnumConverter<ProjectTransformerKind>))]
+public enum ProjectTransformerKind
+{
+    PublicPoleMounted,
+    DedicatedPoleMounted,
+    PublicIndoor
+}
+
+public sealed record ProjectTransformerDto(
+    [property: JsonRequired] Guid TransformerId,
+    [property: JsonRequired] ProjectTransformerKind TransformerKind,
+    [property: JsonRequired] Guid HvTerminalId);
+
+[JsonConverter(typeof(StrictStringEnumConverter<ProjectStationKind>))]
+public enum ProjectStationKind
+{
+    BoxStation,
+    IndoorStation
+}
+
+public sealed record ProjectCustomerStationDto
+{
+    [JsonConstructor]
+    public ProjectCustomerStationDto(
+        Guid customerStationId,
+        ProjectStationKind stationKind,
+        IReadOnlyList<ProjectCustomerStationIncomingFeederDto> incomingFeeders)
+    {
+        if (customerStationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Customer station ID cannot be empty.",
+                nameof(customerStationId));
+        }
+
+        if (!Enum.IsDefined(stationKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(stationKind));
+        }
+
+        ProjectCustomerStationIncomingFeederDto[] feeders = incomingFeeders?.ToArray()
+            ?? throw new ArgumentNullException(nameof(incomingFeeders));
+        bool validCount = stationKind switch
+        {
+            ProjectStationKind.BoxStation => feeders.Length == 1,
+            ProjectStationKind.IndoorStation => feeders.Length is 1 or 2,
+            _ => false
+        };
+        if (!validCount)
+        {
+            throw new ArgumentException(
+                "BoxStation requires one incoming feeder; IndoorStation requires one or two.",
+                nameof(incomingFeeders));
+        }
+
+        if (feeders.Select(feeder => feeder.IncomingFeederId).Distinct().Count() !=
+            feeders.Length)
+        {
+            throw new ArgumentException(
+                "Customer station incoming feeder IDs must be unique.",
+                nameof(incomingFeeders));
+        }
+
+        foreach (ProjectCustomerStationIncomingFeederDto feeder in feeders)
+        {
+            if (feeder.IncomingFeederId == Guid.Empty ||
+                feeder.CableTerminalId == Guid.Empty ||
+                feeder.StationTerminalId == Guid.Empty ||
+                feeder.ElectricalNodeId == Guid.Empty)
+            {
+                throw new ArgumentException(
+                    "Customer station incoming feeder IDs cannot be empty.",
+                    nameof(incomingFeeders));
+            }
+
+            if (feeder.IsolationSwitch is null ||
+                !string.Equals(
+                    feeder.IsolationSwitch.SwitchKind,
+                    "isolation-switch",
+                    StringComparison.Ordinal) ||
+                feeder.IsolationSwitch.Owner is not
+                {
+                    OwnerKind: ProjectSwitchOwnerKind.CustomerStationIncomingFeeder,
+                    OwnerId: var ownerId
+                } || ownerId != feeder.IncomingFeederId)
+            {
+                throw new ArgumentException(
+                    "Customer station isolation switch requires its typed incoming-feeder owner.",
+                    nameof(incomingFeeders));
+            }
+        }
+
+        CustomerStationId = customerStationId;
+        StationKind = stationKind;
+        IncomingFeeders = Array.AsReadOnly(feeders);
+    }
+
+    public Guid CustomerStationId { get; }
+
+    public ProjectStationKind StationKind { get; }
+
+    public IReadOnlyList<ProjectCustomerStationIncomingFeederDto> IncomingFeeders { get; }
+}
+
+public sealed record ProjectCustomerStationIncomingFeederDto(
+    [property: JsonRequired] Guid IncomingFeederId,
+    [property: JsonRequired] Guid CableTerminalId,
+    [property: JsonRequired] Guid StationTerminalId,
+    [property: JsonRequired] Guid ElectricalNodeId,
+    [property: JsonRequired] ProjectSwitchDeviceDto IsolationSwitch);
 
 public sealed record ProjectElectricalNodeDto(
     Guid NodeId,
@@ -288,10 +416,12 @@ internal static class ProjectDomainMapper
             document.Devices
                 .OfType<SwitchDevice>()
                 .Where(device => !ringCabinetSwitchIds.Contains(device.Id))
-                .Select(ToDto)
+                .Select(device => ToDto(device))
                 .ToArray(),
             document.CableSegments.Select(ToDto).ToArray(),
-            document.IntermediateTerminals.Select(ToDto).ToArray());
+            document.IntermediateTerminals.Select(ToDto).ToArray(),
+            [],
+            []);
 
         ValidateTopology(document, result);
         return result;
@@ -312,6 +442,18 @@ internal static class ProjectDomainMapper
         }
 
         var document = new DrawingDocument(dto.DocumentId, dto.Title);
+
+        if ((dto.Transformers ?? []).Count != 0)
+        {
+            throw new InvalidDataException(
+                "Transformer runtime support is not implemented in WP-EM-02.");
+        }
+
+        if ((dto.CustomerStations ?? []).Count != 0)
+        {
+            throw new InvalidDataException(
+                "CustomerStation runtime support is not implemented in WP-EM-02.");
+        }
 
         foreach (ProjectDeviceDto deviceDto in dto.Devices ??
                  throw new InvalidDataException("Domain devices are required."))
@@ -508,10 +650,16 @@ internal static class ProjectDomainMapper
             interval.EarthNodeId,
             interval.ExternalTerminalId,
             interval.SwitchAssembly.AssemblyId,
-            interval.SwitchDevices.Select(ToDto).ToArray());
+            interval.SwitchDevices.Select(device => ToDto(
+                device,
+                new ProjectSwitchOwnerReferenceDto(
+                    ProjectSwitchOwnerKind.RingCabinetInterval,
+                    interval.IntervalId))).ToArray());
     }
 
-    private static ProjectSwitchDeviceDto ToDto(SwitchDevice device)
+    private static ProjectSwitchDeviceDto ToDto(
+        SwitchDevice device,
+        ProjectSwitchOwnerReferenceDto? owner = null)
     {
         return new ProjectSwitchDeviceDto(
             device.Id,
@@ -523,7 +671,8 @@ internal static class ProjectDomainMapper
                 $"Switch '{device.Id}' has no state.")),
             device.DisplayName,
             device.VoltageLevel ?? string.Empty,
-            device.DispatchNumber);
+            device.DispatchNumber,
+            owner);
     }
 
     private static ProjectElectricalNodeDto ToDto(ElectricalNode node)
@@ -611,6 +760,12 @@ internal static class ProjectDomainMapper
 
     private static SwitchDevice RestoreTopLevelSwitch(ProjectSwitchDeviceDto dto)
     {
+        if (dto.Owner is not null)
+        {
+            throw new InvalidDataException(
+                $"Top-level switch '{dto.DeviceId}' cannot have an aggregate owner.");
+        }
+
         SwitchInstallationType installationType = Parse<SwitchInstallationType>(
             dto.InstallationType,
             dto.DeviceId,
@@ -1019,6 +1174,13 @@ internal static class ProjectDomainMapper
                 $"Interval '{interval.IntervalId}' has an invalid bayIndex '{interval.BayIndex}'.");
         }
 
+        if (interval.CableTerminalId is not Guid cableTerminalId ||
+            cableTerminalId == Guid.Empty)
+        {
+            throw new InvalidDataException(
+                $"Interval '{interval.IntervalId}' requires a cable terminal until WP-EM-03 implements optional-terminal runtime behavior.");
+        }
+
         return new RingCabinetIntervalRestoreDefinition(
             interval.IntervalId,
             interval.ParentCabinetId,
@@ -1035,24 +1197,41 @@ internal static class ProjectDomainMapper
             interval.IntermediateNodeId,
             interval.CircuitNodeId,
             interval.EarthNodeId,
-            interval.ExternalTerminalId,
+            cableTerminalId,
             interval.SwitchAssemblyId,
             (interval.Switches ?? throw new InvalidDataException(
                     $"Interval '{interval.IntervalId}' is missing switches."))
-                .Select(switchDto => new SwitchDeviceRestoreDefinition(
-                    switchDto.DeviceId,
-                    Parse<SwitchKind>(switchDto.SwitchKind, switchDto.DeviceId, "switchKind"),
-                    Parse<SwitchInstallationType>(
-                        switchDto.InstallationType,
-                        switchDto.DeviceId,
-                        "installationType"),
-                    switchDto.FirstTerminalId,
-                    switchDto.SecondTerminalId,
-                    Parse<SwitchState>(switchDto.SwitchState, switchDto.DeviceId, "switchState"),
-                    switchDto.DisplayName ?? string.Empty,
-                    switchDto.VoltageLevel,
-                    switchDto.DispatchNumber))
+                .Select(switchDto => RestoreCabinetSwitch(interval.IntervalId, switchDto))
                 .ToArray());
+    }
+
+    private static SwitchDeviceRestoreDefinition RestoreCabinetSwitch(
+        Guid intervalId,
+        ProjectSwitchDeviceDto switchDto)
+    {
+        if (switchDto.Owner is not
+            {
+                OwnerKind: ProjectSwitchOwnerKind.RingCabinetInterval,
+                OwnerId: var ownerId
+            } || ownerId != intervalId)
+        {
+            throw new InvalidDataException(
+                $"Cabinet switch '{switchDto.DeviceId}' has an invalid typed owner.");
+        }
+
+        return new SwitchDeviceRestoreDefinition(
+            switchDto.DeviceId,
+            Parse<SwitchKind>(switchDto.SwitchKind, switchDto.DeviceId, "switchKind"),
+            Parse<SwitchInstallationType>(
+                switchDto.InstallationType,
+                switchDto.DeviceId,
+                "installationType"),
+            switchDto.FirstTerminalId,
+            switchDto.SecondTerminalId,
+            Parse<SwitchState>(switchDto.SwitchState, switchDto.DeviceId, "switchState"),
+            switchDto.DisplayName ?? string.Empty,
+            switchDto.VoltageLevel,
+            switchDto.DispatchNumber);
     }
 
     private static void ValidateRestoredAggregate(

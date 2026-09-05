@@ -109,7 +109,7 @@ public sealed class CablePersistenceV6Tests
     }
 
     [Fact]
-    public void CableRouteGuide_RoundTrip_PreservesOptionalHorizontalHeightInV6()
+    public void CableRouteGuide_RoundTrip_PreservesOptionalHorizontalHeightInV7()
     {
         DrawingDocument document = CreateDocumentWithIntermediateTerminals(2);
         IntermediateTerminal[] terminals = document.IntermediateTerminals.ToArray();
@@ -122,7 +122,10 @@ public sealed class CablePersistenceV6Tests
             [],
             [],
             [],
-            [new ProjectCableRouteGuideDto(cable.CableSegment.Id, 125)]);
+            [new ProjectCableRouteGuideDto(cable.CableSegment.Id, 125)],
+            [],
+            [],
+            []);
 
         string filePath = Path.Combine(
             Path.GetTempPath(),
@@ -146,8 +149,8 @@ public sealed class CablePersistenceV6Tests
                 restored.Layout!.CableRouteGuides!);
             Assert.Equal(cable.CableSegment.Id, guide.CableSegmentId);
             Assert.Equal(125, guide.HorizontalYMillimeters);
-            Assert.Equal(ProjectFileFormat.Version6, restored.Manifest.FormatVersion);
-            Assert.Equal(ProjectFileFormat.Version6, ProjectFileFormat.CurrentVersion);
+            Assert.Equal(ProjectFileFormat.Version7, restored.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version7, ProjectFileFormat.CurrentVersion);
         }
         finally
         {

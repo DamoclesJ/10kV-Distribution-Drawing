@@ -50,6 +50,12 @@ internal static class ProjectFormatMigration
             version = ProjectFileFormat.Version6;
         }
 
+        if (version == ProjectFileFormat.Version6)
+        {
+            MigrateVersion6ToVersion7(migrated);
+            version = ProjectFileFormat.Version7;
+        }
+
         if (version != ProjectFileFormat.CurrentVersion)
         {
             throw new InvalidDataException(
@@ -149,6 +155,90 @@ internal static class ProjectFormatMigration
 
         domain["cableSegments"] ??= new JsonArray();
         domain["intermediateTerminals"] ??= new JsonArray();
+    }
+
+    private static void MigrateVersion6ToVersion7(JsonObject payload)
+    {
+        if (payload["domain"] is JsonObject domain)
+        {
+            domain["transformers"] ??= new JsonArray();
+            domain["customerStations"] ??= new JsonArray();
+
+            if (domain["ringCabinets"] is JsonArray cabinets)
+            {
+                foreach (JsonNode? cabinetNode in cabinets)
+                {
+                    if (cabinetNode is not JsonObject cabinet ||
+                        cabinet["intervals"] is not JsonArray intervals)
+                    {
+                        continue;
+                    }
+
+                    foreach (JsonNode? intervalNode in intervals)
+                    {
+                        if (intervalNode is not JsonObject interval)
+                        {
+                            continue;
+                        }
+
+                        if (interval.ContainsKey("externalTerminalId"))
+                        {
+                            interval["cableTerminalId"] =
+                                interval["externalTerminalId"]?.DeepClone();
+                            interval.Remove("externalTerminalId");
+                        }
+
+                        if (interval["switches"] is not JsonArray switches)
+                        {
+                            continue;
+                        }
+
+                        JsonNode? intervalId = interval["intervalId"]?.DeepClone();
+                        foreach (JsonNode? switchNode in switches)
+                        {
+                            if (switchNode is JsonObject switchDevice)
+                            {
+                                switchDevice["owner"] = new JsonObject
+                                {
+                                    ["ownerKind"] = "RingCabinetInterval",
+                                    ["ownerId"] = intervalId?.DeepClone()
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (payload["professional"] is JsonObject professional)
+        {
+            professional["groundingAccessPoints"] ??= new JsonArray();
+            if (professional["groundingPoints"] is JsonArray groundingPoints)
+            {
+                foreach (JsonNode? groundingPointNode in groundingPoints)
+                {
+                    if (groundingPointNode is not JsonObject groundingPoint ||
+                        !groundingPoint.ContainsKey("terminalId"))
+                    {
+                        continue;
+                    }
+
+                    groundingPoint["groundingTarget"] = new JsonObject
+                    {
+                        ["kind"] = "Terminal",
+                        ["targetId"] = groundingPoint["terminalId"]?.DeepClone()
+                    };
+                    groundingPoint.Remove("terminalId");
+                }
+            }
+        }
+
+        if (payload["layout"] is JsonObject layout)
+        {
+            layout["transformerLayouts"] ??= new JsonArray();
+            layout["customerStationLayouts"] ??= new JsonArray();
+            layout["groundingPointLayouts"] ??= new JsonArray();
+        }
     }
 
     private static JsonObject RequireObject(JsonNode? node, string path)

@@ -1,16 +1,19 @@
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
+using System.Text.Json.Serialization;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
 public sealed record ProjectProfessionalDto(
     Guid DocumentId,
     IReadOnlyList<ProjectWorkScopeDto> WorkScopes,
-    IReadOnlyList<ProjectGroundingPointDto> GroundingPoints)
+    IReadOnlyList<ProjectGroundingPointDto> GroundingPoints,
+    [property: JsonRequired]
+    IReadOnlyList<ProjectGroundingAccessPointDto>? GroundingAccessPoints = null)
 {
     public static ProjectProfessionalDto Empty(Guid documentId)
     {
-        return new ProjectProfessionalDto(documentId, [], []);
+        return new ProjectProfessionalDto(documentId, [], [], []);
     }
 }
 
@@ -28,10 +31,34 @@ public sealed record ProjectBoundaryPointDto(
 
 public sealed record ProjectGroundingPointDto(
     Guid GroundingPointId,
-    Guid TerminalId,
+    [property: JsonRequired] ProjectGroundingTargetDto GroundingTarget,
     string Location,
     string? Number,
     string? Note);
+
+[JsonConverter(typeof(StrictStringEnumConverter<ProjectGroundingTargetKind>))]
+public enum ProjectGroundingTargetKind
+{
+    Terminal,
+    GroundingAccessPoint
+}
+
+public sealed record ProjectGroundingTargetDto(
+    [property: JsonRequired] ProjectGroundingTargetKind Kind,
+    [property: JsonRequired] Guid TargetId);
+
+[JsonConverter(typeof(StrictStringEnumConverter<ProjectGroundingAccessLineSide>))]
+public enum ProjectGroundingAccessLineSide
+{
+    SmallerNumberSide,
+    LargerNumberSide
+}
+
+public sealed record ProjectGroundingAccessPointDto(
+    [property: JsonRequired] Guid GroundingAccessPointId,
+    [property: JsonRequired] Guid ConnectionId,
+    [property: JsonRequired] Guid PoleId,
+    [property: JsonRequired] ProjectGroundingAccessLineSide LineSide);
 
 /// <summary>
 /// Validated, persistence-neutral Professional snapshot. It contains no
@@ -44,6 +71,9 @@ public sealed record ProjectProfessionalSnapshot(ProjectProfessionalDto Data)
     public IReadOnlyList<ProjectWorkScopeDto> WorkScopes => Data.WorkScopes;
 
     public IReadOnlyList<ProjectGroundingPointDto> GroundingPoints => Data.GroundingPoints;
+
+    public IReadOnlyList<ProjectGroundingAccessPointDto> GroundingAccessPoints =>
+        Data.GroundingAccessPoints ?? [];
 
     public static ProjectProfessionalSnapshot Empty(Guid documentId)
     {
@@ -70,11 +100,14 @@ internal static class ProjectProfessionalMapper
             document.GroundingPoints
                 .Select(groundingPoint => new ProjectGroundingPointDto(
                     groundingPoint.GroundingPointId,
-                    groundingPoint.TerminalId,
+                    new ProjectGroundingTargetDto(
+                        ProjectGroundingTargetKind.Terminal,
+                        groundingPoint.TerminalId),
                     groundingPoint.Location,
                     groundingPoint.Number,
                     groundingPoint.Note))
-                .ToArray());
+                .ToArray(),
+            []);
     }
 
     public static ProjectProfessionalSnapshot ToSnapshot(
@@ -86,11 +119,23 @@ internal static class ProjectProfessionalMapper
         ProjectProfessionalDto professional = dto ?? ProjectProfessionalDto.Empty(document.Id);
         ValidateStructure(document, professional);
 
+        if ((professional.GroundingAccessPoints ?? []).Count != 0)
+        {
+            throw new InvalidDataException(
+                "GroundingAccessPoint runtime support is not implemented in WP-EM-02.");
+        }
+
         foreach (ProjectGroundingPointDto groundingPoint in professional.GroundingPoints)
         {
+            if (groundingPoint.GroundingTarget.Kind != ProjectGroundingTargetKind.Terminal)
+            {
+                throw new InvalidDataException(
+                    $"Grounding point '{groundingPoint.GroundingPointId}' uses a target that is not supported by the WP-EM-02 runtime.");
+            }
+
             document.CreateGroundingPoint(
                 groundingPoint.GroundingPointId,
-                groundingPoint.TerminalId,
+                groundingPoint.GroundingTarget.TargetId,
                 groundingPoint.Location,
                 groundingPoint.Number,
                 groundingPoint.Note);
@@ -134,6 +179,9 @@ internal static class ProjectProfessionalMapper
             ?? throw new InvalidDataException("Professional work scopes are required.");
         IReadOnlyList<ProjectGroundingPointDto> groundingPoints = professional.GroundingPoints
             ?? throw new InvalidDataException("Professional grounding points are required.");
+        IReadOnlyList<ProjectGroundingAccessPointDto> groundingAccessPoints =
+            professional.GroundingAccessPoints ?? throw new InvalidDataException(
+                "Professional grounding access points are required.");
 
         EnsureUnique(
             workScopes.Select(workScope => workScope.WorkScopeId),
@@ -141,28 +189,43 @@ internal static class ProjectProfessionalMapper
         EnsureUnique(
             groundingPoints.Select(groundingPoint => groundingPoint.GroundingPointId),
             "grounding point");
+        EnsureUnique(
+            groundingAccessPoints.Select(point => point.GroundingAccessPointId),
+            "grounding access point");
 
         HashSet<Guid> groundingPointIds = groundingPoints
             .Select(groundingPoint => groundingPoint.GroundingPointId)
             .ToHashSet();
-        HashSet<Guid> groundingTerminalIds = [];
+        HashSet<(ProjectGroundingTargetKind Kind, Guid TargetId)> groundingTargets = [];
         foreach (ProjectGroundingPointDto groundingPoint in groundingPoints)
         {
-            if (groundingPoint.TerminalId == Guid.Empty)
+            if (groundingPoint.GroundingTarget is null ||
+                groundingPoint.GroundingTarget.TargetId == Guid.Empty)
             {
                 throw new InvalidDataException(
-                    "A grounding point terminal ID cannot be empty.");
+                    "A grounding point target ID cannot be empty.");
             }
 
-            if (!groundingTerminalIds.Add(groundingPoint.TerminalId))
+            if (!groundingTargets.Add((
+                    groundingPoint.GroundingTarget.Kind,
+                    groundingPoint.GroundingTarget.TargetId)))
             {
                 throw new InvalidDataException(
-                    $"Terminal '{groundingPoint.TerminalId}' has duplicate grounding points.");
+                    $"Grounding target '{groundingPoint.GroundingTarget.TargetId}' has duplicate grounding points.");
             }
 
             if (string.IsNullOrWhiteSpace(groundingPoint.Location))
             {
                 throw new InvalidDataException("A grounding point location is required.");
+            }
+        }
+
+        foreach (ProjectGroundingAccessPointDto point in groundingAccessPoints)
+        {
+            if (point.ConnectionId == Guid.Empty || point.PoleId == Guid.Empty)
+            {
+                throw new InvalidDataException(
+                    $"Grounding access point '{point.GroundingAccessPointId}' has an empty reference.");
             }
         }
 

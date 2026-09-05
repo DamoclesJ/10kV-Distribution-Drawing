@@ -1,4 +1,7 @@
 using System.IO;
+using System.IO.Compression;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -73,6 +76,47 @@ public sealed class ProjectWorkspaceMultiDocumentTests : IDisposable
         Assert.True(second.IsDirty);
         Assert.DoesNotContain("*", first.TabTitle);
         Assert.Contains("*", second.TabTitle);
+    }
+
+    [Fact]
+    public void OrdinarySaveForOpenedV6_UsesSaveAsAndThenBecomesNormalV7Session()
+    {
+        string sourcePath = CreateVersion6Project();
+        string targetPath = NextPath();
+        byte[] sourceBytes = File.ReadAllBytes(sourcePath);
+        var dialogs = new TestDialogs();
+        dialogs.OpenPaths.Enqueue(sourcePath);
+        dialogs.SaveAsPaths.Enqueue(targetPath);
+        ProjectWorkspaceController controller = CreateController(dialogs);
+        Assert.True(controller.OpenProject());
+
+        Assert.True(controller.SaveProject());
+
+        Assert.Equal(sourceBytes, File.ReadAllBytes(sourcePath));
+        Assert.Equal(Path.GetFullPath(targetPath), controller.ActiveDocumentSession!.FilePath);
+        Assert.False(controller.CurrentSession!.PersistenceSession.RequiresUpgradeSaveAs);
+        Assert.Equal(
+            ProjectFileFormat.Version7,
+            new ProjectFileContainer().OpenWithSource(targetPath).OpenedFormatVersion);
+        Assert.True(controller.SaveProject());
+    }
+
+    [Fact]
+    public void CancelledUpgradeSaveAs_LeavesV6SessionAndOriginalUntouched()
+    {
+        string sourcePath = CreateVersion6Project();
+        byte[] sourceBytes = File.ReadAllBytes(sourcePath);
+        var dialogs = new TestDialogs();
+        dialogs.OpenPaths.Enqueue(sourcePath);
+        dialogs.SaveAsPaths.Enqueue(null);
+        ProjectWorkspaceController controller = CreateController(dialogs);
+        Assert.True(controller.OpenProject());
+
+        Assert.False(controller.SaveProject());
+
+        Assert.Equal(sourceBytes, File.ReadAllBytes(sourcePath));
+        Assert.Equal(Path.GetFullPath(sourcePath), controller.ActiveDocumentSession!.FilePath);
+        Assert.True(controller.CurrentSession!.PersistenceSession.RequiresUpgradeSaveAs);
     }
 
     [Fact]
@@ -367,6 +411,42 @@ public sealed class ProjectWorkspaceMultiDocumentTests : IDisposable
         ProjectSession session = service.CreateProject(path, title);
         service.SaveProject(session.Layout);
         return path;
+    }
+
+    private string CreateVersion6Project()
+    {
+        string path = CreateSavedProject("V6 升级工程");
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: false);
+        JsonObject manifest = ReadJson(archive, ProjectFileFormat.ManifestEntryName);
+        JsonObject payload = ReadJson(archive, ProjectFileFormat.DocumentEntryName);
+        manifest["formatVersion"] = ProjectFileFormat.Version6;
+        Assert.IsType<JsonObject>(payload["domain"]).Remove("transformers");
+        Assert.IsType<JsonObject>(payload["domain"]).Remove("customerStations");
+        Assert.IsType<JsonObject>(payload["professional"]).Remove("groundingAccessPoints");
+        Assert.IsType<JsonObject>(payload["layout"]).Remove("transformerLayouts");
+        Assert.IsType<JsonObject>(payload["layout"]).Remove("customerStationLayouts");
+        Assert.IsType<JsonObject>(payload["layout"]).Remove("groundingPointLayouts");
+        ReplaceJson(archive, ProjectFileFormat.ManifestEntryName, manifest);
+        ReplaceJson(archive, ProjectFileFormat.DocumentEntryName, payload);
+        return path;
+    }
+
+    private static JsonObject ReadJson(ZipArchive archive, string entryName)
+    {
+        using Stream stream = archive.GetEntry(entryName)!.Open();
+        return Assert.IsType<JsonObject>(JsonNode.Parse(stream));
+    }
+
+    private static void ReplaceJson(ZipArchive archive, string entryName, JsonObject value)
+    {
+        archive.GetEntry(entryName)!.Delete();
+        using Stream stream = archive.CreateEntry(entryName).Open();
+        JsonSerializer.Serialize(stream, value, new JsonSerializerOptions { WriteIndented = true });
     }
 
     private string NextPath()

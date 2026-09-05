@@ -20,7 +20,8 @@ public sealed record ProjectSession
             domain,
             ProjectLayoutSnapshot.Empty(domain.Id),
             ProjectProfessionalSnapshot.Empty(domain.Id),
-            isDirty)
+            isDirty,
+            ProjectFileFormat.CurrentVersion)
     {
     }
 
@@ -36,7 +37,8 @@ public sealed record ProjectSession
             domain,
             layout,
             ProjectProfessionalSnapshot.Empty(domain.Id),
-            isDirty)
+            isDirty,
+            ProjectFileFormat.CurrentVersion)
     {
     }
 
@@ -46,13 +48,18 @@ public sealed record ProjectSession
         DrawingDocument domain,
         ProjectLayoutSnapshot layout,
         ProjectProfessionalSnapshot professional,
-        bool isDirty)
+        bool isDirty,
+        int openedFormatVersion = ProjectFileFormat.CurrentVersion)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(professional);
+        if (!ProjectFileFormat.IsSupportedVersion(openedFormatVersion))
+        {
+            throw new ArgumentOutOfRangeException(nameof(openedFormatVersion));
+        }
 
         FilePath = Path.GetFullPath(filePath);
         Document = document;
@@ -60,6 +67,7 @@ public sealed record ProjectSession
         Layout = layout;
         Professional = professional;
         IsDirty = isDirty;
+        OpenedFormatVersion = openedFormatVersion;
     }
 
     public string FilePath { get; }
@@ -79,4 +87,9 @@ public sealed record ProjectSession
     public Guid ProjectId => Manifest.ProjectId;
 
     public bool IsDirty { get; init; }
+
+    public int OpenedFormatVersion { get; }
+
+    public bool RequiresUpgradeSaveAs =>
+        OpenedFormatVersion < ProjectFileFormat.CurrentVersion;
 }

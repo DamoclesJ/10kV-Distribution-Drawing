@@ -42,7 +42,8 @@ public sealed class ProjectService
             domain,
             layout,
             professional,
-            isDirty: false);
+            isDirty: false,
+            openedFormatVersion: ProjectFileFormat.CurrentVersion);
         Current = candidate;
         return candidate;
     }
@@ -50,19 +51,30 @@ public sealed class ProjectService
     public ProjectSession SaveProject()
     {
         ProjectSession current = RequireCurrent();
+        EnsureCanSaveInPlace(current);
         return SaveProject(current.FilePath, current.Layout);
     }
 
     public ProjectSession SaveProject(ProjectLayoutSnapshot layout)
     {
         ProjectSession current = RequireCurrent();
+        EnsureCanSaveInPlace(current);
         return SaveProject(current.FilePath, layout);
     }
 
     public ProjectSession SaveProjectAs(string filePath, ProjectLayoutSnapshot layout)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        return SaveProject(Path.GetFullPath(filePath), layout);
+        ProjectSession current = RequireCurrent();
+        string targetPath = Path.GetFullPath(filePath);
+        if (current.RequiresUpgradeSaveAs &&
+            StringComparer.OrdinalIgnoreCase.Equals(targetPath, current.FilePath))
+        {
+            throw new InvalidOperationException(
+                "从旧格式打开的工程必须另存为新的 V7 文件，不能覆盖原文件。");
+        }
+
+        return SaveProject(targetPath, layout);
     }
 
     private ProjectSession SaveProject(string filePath, ProjectLayoutSnapshot layout)
@@ -83,7 +95,8 @@ public sealed class ProjectService
 
         // Reopen the written archive so the session observes the persisted
         // manifest timestamps and validates the complete container round trip.
-        ProjectFileDocument persistedDocument = _container.Open(filePath);
+        ProjectFileOpenResult persisted = _container.OpenWithSource(filePath);
+        ProjectFileDocument persistedDocument = persisted.Document;
         DrawingDocument validationDomain = RestoreDomain(persistedDocument);
         _ = RestoreProfessional(persistedDocument, validationDomain);
         _ = RestoreLayout(persistedDocument, validationDomain);
@@ -93,7 +106,8 @@ public sealed class ProjectService
             current.Domain,
             layout,
             new ProjectProfessionalSnapshot(ProjectProfessionalMapper.ToDto(current.Domain)),
-            isDirty: false);
+            isDirty: false,
+            openedFormatVersion: persisted.OpenedFormatVersion);
 
         Current = candidate;
         return candidate;
@@ -104,7 +118,8 @@ public sealed class ProjectService
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
         // Build and validate the candidate before replacing the current session.
-        ProjectFileDocument document = _container.Open(filePath);
+        ProjectFileOpenResult opened = _container.OpenWithSource(filePath);
+        ProjectFileDocument document = opened.Document;
         DrawingDocument domain = RestoreDomain(document);
         ProjectProfessionalSnapshot professional = RestoreProfessional(document, domain);
         ProjectLayoutSnapshot layout = RestoreLayout(document, domain);
@@ -114,7 +129,8 @@ public sealed class ProjectService
             domain,
             layout,
             professional,
-            isDirty: false);
+            isDirty: false,
+            openedFormatVersion: opened.OpenedFormatVersion);
         Current = candidate;
         return candidate;
     }
@@ -150,6 +166,15 @@ public sealed class ProjectService
     {
         return Current
             ?? throw new InvalidOperationException("No project is currently open.");
+    }
+
+    private static void EnsureCanSaveInPlace(ProjectSession session)
+    {
+        if (session.RequiresUpgradeSaveAs)
+        {
+            throw new InvalidOperationException(
+                $"该工程从 V{session.OpenedFormatVersion} 打开，首次保存必须使用“另存为”创建新的 V7 文件。");
+        }
     }
 
     private static DrawingDocument RestoreDomain(ProjectFileDocument document)

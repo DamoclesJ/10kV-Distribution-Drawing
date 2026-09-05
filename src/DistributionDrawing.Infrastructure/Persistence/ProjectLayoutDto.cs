@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
+using System.Text.Json.Serialization;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
@@ -11,11 +12,27 @@ public sealed record ProjectLayoutDto(
     IReadOnlyList<ProjectPoleLayoutDto> Poles,
     IReadOnlyList<ProjectAttachmentLayoutDto> Attachments,
     IReadOnlyList<ProjectOverheadLineLayoutDto> OverheadLines,
-    IReadOnlyList<ProjectCableRouteGuideDto>? CableRouteGuides = null)
+    IReadOnlyList<ProjectCableRouteGuideDto>? CableRouteGuides = null,
+    [property: JsonRequired]
+    IReadOnlyList<ProjectTransformerLayoutDto>? TransformerLayouts = null,
+    [property: JsonRequired]
+    IReadOnlyList<ProjectCustomerStationLayoutDto>? CustomerStationLayouts = null,
+    [property: JsonRequired]
+    IReadOnlyList<ProjectGroundingPointLayoutDto>? GroundingPointLayouts = null)
 {
     public static ProjectLayoutDto Empty(Guid documentId)
     {
-        return new ProjectLayoutDto(documentId, "mm", [], [], [], []);
+        return new ProjectLayoutDto(
+            documentId,
+            "mm",
+            RingCabinets: [],
+            Poles: [],
+            Attachments: [],
+            OverheadLines: [],
+            CableRouteGuides: [],
+            TransformerLayouts: [],
+            CustomerStationLayouts: [],
+            GroundingPointLayouts: []);
     }
 }
 
@@ -73,6 +90,26 @@ public sealed record ProjectCableRouteGuideDto(
     Guid CableSegmentId,
     double HorizontalYMillimeters);
 
+[JsonConverter(typeof(StrictStringEnumConverter<ProjectTransformerOrientation>))]
+public enum ProjectTransformerOrientation
+{
+    Horizontal,
+    Vertical
+}
+
+public sealed record ProjectTransformerLayoutDto(
+    [property: JsonRequired] Guid TransformerId,
+    [property: JsonRequired] ProjectPointDto Position,
+    [property: JsonRequired] ProjectTransformerOrientation Orientation);
+
+public sealed record ProjectCustomerStationLayoutDto(
+    [property: JsonRequired] Guid CustomerStationId,
+    [property: JsonRequired] ProjectPointDto Position);
+
+public sealed record ProjectGroundingPointLayoutDto(
+    [property: JsonRequired] Guid GroundingPointId,
+    [property: JsonRequired] ProjectPointDto SymbolOffset);
+
 /// <summary>
 /// Persistence-neutral, validated layout snapshot. It deliberately contains
 /// no WPF Point, DIP, Visual, transform, selection, or hit-test state.
@@ -93,6 +130,15 @@ public sealed record ProjectLayoutSnapshot(ProjectLayoutDto Data)
 
     public IReadOnlyList<ProjectCableRouteGuideDto> CableRouteGuides =>
         Data.CableRouteGuides ?? [];
+
+    public IReadOnlyList<ProjectTransformerLayoutDto> TransformerLayouts =>
+        Data.TransformerLayouts ?? [];
+
+    public IReadOnlyList<ProjectCustomerStationLayoutDto> CustomerStationLayouts =>
+        Data.CustomerStationLayouts ?? [];
+
+    public IReadOnlyList<ProjectGroundingPointLayoutDto> GroundingPointLayouts =>
+        Data.GroundingPointLayouts ?? [];
 
     public static ProjectLayoutSnapshot Empty(Guid documentId)
     {
@@ -151,6 +197,15 @@ internal static class ProjectLayoutMapper
                 "Overhead line layouts are required.");
         IReadOnlyList<ProjectCableRouteGuideDto> cableRouteGuideDtos =
             layout.CableRouteGuides ?? [];
+        IReadOnlyList<ProjectTransformerLayoutDto> transformerDtos =
+            layout.TransformerLayouts ?? throw new InvalidDataException(
+                "Transformer layouts are required.");
+        IReadOnlyList<ProjectCustomerStationLayoutDto> customerStationDtos =
+            layout.CustomerStationLayouts ?? throw new InvalidDataException(
+                "Customer station layouts are required.");
+        IReadOnlyList<ProjectGroundingPointLayoutDto> groundingPointDtos =
+            layout.GroundingPointLayouts ?? throw new InvalidDataException(
+                "Grounding point layouts are required.");
 
         EnsureUnique(cabinetDtos.Select(layoutDto => layoutDto.CabinetId), "ring cabinet layout");
         EnsureUnique(poleDtos.Select(layoutDto => layoutDto.PoleId), "pole layout");
@@ -163,6 +218,15 @@ internal static class ProjectLayoutMapper
         EnsureUnique(
             cableRouteGuideDtos.Select(layoutDto => layoutDto.CableSegmentId),
             "cable route guide");
+        EnsureUnique(
+            transformerDtos.Select(layoutDto => layoutDto.TransformerId),
+            "transformer layout");
+        EnsureUnique(
+            customerStationDtos.Select(layoutDto => layoutDto.CustomerStationId),
+            "customer station layout");
+        EnsureUnique(
+            groundingPointDtos.Select(layoutDto => layoutDto.GroundingPointId),
+            "grounding point layout");
 
         HashSet<Guid> intervalLayoutIds = [];
         HashSet<Guid> switchLayoutIds = [];
@@ -284,6 +348,38 @@ internal static class ProjectLayoutMapper
                 throw new InvalidDataException(
                     $"Cable route guide '{guideDto.CableSegmentId}' has an invalid height.");
             }
+        }
+
+        foreach (ProjectTransformerLayoutDto transformerDto in transformerDtos)
+        {
+            ValidatePoint(
+                transformerDto.Position,
+                $"transformer '{transformerDto.TransformerId}' position");
+        }
+
+        foreach (ProjectCustomerStationLayoutDto stationDto in customerStationDtos)
+        {
+            ValidatePoint(
+                stationDto.Position,
+                $"customer station '{stationDto.CustomerStationId}' position");
+        }
+
+        HashSet<Guid> groundingPointIds = domain.GroundingPoints
+            .Select(point => point.GroundingPointId)
+            .ToHashSet();
+        foreach (ProjectGroundingPointLayoutDto groundingPointDto in groundingPointDtos)
+        {
+            if (!groundingPointIds.Contains(groundingPointDto.GroundingPointId))
+            {
+                throw new InvalidDataException(
+                    $"Grounding point layout references missing grounding point '{groundingPointDto.GroundingPointId}'.");
+            }
+
+            // SymbolOffset is a drawing logical-space vector relative to the
+            // derived default presentation position, never an absolute anchor.
+            ValidatePoint(
+                groundingPointDto.SymbolOffset,
+                $"grounding point '{groundingPointDto.GroundingPointId}' symbol offset");
         }
     }
 

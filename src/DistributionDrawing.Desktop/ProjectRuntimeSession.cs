@@ -256,7 +256,10 @@ internal static class ProjectLayoutRuntimeMapper
             poles,
             attachments,
             overheadLines,
-            cableRouteGuides));
+            cableRouteGuides,
+            [],
+            [],
+            []));
     }
 
     public static RuntimeLayoutDocument ToRuntime(
