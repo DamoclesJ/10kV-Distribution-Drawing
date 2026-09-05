@@ -1,6 +1,8 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Domain.Professional;
+using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
@@ -178,6 +180,18 @@ internal sealed class ClipboardFragmentMaterializer
                     snapshot.Layout.ContinuationOffset)));
         }
 
+        foreach (GroundingAccessPointSnapshot snapshot in fragment.GroundingAccessPoints)
+        {
+            commands.Add(new AddGroundingAccessPointCommand(
+                document,
+                new GroundingAccessPointCommandSnapshot(
+                    Map(snapshot.GroundingAccessPointId),
+                    Map(snapshot.ConnectionId),
+                    Map(snapshot.PoleId),
+                    Map(snapshot.AdjacentPoleId),
+                    snapshot.LineSide)));
+        }
+
         SelectionReference[] mappedSelection = fragment.RootSelections
             .Where(item => idMap.ContainsKey(item.ObjectId))
             .Select(item => Remap(item, idMap))
@@ -255,6 +269,16 @@ internal sealed class ClipboardFragmentMaterializer
             {
                 item.Connection.Id, item.Connection.StartTerminalId,
                 item.Connection.EndTerminalId, item.CableSegment.Id
+            });
+        }
+        foreach (GroundingAccessPointSnapshot item in fragment.GroundingAccessPoints)
+        {
+            ids.UnionWith(new[]
+            {
+                item.GroundingAccessPointId,
+                item.ConnectionId,
+                item.PoleId,
+                item.AdjacentPoleId
             });
         }
 

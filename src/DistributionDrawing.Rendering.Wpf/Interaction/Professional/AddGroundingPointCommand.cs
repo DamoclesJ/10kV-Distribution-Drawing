@@ -23,7 +23,7 @@ public sealed class AddGroundingPointCommand : ICommand
     {
         _document.CreateGroundingPoint(
             After.GroundingPointId,
-            After.TerminalId,
+            After.Target,
             After.Location,
             After.Number,
             After.Note);

@@ -164,6 +164,7 @@ public sealed class ProjectRuntimeSession
             OverheadLines = session.Domain.OverheadLines,
             WorkScopes = session.Domain.WorkScopes,
             GroundingPoints = session.Domain.GroundingPoints,
+            GroundingAccessPoints = session.Domain.GroundingAccessPoints,
             Terminals = session.Domain.Terminals,
             HitTestIndex = scene.HitTestIndex
         };

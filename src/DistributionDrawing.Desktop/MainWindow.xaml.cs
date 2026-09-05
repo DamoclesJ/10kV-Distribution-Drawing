@@ -6,6 +6,7 @@ using System.Globalization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
@@ -24,6 +25,7 @@ using DistributionDrawing.Desktop.Clipboard;
 using DistributionDrawing.Desktop.CableTerminationCreation;
 using DistributionDrawing.Desktop.PoleSwitchCreation;
 using DistributionDrawing.Desktop.PoleAttachmentManagement;
+using DistributionDrawing.Desktop.GroundingAccessPointCreation;
 using DistributionDrawing.Desktop.Demo;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.RingCabinetCreation;
@@ -82,7 +84,7 @@ public partial class MainWindow : Window
     private DrawingScene? _currentScene;
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
-    private Guid? _pendingGroundingPointTerminalId;
+    private GroundingTarget? _pendingGroundingTarget;
     private WorkScopePickState _workScopePickState;
     private DocumentPoint? _contextMenuWorldPoint;
     private BoundaryPointCommandValue? _pendingWorkScopeStartBoundary;
@@ -294,6 +296,62 @@ public partial class MainWindow : Window
         {
             SyncToolboxModeFromInteraction();
             UpdateCanvasStatus();
+        }
+    }
+
+    private void OnAddGroundingAccessPoint(object sender, RoutedEventArgs e)
+    {
+        ProjectRuntimeSession? session = _workspace.CurrentSession;
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (session is null || selection?.Pole is not Pole pole)
+        {
+            _messageService.ShowError("无法添加验电接地环", "请先选择一个杆塔。");
+            return;
+        }
+
+        IReadOnlyList<GroundingAccessCandidate> candidates =
+            GroundingAccessPointCreationService.GetCandidates(session, pole.Id);
+        if (candidates.Count == 0)
+        {
+            _messageService.ShowError(
+                "无法添加验电接地环",
+                "该杆塔没有可用的架空线路物理方向，或对应方向已经存在验电接地环。");
+            return;
+        }
+
+        var dialog = new GroundingAccessPointCreationDialog(candidates) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.SelectedCandidate is not { } candidate)
+        {
+            return;
+        }
+
+        bool addGroundingPoint = MessageBox.Show(
+            this,
+            "是否在此处添加工作地线？",
+            "验电接地环",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question) == MessageBoxResult.Yes;
+        try
+        {
+            ICommand command = GroundingAccessPointCreationService.CreateCommand(
+                session,
+                candidate,
+                dialog.SelectedLineSide,
+                addGroundingPoint,
+                _professionalCommandFactory);
+            session.CommandStack.ExecuteCommand(command, session.RebuildScene);
+            GroundingAccessPoint point = session.PersistenceSession.Domain.GroundingAccessPoints
+                .Single(item => item.ConnectionId == candidate.ConnectionId &&
+                                item.PoleId == candidate.PoleId &&
+                                item.AdjacentPoleId == candidate.AdjacentPoleId);
+            session.SelectionManager.Select(new SelectionReference(
+                SelectionTargetKind.GroundingAccessPoint,
+                point.GroundingAccessPointId));
+            RefreshDrawingScene();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            _messageService.ShowError("无法添加验电接地环", exception.Message);
         }
     }
 
@@ -1001,7 +1059,7 @@ public partial class MainWindow : Window
         _currentScene = null;
         _activeSource = null;
         _groundingPointPickMode = false;
-        _pendingGroundingPointTerminalId = null;
+        _pendingGroundingTarget = null;
         ResetWorkScopePick();
         _selectionResolver.SetSource(null);
         _selectionManager.Clear();
@@ -1009,6 +1067,7 @@ public partial class MainWindow : Window
         IntervalEditorPanel.Visibility = Visibility.Collapsed;
         PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
         GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
+        GroundingAccessPointEditorPanel.Visibility = Visibility.Collapsed;
         WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
         WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
         DrawingSurface.Clear();
@@ -1684,10 +1743,10 @@ public partial class MainWindow : Window
         ResetWorkScopePick();
         _groundingPointPickMode = true;
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.AddGroundingPoint);
-        _pendingGroundingPointTerminalId = null;
+        _pendingGroundingTarget = null;
         _selectionManager.Clear();
         GroundingPointEditorPanel.Visibility = Visibility.Visible;
-        GroundingPointTerminalText.Text = "请在图面中点击一个有效端子";
+        GroundingPointTerminalText.Text = "请在图面中选择验电接地点或合法电缆侧端子";
         GroundingPointLocationInput.Text = string.Empty;
         GroundingPointNumberInput.Text = string.Empty;
         GroundingPointNoteInput.Text = string.Empty;
@@ -1707,7 +1766,7 @@ public partial class MainWindow : Window
         CancelDeviceDrag();
         _drawingTools.Cancel();
         _groundingPointPickMode = false;
-        _pendingGroundingPointTerminalId = null;
+        _pendingGroundingTarget = null;
         ResetWorkScopePick();
         _workScopePickState = WorkScopePickState.PickingBoundaryA;
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.AddWorkScope);
@@ -1946,20 +2005,29 @@ public partial class MainWindow : Window
 
         if (_groundingPointPickMode)
         {
-            Guid? terminalId = HitTestTerminal(
+            GroundingTarget? groundingTarget = HitTestGroundingTarget(
                 documentPoint,
                 _viewport.Transform.ViewDistanceToDocument(8));
-            if (terminalId is null)
+            if (groundingTarget is null)
             {
-                ShowCommandError("端子选择失败", "点击位置没有可解析的端子。");
+                ShowCommandError(
+                    "接地目标选择失败",
+                    "点击位置没有可用的验电接地点或电缆侧端子。");
                 e.Handled = true;
                 return;
             }
 
-            _pendingGroundingPointTerminalId = terminalId;
+            _pendingGroundingTarget = groundingTarget;
             _selectionManager.Select(
-                new SelectionReference(SelectionTargetKind.Terminal, terminalId.Value));
-            GroundingPointTerminalText.Text = $"已选择端子：{terminalId.Value}";
+                new SelectionReference(
+                    groundingTarget.Kind == GroundingTargetKind.GroundingAccessPoint
+                        ? SelectionTargetKind.GroundingAccessPoint
+                        : SelectionTargetKind.Terminal,
+                    groundingTarget.TargetId));
+            GroundingPointTerminalText.Text = groundingTarget.Kind ==
+                                              GroundingTargetKind.GroundingAccessPoint
+                ? $"已选择验电接地点：{groundingTarget.TargetId}"
+                : $"已选择电缆侧端子：{groundingTarget.TargetId}";
             e.Handled = true;
             return;
         }
@@ -2115,7 +2183,7 @@ public partial class MainWindow : Window
     private void CancelProfessionalPicking()
     {
         _groundingPointPickMode = false;
-        _pendingGroundingPointTerminalId = null;
+        _pendingGroundingTarget = null;
         ResetWorkScopePick();
     }
 
@@ -2294,6 +2362,7 @@ public partial class MainWindow : Window
         UpdateAttachmentLayoutEditor();
         UpdateCableTerminationDisplayNameEditor();
         UpdateGroundingPointEditor();
+        UpdateGroundingAccessPointEditor();
         UpdateWorkScopeEditor();
         RenderCurrentScene();
     }
@@ -2309,6 +2378,7 @@ public partial class MainWindow : Window
         AttachmentLayoutEditorPanel.Visibility = Visibility.Collapsed;
         CableTerminationDisplayNameEditorPanel.Visibility = Visibility.Collapsed;
         GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
+        GroundingAccessPointEditorPanel.Visibility = Visibility.Collapsed;
         WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
         WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
         CablePropertyEditorPanel.Visibility = Visibility.Collapsed;
@@ -2571,9 +2641,9 @@ public partial class MainWindow : Window
         }
 
         if (_activeSource?.Document is null ||
-            _pendingGroundingPointTerminalId is not Guid terminalId)
+            _pendingGroundingTarget is not GroundingTarget groundingTarget)
         {
-            ShowCommandError("无法创建工作地线", "请先点击一个有效端子。");
+            ShowCommandError("无法创建工作地线", "请先点击一个合法接地目标。");
             return;
         }
 
@@ -2581,14 +2651,14 @@ public partial class MainWindow : Window
         {
             ICommand command = _professionalCommandFactory.CreateAddGroundingPoint(
                 _activeSource.Document,
-                terminalId,
+                groundingTarget,
                 GroundingPointLocationInput.Text,
                 GroundingPointNumberInput.Text,
                 GroundingPointNoteInput.Text);
             AddGroundingPointCommand addCommand = (AddGroundingPointCommand)command;
             _commandStack.ExecuteCommand(addCommand);
             _groundingPointPickMode = false;
-            _pendingGroundingPointTerminalId = null;
+            _pendingGroundingTarget = null;
             RefreshDrawingScene();
             _selectionManager.Select(
                 new SelectionReference(
@@ -2631,6 +2701,64 @@ public partial class MainWindow : Window
         catch (InvalidOperationException exception)
         {
             ShowCommandError("工作地线删除失败", exception.Message);
+        }
+    }
+
+    private void OnAddGroundingPointFromAccessPoint(object sender, RoutedEventArgs e)
+    {
+        if (_activeSource?.Document is not { } document ||
+            _selectionManager.Selected is not
+            { Kind: SelectionTargetKind.GroundingAccessPoint, ObjectId: var accessPointId })
+        {
+            ShowCommandError("无法添加工作地线", "请先选择一个验电接地点。");
+            return;
+        }
+
+        try
+        {
+            GroundingAccessPoint point = document.GetGroundingAccessPoint(accessPointId);
+            string location = point.LineSide == GroundingAccessLineSide.SmallerNumberSide
+                ? "小号侧"
+                : "大号侧";
+            AddGroundingPointCommand command = (AddGroundingPointCommand)
+                _professionalCommandFactory.CreateAddGroundingPoint(
+                    document,
+                    GroundingTarget.ForGroundingAccessPoint(accessPointId),
+                    location);
+            _commandStack.ExecuteCommand(command);
+            RefreshDrawingScene();
+            _selectionManager.Select(new SelectionReference(
+                SelectionTargetKind.GroundingPoint,
+                command.After.GroundingPointId));
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ShowCommandError("工作地线创建失败", exception.Message);
+        }
+    }
+
+    private void OnRemoveGroundingAccessPoint(object sender, RoutedEventArgs e)
+    {
+        if (_activeSource?.Document is not { } document ||
+            _selectionManager.Selected is not
+            { Kind: SelectionTargetKind.GroundingAccessPoint, ObjectId: var accessPointId })
+        {
+            ShowCommandError("无法删除验电接地点", "请先选择一个验电接地点。");
+            return;
+        }
+
+        try
+        {
+            ICommand command = _professionalCommandFactory.CreateRemoveGroundingAccessPoint(
+                document,
+                accessPointId);
+            _commandStack.ExecuteCommand(command);
+            _selectionManager.Clear();
+            RefreshDrawingScene();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ShowCommandError("验电接地点删除失败", exception.Message);
         }
     }
 
@@ -2889,7 +3017,10 @@ public partial class MainWindow : Window
         if (selection?.GroundingPoint is { } groundingPoint)
         {
             GroundingPointEditorPanel.Visibility = Visibility.Visible;
-            GroundingPointTerminalText.Text = "已绑定到图面端子";
+            GroundingPointTerminalText.Text = groundingPoint.Target.Kind ==
+                                              GroundingTargetKind.GroundingAccessPoint
+                ? "已绑定到验电接地点"
+                : "已绑定到兼容/电缆侧端子";
             GroundingPointLocationInput.Text = groundingPoint.Location;
             GroundingPointNumberInput.Text = groundingPoint.Number ?? string.Empty;
             GroundingPointNoteInput.Text = groundingPoint.Note ?? string.Empty;
@@ -2903,6 +3034,26 @@ public partial class MainWindow : Window
         }
 
         GroundingPointEditorPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void UpdateGroundingAccessPointEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.GroundingAccessPoint is not { } point ||
+            selection.Document is not { } document)
+        {
+            GroundingAccessPointEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        GroundingPoint? groundingPoint = document.GroundingPoints.SingleOrDefault(item =>
+            item.Target == GroundingTarget.ForGroundingAccessPoint(
+                point.GroundingAccessPointId));
+        GroundingAccessPointEditorPanel.Visibility = Visibility.Visible;
+        GroundingAccessPointStatusText.Text = groundingPoint is null
+            ? "当前未安装工作地线。"
+            : $"当前工作地线：{groundingPoint.Number ?? "未编号（旧数据）"}";
+        AddGroundingPointFromAccessPointButton.IsEnabled = groundingPoint is null;
     }
 
     private void UpdateWorkScopeEditor()
@@ -3038,7 +3189,7 @@ public partial class MainWindow : Window
     private void ShowScene(DrawingScene scene, PropertyInspectionSource source)
     {
         _groundingPointPickMode = false;
-        _pendingGroundingPointTerminalId = null;
+        _pendingGroundingTarget = null;
         ResetWorkScopePick();
         _currentScene = scene;
         _activeSource = source;
@@ -3092,6 +3243,7 @@ public partial class MainWindow : Window
             OverheadLines = source.OverheadLines,
             WorkScopes = source.WorkScopes,
             GroundingPoints = source.GroundingPoints,
+            GroundingAccessPoints = source.GroundingAccessPoints,
             Terminals = source.Terminals,
             HitTestIndex = scene.HitTestIndex
         };
@@ -3127,6 +3279,30 @@ public partial class MainWindow : Window
                 Math.Pow(anchor.Position.YMillimeters - point.YMillimeters, 2))
             .Select(anchor => (Guid?)anchor.TerminalId)
             .FirstOrDefault();
+    }
+
+    private GroundingTarget? HitTestGroundingTarget(
+        DocumentPoint point,
+        double toleranceMillimeters)
+    {
+        if (_activeSource?.Document is not { } document || _currentScene is null)
+        {
+            return null;
+        }
+
+        SelectionReference? sceneTarget = _currentScene.HitTestIndex.HitTest(
+            point,
+            toleranceMillimeters);
+        if (sceneTarget is { Kind: SelectionTargetKind.GroundingAccessPoint })
+        {
+            return GroundingTarget.ForGroundingAccessPoint(sceneTarget.ObjectId);
+        }
+
+        Guid? terminalId = HitTestTerminal(point, toleranceMillimeters);
+        return terminalId is Guid value &&
+               ProfessionalCommandFactory.IsEligibleNewTerminalTarget(document, value)
+            ? GroundingTarget.ForTerminal(value)
+            : null;
     }
 
     private static void ShowCommandError(string title, string message)

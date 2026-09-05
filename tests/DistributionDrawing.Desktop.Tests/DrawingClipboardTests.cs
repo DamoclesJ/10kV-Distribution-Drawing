@@ -4,6 +4,7 @@ using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.Clipboard;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -648,6 +649,78 @@ public sealed class DrawingClipboardTests : IDisposable
             item => item.Id == copiedCenterTerminalId && item.AllowsMultipleConnections);
     }
 
+    [Fact]
+    public void OverheadClipboard_IncludesGapAndRemapsAdjacentPoleWhilePreservingLineSide()
+    {
+        ProjectRuntimeSession session = CreateSession("GAP 复制");
+        AddPoleCommand start = AddPole(session, new DocumentPoint(10, 10));
+        AddPoleCommand middle = AddPole(session, new DocumentPoint(90, 50));
+        AddPoleCommand end = AddPole(session, new DocumentPoint(170, 10));
+        AddOverhead(session, start, end, [start.Pole.Id, middle.Pole.Id, end.Pole.Id]);
+        Connection connection = Assert.Single(session.PersistenceSession.Domain.Connections);
+        GroundingAccessPoint sourceGap = session.PersistenceSession.Domain.CreateGroundingAccessPoint(
+            Guid.NewGuid(), connection.Id, middle.Pole.Id, end.Pole.Id,
+            GroundingAccessLineSide.SmallerNumberSide);
+        session.RebuildScene();
+        session.SelectionManager.Replace([
+            new SelectionReference(SelectionTargetKind.Device, start.Pole.Id),
+            new SelectionReference(SelectionTargetKind.Device, middle.Pole.Id),
+            new SelectionReference(SelectionTargetKind.Device, end.Pole.Id),
+            new SelectionReference(SelectionTargetKind.Connection, connection.Id)
+        ]);
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        GroundingAccessPoint copied = Assert.Single(
+            session.PersistenceSession.Domain.GroundingAccessPoints,
+            point => point.GroundingAccessPointId != sourceGap.GroundingAccessPointId);
+        Assert.NotEqual(sourceGap.ConnectionId, copied.ConnectionId);
+        Assert.NotEqual(sourceGap.PoleId, copied.PoleId);
+        Assert.NotEqual(sourceGap.AdjacentPoleId, copied.AdjacentPoleId);
+        Assert.Equal(sourceGap.LineSide, copied.LineSide);
+        OverheadLine copiedLine = session.PersistenceSession.Domain.OverheadLines.Single(line =>
+            line.ConnectionId == copied.ConnectionId);
+        Assert.Contains(copied.PoleId, copiedLine.SupportPoleIds);
+        Assert.Contains(copied.AdjacentPoleId, copiedLine.SupportPoleIds);
+    }
+
+    [Fact]
+    public void GroundingPointInCopyClosureBlocksCopyUntilDeleted()
+    {
+        ProjectRuntimeSession session = CreateSession("GAP 工作地线阻止复制");
+        AddPoleCommand start = AddPole(session, new DocumentPoint(10, 10));
+        AddPoleCommand end = AddPole(session, new DocumentPoint(150, 10));
+        AddOverhead(session, start, end);
+        Connection connection = Assert.Single(session.PersistenceSession.Domain.Connections);
+        GroundingAccessPoint gap = session.PersistenceSession.Domain.CreateGroundingAccessPoint(
+            Guid.NewGuid(), connection.Id, start.Pole.Id, end.Pole.Id,
+            GroundingAccessLineSide.LargerNumberSide);
+        GroundingPoint grounding = session.PersistenceSession.Domain.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
+            "大号侧", "L01");
+        session.RebuildScene();
+        session.SelectionManager.Replace([
+            new SelectionReference(SelectionTargetKind.Device, start.Pole.Id),
+            new SelectionReference(SelectionTargetKind.Device, end.Pole.Id),
+            new SelectionReference(SelectionTargetKind.Connection, connection.Id)
+        ]);
+        var clipboard = new DrawingClipboardService();
+
+        Assert.False(clipboard.Copy(session).IsSuccess);
+        session.PersistenceSession.Domain.RemoveGroundingPoint(grounding.GroundingPointId);
+        Assert.True(clipboard.Copy(session).IsSuccess);
+
+        GroundingPoint legacyTerminalGrounding =
+            session.PersistenceSession.Domain.CreateGroundingPoint(
+                Guid.NewGuid(), start.Terminal.Id, "legacy terminal", "L02");
+        Assert.False(clipboard.Copy(session).IsSuccess);
+        session.PersistenceSession.Domain.RemoveGroundingPoint(
+            legacyTerminalGrounding.GroundingPointId);
+        Assert.True(clipboard.Copy(session).IsSuccess);
+    }
+
     private ProjectRuntimeSession CreateSession(string title)
     {
         string path = Path.Combine(
@@ -696,6 +769,15 @@ public sealed class DrawingClipboardTests : IDisposable
         AddPoleCommand first,
         AddPoleCommand second)
     {
+        AddOverhead(session, first, second, [first.Pole.Id, second.Pole.Id]);
+    }
+
+    private static void AddOverhead(
+        ProjectRuntimeSession session,
+        AddPoleCommand first,
+        AddPoleCommand second,
+        IReadOnlyList<Guid> supportPoleIds)
+    {
         Guid connectionId = Guid.NewGuid();
         var connection = new Connection(
             connectionId,
@@ -707,7 +789,7 @@ public sealed class DrawingClipboardTests : IDisposable
         var line = new OverheadLine(
             connectionId,
             "JKLYJ-120",
-            new[] { first.Pole.Id, second.Pole.Id });
+            supportPoleIds);
         var layout = new OverheadLineLayout(
             connectionId,
             first.Layout.Position,

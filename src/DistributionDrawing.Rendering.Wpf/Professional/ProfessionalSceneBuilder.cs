@@ -4,6 +4,7 @@ using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Metrics;
+using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
@@ -22,22 +23,28 @@ public sealed class ProfessionalSceneBuilder
 {
     private readonly SymbolLibrary _symbolLibrary;
     private readonly GroundingPresentationAnchorResolver _groundingAnchorResolver;
+    private readonly GroundingAccessPointAnchorResolver _accessPointAnchorResolver;
 
     public ProfessionalSceneBuilder(SymbolLibrary symbolLibrary)
     {
         ArgumentNullException.ThrowIfNull(symbolLibrary);
         _symbolLibrary = symbolLibrary;
         _groundingAnchorResolver = new GroundingPresentationAnchorResolver();
+        _accessPointAnchorResolver = new GroundingAccessPointAnchorResolver();
     }
 
     public ProfessionalSceneResult Build(
         DrawingDocument document,
         DrawingLayout drawingLayout,
-        IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts)
+        IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
+        IEnumerable<OrthogonalRoute> routes)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(drawingLayout);
         ArgumentNullException.ThrowIfNull(ringCabinetLayouts);
+        ArgumentNullException.ThrowIfNull(routes);
+        IReadOnlyDictionary<Guid, OrthogonalRoute> routeByConnectionId = routes
+            .ToDictionary(route => route.ConnectionId);
 
         TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
             document,
@@ -47,6 +54,38 @@ public sealed class ProfessionalSceneBuilder
         var hitTestEntries = new List<SelectionHitTestEntry>();
         var diagnostics = new List<SceneBuildDiagnostic>();
 
+        foreach (GroundingAccessPoint point in document.GroundingAccessPoints)
+        {
+            if (!_accessPointAnchorResolver.TryResolve(
+                    point,
+                    document,
+                    drawingLayout,
+                    routeByConnectionId,
+                    out GroundingPresentationAnchor anchor))
+            {
+                diagnostics.Add(new SceneBuildDiagnostic(
+                    "GroundingAccessPointAnchorMissing",
+                    $"验电接地点 '{point.GroundingAccessPointId}' 无法解析导线半边。",
+                    SelectionTargetKind.GroundingAccessPoint,
+                    point.GroundingAccessPointId));
+                continue;
+            }
+
+            double diameter = DrawingMetrics.Default.Line.GroundingAccessMarkerDiameter;
+            DocumentRect bounds = MarkerBounds(anchor.Position, diameter);
+            elements.Add(new SceneEllipse(
+                bounds,
+                Colors.Black,
+                DrawingMetrics.Default.Line.ConnectionThickness,
+                Colors.Black));
+            hitTestEntries.Add(new SelectionHitTestEntry(
+                new SelectionReference(
+                    SelectionTargetKind.GroundingAccessPoint,
+                    point.GroundingAccessPointId),
+                Expand(bounds, DrawingMetrics.Default.Line.GroundingAccessHitPadding),
+                70));
+        }
+
         foreach (GroundingPoint groundingPoint in document.GroundingPoints)
         {
             if (!_groundingAnchorResolver.TryResolve(
@@ -54,6 +93,7 @@ public sealed class ProfessionalSceneBuilder
                     document,
                     drawingLayout,
                     anchors,
+                    routeByConnectionId,
                     out GroundingPresentationAnchor anchor))
             {
                 diagnostics.Add(new SceneBuildDiagnostic(
@@ -190,5 +230,14 @@ public sealed class ProfessionalSceneBuilder
             position.YMillimeters - size / 2,
             size,
             size);
+    }
+
+    private static DocumentRect Expand(DocumentRect bounds, double padding)
+    {
+        return new DocumentRect(
+            bounds.XMillimeters - padding,
+            bounds.YMillimeters - padding,
+            bounds.WidthMillimeters + padding * 2,
+            bounds.HeightMillimeters + padding * 2);
     }
 }

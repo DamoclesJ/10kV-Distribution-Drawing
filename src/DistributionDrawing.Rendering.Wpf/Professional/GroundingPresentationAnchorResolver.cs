@@ -2,6 +2,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 
@@ -17,19 +18,42 @@ public readonly record struct GroundingPresentationAnchor(
 /// </summary>
 public sealed class GroundingPresentationAnchorResolver
 {
+    private readonly GroundingAccessPointAnchorResolver _accessPointResolver = new();
+
     public bool TryResolve(
         GroundingPoint groundingPoint,
         DrawingDocument document,
         DrawingLayout drawingLayout,
         TerminalAnchorIndex terminalAnchors,
+        IReadOnlyDictionary<Guid, OrthogonalRoute> routes,
         out GroundingPresentationAnchor presentationAnchor)
     {
         ArgumentNullException.ThrowIfNull(groundingPoint);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(drawingLayout);
         ArgumentNullException.ThrowIfNull(terminalAnchors);
+        ArgumentNullException.ThrowIfNull(routes);
 
-        if (!terminalAnchors.TryGet(groundingPoint.TerminalId, out TerminalAnchor terminalAnchor))
+        if (groundingPoint.Target.Kind == GroundingTargetKind.GroundingAccessPoint)
+        {
+            GroundingAccessPoint? point = document.GroundingAccessPoints.SingleOrDefault(candidate =>
+                candidate.GroundingAccessPointId == groundingPoint.Target.TargetId);
+            if (point is null)
+            {
+                presentationAnchor = default;
+                return false;
+            }
+
+            return _accessPointResolver.TryResolve(
+                point,
+                document,
+                drawingLayout,
+                routes,
+                out presentationAnchor);
+        }
+
+        Guid terminalId = groundingPoint.Target.TargetId;
+        if (!terminalAnchors.TryGet(terminalId, out TerminalAnchor terminalAnchor))
         {
             presentationAnchor = default;
             return false;
@@ -39,7 +63,7 @@ public sealed class GroundingPresentationAnchorResolver
             .OfType<SwitchDevice>()
             .SingleOrDefault(device =>
                 device.InstallationType == SwitchInstallationType.Pole &&
-                device.OwnsTerminal(groundingPoint.TerminalId));
+                device.OwnsTerminal(terminalId));
         if (switchDevice is null)
         {
             presentationAnchor = new GroundingPresentationAnchor(
@@ -64,7 +88,7 @@ public sealed class GroundingPresentationAnchorResolver
             poleLayout,
             attachmentLayout,
             SymbolLibrary.ResolveAttachmentKind(switchDevice));
-        bool isFirstTerminal = switchDevice.TerminalIds[0] == groundingPoint.TerminalId;
+        bool isFirstTerminal = switchDevice.TerminalIds[0] == terminalId;
         DocumentPoint targetTerminal = isFirstTerminal
             ? geometry.FirstTerminal
             : geometry.SecondTerminal;
@@ -83,6 +107,19 @@ public sealed class GroundingPresentationAnchorResolver
             direction);
         return true;
     }
+
+    public bool TryResolve(
+        GroundingPoint groundingPoint,
+        DrawingDocument document,
+        DrawingLayout drawingLayout,
+        TerminalAnchorIndex terminalAnchors,
+        out GroundingPresentationAnchor presentationAnchor) => TryResolve(
+            groundingPoint,
+            document,
+            drawingLayout,
+            terminalAnchors,
+            new Dictionary<Guid, OrthogonalRoute>(),
+            out presentationAnchor);
 
     private static TerminalAnchorDirection ResolveOutwardDirection(
         DocumentPoint from,

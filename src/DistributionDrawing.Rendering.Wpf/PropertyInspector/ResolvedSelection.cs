@@ -38,6 +38,8 @@ public sealed class ResolvedSelection
 
     public GroundingPoint? GroundingPoint { get; init; }
 
+    public GroundingAccessPoint? GroundingAccessPoint { get; init; }
+
     public Terminal? Terminal { get; init; }
 
     public RingCabinetLayout? RingCabinetLayout { get; init; }

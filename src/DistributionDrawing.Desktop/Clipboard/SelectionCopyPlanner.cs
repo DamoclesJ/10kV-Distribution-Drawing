@@ -2,6 +2,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 
@@ -97,6 +98,31 @@ internal sealed class SelectionCopyPlanner
                 warnings))
             .OfType<CableSegmentSnapshot>()
             .ToArray();
+        HashSet<Guid> includedConnectionIds = overheadLines
+            .Select(item => item.Connection.Id)
+            .ToHashSet();
+        GroundingAccessPointSnapshot[] accessPoints = document.GroundingAccessPoints
+            .Where(point => includedConnectionIds.Contains(point.ConnectionId))
+            .OrderBy(point => point.GroundingAccessPointId)
+            .Select(point => new GroundingAccessPointSnapshot(
+                point.GroundingAccessPointId,
+                point.ConnectionId,
+                point.PoleId,
+                point.AdjacentPoleId,
+                point.LineSide))
+            .ToArray();
+        HashSet<Guid> includedAccessPointIds = accessPoints
+            .Select(point => point.GroundingAccessPointId)
+            .ToHashSet();
+        if (document.GroundingPoints.Any(point =>
+                point.Target.Kind == GroundingTargetKind.GroundingAccessPoint
+                    ? includedAccessPointIds.Contains(point.Target.TargetId)
+                    : includedTerminalIds.Contains(point.Target.TargetId)))
+        {
+            return new CopyPlanResult(
+                null,
+                ["所选线路存在工作地线，请先删除工作地线后再复制。"]);
+        }
 
         if (poles.Length == 0 && cabinets.Length == 0)
         {
@@ -118,7 +144,8 @@ internal sealed class SelectionCopyPlanner
                 terminations,
                 cabinets,
                 overheadLines,
-                cableSegments),
+                cableSegments,
+                accessPoints),
             Array.AsReadOnly(warnings.ToArray()));
     }
 
@@ -207,6 +234,23 @@ internal sealed class SelectionCopyPlanner
                     return true;
                 }
                 return false;
+
+            case SelectionTargetKind.GroundingAccessPoint:
+                GroundingAccessPoint? point = document.GroundingAccessPoints.SingleOrDefault(
+                    item => item.GroundingAccessPointId == reference.ObjectId);
+                if (point is null)
+                {
+                    return false;
+                }
+                OverheadLine line = document.OverheadLines.Single(item =>
+                    item.ConnectionId == point.ConnectionId);
+                connectionIds.Add(point.ConnectionId);
+                foreach (Guid poleId in line.SupportPoleIds)
+                {
+                    poleIds.Add(poleId);
+                }
+                roots.Add(reference);
+                return true;
 
             case SelectionTargetKind.CableSegment:
                 if (document.CableSegments.Any(item => item.Id == reference.ObjectId))

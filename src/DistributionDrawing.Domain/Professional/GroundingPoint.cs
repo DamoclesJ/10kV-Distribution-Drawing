@@ -1,14 +1,13 @@
 namespace DistributionDrawing.Domain.Professional;
 
 /// <summary>
-/// A user-defined temporary work grounding location. The terminal is the
-/// only persisted topology reference; device ownership is resolved from it.
+/// A user-defined temporary work grounding location bound to one typed target.
 /// </summary>
 public sealed class GroundingPoint
 {
     private GroundingPoint(
         Guid groundingPointId,
-        Guid terminalId,
+        GroundingTarget target,
         string location,
         string? number,
         string? note)
@@ -20,12 +19,7 @@ public sealed class GroundingPoint
                 nameof(groundingPointId));
         }
 
-        if (terminalId == Guid.Empty)
-        {
-            throw new ArgumentException(
-                "Grounding terminal ID cannot be empty.",
-                nameof(terminalId));
-        }
+        ArgumentNullException.ThrowIfNull(target);
 
         if (string.IsNullOrWhiteSpace(location))
         {
@@ -33,7 +27,7 @@ public sealed class GroundingPoint
         }
 
         GroundingPointId = groundingPointId;
-        TerminalId = terminalId;
+        Target = target;
         Location = location.Trim();
         Number = NormalizeOptional(number);
         Note = NormalizeOptional(note);
@@ -41,7 +35,12 @@ public sealed class GroundingPoint
 
     public Guid GroundingPointId { get; }
 
-    public Guid TerminalId { get; private set; }
+    public GroundingTarget Target { get; private set; }
+
+    // Compatibility view for legacy callers; typed targets should use Target.
+    public Guid TerminalId => Target.Kind == GroundingTargetKind.Terminal
+        ? Target.TargetId
+        : Guid.Empty;
 
     public string Location { get; private set; }
 
@@ -51,33 +50,45 @@ public sealed class GroundingPoint
 
     public static GroundingPoint Create(
         Guid groundingPointId,
-        Guid terminalId,
+        GroundingTarget target,
         string location,
         string? number = null,
         string? note = null)
     {
         return new GroundingPoint(
             groundingPointId,
-            terminalId,
+            target,
             location,
             number,
             note);
     }
 
-    internal void Update(
+    public static GroundingPoint Create(
+        Guid groundingPointId,
         Guid terminalId,
+        string location,
+        string? number = null,
+        string? note = null) => Create(
+            groundingPointId,
+            GroundingTarget.ForTerminal(terminalId),
+            location,
+            number,
+            note);
+
+    internal void Update(
+        GroundingTarget target,
         string location,
         string? number,
         string? note)
     {
         GroundingPoint replacement = Create(
             GroundingPointId,
-            terminalId,
+            target,
             location,
             number,
             note);
 
-        TerminalId = replacement.TerminalId;
+        Target = replacement.Target;
         Location = replacement.Location;
         Number = replacement.Number;
         Note = replacement.Note;

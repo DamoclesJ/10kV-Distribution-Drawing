@@ -8,6 +8,7 @@ public enum SelectionTargetKind
     PoleAttachment,
     Connection,
     GroundingPoint,
+    GroundingAccessPoint,
     WorkScope,
     Terminal,
     CableSegment,

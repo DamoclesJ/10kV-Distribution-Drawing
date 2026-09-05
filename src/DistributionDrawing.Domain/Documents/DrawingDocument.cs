@@ -19,6 +19,7 @@ public sealed class DrawingDocument
     private readonly List<OverheadLine> _overheadLines = [];
     private readonly List<WorkScope> _workScopes = [];
     private readonly List<GroundingPoint> _groundingPoints = [];
+    private readonly List<GroundingAccessPoint> _groundingAccessPoints = [];
     private readonly HashSet<Guid> _internalAggregateOwnerIds = [];
 
     public DrawingDocument(Guid id, string title)
@@ -63,6 +64,8 @@ public sealed class DrawingDocument
     public IReadOnlyList<WorkScope> WorkScopes => _workScopes;
 
     public IReadOnlyList<GroundingPoint> GroundingPoints => _groundingPoints;
+
+    public IReadOnlyList<GroundingAccessPoint> GroundingAccessPoints => _groundingAccessPoints;
 
     public void Rename(string title)
     {
@@ -192,7 +195,7 @@ public sealed class DrawingDocument
         if (_connections.Any(connection =>
                 retiredTerminalIds.Contains(connection.StartTerminalId) ||
                 retiredTerminalIds.Contains(connection.EndTerminalId)) ||
-            _groundingPoints.Any(point => retiredTerminalIds.Contains(point.TerminalId)) ||
+            _groundingPoints.Any(point => TargetsAnyTerminal(point, retiredTerminalIds)) ||
             _workScopes.Any(scope =>
                 retiredTerminalIds.Contains(scope.StartBoundary.TerminalId) ||
                 retiredTerminalIds.Contains(scope.EndBoundary.TerminalId)))
@@ -292,7 +295,7 @@ public sealed class DrawingDocument
                 $"Pole '{deviceId}' is still referenced by an overhead line.");
         }
 
-        if (_groundingPoints.Any(point => terminalIds.Contains(point.TerminalId)) ||
+        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)) ||
             _workScopes.Any(scope =>
                 aggregateDeviceIds.Contains(scope.StartBoundary.DeviceId) ||
                 aggregateDeviceIds.Contains(scope.EndBoundary.DeviceId) ||
@@ -921,7 +924,7 @@ public sealed class DrawingDocument
                 $"Switch '{switchDevice.Id}' is still referenced by a connection.");
         }
 
-        if (_groundingPoints.Any(point => terminalIds.Contains(point.TerminalId)) ||
+        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)) ||
             _workScopes.Any(scope => terminalIds.Contains(scope.StartBoundary.TerminalId) ||
                 terminalIds.Contains(scope.EndBoundary.TerminalId)))
         {
@@ -1193,7 +1196,7 @@ public sealed class DrawingDocument
                 $"Cable termination '{cableTermination.Id}' is still referenced by a connection.");
         }
 
-        if (_groundingPoints.Any(point => terminalIds.Contains(point.TerminalId)))
+        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)))
         {
             throw new InvalidOperationException(
                 $"Cable termination '{cableTermination.Id}' is still referenced by a grounding point.");
@@ -1256,8 +1259,80 @@ public sealed class DrawingDocument
                 existing => existing.ConnectionId == connectionId)
             ?? throw new InvalidOperationException(
                 $"Overhead line '{connectionId}' does not exist.");
+
+        GroundingAccessPoint[] accessPoints = _groundingAccessPoints
+            .Where(point => point.ConnectionId == connectionId)
+            .ToArray();
+        GroundingAccessPoint? occupied = accessPoints.FirstOrDefault(point =>
+            _groundingPoints.Any(groundingPoint =>
+                groundingPoint.Target == GroundingTarget.ForGroundingAccessPoint(
+                    point.GroundingAccessPointId)));
+        if (occupied is not null)
+        {
+            throw new InvalidOperationException(
+                $"Overhead line '{connectionId}' has an occupied grounding access point '{occupied.GroundingAccessPointId}'.");
+        }
+
+        _groundingAccessPoints.RemoveAll(point => point.ConnectionId == connectionId);
         _overheadLines.Remove(overheadLine);
         return overheadLine;
+    }
+
+    public GroundingAccessPoint CreateGroundingAccessPoint(
+        Guid groundingAccessPointId,
+        Guid connectionId,
+        Guid poleId,
+        Guid adjacentPoleId,
+        GroundingAccessLineSide lineSide)
+    {
+        var point = new GroundingAccessPoint(
+            groundingAccessPointId,
+            connectionId,
+            poleId,
+            adjacentPoleId,
+            lineSide);
+        AddGroundingAccessPoint(point);
+        return point;
+    }
+
+    public void AddGroundingAccessPoint(GroundingAccessPoint point)
+    {
+        ArgumentNullException.ThrowIfNull(point);
+        EnsureObjectIdIsAvailable(point.GroundingAccessPointId, nameof(GroundingAccessPoint));
+        ValidateGroundingAccessPoint(point);
+
+        if (_groundingAccessPoints.Any(existing =>
+                existing.ConnectionId == point.ConnectionId &&
+                existing.PoleId == point.PoleId &&
+                existing.AdjacentPoleId == point.AdjacentPoleId))
+        {
+            throw new InvalidOperationException(
+                "A grounding access point already exists on the selected conductor half-edge.");
+        }
+
+        _groundingAccessPoints.Add(point);
+    }
+
+    public GroundingAccessPoint GetGroundingAccessPoint(Guid groundingAccessPointId)
+    {
+        return _groundingAccessPoints.SingleOrDefault(point =>
+                point.GroundingAccessPointId == groundingAccessPointId)
+            ?? throw new InvalidOperationException(
+                $"Grounding access point '{groundingAccessPointId}' does not exist.");
+    }
+
+    public void RemoveGroundingAccessPoint(Guid groundingAccessPointId)
+    {
+        GroundingAccessPoint point = GetGroundingAccessPoint(groundingAccessPointId);
+        if (_groundingPoints.Any(groundingPoint =>
+                groundingPoint.Target == GroundingTarget.ForGroundingAccessPoint(
+                    groundingAccessPointId)))
+        {
+            throw new InvalidOperationException(
+                $"Grounding access point '{groundingAccessPointId}' is occupied by a grounding point.");
+        }
+
+        _groundingAccessPoints.Remove(point);
     }
 
     public WorkScope CreateWorkScope(
@@ -1327,9 +1402,24 @@ public sealed class DrawingDocument
         string? number = null,
         string? note = null)
     {
+        return CreateGroundingPoint(
+            groundingPointId,
+            GroundingTarget.ForTerminal(terminalId),
+            location,
+            number,
+            note);
+    }
+
+    public GroundingPoint CreateGroundingPoint(
+        Guid groundingPointId,
+        GroundingTarget target,
+        string location,
+        string? number = null,
+        string? note = null)
+    {
         GroundingPoint groundingPoint = GroundingPoint.Create(
             groundingPointId,
-            terminalId,
+            target,
             location,
             number,
             note);
@@ -1344,13 +1434,20 @@ public sealed class DrawingDocument
         EnsureObjectIdIsAvailable(
             groundingPoint.GroundingPointId,
             nameof(GroundingPoint));
-        ValidateGroundingPointTerminal(groundingPoint.TerminalId);
+        ValidateGroundingTarget(groundingPoint.Target);
 
         if (_groundingPoints.Any(existing =>
-                existing.TerminalId == groundingPoint.TerminalId))
+                existing.Target == groundingPoint.Target))
         {
             throw new InvalidOperationException(
-                $"Terminal '{groundingPoint.TerminalId}' already has a grounding point.");
+                $"Grounding target '{groundingPoint.Target.TargetId}' already has a grounding point.");
+        }
+
+        if (groundingPoint.Number is not null && _groundingPoints.Any(existing =>
+                string.Equals(existing.Number, groundingPoint.Number, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Grounding point number '{groundingPoint.Number}' is already in use.");
         }
 
         _groundingPoints.Add(groundingPoint);
@@ -1363,25 +1460,58 @@ public sealed class DrawingDocument
         string? number = null,
         string? note = null)
     {
+        UpdateGroundingPoint(
+            groundingPointId,
+            GroundingTarget.ForTerminal(terminalId),
+            location,
+            number,
+            note);
+    }
+
+    public void UpdateGroundingPoint(
+        Guid groundingPointId,
+        GroundingTarget target,
+        string location,
+        string? number = null,
+        string? note = null)
+    {
         GroundingPoint groundingPoint = GetGroundingPoint(groundingPointId);
+        if (groundingPoint.Target != target)
+        {
+            throw new InvalidOperationException("Grounding target rebinding is not supported.");
+        }
+
         GroundingPoint replacement = GroundingPoint.Create(
             groundingPointId,
-            terminalId,
+            target,
             location,
             number,
             note);
 
-        ValidateGroundingPointTerminal(replacement.TerminalId);
+        ValidateGroundingTarget(replacement.Target);
         if (_groundingPoints.Any(existing =>
                 existing.GroundingPointId != groundingPointId &&
-                existing.TerminalId == replacement.TerminalId))
+                existing.Target == replacement.Target))
         {
             throw new InvalidOperationException(
-                $"Terminal '{replacement.TerminalId}' already has a grounding point.");
+                $"Grounding target '{replacement.Target.TargetId}' already has a grounding point.");
+        }
+
+        if (string.IsNullOrWhiteSpace(replacement.Number))
+        {
+            throw new InvalidOperationException("Grounding point number is required when editing.");
+        }
+
+        if (_groundingPoints.Any(existing =>
+                existing.GroundingPointId != groundingPointId &&
+                string.Equals(existing.Number, replacement.Number, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Grounding point number '{replacement.Number}' is already in use.");
         }
 
         groundingPoint.Update(
-            replacement.TerminalId,
+            replacement.Target,
             replacement.Location,
             replacement.Number,
             replacement.Note);
@@ -1459,9 +1589,72 @@ public sealed class DrawingDocument
             $"Boundary terminal '{terminal.Id}' is not owned by or contained in device '{device.Id}'.");
     }
 
-    private void ValidateGroundingPointTerminal(Guid terminalId)
+    private void ValidateGroundingTarget(GroundingTarget target)
     {
-        _ = GetTerminal(terminalId);
+        ArgumentNullException.ThrowIfNull(target);
+        switch (target.Kind)
+        {
+            case GroundingTargetKind.Terminal:
+                _ = GetTerminal(target.TargetId);
+                break;
+            case GroundingTargetKind.GroundingAccessPoint:
+                _ = GetGroundingAccessPoint(target.TargetId);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported grounding target kind '{target.Kind}'.");
+        }
+    }
+
+    private void ValidateGroundingAccessPoint(GroundingAccessPoint point)
+    {
+        Connection connection = _connections.SingleOrDefault(candidate =>
+                candidate.Id == point.ConnectionId)
+            ?? throw new InvalidOperationException(
+                $"Connection '{point.ConnectionId}' does not exist.");
+        if (connection.Type != ConnectionType.OverheadLine)
+        {
+            throw new InvalidOperationException(
+                $"Connection '{point.ConnectionId}' is not an overhead line.");
+        }
+
+        OverheadLine line = _overheadLines.SingleOrDefault(candidate =>
+                candidate.ConnectionId == point.ConnectionId)
+            ?? throw new InvalidOperationException(
+                $"Overhead line detail '{point.ConnectionId}' does not exist.");
+        if (_devices.SingleOrDefault(device => device.Id == point.PoleId) is not Pole)
+        {
+            throw new InvalidOperationException($"Pole '{point.PoleId}' does not exist.");
+        }
+        if (_devices.SingleOrDefault(device => device.Id == point.AdjacentPoleId) is not Pole)
+        {
+            throw new InvalidOperationException(
+                $"Adjacent pole '{point.AdjacentPoleId}' does not exist.");
+        }
+
+        int poleIndex = line.SupportPoleIds.ToList().IndexOf(point.PoleId);
+        if (poleIndex < 0)
+        {
+            throw new InvalidOperationException(
+                $"Pole '{point.PoleId}' is not a support pole of overhead line '{point.ConnectionId}'.");
+        }
+
+        bool isPredecessor = poleIndex > 0 &&
+                             line.SupportPoleIds[poleIndex - 1] == point.AdjacentPoleId;
+        bool isSuccessor = poleIndex + 1 < line.SupportPoleIds.Count &&
+                           line.SupportPoleIds[poleIndex + 1] == point.AdjacentPoleId;
+        if (!isPredecessor && !isSuccessor)
+        {
+            throw new InvalidOperationException(
+                $"Pole '{point.AdjacentPoleId}' is not directly adjacent to pole '{point.PoleId}' on overhead line '{point.ConnectionId}'.");
+        }
+    }
+
+    private static bool TargetsAnyTerminal(
+        GroundingPoint groundingPoint,
+        IReadOnlyCollection<Guid> terminalIds)
+    {
+        return groundingPoint.Target.Kind == GroundingTargetKind.Terminal &&
+               terminalIds.Contains(groundingPoint.Target.TargetId);
     }
 
     private void EnsureGroundingPointReferencesExist(IEnumerable<Guid> groundingPointIds)
@@ -1740,6 +1933,7 @@ public sealed class DrawingDocument
             _poleAttachments.Any(attachment => attachment.AttachmentId == objectId) ||
             _workScopes.Any(workScope => workScope.WorkScopeId == objectId) ||
             _groundingPoints.Any(point => point.GroundingPointId == objectId) ||
+            _groundingAccessPoints.Any(point => point.GroundingAccessPointId == objectId) ||
             _internalAggregateOwnerIds.Contains(objectId))
         {
             throw new InvalidOperationException($"{objectName} ID '{objectId}' is already in use.");

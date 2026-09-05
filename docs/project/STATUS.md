@@ -8,8 +8,8 @@
 - **Current Development Target:** Post-V1 Electrical Model Closure
 - **Completed Work Package:** WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice — Closed
 - **Grounding Scope Amendment:** Completed / Frozen
-- **Active Work Package:** None
-- **Next Work Package:** WP-EM-04 GroundingAccessPoint & GroundingTarget Vertical Slice — Planning / Refinement only
+- **Active Work Package:** WP-EM-04 GroundingAccessPoint & GroundingTarget Vertical Slice — Implementation / Review in progress
+- **Next Work Package:** WP-EM-05 Grounding Layout & Interaction Closure — Not started
 - **Blockers:** None
 
 V1.0 provides a standard portable profile and a legacy Windows 10 portable profile. The legacy profile is for older Windows 10 systems that cannot be upgraded or adequately serviced. V1.0 has completed target-machine validation.
@@ -18,7 +18,7 @@ V1.0 provides a standard portable profile and a legacy Windows 10 portable profi
 
 Post-V1 Requirement Reassessment / Planning is complete. The first confirmed implementation stage is [Post-V1 Electrical Model Closure](POST_V1_ELECTRICAL_MODEL_CLOSURE.md). It does not yet define a V1.1, V1.2, or V2.0 release scope.
 
-WP-EM-01, WP-EM-02, and WP-EM-03 are complete following code review, automated verification, and Windows validation. WP-EM-03 completed the RingCabinet optional cable-terminal vertical slice, including nullable V7 persistence, dependency protection, clipboard, rendering, and interval internal-lead preservation when the cable terminal is absent. The Post-V1 Grounding Scope Amendment is complete and frozen in [Post-V1 Electrical Model Closure](POST_V1_ELECTRICAL_MODEL_CLOSURE.md). The next stage is WP-EM-04 requirements refinement / planning only; its implementation has not started. Do not enter later Work Packages or the future Annotation / Work-ticket Presentation Layer implicitly.
+WP-EM-01, WP-EM-02, and WP-EM-03 are complete following code review, automated verification, and Windows validation. WP-EM-03 completed the RingCabinet optional cable-terminal vertical slice, including nullable V7 persistence, dependency protection, clipboard, rendering, and interval internal-lead preservation when the cable terminal is absent. The Post-V1 Grounding Scope Amendment and WP-EM-04 requirements refinement are complete and frozen in [Post-V1 Electrical Model Closure](POST_V1_ELECTRICAL_MODEL_CLOSURE.md). WP-EM-04 is in Implementation / Review. Do not enter later Work Packages or the future Annotation / Work-ticket Presentation Layer implicitly.
 
 ### WP-EM-03 Closure Evidence
 

@@ -138,6 +138,7 @@ public sealed class ProjectV7ContractTests : IDisposable
                     groundingAccessPointId,
                     Guid.NewGuid(),
                     Guid.NewGuid(),
+                    Guid.NewGuid(),
                     ProjectGroundingAccessLineSide.SmallerNumberSide)
             ]);
         var layout = new ProjectLayoutDto(
@@ -224,6 +225,7 @@ public sealed class ProjectV7ContractTests : IDisposable
             Guid.NewGuid(),
             Guid.NewGuid(),
             Guid.NewGuid(),
+            Guid.NewGuid(),
             lineSide);
 
         string json = JsonSerializer.Serialize(original);
@@ -231,6 +233,7 @@ public sealed class ProjectV7ContractTests : IDisposable
             JsonSerializer.Deserialize<ProjectGroundingAccessPointDto>(json)!;
 
         Assert.Equal(original, restored);
+        Assert.Equal(original.AdjacentPoleId, restored.AdjacentPoleId);
     }
 
     [Fact]

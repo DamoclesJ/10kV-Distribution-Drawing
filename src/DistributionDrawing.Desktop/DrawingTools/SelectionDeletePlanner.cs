@@ -2,10 +2,12 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Desktop.CableConnection;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
 
 namespace DistributionDrawing.Desktop.DrawingTools;
@@ -14,6 +16,7 @@ public sealed class SelectionDeletePlanner
 {
     private readonly DeviceCommandFactory _deviceCommandFactory = new();
     private readonly OverheadLineCommandFactory _overheadLineCommandFactory = new();
+    private readonly ProfessionalCommandFactory _professionalCommandFactory = new();
 
     public ICommand Create(ProjectRuntimeSession session, SelectionSet selection)
     {
@@ -36,6 +39,8 @@ public sealed class SelectionDeletePlanner
         HashSet<Guid> attachmentIds = [];
         HashSet<Guid> cableIds = [];
         HashSet<Guid> overheadIds = [];
+        HashSet<Guid> groundingPointIds = [];
+        HashSet<Guid> groundingAccessPointIds = [];
 
         foreach (SelectionReference reference in selection.SelectedReferences)
         {
@@ -75,6 +80,12 @@ public sealed class SelectionDeletePlanner
                 case SelectionTargetKind.Connection:
                     overheadIds.Add(reference.ObjectId);
                     break;
+                case SelectionTargetKind.GroundingPoint:
+                    groundingPointIds.Add(reference.ObjectId);
+                    break;
+                case SelectionTargetKind.GroundingAccessPoint:
+                    groundingAccessPointIds.Add(reference.ObjectId);
+                    break;
                 case SelectionTargetKind.RingCabinetInterval:
                     if (reference.ParentId is not Guid parentId || !cabinetIds.Contains(parentId))
                     {
@@ -93,6 +104,19 @@ public sealed class SelectionDeletePlanner
         }
 
         var commands = new List<ICommand>();
+        foreach (Guid groundingPointId in groundingPointIds.OrderBy(id => id))
+        {
+            commands.Add(_professionalCommandFactory.CreateRemoveGroundingPoint(
+                document,
+                groundingPointId));
+        }
+
+        foreach (Guid groundingAccessPointId in groundingAccessPointIds.OrderBy(id => id))
+        {
+            commands.Add(_professionalCommandFactory.CreateRemoveGroundingAccessPoint(
+                document,
+                groundingAccessPointId));
+        }
         foreach (Guid cableId in cableIds.OrderBy(id => id))
         {
             CableSegment cable = document.CableSegments.SingleOrDefault(item => item.Id == cableId)

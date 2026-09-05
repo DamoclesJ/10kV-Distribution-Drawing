@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 
@@ -74,6 +75,13 @@ internal sealed record CableSegmentSnapshot(
     CableSegment CableSegment,
     CableRouteGuide? RouteGuide);
 
+internal sealed record GroundingAccessPointSnapshot(
+    Guid GroundingAccessPointId,
+    Guid ConnectionId,
+    Guid PoleId,
+    Guid AdjacentPoleId,
+    GroundingAccessLineSide LineSide);
+
 internal sealed class ClipboardDrawingFragment
 {
     public ClipboardDrawingFragment(
@@ -84,7 +92,8 @@ internal sealed class ClipboardDrawingFragment
         IEnumerable<CableTerminationAttachmentSnapshot> cableTerminations,
         IEnumerable<RingCabinetSnapshot> ringCabinets,
         IEnumerable<OverheadLineSnapshot> overheadLines,
-        IEnumerable<CableSegmentSnapshot> cableSegments)
+        IEnumerable<CableSegmentSnapshot> cableSegments,
+        IEnumerable<GroundingAccessPointSnapshot> groundingAccessPoints)
     {
         PrimarySelection = primarySelection;
         RootSelections = Array.AsReadOnly(rootSelections.ToArray());
@@ -94,6 +103,7 @@ internal sealed class ClipboardDrawingFragment
         RingCabinets = Array.AsReadOnly(ringCabinets.ToArray());
         OverheadLines = Array.AsReadOnly(overheadLines.ToArray());
         CableSegments = Array.AsReadOnly(cableSegments.ToArray());
+        GroundingAccessPoints = Array.AsReadOnly(groundingAccessPoints.ToArray());
     }
 
     public SelectionReference? PrimarySelection { get; }
@@ -111,6 +121,8 @@ internal sealed class ClipboardDrawingFragment
     public IReadOnlyList<OverheadLineSnapshot> OverheadLines { get; }
 
     public IReadOnlyList<CableSegmentSnapshot> CableSegments { get; }
+
+    public IReadOnlyList<GroundingAccessPointSnapshot> GroundingAccessPoints { get; }
 
     public bool IsEmpty => Poles.Count == 0 && RingCabinets.Count == 0;
 }

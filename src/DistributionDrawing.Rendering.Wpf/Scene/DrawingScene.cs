@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using DistributionDrawing.Application.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Routing;
 using ApplicationSelectionTargetKind = DistributionDrawing.Application.Interaction.SelectionTargetKind;
 
 namespace DistributionDrawing.Rendering.Wpf.Scene;
@@ -10,11 +11,13 @@ public sealed class DrawingScene
     public DrawingScene(
         IEnumerable<SceneElement> elements,
         SelectionHitTestIndex? hitTestIndex = null,
-        IEnumerable<SceneBuildDiagnostic>? diagnostics = null)
+        IEnumerable<SceneBuildDiagnostic>? diagnostics = null,
+        IEnumerable<OrthogonalRoute>? routes = null)
     {
         Elements = elements.ToArray();
         HitTestIndex = hitTestIndex ?? new SelectionHitTestIndex();
         Diagnostics = diagnostics?.ToArray() ?? [];
+        Routes = routes?.ToArray() ?? [];
     }
 
     public IReadOnlyList<SceneElement> Elements { get; }
@@ -22,6 +25,8 @@ public sealed class DrawingScene
     public SelectionHitTestIndex HitTestIndex { get; }
 
     public IReadOnlyList<SceneBuildDiagnostic> Diagnostics { get; }
+
+    public IReadOnlyList<OrthogonalRoute> Routes { get; }
 }
 
 public abstract record SceneElement

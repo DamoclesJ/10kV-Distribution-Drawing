@@ -32,6 +32,7 @@ public sealed class SelectionObjectResolver
             SelectionTargetKind.Connection => ResolveConnection(reference),
             SelectionTargetKind.CableSegment => ResolveCableSegment(reference),
             SelectionTargetKind.GroundingPoint => ResolveGroundingPoint(reference),
+            SelectionTargetKind.GroundingAccessPoint => ResolveGroundingAccessPoint(reference),
             SelectionTargetKind.WorkScope => ResolveWorkScope(reference),
             SelectionTargetKind.Terminal => ResolveTerminal(reference),
             _ => null
@@ -58,6 +59,7 @@ public sealed class SelectionObjectResolver
             CableSegment = resolved.CableSegment,
             WorkScope = resolved.WorkScope,
             GroundingPoint = resolved.GroundingPoint,
+            GroundingAccessPoint = resolved.GroundingAccessPoint,
             Terminal = resolved.Terminal,
             RingCabinetLayout = resolved.RingCabinetLayout,
             RingCabinetIntervalLayout = resolved.RingCabinetIntervalLayout,
@@ -306,6 +308,23 @@ public sealed class SelectionObjectResolver
             {
                 Reference = reference,
                 GroundingPoint = groundingPoint
+            };
+    }
+
+    private ResolvedSelection? ResolveGroundingAccessPoint(SelectionReference reference)
+    {
+        IReadOnlyList<GroundingAccessPoint> accessPoints =
+            _source.GroundingAccessPoints.Count > 0
+                ? _source.GroundingAccessPoints
+                : _source.Document?.GroundingAccessPoints ?? [];
+        GroundingAccessPoint? point = accessPoints.SingleOrDefault(candidate =>
+            candidate.GroundingAccessPointId == reference.ObjectId);
+        return point is null
+            ? null
+            : new ResolvedSelection
+            {
+                Reference = reference,
+                GroundingAccessPoint = point
             };
     }
 

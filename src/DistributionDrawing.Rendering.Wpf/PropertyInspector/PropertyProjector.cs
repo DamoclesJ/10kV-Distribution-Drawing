@@ -1,6 +1,7 @@
 using System.Globalization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -24,6 +25,11 @@ public sealed class PropertyProjector
         if (selection.GroundingPoint is not null)
         {
             return ProjectGroundingPoint(selection);
+        }
+
+        if (selection.GroundingAccessPoint is not null)
+        {
+            return ProjectGroundingAccessPoint(selection);
         }
 
         if (selection.WorkScope is not null)
@@ -103,6 +109,7 @@ public sealed class PropertyProjector
     private static PropertyInspectorSnapshot ProjectGroundingPoint(ResolvedSelection selection)
     {
         GroundingPoint groundingPoint = selection.GroundingPoint!;
+        (string targetType, string targetLocation) = ResolveGroundingTarget(selection, groundingPoint);
         return Snapshot(
             selection,
             "工作地线",
@@ -111,10 +118,89 @@ public sealed class PropertyProjector
                 Section(
                     "专业属性",
                     DomainRow("Location", "位置说明", groundingPoint.Location),
-                    DomainRow("Number", "编号", groundingPoint.Number),
-                    DomainRow("Note", "备注", groundingPoint.Note))
+                    EditableDomainRow(
+                        PropertyCommandFactory.GroundingPointNumberPropertyKey,
+                        "编号",
+                        groundingPoint.Number),
+                    DomainRow("TargetType", "目标类型", targetType),
+                    DomainRow("TargetLocation", "目标位置", targetLocation),
+                    EditableDomainRow(
+                        PropertyCommandFactory.GroundingPointNotePropertyKey,
+                        "备注",
+                        groundingPoint.Note))
             ]);
     }
+
+    private static PropertyInspectorSnapshot ProjectGroundingAccessPoint(
+        ResolvedSelection selection)
+    {
+        GroundingAccessPoint point = selection.GroundingAccessPoint!;
+        DrawingDocument document = selection.Document!;
+        Connection connection = document.Connections.Single(item => item.Id == point.ConnectionId);
+        Pole pole = document.Devices.OfType<Pole>().Single(item => item.Id == point.PoleId);
+        Pole adjacentPole = document.Devices.OfType<Pole>()
+            .Single(item => item.Id == point.AdjacentPoleId);
+        GroundingPoint? groundingPoint = document.GroundingPoints.SingleOrDefault(item =>
+            item.Target == GroundingTarget.ForGroundingAccessPoint(point.GroundingAccessPointId));
+        return Snapshot(
+            selection,
+            "验电接地点 / 接地线夹",
+            $"{pole.PoleNumber}杆 {LineSideText(point.LineSide)}",
+            [
+                Section(
+                    "专业属性",
+                    DomainRow("Connection", "线路", connection.DisplayName),
+                    DomainRow("Pole", "杆塔", pole.PoleNumber),
+                    DomainRow("AdjacentPole", "相邻杆", adjacentPole.PoleNumber),
+                    DomainRow("LineSide", "线路侧", LineSideText(point.LineSide)),
+                    DomainRow("GroundingPoint", "工作地线", groundingPoint?.Number ?? "无"))
+            ]);
+    }
+
+    private static (string Type, string Location) ResolveGroundingTarget(
+        ResolvedSelection selection,
+        GroundingPoint groundingPoint)
+    {
+        DrawingDocument? document = selection.Document;
+        if (document is null)
+        {
+            return (groundingPoint.Target.Kind.ToString(), groundingPoint.Target.TargetId.ToString());
+        }
+        if (groundingPoint.Target.Kind == GroundingTargetKind.GroundingAccessPoint)
+        {
+            GroundingAccessPoint? point = document.GroundingAccessPoints.SingleOrDefault(item =>
+                item.GroundingAccessPointId == groundingPoint.Target.TargetId);
+            Pole? pole = point is null ? null : document.Devices.OfType<Pole>()
+                .SingleOrDefault(item => item.Id == point.PoleId);
+            return (
+                "验电接地点",
+                point is null ? "目标缺失" : $"{pole?.PoleNumber ?? point.PoleId.ToString()}杆 {LineSideText(point.LineSide)}");
+        }
+
+        Guid terminalId = groundingPoint.Target.TargetId;
+        CableTermination? termination = document.Devices.OfType<CableTermination>()
+            .SingleOrDefault(item => item.CableSideTerminalId == terminalId ||
+                                     item.OverheadSideTerminalId == terminalId);
+        if (termination is not null)
+        {
+            return ("电缆终端", termination.DisplayName ?? "杆塔电缆终端");
+        }
+        RingCabinet? cabinet = document.Devices.OfType<RingCabinet>()
+            .SingleOrDefault(item => item.Intervals.Any(interval =>
+                interval.CableTerminalId == terminalId));
+        RingCabinetInterval? interval = cabinet?.Intervals.Single(item =>
+            item.CableTerminalId == terminalId);
+        return cabinet is not null && interval is not null
+            ? ("电缆终端", $"{cabinet.DisplayName ?? "环网柜"} / {interval.DisplayName}")
+            : ("端子（兼容）", terminalId.ToString());
+    }
+
+    private static string LineSideText(GroundingAccessLineSide side) => side switch
+    {
+        GroundingAccessLineSide.SmallerNumberSide => "小号侧",
+        GroundingAccessLineSide.LargerNumberSide => "大号侧",
+        _ => side.ToString()
+    };
 
     private static PropertyInspectorSnapshot ProjectWorkScope(ResolvedSelection selection)
     {

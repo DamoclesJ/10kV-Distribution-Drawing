@@ -35,6 +35,8 @@ public sealed class PropertyInspectionSource
 
     public IReadOnlyList<GroundingPoint> GroundingPoints { get; init; } = [];
 
+    public IReadOnlyList<GroundingAccessPoint> GroundingAccessPoints { get; init; } = [];
+
     public IReadOnlyList<Terminal> Terminals { get; init; } = [];
 
     public SelectionHitTestIndex? HitTestIndex { get; init; }

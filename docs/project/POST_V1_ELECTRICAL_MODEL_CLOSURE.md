@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Next / Grounding Scope Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Implementation / Review in progress / Grounding Scope Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
 
@@ -111,9 +111,12 @@ GroundingPoint
 
 - associated `OverheadLine` / `Connection`；按当前模型以其 stable `ConnectionId` 表达；
 - `PoleId`；
+- `AdjacentPoleId`，表示该 GAP 实际位于 `PoleId` 朝哪个直接相邻支撑杆方向的 local conductor half-edge；
 - `LineSide`，值仅为 `SmallerNumberSide` / `LargerNumberSide`。
 
-同一 `ConnectionId + PoleId + LineSide` 最多一个 `GroundingAccessPoint`。`Left`、`Right`、`Up`、`Down` 只是 Rendering 结果，不得持久化为业务事实。
+`AdjacentPoleId` 必须是 `PoleId` 在对应 `OverheadLine.SupportPoleIds` 有序列表中的直接 predecessor 或 successor。物理位置身份与专业侧别严格分离：`AdjacentPoleId` 固化实际 conductor half-edge，`LineSide` 固化用户确认的“小号侧 / 大号侧”业务标签。同一 `ConnectionId + PoleId + AdjacentPoleId` 最多一个 `GroundingAccessPoint`；中间支撑杆可以在两个不同相邻杆方向各有一个 GAP。`Left`、`Right`、`Up`、`Down` 只属于创建交互，不得持久化为业务事实。
+
+创建时可比较 `PoleId` 与 `AdjacentPoleId` 的明确简单杆号主整数，为 `LineSide` 提供保守推荐；无法可靠解析时必须由用户明确选择，不得猜测。用户覆盖推荐不改变 `AdjacentPoleId`。PoleNumber rename 不自动修改、移动、删除或重建已有 GAP。
 
 `GroundingAccessPoint` 不创建新的 `ElectricalNode`，不分割 `OverheadLine` / `Connection`，不改变 conduction，不成为 Switch 或 Terminal。它与临时 `GroundingPoint` 生命周期独立，可在没有 `GroundingPoint` 时存在；删除 `GroundingPoint` 不得自动删除 `GroundingAccessPoint`。
 
@@ -140,6 +143,7 @@ ProjectGroundingAccessPointDto
 ├── GroundingAccessPointId
 ├── ConnectionId
 ├── PoleId
+├── AdjacentPoleId
 └── LineSide: SmallerNumberSide | LargerNumberSide
 ```
 
@@ -166,7 +170,9 @@ WP-EM-01 已实现的 `Pole + Switch` legacy Terminal-target presentation anchor
 
 ### 3.6 Grounding professional presentation 与交互
 
-`GroundingAccessPoint` 的默认专业位置由 `Pole + associated overhead segment + LineSide` 派生。存在柱上设备时，位置仍在设备外侧的真实架空导线上：从 Pole 或 `Pole + relevant device` 专业组合外边界，沿该侧导线方向向外保留约 1～2 mm 间距，推荐视觉目标约 1.5 mm。最终数值由 Rendering `DrawingMetrics` 中的 `GroundingAccessClearance` 或等价 typed metric 决定，不进入 Domain，也不持久化 screen / physical pixel 坐标。
+`GroundingAccessPoint` 的默认专业位置由 `ConnectionId + PoleId + AdjacentPoleId` 对应的 local conductor half-edge 派生，`LineSide` 不再承担物理 half-edge 恢复。WP-EM-04 获得有限授权，使有序 `OverheadLine.SupportPoleIds` 参与架空线路 presentation：例如 `[P10, P11, P12]` 必须表现为线路经过 `P10 → P11 → P12`，从而在中间杆形成稳定 incoming / outgoing conductor geometry。该修正只属于 Presentation / Routing，不得拆分 Connection、新增 ElectricalNode 或 Terminal、改变 electrical connectivity，亦不得引入通用 waypoint editor。
+
+WP-EM-04 basic GAP marker 为对应架空导线上的实心小圆点，直径约为 conductor stroke width 的 2.5 倍，并使用 Rendering typed metric。从 Pole 沿 `AdjacentPoleId` 对应 half-edge 方向使用固定 visual clearance 放置；不保存 screen coordinates、offset 或 clearance，不支持拖动。存在柱上设备时仍以该真实 half-edge 为定位基础。高级 `GroundingAccessClearance`、leader 与可调布局继续留给 WP-EM-05。
 
 工作地线使用标准矢量 grounding symbol：一根竖向主 stem，下端三条以 stem 为中心、由上到下逐渐变短的水平横线。不得继续使用含义不明确的小方框或 bitmap。符号尺度与 Pole 保持合理专业比例，并由 Rendering metric 控制；用户调整 leader 时符号本身大小固定，不保存 symbol scale。
 
@@ -191,7 +197,9 @@ WP-EM-04 必须提供可用的 `GroundingAccessPoint` 创建、删除、选择�
 
 `GroundingPoint.Location` 继续是工作票文字 / 位置说明。UI 提供“小号侧 / 大号侧 / 自定义”，默认“小号侧”。GAP target 的默认显示值直接由唯一结构事实 `GroundingAccessPoint.LineSide` 派生：`SmallerNumberSide` → “小号侧”，`LargerNumberSide` → “大号侧”；不得再持久化第二套 side enum。只有选择“自定义”时输入自定义文本。Terminal target 的 `Location` 仅为 descriptive text，不因这些文字创造 Electrical `LineSide` 语义。
 
-新建 `GroundingPoint` 的 `Number` 默认 `L01`；创建输入为 null、empty 或 whitespace 时归一化为 `L01`，且用户可修改。本阶段不引入 `L02`、`L03` 自动递增或通用 numbering framework。
+从 WP-EM-04 开始，新创建 `GroundingPoint` 必须自动获得非空、trim 后在当前 `DrawingDocument` 内唯一的 `Number`。默认分配扫描现存合法标准 `Lxx` 编号并选择可用序号；不持久化 global sequence counter，历史删除形成的空号允许未来复用。Inspector 编辑必须通过 CommandStack，重复编号修改原子拒绝并支持 Undo / Redo。
+
+正式 V6 / legacy Terminal-target 文件继续允许加载；若旧记录的 Number 为空，不为兼容而猜号、自动重编号或建立复杂 grandfather 双模型。required / unique 约束应用于 WP-EM-04 新创建及新修改状态；旧空 Number 可保持只读兼容并在用户明确编辑后进入新约束。
 
 ## 4. FormatVersion 7 与迁移合同
 
@@ -356,15 +364,15 @@ Closure evidence:
 - Windows automated tests: Domain.Tests 101/101, Infrastructure.Tests 76/76, Rendering.Wpf.Tests 358/358, Desktop.Tests 173/173, ProjectPersistenceRoundTrip 24/24; failed = 0, skipped = 0.
 - Windows manual validation: passed. With no external cable, present → absent removes only the terminal triangle and preserves the interval internal lead; absent → present restores the triangle with stable lead geometry. With an external Cable / Connection, terminal removal remains blocked and Cable / topology are preserved. GroundingPoint and WorkScope dependency protection also remains enforced.
 - Absent-terminal rendering produces no triangle, terminal anchor, or cable target.
-- FormatVersion remains V7; no new migration was added; WP-EM-04 implementation has not started.
+- FormatVersion remains V7; no new migration was added; WP-EM-04 is in Implementation / Review.
 
 ### WP-EM-04 — GroundingAccessPoint & GroundingTarget Vertical Slice
 
-完成 GAP Domain behavior、stable identity、唯一性、create/delete、`GroundingTarget` behavior、GroundingPoint target binding、Pole / OverheadLine deletion guards、commands、selection、Inspector、basic GAP rendering、clipboard、Undo / Redo、V7 integration 和 legacy Terminal-target compatibility。不得分割 `OverheadLine`，不得将复杂 presentation layout 塞入本 WP。
+完成 GAP Domain behavior、`AdjacentPoleId` physical half-edge identity、stable identity、唯一性、create/delete、`GroundingTarget` behavior、GroundingPoint target binding 与 Number policy、Pole / OverheadLine deletion guards、support-pole-aware basic presentation、commands、selection、Inspector、basic GAP rendering、clipboard、Undo / Redo、Canvas / PNG basic consistency、V7 integration 和 legacy Terminal-target compatibility。不得分割 `OverheadLine`，不得将复杂 presentation layout 塞入本 WP。
 
 ### WP-EM-05 — Grounding Layout & Interaction Closure
 
-完成 standard grounding symbol、`GroundingAccessClearance`、`GroundingPointLayout`、drag / leader adjustment、架空 GAP professional placement、Cable-side Terminal elbow route、Location selector、Number 默认 `L01`、target affordance / tolerance、crossing bridge、Canvas / PNG consistency，以及 Windows professional visual acceptance。
+完成 standard grounding symbol、`GroundingAccessClearance`、`GroundingPointLayout`、drag / leader adjustment、架空 GAP advanced professional placement、Cable-side Terminal elbow route、Location selector、target affordance / tolerance、crossing bridge，以及 Windows professional visual acceptance。
 
 ### WP-EM-06 — Transformer Vertical Slice
 
@@ -399,6 +407,6 @@ Closure evidence:
 - Post-V1 Grounding Scope Amendment 已完成并冻结；
 - WP-EM-02 V7 Format & Migration Foundation 已完成代码 Review、自动验证和 Windows 最终验证；
 - WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice 已完成并 Closed，包含 Windows 最终验证；
-- 下一个阶段为 WP-EM-04 requirements refinement / planning only，尚未开始实现；
-- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer、CustomerStation 尚未实现；
+- WP-EM-04 requirements refinement 已完成，当前处于 Implementation / Review；
+- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint` 正处于 WP-EM-04 Implementation / Review，Transformer、CustomerStation 尚未实现；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-08 顺序推进，任何范围变化需重新治理确认。

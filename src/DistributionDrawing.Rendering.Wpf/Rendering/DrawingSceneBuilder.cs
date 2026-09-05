@@ -155,14 +155,16 @@ public sealed class DrawingSceneBuilder
         ProfessionalSceneResult professionalScene = _professionalSceneBuilder.Build(
             document,
             layout.DrawingLayout,
-            layout.RingCabinetLayouts);
+            layout.RingCabinetLayouts,
+            baseScene.Routes);
         elements.AddRange(professionalScene.Elements);
         hitTestEntries.AddRange(professionalScene.HitTestEntries);
 
         return new DrawingScene(
             elements,
             new SelectionHitTestIndex(hitTestEntries),
-            professionalScene.Diagnostics);
+            professionalScene.Diagnostics,
+            baseScene.Routes);
     }
 
     public DrawingScene Build(
@@ -359,7 +361,14 @@ public sealed class DrawingSceneBuilder
                 overheadLine.ValidateAgainst(connection);
                 if (terminalAnchors is not null)
                 {
-                    routeRequests.Add(CreateRouteRequest(connection, terminalAnchorById));
+                    routeRequests.Add(CreateRouteRequest(
+                        connection,
+                        terminalAnchorById,
+                        requiredWaypoints: overheadLine.SupportPoleIds.Select(poleId =>
+                            new RequiredRouteWaypoint(
+                                poleId,
+                                PoleProfessionalGeometry.GetPoleCenter(layout.Poles[poleId])))
+                            .ToArray()));
                 }
             }
 
@@ -613,7 +622,10 @@ public sealed class DrawingSceneBuilder
             }
         }
 
-        return new DrawingScene(elements, new SelectionHitTestIndex(hitTestEntries));
+        return new DrawingScene(
+            elements,
+            new SelectionHitTestIndex(hitTestEntries),
+            routes: routes);
     }
 
     private static DocumentRect CreateBounds(
@@ -631,7 +643,8 @@ public sealed class DrawingSceneBuilder
     private static ConnectionRouteRequest CreateRouteRequest(
         Connection connection,
         IReadOnlyDictionary<Guid, TerminalAnchor> anchors,
-        double? preferredHorizontalY = null)
+        double? preferredHorizontalY = null,
+        IReadOnlyList<RequiredRouteWaypoint>? requiredWaypoints = null)
     {
         if (!anchors.TryGetValue(connection.StartTerminalId, out TerminalAnchor start) ||
             !anchors.TryGetValue(connection.EndTerminalId, out TerminalAnchor end))
@@ -647,7 +660,8 @@ public sealed class DrawingSceneBuilder
             connection.EndTerminalId,
             start,
             end,
-            preferredHorizontalY);
+            preferredHorizontalY,
+            requiredWaypoints);
     }
 
     private static DocumentRect ExpandBounds(DocumentRect bounds, double paddingMillimeters)

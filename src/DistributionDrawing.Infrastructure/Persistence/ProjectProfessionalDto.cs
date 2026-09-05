@@ -58,6 +58,7 @@ public sealed record ProjectGroundingAccessPointDto(
     [property: JsonRequired] Guid GroundingAccessPointId,
     [property: JsonRequired] Guid ConnectionId,
     [property: JsonRequired] Guid PoleId,
+    [property: JsonRequired] Guid AdjacentPoleId,
     [property: JsonRequired] ProjectGroundingAccessLineSide LineSide);
 
 /// <summary>
@@ -101,13 +102,20 @@ internal static class ProjectProfessionalMapper
                 .Select(groundingPoint => new ProjectGroundingPointDto(
                     groundingPoint.GroundingPointId,
                     new ProjectGroundingTargetDto(
-                        ProjectGroundingTargetKind.Terminal,
-                        groundingPoint.TerminalId),
+                        ToDto(groundingPoint.Target.Kind),
+                        groundingPoint.Target.TargetId),
                     groundingPoint.Location,
                     groundingPoint.Number,
                     groundingPoint.Note))
                 .ToArray(),
-            []);
+            document.GroundingAccessPoints
+                .Select(point => new ProjectGroundingAccessPointDto(
+                    point.GroundingAccessPointId,
+                    point.ConnectionId,
+                    point.PoleId,
+                    point.AdjacentPoleId,
+                    ToDto(point.LineSide)))
+                .ToArray());
     }
 
     public static ProjectProfessionalSnapshot ToSnapshot(
@@ -119,26 +127,44 @@ internal static class ProjectProfessionalMapper
         ProjectProfessionalDto professional = dto ?? ProjectProfessionalDto.Empty(document.Id);
         ValidateStructure(document, professional);
 
-        if ((professional.GroundingAccessPoints ?? []).Count != 0)
+        foreach (ProjectGroundingAccessPointDto point in professional.GroundingAccessPoints ?? [])
         {
-            throw new InvalidDataException(
-                "GroundingAccessPoint runtime support is not implemented in WP-EM-02.");
+            try
+            {
+                document.CreateGroundingAccessPoint(
+                    point.GroundingAccessPointId,
+                    point.ConnectionId,
+                    point.PoleId,
+                    point.AdjacentPoleId,
+                    ToDomain(point.LineSide));
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+            {
+                throw new InvalidDataException(
+                    $"Grounding access point '{point.GroundingAccessPointId}' is invalid: {exception.Message}",
+                    exception);
+            }
         }
 
         foreach (ProjectGroundingPointDto groundingPoint in professional.GroundingPoints)
         {
-            if (groundingPoint.GroundingTarget.Kind != ProjectGroundingTargetKind.Terminal)
+            try
+            {
+                document.CreateGroundingPoint(
+                    groundingPoint.GroundingPointId,
+                    new GroundingTarget(
+                        ToDomain(groundingPoint.GroundingTarget.Kind),
+                        groundingPoint.GroundingTarget.TargetId),
+                    groundingPoint.Location,
+                    groundingPoint.Number,
+                    groundingPoint.Note);
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
                 throw new InvalidDataException(
-                    $"Grounding point '{groundingPoint.GroundingPointId}' uses a target that is not supported by the WP-EM-02 runtime.");
+                    $"Grounding point '{groundingPoint.GroundingPointId}' is invalid: {exception.Message}",
+                    exception);
             }
-
-            document.CreateGroundingPoint(
-                groundingPoint.GroundingPointId,
-                groundingPoint.GroundingTarget.TargetId,
-                groundingPoint.Location,
-                groundingPoint.Number,
-                groundingPoint.Note);
         }
 
         foreach (ProjectWorkScopeDto workScope in professional.WorkScopes)
@@ -197,6 +223,7 @@ internal static class ProjectProfessionalMapper
             .Select(groundingPoint => groundingPoint.GroundingPointId)
             .ToHashSet();
         HashSet<(ProjectGroundingTargetKind Kind, Guid TargetId)> groundingTargets = [];
+        HashSet<string> groundingNumbers = new(StringComparer.OrdinalIgnoreCase);
         foreach (ProjectGroundingPointDto groundingPoint in groundingPoints)
         {
             if (groundingPoint.GroundingTarget is null ||
@@ -218,14 +245,30 @@ internal static class ProjectProfessionalMapper
             {
                 throw new InvalidDataException("A grounding point location is required.");
             }
+
+            if (groundingPoint.Number is not null &&
+                !groundingNumbers.Add(groundingPoint.Number.Trim()))
+            {
+                throw new InvalidDataException(
+                    $"Grounding point number '{groundingPoint.Number}' is duplicated.");
+            }
         }
 
+        HashSet<(Guid ConnectionId, Guid PoleId, Guid AdjacentPoleId)> accessLocations = [];
         foreach (ProjectGroundingAccessPointDto point in groundingAccessPoints)
         {
-            if (point.ConnectionId == Guid.Empty || point.PoleId == Guid.Empty)
+            if (point.ConnectionId == Guid.Empty ||
+                point.PoleId == Guid.Empty ||
+                point.AdjacentPoleId == Guid.Empty)
             {
                 throw new InvalidDataException(
                     $"Grounding access point '{point.GroundingAccessPointId}' has an empty reference.");
+            }
+
+            if (!accessLocations.Add((point.ConnectionId, point.PoleId, point.AdjacentPoleId)))
+            {
+                throw new InvalidDataException(
+                    "Grounding access point physical locations must be unique.");
             }
         }
 
@@ -275,6 +318,34 @@ internal static class ProjectProfessionalMapper
         // ownership and global ID checks when the candidate is restored.
         _ = document;
     }
+
+    private static ProjectGroundingTargetKind ToDto(GroundingTargetKind kind) => kind switch
+    {
+        GroundingTargetKind.Terminal => ProjectGroundingTargetKind.Terminal,
+        GroundingTargetKind.GroundingAccessPoint => ProjectGroundingTargetKind.GroundingAccessPoint,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
+
+    private static GroundingTargetKind ToDomain(ProjectGroundingTargetKind kind) => kind switch
+    {
+        ProjectGroundingTargetKind.Terminal => GroundingTargetKind.Terminal,
+        ProjectGroundingTargetKind.GroundingAccessPoint => GroundingTargetKind.GroundingAccessPoint,
+        _ => throw new InvalidDataException($"Unsupported grounding target kind '{kind}'.")
+    };
+
+    private static ProjectGroundingAccessLineSide ToDto(GroundingAccessLineSide side) => side switch
+    {
+        GroundingAccessLineSide.SmallerNumberSide => ProjectGroundingAccessLineSide.SmallerNumberSide,
+        GroundingAccessLineSide.LargerNumberSide => ProjectGroundingAccessLineSide.LargerNumberSide,
+        _ => throw new ArgumentOutOfRangeException(nameof(side))
+    };
+
+    private static GroundingAccessLineSide ToDomain(ProjectGroundingAccessLineSide side) => side switch
+    {
+        ProjectGroundingAccessLineSide.SmallerNumberSide => GroundingAccessLineSide.SmallerNumberSide,
+        ProjectGroundingAccessLineSide.LargerNumberSide => GroundingAccessLineSide.LargerNumberSide,
+        _ => throw new InvalidDataException($"Unsupported grounding access line side '{side}'.")
+    };
 
     private static void ValidateBoundaryStructure(
         ProjectBoundaryPointDto boundary,

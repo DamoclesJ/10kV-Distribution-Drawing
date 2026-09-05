@@ -4,7 +4,7 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 
 public sealed record GroundingPointCommandSnapshot(
     Guid GroundingPointId,
-    Guid TerminalId,
+    GroundingTarget Target,
     string Location,
     string? Number,
     string? Note)
@@ -15,7 +15,7 @@ public sealed record GroundingPointCommandSnapshot(
 
         return new GroundingPointCommandSnapshot(
             groundingPoint.GroundingPointId,
-            groundingPoint.TerminalId,
+            groundingPoint.Target,
             groundingPoint.Location,
             groundingPoint.Number,
             groundingPoint.Note);

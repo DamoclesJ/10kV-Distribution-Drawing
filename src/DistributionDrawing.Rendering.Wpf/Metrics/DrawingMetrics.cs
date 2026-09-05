@@ -72,7 +72,10 @@ public sealed record DrawingMetrics(
         new LineDrawingMetrics(
             ConnectionThickness: 0.8,
             CableDashLength: 4,
-            CableDashGap: 3),
+            CableDashGap: 3,
+            GroundingAccessMarkerDiameter: 2,
+            GroundingAccessClearance: 1.5,
+            GroundingAccessHitPadding: 3),
         new RoutingDrawingMetrics(
             PortStubLength: 8,
             ObstacleClearance: 4,
@@ -223,7 +226,10 @@ public sealed record CableTerminationDrawingMetrics(
 public sealed record LineDrawingMetrics(
     double ConnectionThickness,
     double CableDashLength,
-    double CableDashGap);
+    double CableDashGap,
+    double GroundingAccessMarkerDiameter,
+    double GroundingAccessClearance,
+    double GroundingAccessHitPadding);
 
 public sealed record RoutingDrawingMetrics(
     double PortStubLength,

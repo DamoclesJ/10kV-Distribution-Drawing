@@ -54,6 +54,7 @@
         <MenuItem Header="电缆" Command="{Binding CreateCableCommand}" />
         <MenuItem Header="电缆终端" Command="{Binding AddCableTerminationCommand}" />
         <MenuItem Header="柱上开关" Command="{Binding AddPoleSwitchCommand}" />
+        <MenuItem Header="验电接地环" Click="OnAddGroundingAccessPoint" />
         <MenuItem Header="工作地线" Command="{Binding AddGroundingPointCommand}" />
         <MenuItem Header="工作范围" Command="{Binding AddWorkScopeCommand}" />
       </MenuItem>
@@ -172,6 +173,10 @@
           <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="柱上开关"
                         IsChecked="{Binding Toolbox.IsPoleSwitchActive, Mode=OneWay}" Command="{Binding AddPoleSwitchCommand}">
             <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.PoleSwitch}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="柱上开关" /></StackPanel>
+          </ToggleButton>
+          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="验电接地环"
+                        Click="OnAddGroundingAccessPoint">
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.WorkGrounding}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="验电接地环" /></StackPanel>
           </ToggleButton>
           <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="工作地线"
                         IsChecked="{Binding Toolbox.IsGroundingPointActive, Mode=OneWay}" Command="{Binding AddGroundingPointCommand}">
@@ -300,6 +305,15 @@
                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                       StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
                 <TextBlock VerticalAlignment="Center" Text="柱上开关" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
+                          Click="OnAddGroundingAccessPoint">
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.WorkGrounding}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="验电接地环" />
               </StackPanel>
             </ToggleButton>
             <TextBlock Style="{StaticResource ToolboxSectionStyle}" Text="作业" />
@@ -668,6 +682,24 @@
                       Click="OnApplyGroundingPoint" />
               <Button Content="删除工作地线"
                       Click="OnRemoveGroundingPoint" />
+            </WrapPanel>
+          </StackPanel>
+          <StackPanel x:Name="GroundingAccessPointEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="验电接地点" />
+            <TextBlock x:Name="GroundingAccessPointStatusText"
+                       Margin="0,4,0,6"
+                       TextWrapping="Wrap" />
+            <WrapPanel>
+              <Button x:Name="AddGroundingPointFromAccessPointButton"
+                      Content="添加工作地线"
+                      Margin="0,0,4,0"
+                      Click="OnAddGroundingPointFromAccessPoint" />
+              <Button Content="删除验电接地点"
+                      Click="OnRemoveGroundingAccessPoint" />
             </WrapPanel>
           </StackPanel>
           <StackPanel x:Name="WorkScopeCreationPanel"

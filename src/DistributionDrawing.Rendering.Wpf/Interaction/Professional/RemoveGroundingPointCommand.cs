@@ -28,7 +28,7 @@ public sealed class RemoveGroundingPointCommand : ICommand
     {
         _document.CreateGroundingPoint(
             Before.GroundingPointId,
-            Before.TerminalId,
+            Before.Target,
             Before.Location,
             Before.Number,
             Before.Note);

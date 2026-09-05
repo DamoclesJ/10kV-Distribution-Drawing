@@ -70,7 +70,9 @@ public sealed class OverheadLineCommandFactory
             runtimeLayout,
             connection,
             overheadLine,
-            layout);
+            layout,
+            document.GroundingAccessPoints.Where(point =>
+                point.ConnectionId == connectionId));
     }
 
     private static IReadOnlyList<Guid> ResolveSupportPoleIds(

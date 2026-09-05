@@ -22,10 +22,10 @@ public sealed class ChangeGroundingPointCommand : ICommand
                 nameof(after));
         }
 
-        if (before.TerminalId != after.TerminalId)
+        if (before.Target != after.Target)
         {
             throw new ArgumentException(
-                "Terminal rebinding is not supported by this command.",
+                "Grounding target rebinding is not supported by this command.",
                 nameof(after));
         }
 
@@ -57,7 +57,7 @@ public sealed class ChangeGroundingPointCommand : ICommand
     {
         _document.UpdateGroundingPoint(
             snapshot.GroundingPointId,
-            snapshot.TerminalId,
+            snapshot.Target,
             snapshot.Location,
             snapshot.Number,
             snapshot.Note);
