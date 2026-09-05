@@ -17,8 +17,8 @@ The first confirmed implementation stage is [Post-V1 Electrical Model Closure](P
 The Grounding Scope Amendment is complete and frozen. The confirmed Work Package order is now WP-EM-01 through WP-EM-08:
 
 1. WP-EM-01 Grounding Presentation Anchor Separation — Completed
-2. WP-EM-02 V7 Format & Migration Foundation — Not Started / Next
-3. WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice
+2. WP-EM-02 V7 Format & Migration Foundation — Completed
+3. WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice — Next / Planned
 4. WP-EM-04 GroundingAccessPoint & GroundingTarget Vertical Slice
 5. WP-EM-05 Grounding Layout & Interaction Closure
 6. WP-EM-06 Transformer Vertical Slice

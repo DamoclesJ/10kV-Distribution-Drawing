@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / Grounding Scope Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Next / Grounding Scope Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
 
@@ -14,7 +14,7 @@ V1.0 已正式发布。Post-V1 Requirement Reassessment / Planning 至此结束�
 - 建立统一的新一代 Persistence baseline；
 - 通过独立、可验证的 Work Package 完成实现与集成验证。
 
-本阶段不绑定或预告后续产品版本号。当前代码与工程文件仍为 V1.0 / FormatVersion 6 基线；只有相应 Work Package 完成后，本文定义的目标能力才成为实现事实。
+本阶段不绑定或预告后续产品版本号。当前代码与工程文件为 V1.0 / FormatVersion 7 基线；WP-EM-02 已建立 V7 persistence foundation，只有相应后续 Work Package 完成后，本文定义的对应 feature capability 才成为实现事实。
 
 ## 2. 不可破坏的架构边界
 
@@ -323,6 +323,8 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 
 ### WP-EM-02 — V7 Format & Migration Foundation
 
+**状态：Completed**
+
 这是基础设施 WP，不一次性实现四个完整功能。范围只包括：
 
 - FormatVersion 7 foundation；
@@ -383,6 +385,7 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 - Post-V1 Electrical Model Closure 成为当前开发目标；
 - WP-EM-01 Grounding Presentation Anchor Separation 已完成代码 Review、自动验证和 Windows 实机验证；
 - Post-V1 Grounding Scope Amendment 已完成并冻结；
-- 下一个实施 Work Package 是尚未开始的 WP-EM-02 V7 Format & Migration Foundation；
-- 当前生产实现和工程文件格式仍为 V6；`GroundingAccessPoint`、typed `GroundingTarget` 与 `GroundingPointLayout` 尚未实现；
+- WP-EM-02 V7 Format & Migration Foundation 已完成代码 Review、自动验证和 Windows 最终验证；
+- 下一个实施 Work Package 是尚未开始的 WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice；
+- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer、CustomerStation 及 Optional CableTerminal feature behavior 尚未实现；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-08 顺序推进，任何范围变化需重新治理确认。
