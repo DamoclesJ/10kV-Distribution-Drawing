@@ -198,7 +198,7 @@ public sealed class DrawingDocument
                 retiredTerminalIds.Contains(scope.EndBoundary.TerminalId)))
         {
             throw new InvalidOperationException(
-                "A connected ring-cabinet terminal cannot be replaced by an interval type change.");
+                "The ring-cabinet cable terminal is still referenced and cannot be removed or replaced.");
         }
 
         Guid[] replacementIds = replacementSwitches.Select(device => device.Id)

@@ -69,8 +69,10 @@ internal sealed class SelectionCopyPlanner
         includedTerminalIds.UnionWith(cabinets
             .SelectMany(item => item.Definition.Intervals)
             .SelectMany(item => item.Switches.SelectMany(switchItem =>
-                new[] { switchItem.FirstTerminalId, switchItem.SecondTerminalId })
-                .Append(item.ExternalTerminalId)));
+                    new[] { switchItem.FirstTerminalId, switchItem.SecondTerminalId })
+                .Concat(item.CableTerminalId is Guid cableTerminalId
+                    ? [cableTerminalId]
+                    : [])));
         includedTerminalIds.UnionWith(switches.SelectMany(item =>
             new[] { item.FirstTerminal.Id, item.SecondTerminal.Id }));
         includedTerminalIds.UnionWith(terminations.SelectMany(item =>
@@ -441,7 +443,7 @@ internal sealed class SelectionCopyPlanner
             interval.IntermediateNodeId,
             interval.CircuitNodeId,
             interval.EarthNodeId,
-            interval.ExternalTerminalId,
+            interval.CableTerminalId,
             interval.SwitchAssemblyId,
             Array.AsReadOnly(interval.Switches.Select(item => item with { }).ToArray()))).ToArray()),
         value.LineName);

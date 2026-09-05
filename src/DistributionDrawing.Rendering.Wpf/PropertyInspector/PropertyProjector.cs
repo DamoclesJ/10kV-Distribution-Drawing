@@ -166,6 +166,14 @@ public sealed class PropertyProjector
             DomainRow("GroundingStructureKind", "接地结构", interval.GroundingStructureKind),
             DomainRow("SwitchCount", "开关数量", interval.SwitchDevices.Count)
         };
+        if (interval.IntervalKind is IntervalKind.LoadSwitchInterval or
+            IntervalKind.IntegratedFeederInterval)
+        {
+            rows.Add(EditableDomainRow(
+                PropertyCommandFactory.IntervalCableTerminalPresencePropertyKey,
+                "电缆终端",
+                interval.HasCableTerminal ? "有" : "无"));
+        }
         foreach (SwitchDevice switchDevice in interval.SwitchDevices)
         {
             string? number = interval.GetSwitchBusinessNumber(switchDevice.Id);

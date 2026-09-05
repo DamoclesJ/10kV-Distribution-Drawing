@@ -109,7 +109,7 @@ public sealed class IntervalTypeChangeIntegrationTests
         Assert.Contains(rows, row => row is { PropertyKey: "BusinessNumber", DisplayValue: "负1" });
         Assert.Contains(rows, row => row is { PropertyKey: "Sequence", IsReadOnly: true });
         Assert.DoesNotContain(rows, row => row.PropertyKey is
-            "IntervalId" or "ParentCabinetId" or "ExternalTerminalId" or
+            "IntervalId" or "ParentCabinetId" or "CableTerminalId" or
             "SymbolKind" or "SymbolVisualState" or "HitBounds" or "HitPriority");
     }
 
@@ -120,7 +120,7 @@ public sealed class IntervalTypeChangeIntegrationTests
         var document = new DrawingDocument(Guid.NewGuid(), "Project");
         document.AddDevice(cabinet);
         RingCabinetInterval interval = cabinet.Intervals.Single(item => item.BayIndex == 1);
-        Guid previousExternalTerminalId = interval.ExternalTerminalId;
+        Guid previousCableTerminalId = interval.CableTerminalId!.Value;
         RuntimeLayoutDocument runtimeLayout = CreateLayout(cabinet);
         var selection = new ResolvedSelection
         {
@@ -145,18 +145,18 @@ public sealed class IntervalTypeChangeIntegrationTests
         stack.ExecuteCommand(command!);
 
         RingCabinetInterval changed = cabinet.Intervals.Single(item => item.BayIndex == 1);
-        Assert.NotEqual(previousExternalTerminalId, changed.ExternalTerminalId);
+        Assert.NotEqual(previousCableTerminalId, changed.CableTerminalId);
         Assert.DoesNotContain(document.Terminals, terminal =>
-            terminal.Id == previousExternalTerminalId);
+            terminal.Id == previousCableTerminalId);
         Terminal replacement = Assert.Single(document.Terminals, terminal =>
-            terminal.Id == changed.ExternalTerminalId);
+            terminal.Id == changed.CableTerminalId);
         Assert.True(replacement.IsExternal);
 
         TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
             document,
             runtimeLayout.DrawingLayout,
             runtimeLayout.RingCabinetLayouts);
-        Assert.True(anchors.TryGet(changed.ExternalTerminalId, out _));
+        Assert.True(anchors.TryGet(changed.CableTerminalId!.Value, out _));
 
         var resolver = new SelectionObjectResolver();
         resolver.SetSource(new PropertyInspectionSource
@@ -167,20 +167,20 @@ public sealed class IntervalTypeChangeIntegrationTests
         });
         ResolvedSelection? resolved = resolver.Resolve(new SelectionReference(
             SelectionTargetKind.Terminal,
-            changed.ExternalTerminalId));
+            changed.CableTerminalId!.Value));
         Assert.Same(replacement, resolved?.Terminal);
 
         Assert.True(stack.Undo());
         Assert.Contains(document.Terminals, terminal =>
-            terminal.Id == previousExternalTerminalId);
+            terminal.Id == previousCableTerminalId);
         Assert.DoesNotContain(document.Terminals, terminal =>
-            terminal.Id == changed.ExternalTerminalId);
+            terminal.Id == changed.CableTerminalId);
 
         Assert.True(stack.Redo());
         RingCabinetInterval redone = cabinet.Intervals.Single(item => item.BayIndex == 1);
-        Assert.Equal(changed.ExternalTerminalId, redone.ExternalTerminalId);
+        Assert.Equal(changed.CableTerminalId, redone.CableTerminalId);
         Assert.Contains(document.Terminals, terminal =>
-            terminal.Id == redone.ExternalTerminalId);
+            terminal.Id == redone.CableTerminalId);
     }
 
     [Fact]
@@ -350,8 +350,8 @@ public sealed class IntervalTypeChangeIntegrationTests
         var connection = new Connection(
             Guid.NewGuid(),
             ConnectionType.Cable,
-            target.ExternalTerminalId,
-            peer.ExternalTerminalId,
+            target.CableTerminalId!.Value,
+            peer.CableTerminalId!.Value,
             "Protected cable",
             "10kV");
         document.AddConnection(connection);

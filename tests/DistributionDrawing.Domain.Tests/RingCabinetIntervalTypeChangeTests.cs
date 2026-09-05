@@ -537,7 +537,7 @@ public sealed class RingCabinetIntervalTypeChangeTests
             interval.CircuitNodeId,
             interval.IntermediateNodeId,
             interval.EarthNodeId,
-            interval.ExternalTerminalId);
+            interval.CableTerminalId);
     }
 
     private static CabinetSnapshot Snapshot(RingCabinet cabinet)
@@ -576,7 +576,7 @@ public sealed class RingCabinetIntervalTypeChangeTests
         Assert.Equal(expected.CircuitNodeId, actual.CircuitNodeId);
         Assert.Equal(expected.IntermediateNodeId, actual.IntermediateNodeId);
         Assert.Equal(expected.EarthNodeId, actual.EarthNodeId);
-        Assert.Equal(expected.ExternalTerminalId, actual.ExternalTerminalId);
+        Assert.Equal(expected.CableTerminalId, actual.CableTerminalId);
         Assert.Equal(expected.Switches.Select(switchSnapshot => switchSnapshot.Id),
             actual.Switches.Select(switchSnapshot => switchSnapshot.Id));
         Assert.Equal(expected.Switches.Select(switchSnapshot => switchSnapshot.Kind),
@@ -599,7 +599,7 @@ public sealed class RingCabinetIntervalTypeChangeTests
         Guid CircuitNodeId,
         Guid? IntermediateNodeId,
         Guid EarthNodeId,
-        Guid ExternalTerminalId);
+        Guid? CableTerminalId);
 
     private sealed record CabinetSnapshot(
         Guid CabinetId,

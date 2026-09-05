@@ -46,7 +46,7 @@ public sealed class CableConnectionControllerTests
             poleSwitch);
         coordinator.BeginCable();
         coordinator.HandleClick(
-            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            anchors.PositionOf(project.Cabinet.Intervals[0].CableTerminalId!.Value),
             8);
         Assert.Equal(CableConnectionToolState.PickingEndTerminal, cable.State);
         int poleCount = project.Document.Devices.OfType<Pole>().Count();
@@ -81,7 +81,7 @@ public sealed class CableConnectionControllerTests
             poleSwitch);
         coordinator.BeginCable();
         coordinator.HandleClick(
-            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            anchors.PositionOf(project.Cabinet.Intervals[0].CableTerminalId!.Value),
             8);
         Assert.Equal(CableConnectionToolState.PickingEndTerminal, cable.State);
 
@@ -101,7 +101,7 @@ public sealed class CableConnectionControllerTests
     {
         using TestProject project = CreateProject();
         TerminalAnchorIndex anchors = CreateAnchors(project);
-        Guid startTerminalId = project.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid startTerminalId = project.Cabinet.Intervals[0].CableTerminalId!.Value;
         var controller = new CableConnectionController(() => project.Session);
         controller.Begin();
         controller.Pick(anchors.PositionOf(startTerminalId), 8);
@@ -434,7 +434,7 @@ public sealed class CableConnectionControllerTests
     {
         using TestProject project = CreateProject();
         TerminalAnchorIndex anchors = CreateAnchors(project);
-        Guid startTerminalId = project.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid startTerminalId = project.Cabinet.Intervals[0].CableTerminalId!.Value;
         Guid endTerminalId = project.CableTerminationCableSideTerminalId;
         var controller = new CableConnectionController(() => project.Session);
 
@@ -461,7 +461,7 @@ public sealed class CableConnectionControllerTests
     {
         using TestProject project = CreateProject();
         TerminalAnchorIndex anchors = CreateAnchors(project);
-        Guid startTerminalId = project.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid startTerminalId = project.Cabinet.Intervals[0].CableTerminalId!.Value;
         Guid endTerminalId = project.CableTerminationCableSideTerminalId;
         DocumentPoint start = anchors.PositionOf(startTerminalId);
         var controller = new CableConnectionController(() => project.Session);
@@ -498,7 +498,7 @@ public sealed class CableConnectionControllerTests
     {
         using TestProject project = CreateProject();
         TerminalAnchorIndex anchors = CreateAnchors(project);
-        Guid cabinetTerminalId = project.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid cabinetTerminalId = project.Cabinet.Intervals[0].CableTerminalId!.Value;
         Guid poleTerminalId = project.CableTerminationCableSideTerminalId;
         var controller = new CableConnectionController(() => project.Session);
         controller.Begin();
@@ -522,7 +522,7 @@ public sealed class CableConnectionControllerTests
         var controller = new CableConnectionController(() => project.Session);
         controller.Begin();
         controller.Pick(
-            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            anchors.PositionOf(project.Cabinet.Intervals[0].CableTerminalId!.Value),
             8);
         controller.Pick(
             anchors.PositionOf(project.CableTerminationCableSideTerminalId),
@@ -798,7 +798,7 @@ public sealed class CableConnectionControllerTests
         var controller = new CableConnectionController(() => project.Session);
         controller.Begin();
         controller.Pick(
-            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            anchors.PositionOf(project.Cabinet.Intervals[0].CableTerminalId!.Value),
             8);
         controller.Pick(
             anchors.PositionOf(project.CableTerminationCableSideTerminalId),
@@ -871,7 +871,7 @@ public sealed class CableConnectionControllerTests
         Guid connectionId = cable.ConnectionId;
         Guid originalStart = cable.StartTerminalId;
         Guid originalEnd = cable.EndTerminalId;
-        Guid newEnd = project.Cabinet.Intervals[1].ExternalTerminalId;
+        Guid newEnd = project.Cabinet.Intervals[1].CableTerminalId!.Value;
 
         project.Session.SelectionManager.Select(
             new SelectionReference(SelectionTargetKind.CableSegment, cable.Id));
@@ -907,7 +907,7 @@ public sealed class CableConnectionControllerTests
         CableSegment cable = Assert.Single(project.Document.CableSegments);
         Guid cableId = cable.Id;
         Guid connectionId = cable.ConnectionId;
-        Guid newStart = project.Cabinet.Intervals[1].ExternalTerminalId;
+        Guid newStart = project.Cabinet.Intervals[1].CableTerminalId!.Value;
         project.Session.SelectionManager.Select(
             new SelectionReference(SelectionTargetKind.CableSegment, cable.Id));
         var reconnect = new CableReconnectController(() => project.Session);
@@ -994,7 +994,7 @@ public sealed class CableConnectionControllerTests
 
         controller.Begin();
         controller.Pick(
-            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            anchors.PositionOf(project.Cabinet.Intervals[0].CableTerminalId!.Value),
             8);
 
         Assert.Throws<InvalidOperationException>(() =>
@@ -1011,7 +1011,7 @@ public sealed class CableConnectionControllerTests
         var controller = new CableConnectionController(() => project.Session);
         controller.Begin();
         controller.Pick(
-            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            anchors.PositionOf(project.Cabinet.Intervals[0].CableTerminalId!.Value),
             8);
         controller.Pick(
             anchors.PositionOf(project.CableTerminationCableSideTerminalId),
@@ -1043,7 +1043,7 @@ public sealed class CableConnectionControllerTests
         AssertCabinetStub(
             project,
             cable,
-            project.Cabinet.Intervals[0].ExternalTerminalId);
+            project.Cabinet.Intervals[0].CableTerminalId!.Value);
 
         Assert.True(project.Workspace.SaveProject());
         var dialogs = new TestDialogs { OpenPath = project.FilePath };
@@ -1085,7 +1085,7 @@ public sealed class CableConnectionControllerTests
         AssertCabinetStub(
             reopened,
             restored,
-            project.Cabinet.Intervals[0].ExternalTerminalId);
+            project.Cabinet.Intervals[0].CableTerminalId!.Value);
     }
 
     private static TestProject CreateProject()
@@ -1153,7 +1153,7 @@ public sealed class CableConnectionControllerTests
         var controller = new CableConnectionController(() => project.Session);
         controller.Begin();
         controller.Pick(
-            anchors.PositionOf(project.Cabinet.Intervals[0].ExternalTerminalId),
+            anchors.PositionOf(project.Cabinet.Intervals[0].CableTerminalId!.Value),
             8);
         controller.Pick(
             anchors.PositionOf(project.CableTerminationCableSideTerminalId),

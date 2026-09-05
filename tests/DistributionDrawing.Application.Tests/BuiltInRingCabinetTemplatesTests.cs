@@ -113,7 +113,7 @@ public sealed class BuiltInRingCabinetTemplatesTests
                     interval.SwitchDevices,
                     device => device.SwitchKind == SwitchKind.GroundSwitch &&
                               device.SwitchState == SwitchState.Open);
-                Assert.NotEqual(Guid.Empty, interval.ExternalTerminalId);
+                Assert.NotEqual(Guid.Empty, interval.CableTerminalId);
             });
         Assert.Null(typeof(RingCabinetInterval).GetProperty("Function"));
         Assert.Null(typeof(BayTemplate).GetProperty("Function"));

@@ -296,6 +296,52 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
+    public void RingCabinetPaste_PreservesMixedCableTerminalPresenceAndRemapsPresentIds()
+    {
+        ProjectRuntimeSession session = CreateSession("可选电缆终端复制");
+        var factory = new DeviceCommandFactory();
+        AddRingCabinetCommand command = factory.CreateAddRingCabinet(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new RingCabinetCreationConfiguration(
+                "NK-MIXED",
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
+            new DocumentPoint(30, 40));
+        command.Execute();
+        RingCabinetInterval absent = command.Cabinet.Intervals[1];
+        command.Cabinet.SetIntervalCableTerminal(absent.IntervalId, null);
+        session.PersistenceSession.Domain.SynchronizeRingCabinetAggregate(command.Cabinet);
+        session.RebuildScene();
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.RingCabinet,
+            command.Cabinet.Id));
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        RingCabinet copied = Assert.Single(
+            session.PersistenceSession.Domain.Devices.OfType<RingCabinet>(),
+            item => item.Id != command.Cabinet.Id);
+        Assert.Equal(
+            command.Cabinet.Intervals.Select(interval => interval.HasCableTerminal),
+            copied.Intervals.Select(interval => interval.HasCableTerminal));
+        Assert.Null(copied.Intervals[1].CableTerminalId);
+        Assert.All(
+            copied.Intervals.Where(interval => interval.HasCableTerminal),
+            interval => Assert.DoesNotContain(
+                command.Cabinet.Intervals
+                    .Where(source => source.HasCableTerminal)
+                    .Select(source => source.CableTerminalId),
+                sourceId => sourceId == interval.CableTerminalId));
+        Assert.Equal(
+            copied.Intervals.Count(interval => interval.HasCableTerminal),
+            copied.Terminals.Count(terminal => terminal.IsExternal));
+    }
+
+    [Fact]
     public void BoundaryConnection_IsOmittedAndNeverReferencesSourceIds()
     {
         ProjectRuntimeSession session = CreateSession("边界线路");
@@ -368,7 +414,7 @@ public sealed class DrawingClipboardTests : IDisposable
         termination.Execute();
         Guid connectionId = Guid.NewGuid();
         Guid segmentId = Guid.NewGuid();
-        Guid start = cabinet.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid start = cabinet.Cabinet.Intervals[0].CableTerminalId!.Value;
         Guid end = termination.Creation.CableSideTerminal.Id;
         var connection = new Connection(
             connectionId, ConnectionType.Cable, start, end, "C-1", "10kV");
@@ -404,8 +450,8 @@ public sealed class DrawingClipboardTests : IDisposable
         var factory = new DeviceCommandFactory();
         AddRingCabinetCommand first = AddRing(session, factory, "RC-A", 20);
         AddRingCabinetCommand second = AddRing(session, factory, "RC-B", 300);
-        Guid startTerminal = first.Cabinet.Intervals[0].ExternalTerminalId;
-        Guid endTerminal = second.Cabinet.Intervals[0].ExternalTerminalId;
+        Guid startTerminal = first.Cabinet.Intervals[0].CableTerminalId!.Value;
+        Guid endTerminal = second.Cabinet.Intervals[0].CableTerminalId!.Value;
         Guid connectionId = Guid.NewGuid();
         Guid cableId = Guid.NewGuid();
         var connection = new Connection(
@@ -446,7 +492,7 @@ public sealed class DrawingClipboardTests : IDisposable
             item => item.Id != cableId);
         Guid[] copiedTerminalIds = copiedCabinets
             .SelectMany(item => item.Intervals)
-            .Select(item => item.ExternalTerminalId)
+            .Select(item => item.CableTerminalId!.Value)
             .ToArray();
         Assert.All(
             new[] { copiedCable.StartTerminalId, copiedCable.EndTerminalId },

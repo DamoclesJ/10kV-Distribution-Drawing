@@ -53,20 +53,23 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             Colors.Black,
             _metrics.General.StandardStrokeThickness));
 
-        DocumentPoint terminalTip = new(
-            centerX,
-            origin.YMillimeters + layout.HeightMillimeters);
-        double terminalTop = terminalTip.YMillimeters -
-                             _metrics.CableTermination.TriangleHeight;
-        elements.Add(new SceneLine(
-            common,
-            new DocumentPoint(centerX, terminalTop),
-            Colors.Black,
-            _metrics.General.StandardStrokeThickness));
-        RingCabinetProfessionalGeometry.AddCableTerminationMarker(
-            elements,
-            terminalTip,
-            _metrics);
+        if (interval.HasCableTerminal)
+        {
+            DocumentPoint terminalTip = new(
+                centerX,
+                origin.YMillimeters + layout.HeightMillimeters);
+            double terminalTop = terminalTip.YMillimeters -
+                                 _metrics.CableTermination.TriangleHeight;
+            elements.Add(new SceneLine(
+                common,
+                new DocumentPoint(centerX, terminalTop),
+                Colors.Black,
+                _metrics.General.StandardStrokeThickness));
+            RingCabinetProfessionalGeometry.AddCableTerminationMarker(
+                elements,
+                terminalTip,
+                _metrics);
+        }
 
         return elements;
     }

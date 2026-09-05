@@ -322,7 +322,7 @@ public sealed class IntervalTypeChangePersistenceTests
         Assert.Equal(expected.CircuitNodeId, actual.CircuitNodeId);
         Assert.Equal(expected.IntermediateNodeId, actual.IntermediateNodeId);
         Assert.Equal(expected.EarthNodeId, actual.EarthNodeId);
-        Assert.Equal(expected.ExternalTerminalId, actual.ExternalTerminalId);
+        Assert.Equal(expected.CableTerminalId, actual.CableTerminalId);
     }
 
     private static int GetSavedVersion(string filePath)

@@ -96,7 +96,7 @@ public sealed class TopologySceneIntegrationTests
             fixture.Document.Connections,
             fixture.Document.CableSegments);
         Assert.True(anchors.TryGet(
-            cabinet.Intervals[0].ExternalTerminalId,
+            cabinet.Intervals[0].CableTerminalId!.Value,
             out TerminalAnchor terminal));
 
         SceneLine exit = Assert.Single(
@@ -147,7 +147,7 @@ public sealed class TopologySceneIntegrationTests
             pole.Devices.OfType<CableTermination>());
         CableSegment firstCable = AddCable(
             document,
-            cabinet.Intervals[0].ExternalTerminalId,
+            cabinet.Intervals[0].CableTerminalId!.Value,
             joint.Terminal.Id,
             "Cable-601-A");
         _ = AddCable(

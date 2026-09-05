@@ -56,6 +56,44 @@ public sealed class ProjectPersistenceRoundTripTests
     }
 
     [Fact]
+    public void Version7RoundTrip_PreservesAbsentCableTerminalAsNull()
+    {
+        DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
+        RingCabinet original = GetCabinet(originalDocument);
+        RingCabinetInterval target = original.Intervals.First(interval =>
+            interval.IntervalKind == IntervalKind.LoadSwitchInterval);
+        Guid removedTerminalId = target.CableTerminalId!.Value;
+        original.SetIntervalCableTerminal(target.IntervalId, null);
+        originalDocument.SynchronizeRingCabinetAggregate(original);
+        string filePath = CreateTemporaryPath("v7-optional-cable-terminal");
+
+        try
+        {
+            var container = new ProjectFileContainer();
+            container.Save(filePath, CreateFileDocument(originalDocument));
+
+            ProjectFileDocument opened = container.Open(filePath);
+            DrawingDocument restoredDocument = ProjectDomainMapper.ToDomain(opened.Domain!);
+            RingCabinet restored = GetCabinet(restoredDocument);
+            RingCabinetInterval restoredTarget = restored.Intervals.Single(interval =>
+                interval.IntervalId == target.IntervalId);
+
+            Assert.Equal(ProjectFileFormat.Version7, opened.Manifest.FormatVersion);
+            Assert.Null(Assert.Single(opened.Domain!.RingCabinets).Intervals
+                .Single(interval => interval.IntervalId == target.IntervalId).CableTerminalId);
+            Assert.Null(restoredTarget.CableTerminalId);
+            Assert.DoesNotContain(restoredDocument.Terminals, terminal =>
+                terminal.Id == removedTerminalId);
+            Assert.Contains(restoredDocument.ElectricalNodes, node =>
+                node.Id == target.CircuitNodeId);
+        }
+        finally
+        {
+            DeleteIfExists(filePath);
+        }
+    }
+
+    [Fact]
     public void Version7ArchiveWithoutLineName_OpensWithEmptyLineName()
     {
         DrawingDocument document = CreateDocumentWithRingCabinet();
@@ -138,8 +176,8 @@ public sealed class ProjectPersistenceRoundTripTests
         RingCabinet originalCabinet = GetCabinet(originalDocument);
         Guid groundingPointId = Guid.NewGuid();
         Guid workScopeId = Guid.NewGuid();
-        Guid groundingTerminalId = originalCabinet.Intervals[0].ExternalTerminalId;
-        Guid otherBoundaryTerminalId = originalCabinet.Intervals[1].ExternalTerminalId;
+        Guid groundingTerminalId = originalCabinet.Intervals[0].CableTerminalId!.Value;
+        Guid otherBoundaryTerminalId = originalCabinet.Intervals[1].CableTerminalId!.Value;
         originalDocument.CreateGroundingPoint(
             groundingPointId,
             groundingTerminalId,

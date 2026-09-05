@@ -20,7 +20,7 @@ public sealed class RingCabinetInterval
         Guid? intermediateNodeId,
         Guid circuitNodeId,
         Guid earthNodeId,
-        Guid externalTerminalId)
+        Guid? cableTerminalId)
     {
         if (id == Guid.Empty)
         {
@@ -57,11 +57,18 @@ public sealed class RingCabinetInterval
             throw new ArgumentException("Earth node ID cannot be empty.", nameof(earthNodeId));
         }
 
-        if (externalTerminalId == Guid.Empty)
+        if (cableTerminalId == Guid.Empty)
         {
             throw new ArgumentException(
-                "External terminal ID cannot be empty.",
-                nameof(externalTerminalId));
+                "Cable terminal ID cannot be empty when specified.",
+                nameof(cableTerminalId));
+        }
+
+        if (intervalKind == IntervalKind.PTInterval && cableTerminalId is null)
+        {
+            throw new ArgumentException(
+                "A PT interval requires a cable terminal.",
+                nameof(cableTerminalId));
         }
 
         if (intermediateNodeId == Guid.Empty)
@@ -163,7 +170,7 @@ public sealed class RingCabinetInterval
         IntermediateNodeId = intermediateNodeId;
         CircuitNodeId = circuitNodeId;
         EarthNodeId = earthNodeId;
-        ExternalTerminalId = externalTerminalId;
+        CableTerminalId = cableTerminalId;
     }
 
     public Guid IntervalId { get; }
@@ -192,7 +199,9 @@ public sealed class RingCabinetInterval
 
     public Guid EarthNodeId { get; }
 
-    public Guid ExternalTerminalId { get; }
+    public Guid? CableTerminalId { get; }
+
+    public bool HasCableTerminal => CableTerminalId is not null;
 
     public string? GetSwitchBusinessNumber(Guid switchDeviceId)
     {

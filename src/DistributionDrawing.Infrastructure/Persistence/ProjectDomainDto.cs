@@ -648,7 +648,7 @@ internal static class ProjectDomainMapper
             interval.IntermediateNodeId,
             interval.CircuitNodeId,
             interval.EarthNodeId,
-            interval.ExternalTerminalId,
+            interval.CableTerminalId,
             interval.SwitchAssembly.AssemblyId,
             interval.SwitchDevices.Select(device => ToDto(
                 device,
@@ -1174,11 +1174,20 @@ internal static class ProjectDomainMapper
                 $"Interval '{interval.IntervalId}' has an invalid bayIndex '{interval.BayIndex}'.");
         }
 
-        if (interval.CableTerminalId is not Guid cableTerminalId ||
-            cableTerminalId == Guid.Empty)
+        if (interval.CableTerminalId == Guid.Empty)
         {
             throw new InvalidDataException(
-                $"Interval '{interval.IntervalId}' requires a cable terminal until WP-EM-03 implements optional-terminal runtime behavior.");
+                $"Interval '{interval.IntervalId}' has an empty cable terminal ID.");
+        }
+
+        IntervalKind intervalKind = Parse<IntervalKind>(
+            interval.IntervalKind,
+            interval.IntervalId,
+            "intervalKind");
+        if (intervalKind == IntervalKind.PTInterval && interval.CableTerminalId is null)
+        {
+            throw new InvalidDataException(
+                $"PT interval '{interval.IntervalId}' requires a cable terminal.");
         }
 
         return new RingCabinetIntervalRestoreDefinition(
@@ -1187,7 +1196,7 @@ internal static class ProjectDomainMapper
             interval.Sequence,
             interval.BayIndex,
             interval.DisplayName,
-            Parse<IntervalKind>(interval.IntervalKind, interval.IntervalId, "intervalKind"),
+            intervalKind,
             interval.GroundingStructureKind is null
                 ? null
                 : Parse<GroundingStructureKind>(
@@ -1197,7 +1206,7 @@ internal static class ProjectDomainMapper
             interval.IntermediateNodeId,
             interval.CircuitNodeId,
             interval.EarthNodeId,
-            cableTerminalId,
+            interval.CableTerminalId,
             interval.SwitchAssemblyId,
             (interval.Switches ?? throw new InvalidDataException(
                     $"Interval '{interval.IntervalId}' is missing switches."))

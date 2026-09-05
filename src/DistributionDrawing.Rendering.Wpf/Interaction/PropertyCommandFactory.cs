@@ -28,6 +28,8 @@ public sealed class PropertyCommandFactory
     public const string CableTypePropertyKey = EditPropertyCommand.CableTypeProperty;
     public const string CableLengthPropertyKey = EditPropertyCommand.CableLengthProperty;
     public const string IntervalDisplayNamePropertyKey = "Interval.DisplayName";
+    public const string IntervalCableTerminalPresencePropertyKey =
+        "Interval.CableTerminalPresence";
     public const string RingCabinetDisplayNamePropertyKey =
         EditPropertyCommand.RingCabinetDisplayNameProperty;
     public const string RingCabinetLineNamePropertyKey =
@@ -93,6 +95,51 @@ public sealed class PropertyCommandFactory
             targetIntervalKind,
             targetGroundingStructureKind,
             document: selection.Document);
+        return true;
+    }
+
+    public bool TryCreateIntervalCableTerminalPresenceChange(
+        ResolvedSelection selection,
+        bool isPresent,
+        out ICommand? command,
+        out PropertyEditError? error)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        command = null;
+        error = null;
+
+        if (selection.Document is null || selection.RingCabinet is null ||
+            selection.RingCabinetInterval is null ||
+            selection.Reference.Kind != SelectionTargetKind.RingCabinetInterval)
+        {
+            error = new PropertyEditError(
+                "TargetNotSupported",
+                "Cable-terminal editing requires a selected ring-cabinet interval.");
+            return false;
+        }
+
+        if (selection.RingCabinetInterval.IntervalKind is not
+            (IntervalKind.LoadSwitchInterval or IntervalKind.IntegratedFeederInterval))
+        {
+            error = new PropertyEditError(
+                "PropertyNotApplicable",
+                "PT intervals do not support optional cable terminals.");
+            return false;
+        }
+
+        if (selection.RingCabinetInterval.HasCableTerminal == isPresent)
+        {
+            error = new PropertyEditError(
+                "NoChange",
+                "The cable-terminal presence has not changed.");
+            return false;
+        }
+
+        command = new SetRingCabinetIntervalCableTerminalPresenceCommand(
+            selection.Document,
+            selection.RingCabinet,
+            selection.RingCabinetInterval.IntervalId,
+            isPresent);
         return true;
     }
 

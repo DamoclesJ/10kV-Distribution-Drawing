@@ -47,7 +47,7 @@ public sealed class CompleteWorkTicketScenarioTests
         ElectricalConnectivityQuery query = new(
             new ElectricalConnectivityGraphBuilder().Build(restored));
         Assert.True(query.IsConnected(
-            restoredInterval.ExternalTerminalId,
+            restoredInterval.CableTerminalId!.Value,
             restoredTermination.CableSideTerminalId));
         Assert.True(restoredInterval.SwitchAssembly.Evaluate().IsValid);
     }
@@ -123,7 +123,7 @@ public sealed class CompleteWorkTicketScenarioTests
 
         CableTermination termination = Assert.Single(
             pole.Devices.OfType<CableTermination>());
-        AddCable(document, cabinet.Intervals[0].ExternalTerminalId, joint.Terminal.Id, "Cable-601-A");
+        AddCable(document, cabinet.Intervals[0].CableTerminalId!.Value, joint.Terminal.Id, "Cable-601-A");
         AddCable(document, joint.Terminal.Id, termination.CableSideTerminalId, "Cable-601-B");
 
         return new ScenarioFixture(document, cabinet, cabinet.Intervals[0]);

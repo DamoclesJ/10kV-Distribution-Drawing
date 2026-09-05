@@ -1440,6 +1440,31 @@ public partial class MainWindow : Window
         RefreshDrawingScene();
     }
 
+    private void OnApplyCableTerminalPresence(object sender, RoutedEventArgs e)
+    {
+        if (_selectionManager.Selected is not
+                { Kind: SelectionTargetKind.RingCabinetInterval } target ||
+            CableTerminalPresenceInput.SelectedIndex is not (0 or 1))
+        {
+            ShowCommandError("电缆终端修改失败", "请先选择一个有效的环网柜间隔。");
+            return;
+        }
+
+        PropertyEditResult result = _propertyEditor.TrySetIntervalCableTerminalPresence(
+            target,
+            CableTerminalPresenceInput.SelectedIndex == 0);
+        if (!result.IsSuccess)
+        {
+            UpdateIntervalEditor();
+            ShowCommandError(
+                "电缆终端修改失败",
+                result.ErrorMessage ?? "电缆终端配置未能应用。");
+            return;
+        }
+
+        RefreshDrawingScene();
+    }
+
     private void OnIntervalTypeSelectionChanged(
         object sender,
         System.Windows.Controls.SelectionChangedEventArgs e)
@@ -2786,6 +2811,13 @@ public partial class MainWindow : Window
             IntervalGroundingStructureInput.IsEnabled =
                 interval.IntervalKind == IntervalKind.IntegratedFeederInterval;
             ApplyIntervalConfigurationButton.IsEnabled = false;
+            bool supportsOptionalCableTerminal =
+                interval.IntervalKind is IntervalKind.LoadSwitchInterval or
+                    IntervalKind.IntegratedFeederInterval;
+            CableTerminalPresencePanel.Visibility = supportsOptionalCableTerminal
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            CableTerminalPresenceInput.SelectedIndex = interval.HasCableTerminal ? 0 : 1;
         }
         finally
         {

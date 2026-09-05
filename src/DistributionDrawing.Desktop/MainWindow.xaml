@@ -499,6 +499,18 @@
             <Button x:Name="ApplyIntervalConfigurationButton"
                     Content="应用间隔配置"
                     Click="OnApplyIntervalConfiguration" />
+            <StackPanel x:Name="CableTerminalPresencePanel"
+                        Margin="0,8,0,0">
+              <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                         Text="电缆终端" />
+              <ComboBox x:Name="CableTerminalPresenceInput"
+                        Margin="0,4,0,4">
+                <ComboBoxItem Content="有" />
+                <ComboBoxItem Content="无" />
+              </ComboBox>
+              <Button Content="应用电缆终端配置"
+                      Click="OnApplyCableTerminalPresence" />
+            </StackPanel>
           </StackPanel>
           <StackPanel x:Name="SwitchOperationPanel"
                       DockPanel.Dock="Top"

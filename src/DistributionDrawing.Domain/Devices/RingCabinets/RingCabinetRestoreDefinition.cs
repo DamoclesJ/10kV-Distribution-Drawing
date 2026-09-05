@@ -24,7 +24,7 @@ public sealed record RingCabinetIntervalRestoreDefinition(
     Guid? IntermediateNodeId,
     Guid CircuitNodeId,
     Guid EarthNodeId,
-    Guid ExternalTerminalId,
+    Guid? CableTerminalId,
     Guid SwitchAssemblyId,
     IReadOnlyList<SwitchDeviceRestoreDefinition> Switches);
 

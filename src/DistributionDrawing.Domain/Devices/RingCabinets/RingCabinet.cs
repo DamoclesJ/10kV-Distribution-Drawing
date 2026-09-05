@@ -217,6 +217,57 @@ public sealed class RingCabinet : Device
             LineName));
     }
 
+    public void SetIntervalCableTerminal(
+        Guid intervalId,
+        Guid? cableTerminalId)
+    {
+        if (intervalId == Guid.Empty)
+        {
+            throw new ArgumentException("Interval ID cannot be empty.", nameof(intervalId));
+        }
+
+        if (cableTerminalId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Cable terminal ID cannot be empty when specified.",
+                nameof(cableTerminalId));
+        }
+
+        RingCabinetInterval interval = _intervals.SingleOrDefault(candidate =>
+                candidate.IntervalId == intervalId)
+            ?? throw new InvalidOperationException(
+                $"Interval '{intervalId}' does not belong to cabinet '{Id}'.");
+        if (interval.IntervalKind is not (IntervalKind.LoadSwitchInterval or
+            IntervalKind.IntegratedFeederInterval))
+        {
+            throw new InvalidOperationException(
+                "Only load-switch and integrated-feeder intervals support optional cable terminals.");
+        }
+
+        if (interval.CableTerminalId == cableTerminalId)
+        {
+            return;
+        }
+
+        RingCabinetIntervalRestoreDefinition[] definitions = _intervals
+            .Select(candidate =>
+            {
+                RingCabinetIntervalRestoreDefinition definition =
+                    CreateRestoreDefinition(candidate);
+                return candidate.IntervalId == intervalId
+                    ? definition with { CableTerminalId = cableTerminalId }
+                    : definition;
+            })
+            .ToArray();
+        RestoreState(new RingCabinetRestoreDefinition(
+            Id,
+            DisplayName ?? throw new InvalidOperationException(
+                "A ring cabinet must have a display name."),
+            MainBusNodeId,
+            definitions,
+            LineName));
+    }
+
     internal IEnumerable<SwitchDevice> InternalSwitchDevices =>
         _intervals.SelectMany(interval => interval.SwitchDevices);
 
@@ -422,7 +473,7 @@ public sealed class RingCabinet : Device
             interval.IntermediateNodeId,
             interval.CircuitNodeId,
             interval.EarthNodeId,
-            interval.ExternalTerminalId,
+            interval.CableTerminalId,
             interval.SwitchAssembly.AssemblyId,
             interval.SwitchDevices.Select(device => new SwitchDeviceRestoreDefinition(
                 device.Id,
@@ -445,7 +496,14 @@ public sealed class RingCabinet : Device
     {
         Guid circuitNodeId = Guid.NewGuid();
         Guid earthNodeId = Guid.NewGuid();
-        Guid externalTerminalId = Guid.NewGuid();
+        bool preservesOptionalPresence =
+            interval.IntervalKind is (IntervalKind.LoadSwitchInterval or
+                IntervalKind.IntegratedFeederInterval) &&
+            targetIntervalKind is (IntervalKind.LoadSwitchInterval or
+                IntervalKind.IntegratedFeederInterval);
+        Guid? cableTerminalId = preservesOptionalPresence
+            ? interval.CableTerminalId
+            : Guid.NewGuid();
         Guid? intermediateNodeId = null;
         List<SwitchDeviceRestoreDefinition> switches = [];
 
@@ -528,7 +586,7 @@ public sealed class RingCabinet : Device
             intermediateNodeId,
             circuitNodeId,
             earthNodeId,
-            externalTerminalId,
+            cableTerminalId,
             Guid.NewGuid(),
             switches);
     }
@@ -639,13 +697,7 @@ public sealed class RingCabinet : Device
                 false,
                 false,
                 earthNode.Id));
-        AddTerminal(
-            terminals,
-            circuitNode,
-            CreateExternalTerminal(
-                definition.ExternalTerminalId,
-                definition.IntervalId,
-                circuitNode.Id));
+        AddOptionalCableTerminal(terminals, circuitNode, definition);
 
         electricalNodes.Add(circuitNode);
         electricalNodes.Add(earthNode);
@@ -663,7 +715,7 @@ public sealed class RingCabinet : Device
             null,
             definition.CircuitNodeId,
             definition.EarthNodeId,
-            definition.ExternalTerminalId);
+            definition.CableTerminalId);
     }
 
     private static RingCabinetInterval CreateRestoredPTInterval(
@@ -725,11 +777,15 @@ public sealed class RingCabinet : Device
                 false,
                 false,
                 earthNode.Id));
+        Guid cableTerminalId = definition.CableTerminalId
+            ?? throw new ArgumentException(
+                "A PT interval requires a cable terminal.",
+                nameof(definition));
         AddTerminal(
             terminals,
             circuitNode,
             CreateExternalTerminal(
-                definition.ExternalTerminalId,
+                cableTerminalId,
                 definition.IntervalId,
                 definition.CircuitNodeId));
 
@@ -749,7 +805,7 @@ public sealed class RingCabinet : Device
             null,
             definition.CircuitNodeId,
             definition.EarthNodeId,
-            definition.ExternalTerminalId);
+            cableTerminalId);
     }
 
     private static RingCabinetInterval CreateRestoredIntegratedFeederInterval(
@@ -866,13 +922,7 @@ public sealed class RingCabinet : Device
                 false,
                 false,
                 earthNode.Id));
-        AddTerminal(
-            terminals,
-            circuitNode,
-            CreateExternalTerminal(
-                definition.ExternalTerminalId,
-                definition.IntervalId,
-                circuitNode.Id));
+        AddOptionalCableTerminal(terminals, circuitNode, definition);
 
         electricalNodes.Add(intermediateNode);
         electricalNodes.Add(circuitNode);
@@ -891,7 +941,7 @@ public sealed class RingCabinet : Device
             intermediateNodeId,
             definition.CircuitNodeId,
             definition.EarthNodeId,
-            definition.ExternalTerminalId);
+            definition.CableTerminalId);
     }
 
     private static SwitchDeviceRestoreDefinition GetRestoredSwitch(
@@ -1547,18 +1597,11 @@ public sealed class RingCabinet : Device
             groundSwitch.Id,
             interval.EarthNodeId,
             false);
-        Terminal externalTerminal = GetRequiredTerminal(
-            terminals,
-            interval.ExternalTerminalId,
-            TopologyOwnerType.InternalAggregate,
-            interval.IntervalId,
-            interval.CircuitNodeId,
-            true);
-
-        EnsureExternalTerminalPolicy(interval, externalTerminal);
+        Terminal? cableTerminal = GetCableTerminal(interval, terminals);
         EnsureNodeTerminals(
             circuitNode,
-            [loadCircuitTerminal.Id, groundDeviceTerminal.Id, externalTerminal.Id]);
+            new[] { loadCircuitTerminal.Id, groundDeviceTerminal.Id }
+                .Concat(cableTerminal is null ? [] : [cableTerminal.Id]));
         EnsureNodeTerminals(earthNode, [groundSideTerminal.Id]);
 
         return loadBusTerminal.Id;
@@ -1620,9 +1663,12 @@ public sealed class RingCabinet : Device
             groundSwitch.Id,
             interval.EarthNodeId,
             false);
+        Guid cableTerminalId = interval.CableTerminalId
+            ?? throw new InvalidOperationException(
+                $"PT interval '{interval.IntervalId}' requires a cable terminal.");
         Terminal externalTerminal = GetRequiredTerminal(
             terminals,
-            interval.ExternalTerminalId,
+            cableTerminalId,
             TopologyOwnerType.InternalAggregate,
             interval.IntervalId,
             interval.CircuitNodeId,
@@ -1748,15 +1794,7 @@ public sealed class RingCabinet : Device
             groundSwitch.Id,
             interval.EarthNodeId,
             false);
-        Terminal externalTerminal = GetRequiredTerminal(
-            terminals,
-            interval.ExternalTerminalId,
-            TopologyOwnerType.InternalAggregate,
-            interval.IntervalId,
-            interval.CircuitNodeId,
-            true);
-
-        EnsureExternalTerminalPolicy(interval, externalTerminal);
+        Terminal? cableTerminal = GetCableTerminal(interval, terminals);
         Terminal[] mainCircuitTerminals =
         [
             isolationFirstTerminal,
@@ -1776,7 +1814,7 @@ public sealed class RingCabinet : Device
             mainCircuitTerminals
                 .Where(terminal => terminal.ElectricalNodeId == interval.CircuitNodeId)
                 .Select(terminal => terminal.Id)
-                .Append(externalTerminal.Id));
+                .Concat(cableTerminal is null ? [] : [cableTerminal.Id]));
         EnsureNodeTerminals(earthNode, [groundSideTerminal.Id]);
 
         return mainCircuitTerminals.Single(
@@ -1894,11 +1932,13 @@ public sealed class RingCabinet : Device
         IReadOnlyDictionary<Guid, ElectricalNode> nodes,
         IReadOnlyDictionary<Guid, Terminal> terminals)
     {
-        if (!terminals.TryGetValue(interval.ExternalTerminalId, out Terminal? externalTerminal) ||
-            externalTerminal.ElectricalNodeId is not Guid externalNodeId)
+        Guid externalNodeId = interval.CircuitNodeId;
+        if (interval.CableTerminalId is Guid cableTerminalId &&
+            (!terminals.TryGetValue(cableTerminalId, out Terminal? cableTerminal) ||
+             cableTerminal.ElectricalNodeId != externalNodeId))
         {
             throw new InvalidOperationException(
-                $"Interval '{interval.IntervalId}' has an invalid external terminal.");
+                $"Interval '{interval.IntervalId}' has an invalid cable terminal.");
         }
 
         if (!nodes.ContainsKey(externalNodeId) || !nodes.ContainsKey(interval.EarthNodeId))
@@ -2053,6 +2093,42 @@ public sealed class RingCabinet : Device
             false,
             circuitNodeId,
             [ConnectionType.Cable, ConnectionType.OverheadLine]);
+    }
+
+    private static void AddOptionalCableTerminal(
+        ICollection<Terminal> terminals,
+        ElectricalNode circuitNode,
+        RingCabinetIntervalRestoreDefinition definition)
+    {
+        if (definition.CableTerminalId is not Guid cableTerminalId)
+        {
+            return;
+        }
+
+        AddTerminal(
+            terminals,
+            circuitNode,
+            CreateExternalTerminal(cableTerminalId, definition.IntervalId, circuitNode.Id));
+    }
+
+    private static Terminal? GetCableTerminal(
+        RingCabinetInterval interval,
+        IReadOnlyDictionary<Guid, Terminal> terminals)
+    {
+        if (interval.CableTerminalId is not Guid cableTerminalId)
+        {
+            return null;
+        }
+
+        Terminal terminal = GetRequiredTerminal(
+            terminals,
+            cableTerminalId,
+            TopologyOwnerType.InternalAggregate,
+            interval.IntervalId,
+            interval.CircuitNodeId,
+            true);
+        EnsureExternalTerminalPolicy(interval, terminal);
+        return terminal;
     }
 
     private static void AddTerminal(

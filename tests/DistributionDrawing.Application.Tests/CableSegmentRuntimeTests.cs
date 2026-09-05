@@ -176,7 +176,7 @@ public sealed class CableSegmentRuntimeTests
             includeCableTerminal: true);
         new CreatePoleCommand(document, poleResult).Execute();
 
-        Guid startTerminalId = cabinet.Intervals[0].ExternalTerminalId;
+        Guid startTerminalId = cabinet.Intervals[0].CableTerminalId!.Value;
         CableTermination cableTermination = Assert.IsType<CableTermination>(
             Assert.Single(poleResult.Devices));
         return (document, startTerminalId, cableTermination.CableSideTerminalId);

@@ -121,6 +121,11 @@ public sealed class TerminalAnchorIndex
 
             foreach (RingCabinetInterval interval in cabinet.Intervals)
             {
+                if (interval.CableTerminalId is not Guid cableTerminalId)
+                {
+                    continue;
+                }
+
                 if (!cabinetLayout.IntervalLayouts.TryGetValue(
                         interval.IntervalId,
                         out RingCabinetIntervalLayout intervalLayout))
@@ -141,7 +146,7 @@ public sealed class TerminalAnchorIndex
                     origin.YMillimeters + intervalLayout.HeightMillimeters);
                 Set(
                     anchors,
-                    interval.ExternalTerminalId,
+                    cableTerminalId,
                     terminalPosition,
                     TerminalAnchorDirection.Down,
                     DrawingMetrics.Default.CableTermination

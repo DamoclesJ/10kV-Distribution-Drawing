@@ -55,7 +55,7 @@ public sealed class PTIntervalTests
             source.IntermediateNodeId,
             source.CircuitNodeId,
             source.EarthNodeId,
-            source.ExternalTerminalId,
+            source.CableTerminalId,
             source.SwitchAssembly.AssemblyId,
             source.SwitchDevices.Select(device => new SwitchDeviceRestoreDefinition(
                 device.Id,

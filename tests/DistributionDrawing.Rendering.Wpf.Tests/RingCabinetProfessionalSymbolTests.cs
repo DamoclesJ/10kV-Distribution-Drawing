@@ -764,7 +764,9 @@ public sealed class RingCabinetProfessionalSymbolTests
         var document = new DrawingDocument(Guid.NewGuid(), "Anchor document");
         document.AddDevice(cabinet);
         RingCabinetLayout layout = CreateLayout(cabinet);
-        Guid[] stableIds = cabinet.Intervals.Select(interval => interval.ExternalTerminalId).ToArray();
+        Guid[] stableIds = cabinet.Intervals
+            .Select(interval => interval.CableTerminalId!.Value)
+            .ToArray();
 
         TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
             document,
@@ -773,7 +775,7 @@ public sealed class RingCabinetProfessionalSymbolTests
 
         foreach (RingCabinetInterval interval in cabinet.Intervals)
         {
-            Assert.True(anchors.TryGet(interval.ExternalTerminalId, out TerminalAnchor anchor));
+            Assert.True(anchors.TryGet(interval.CableTerminalId!.Value, out TerminalAnchor anchor));
             RingCabinetIntervalLayout intervalLayout = layout.IntervalLayouts[interval.IntervalId];
             double expectedX = interval.IntervalKind == IntervalKind.PTInterval
                 ? layout.Position.XMillimeters + intervalLayout.RelativePosition.XMillimeters +
@@ -789,7 +791,9 @@ public sealed class RingCabinetProfessionalSymbolTests
             Assert.Equal(TerminalAnchorDirection.Down, anchor.Direction);
         }
 
-        Assert.Equal(stableIds, cabinet.Intervals.Select(interval => interval.ExternalTerminalId));
+        Assert.Equal(
+            stableIds,
+            cabinet.Intervals.Select(interval => interval.CableTerminalId!.Value));
     }
 
     [Fact]

@@ -55,7 +55,7 @@ public sealed class TopologyBoundaryTests
         RingCabinet cabinet = TestFixtures.CreateLoadSwitchRingCabinet([1, 3, 5]);
         document.AddDevice(cabinet);
         Terminal cabinetTerminal = document.Terminals.Single(
-            terminal => terminal.Id == cabinet.Intervals[0].ExternalTerminalId);
+            terminal => terminal.Id == cabinet.Intervals[0].CableTerminalId);
 
         var cable = new Connection(
             Guid.NewGuid(),

@@ -272,8 +272,9 @@ internal sealed class ClipboardFragmentMaterializer
             ids.UnionWith(new[]
             {
                 interval.IntervalId, interval.ParentCabinetId, interval.CircuitNodeId,
-                interval.EarthNodeId, interval.ExternalTerminalId, interval.SwitchAssemblyId
+                interval.EarthNodeId, interval.SwitchAssemblyId
             });
+            if (interval.CableTerminalId is Guid cableTerminalId) ids.Add(cableTerminalId);
             if (interval.IntermediateNodeId is Guid intermediateNodeId) ids.Add(intermediateNodeId);
             foreach (SwitchDeviceRestoreDefinition device in interval.Switches)
             {
@@ -321,7 +322,7 @@ internal sealed class ClipboardFragmentMaterializer
             interval.IntermediateNodeId is Guid nodeId ? map(nodeId) : null,
             map(interval.CircuitNodeId),
             map(interval.EarthNodeId),
-            map(interval.ExternalTerminalId),
+            interval.CableTerminalId is Guid cableTerminalId ? map(cableTerminalId) : null,
             map(interval.SwitchAssemblyId),
             interval.Switches.Select(item => new SwitchDeviceRestoreDefinition(
                 map(item.Id),

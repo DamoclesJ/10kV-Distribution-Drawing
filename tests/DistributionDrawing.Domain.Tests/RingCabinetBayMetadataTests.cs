@@ -168,7 +168,7 @@ public sealed class RingCabinetBayMetadataTests
                 interval.IntermediateNodeId,
                 interval.CircuitNodeId,
                 interval.EarthNodeId,
-                interval.ExternalTerminalId,
+                interval.CableTerminalId,
                 interval.SwitchAssembly.AssemblyId,
                 interval.SwitchDevices
                     .Select(device => new SwitchDeviceRestoreDefinition(

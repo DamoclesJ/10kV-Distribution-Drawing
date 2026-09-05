@@ -160,7 +160,7 @@ public sealed class RoutingObstacleBuilderTests
             document,
             new DrawingLayout(),
             layouts);
-        Assert.True(anchors.TryGet(pt.ExternalTerminalId, out TerminalAnchor start));
+        Assert.True(anchors.TryGet(pt.CableTerminalId!.Value, out TerminalAnchor start));
         RoutingObstacle[] obstacles = new RoutingObstacleBuilder().Build(
             [cabinet],
             [],
@@ -170,7 +170,7 @@ public sealed class RoutingObstacleBuilderTests
         var request = new ConnectionRouteRequest(
             Guid.NewGuid(),
             ConnectionType.Cable,
-            pt.ExternalTerminalId,
+            pt.CableTerminalId!.Value,
             endId,
             start,
             new TerminalAnchor(
