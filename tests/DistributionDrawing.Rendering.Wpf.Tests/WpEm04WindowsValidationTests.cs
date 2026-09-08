@@ -25,7 +25,14 @@ public sealed class WpEm04WindowsValidationTests
         var (document, runtime, start, end, gap) = BuildLineScene(new DocumentPoint(0, 0), new DocumentPoint(120, 0), true);
         DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
         OrthogonalRoute route = Assert.Single(scene.Routes, item => item.ConnectionId == gap.ConnectionId);
-        Assert.Contains(PoleProfessionalGeometry.GetPoleCenter(runtime.DrawingLayout.Poles[start.Pole.Id]), route.Points);
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts,
+            document.Connections,
+            document.CableSegments);
+        Assert.True(anchors.TryGet(document.Connections.Single().StartTerminalId, out TerminalAnchor startAnchor));
+        Assert.Contains(startAnchor.Position, route.Points);
         Assert.All(route.Segments, segment => Assert.True(segment.IsHorizontal || segment.IsVertical));
         AssertNoDuplicatePoints(route);
         AssertClearance(scene, gap, ActualRenderedEnvelope(scene, start.Pole.Id, runtime.DrawingLayout), false);
@@ -168,6 +175,89 @@ public sealed class WpEm04WindowsValidationTests
     {
         Assert.Throws<ArgumentException>(() => new PoleSwitchAttachmentCreationFactory().Create(
             Guid.NewGuid(), SwitchKind.GroundSwitch, new DocumentPoint(0, 0)));
+    }
+
+    [Fact]
+    public void CableTerminationOverheadEndpoint_DoesNotUseMountedSwitchSubstitution()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "Cable termination owner guard");
+        var runtime = new RuntimeLayoutDocument(
+            new DrawingLayout(),
+            new Dictionary<Guid, RingCabinetLayout>());
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand start = factory.CreateAddPole(
+            document,
+            runtime,
+            new DocumentPoint(0, 0));
+        AddPoleCommand end = factory.CreateAddPole(
+            document,
+            runtime,
+            new DocumentPoint(200, 0));
+        start.Execute();
+        end.Execute();
+        AddCableTerminationAttachmentCommand cableTerminationCommand =
+            factory.CreateAddCableTerminationAttachment(
+                document,
+                runtime,
+                start.Pole.Id,
+                "终端",
+                new DocumentPoint(14, 2));
+        cableTerminationCommand.Execute();
+        CableTermination termination = Assert.Single(document.Devices.OfType<CableTermination>());
+        var connection = new Connection(
+            Guid.NewGuid(),
+            ConnectionType.OverheadLine,
+            termination.OverheadSideTerminalId,
+            end.Terminal.Id,
+            "架空线",
+            "10kV");
+        document.AddConnection(connection);
+        document.AddOverheadLine(new OverheadLine(
+            connection.Id,
+            "JKLYJ",
+            [start.Pole.Id, end.Pole.Id]));
+        runtime.DrawingLayout.Add(new OverheadLineLayout(
+            connection.Id,
+            runtime.DrawingLayout.Poles[start.Pole.Id].Position,
+            runtime.DrawingLayout.Poles[end.Pole.Id].Position));
+
+        DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
+
+        Assert.Empty(scene.Diagnostics);
+        OrthogonalRoute route = Assert.Single(scene.Routes, item => item.ConnectionId == connection.Id);
+        Assert.Contains(
+            PoleProfessionalGeometry.GetPoleCenter(runtime.DrawingLayout.Poles[start.Pole.Id]),
+            route.Points);
+        Assert.Contains(
+            PoleProfessionalGeometry.GetPoleCenter(runtime.DrawingLayout.Poles[end.Pole.Id]),
+            route.Points);
+        Assert.All(route.Segments, segment => Assert.True(segment.IsHorizontal || segment.IsVertical));
+    }
+
+    [Fact]
+    public void CableTerminationCableSideTerminal_RemainsCableOnlyAndCannotBeMountedEndpoint()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "Cable termination cable-side owner guard");
+        var runtime = new RuntimeLayoutDocument(
+            new DrawingLayout(),
+            new Dictionary<Guid, RingCabinetLayout>());
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand pole = factory.CreateAddPole(document, runtime, new DocumentPoint(0, 0));
+        pole.Execute();
+        AddCableTerminationAttachmentCommand command = factory.CreateAddCableTerminationAttachment(
+            document,
+            runtime,
+            pole.Pole.Id,
+            "终端",
+            new DocumentPoint(14, 2));
+        command.Execute();
+        CableTermination termination = Assert.Single(document.Devices.OfType<CableTermination>());
+        Terminal cableSide = Assert.Single(
+            document.Terminals,
+            terminal => terminal.Id == termination.CableSideTerminalId);
+
+        Assert.DoesNotContain(ConnectionType.OverheadLine, cableSide.AllowedConnectionTypes);
+        Assert.Contains(ConnectionType.Cable, cableSide.AllowedConnectionTypes);
     }
 
     [Fact]
@@ -465,7 +555,9 @@ public sealed class WpEm04WindowsValidationTests
         double direction = Math.Sign(end.XMillimeters - start.XMillimeters);
         Assert.NotEqual(0, direction);
         Assert.All(route.Segments, segment =>
-            Assert.Equal(direction, Math.Sign(segment.End.XMillimeters - segment.Start.XMillimeters)));
+            Assert.True(
+                direction == Math.Sign(segment.End.XMillimeters - segment.Start.XMillimeters),
+                $"Unexpected backtracking in route: {string.Join(" -> ", route.Points)}"));
         Assert.Equal(
             Math.Abs(end.XMillimeters - start.XMillimeters),
             route.Segments.Sum(segment => segment.Length),
@@ -490,8 +582,10 @@ public sealed class WpEm04WindowsValidationTests
             coordinates.MillimetersToDip(text.FontSizeMillimeters),
             Brushes.Black,
             1);
+        Geometry visibleGeometry = formatted.BuildGeometry(new Point());
+        Rect visibleBounds = visibleGeometry.Bounds;
         Point topLeft = coordinates.ToPoint(text.Origin);
-        topLeft.X -= formatted.WidthIncludingTrailingWhitespace / 2;
+        topLeft.X -= visibleBounds.Left + visibleBounds.Width / 2;
         Rect expectedBounds = formatted.BuildGeometry(topLeft).Bounds;
         DrawingGroup rendered = new DrawingSceneRenderer().RenderDrawing(
             new DrawingScene([text]),

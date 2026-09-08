@@ -193,28 +193,38 @@ public sealed class OrthogonalRoutePlanner
                 Math.Abs(endpoint.Position.YMillimeters - pole.YMillimeters) <= tolerance)
             {
                 bool towardRight = adjacent.XMillimeters > pole.XMillimeters;
-                return endpoint.Direction == (towardRight
-                           ? TerminalAnchorDirection.Right
-                           : TerminalAnchorDirection.Left) &&
-                       (towardRight
-                           ? endpoint.Position.XMillimeters > pole.XMillimeters &&
-                             endpoint.Position.XMillimeters < adjacent.XMillimeters
-                           : endpoint.Position.XMillimeters < pole.XMillimeters &&
-                             endpoint.Position.XMillimeters > adjacent.XMillimeters);
+                bool pointsTowardAdjacent = endpoint.Direction == (towardRight
+                    ? TerminalAnchorDirection.Right
+                    : TerminalAnchorDirection.Left);
+                bool liesBetweenPoleAndAdjacent = towardRight
+                    ? endpoint.Position.XMillimeters > pole.XMillimeters &&
+                      endpoint.Position.XMillimeters < adjacent.XMillimeters
+                    : endpoint.Position.XMillimeters < pole.XMillimeters &&
+                      endpoint.Position.XMillimeters > adjacent.XMillimeters;
+                bool liesOnOppositeSideOfPole = towardRight
+                    ? endpoint.Position.XMillimeters < pole.XMillimeters
+                    : endpoint.Position.XMillimeters > pole.XMillimeters;
+                return pointsTowardAdjacent &&
+                       (liesBetweenPoleAndAdjacent || liesOnOppositeSideOfPole);
             }
 
             if (Math.Abs(adjacent.XMillimeters - pole.XMillimeters) <= tolerance &&
                 Math.Abs(endpoint.Position.XMillimeters - pole.XMillimeters) <= tolerance)
             {
                 bool towardDown = adjacent.YMillimeters > pole.YMillimeters;
-                return endpoint.Direction == (towardDown
-                           ? TerminalAnchorDirection.Down
-                           : TerminalAnchorDirection.Up) &&
-                       (towardDown
-                           ? endpoint.Position.YMillimeters > pole.YMillimeters &&
-                             endpoint.Position.YMillimeters < adjacent.YMillimeters
-                           : endpoint.Position.YMillimeters < pole.YMillimeters &&
-                             endpoint.Position.YMillimeters > adjacent.YMillimeters);
+                bool pointsTowardAdjacent = endpoint.Direction == (towardDown
+                    ? TerminalAnchorDirection.Down
+                    : TerminalAnchorDirection.Up);
+                bool liesBetweenPoleAndAdjacent = towardDown
+                    ? endpoint.Position.YMillimeters > pole.YMillimeters &&
+                      endpoint.Position.YMillimeters < adjacent.YMillimeters
+                    : endpoint.Position.YMillimeters < pole.YMillimeters &&
+                      endpoint.Position.YMillimeters > adjacent.YMillimeters;
+                bool liesOnOppositeSideOfPole = towardDown
+                    ? endpoint.Position.YMillimeters < pole.YMillimeters
+                    : endpoint.Position.YMillimeters > pole.YMillimeters;
+                return pointsTowardAdjacent &&
+                       (liesBetweenPoleAndAdjacent || liesOnOppositeSideOfPole);
             }
 
             return false;

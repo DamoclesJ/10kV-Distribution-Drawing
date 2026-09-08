@@ -399,9 +399,6 @@ public sealed class DrawingSceneBuilder
                                 device switch
                                 {
                                     SwitchDevice poleSwitch => poleSwitch.OwnsTerminal(terminalId),
-                                    CableTermination termination =>
-                                        termination.CableSideTerminalId == terminalId ||
-                                        termination.OverheadSideTerminalId == terminalId,
                                     _ => false
                                 });
                             return new RequiredRouteWaypoint(

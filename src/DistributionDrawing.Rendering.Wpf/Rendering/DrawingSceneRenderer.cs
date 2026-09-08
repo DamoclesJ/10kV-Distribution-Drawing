@@ -183,7 +183,8 @@ public sealed class DrawingSceneRenderer
         Point origin = _coordinates.ToPoint(text.Origin);
         if (text.HorizontalAlignment == SceneTextHorizontalAlignment.Center)
         {
-            origin.X -= formattedText.WidthIncludingTrailingWhitespace / 2;
+            Rect visibleBounds = formattedText.BuildGeometry(new Point()).Bounds;
+            origin.X -= visibleBounds.Left + visibleBounds.Width / 2;
         }
         context.DrawText(formattedText, origin);
     }
