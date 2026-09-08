@@ -1029,32 +1029,38 @@ public sealed class DrawingDocument
         }
     }
 
-    private void ReplaceOverheadConnection(
+    public void ReplaceOverheadConnection(
         Connection before,
         Connection after,
         OverheadLine line)
     {
-        if (before.Id != after.Id || line.ConnectionId != before.Id)
+        if (before.Id != after.Id || line.ConnectionId != before.Id ||
+            before.Type != after.Type ||
+            !string.Equals(before.DisplayName, after.DisplayName, StringComparison.Ordinal) ||
+            !string.Equals(before.VoltageLevel, after.VoltageLevel, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("架空线旁路连接标识不一致。");
         }
 
-        RemoveOverheadLine(before.Id);
-        RemoveConnection(before.Id);
+        Connection? current = _connections.SingleOrDefault(item => item.Id == before.Id);
+        if (current is null || !ConnectionFactsEqual(current, before) || !_overheadLines.Contains(line))
+        {
+            throw new InvalidOperationException("架空线端点状态与预期不一致。");
+        }
+
+        // Endpoint substitution is not deletion: retain the line and all GAP facts.
+        _connections.Remove(current);
         try
         {
             AddConnection(after);
-            AddOverheadLine(line);
+            line.ValidateAgainst(after);
+            ValidateOverheadEndpoint(after.StartTerminalId, line.SupportPoleIds[0]);
+            ValidateOverheadEndpoint(after.EndTerminalId, line.SupportPoleIds[^1]);
         }
         catch
         {
-            if (_connections.Any(item => item.Id == after.Id))
-            {
-                RemoveConnection(after.Id);
-            }
-
-            AddConnection(before);
-            AddOverheadLine(line);
+            _connections.Remove(after);
+            _connections.Add(current);
             throw;
         }
     }

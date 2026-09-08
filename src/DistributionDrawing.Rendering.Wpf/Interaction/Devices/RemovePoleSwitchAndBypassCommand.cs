@@ -90,23 +90,6 @@ public sealed class RemovePoleSwitchAndBypassCommand : ICommand
 
     private void Replace(Connection before, Connection after, OverheadLine line)
     {
-        _document.RemoveOverheadLine(before.Id);
-        _document.RemoveConnection(before.Id);
-        try
-        {
-            _document.AddConnection(after);
-            _document.AddOverheadLine(line);
-        }
-        catch
-        {
-            if (_document.Connections.Any(item => item.Id == after.Id))
-            {
-                _document.RemoveConnection(after.Id);
-            }
-
-            _document.AddConnection(before);
-            _document.AddOverheadLine(line);
-            throw;
-        }
+        _document.ReplaceOverheadConnection(before, after, line);
     }
 }

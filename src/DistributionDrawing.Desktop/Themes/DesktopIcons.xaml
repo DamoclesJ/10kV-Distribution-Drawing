@@ -17,6 +17,7 @@
   <StreamGeometry x:Key="Icon.Cable">M4,7 L8,7 L8,12 L16,12 L16,17 L20,17 M4,5 L4,9 M20,15 L20,19</StreamGeometry>
   <StreamGeometry x:Key="Icon.CableTermination">M12,4 L12,9 M7,9 L17,9 L12,18 Z M8,21 L16,21</StreamGeometry>
   <StreamGeometry x:Key="Icon.PoleSwitch">M7,4 A3,3 0 1 1 6.99,4 M10,7 L14,7 M14,7 L19,3 M14,7 L19,11 M19,2 L19,4 M19,10 L19,12</StreamGeometry>
+  <StreamGeometry x:Key="Icon.GroundingAccessPoint">M12,3 L12,15 M9,15 L15,15 L15,21 L9,21 Z</StreamGeometry>
   <StreamGeometry x:Key="Icon.WorkGrounding">M12,3 L12,14 M6,14 L18,14 M8,17 L16,17 M10,20 L14,20</StreamGeometry>
   <StreamGeometry x:Key="Icon.WorkScope">M4,7 L4,4 L8,4 M16,4 L20,4 L20,8 M20,16 L20,20 L16,20 M8,20 L4,20 L4,16 M8,8 L16,16 M16,8 L8,16</StreamGeometry>
 </ResourceDictionary>

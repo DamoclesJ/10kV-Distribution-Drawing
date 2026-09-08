@@ -110,27 +110,7 @@ public sealed class AddPoleSwitchAttachmentCommand : ICommand
             throw new InvalidOperationException("架空线端点状态与预期不一致。");
         }
 
-        _document.RemoveOverheadLine(before.Id);
-        _document.RemoveConnection(before.Id);
-        try
-        {
-            _document.AddConnection(after);
-            try
-            {
-                _document.AddOverheadLine(overheadLine);
-            }
-            catch
-            {
-                _document.RemoveConnection(after.Id);
-                throw;
-            }
-        }
-        catch
-        {
-            _document.AddConnection(before);
-            _document.AddOverheadLine(overheadLine);
-            throw;
-        }
+        _document.ReplaceOverheadConnection(current, after, overheadLine);
     }
 }
 

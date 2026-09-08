@@ -148,7 +148,7 @@ public static class GroundingAccessPointCreationService
                 adjacentPoleId,
                 out GroundingAccessHalfEdge halfEdge))
         {
-            throw new InvalidOperationException("无法从正式线路解析验电接地点方向。");
+            throw new InvalidOperationException("无法从正式线路解析验电接地环方向。");
         }
 
         double dx = halfEdge.DirectionPoint.XMillimeters - halfEdge.PoleCenter.XMillimeters;

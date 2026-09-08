@@ -15,6 +15,12 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
     public void V7RoundTrip_PreservesGapAdjacencyAndBothTypedGroundingTargets()
     {
         Fixture fixture = CreateFixture();
+        Connection before = Assert.Single(fixture.Document.Connections);
+        Terminal replacement = fixture.Start.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        fixture.Document.AddTerminal(replacement);
+        fixture.Document.ReplaceOverheadConnection(before,
+            new Connection(before.Id, before.Type, replacement.Id, before.EndTerminalId, before.DisplayName, before.VoltageLevel),
+            Assert.Single(fixture.Document.OverheadLines));
         string path = NextPath();
         var container = new ProjectFileContainer();
         var file = new ProjectFileDocument(
@@ -34,6 +40,7 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         Assert.Equal(fixture.End.Id, dto.AdjacentPoleId);
 
         DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Domain!);
+        Assert.Equal(replacement.Id, Assert.Single(restored.Connections).StartTerminalId);
         ProjectProfessionalMapper.ToSnapshot(restored, opened.Professional);
         GroundingAccessPoint gap = Assert.Single(restored.GroundingAccessPoints);
         Assert.Equal(fixture.Gap.AdjacentPoleId, gap.AdjacentPoleId);

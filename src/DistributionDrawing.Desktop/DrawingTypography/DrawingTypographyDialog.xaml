@@ -19,6 +19,7 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
@@ -35,11 +36,13 @@
     <TextBlock Grid.Row="5" Margin="0,6,12,12" Text="PT 标识（mm）" />
     <TextBox x:Name="PTLabelFontSizeInput" Grid.Row="5" Grid.Column="1" Margin="0,0,0,12" Style="{StaticResource DialogFieldStyle}" />
     <TextBlock x:Name="ValidationMessage"
-               Grid.Row="6"
+               Grid.Row="7"
                Grid.ColumnSpan="2"
                Foreground="{StaticResource DangerBrush}"
                TextWrapping="Wrap" />
-    <StackPanel Grid.Row="7" Grid.ColumnSpan="2" HorizontalAlignment="Right" Orientation="Horizontal">
+    <TextBlock Grid.Row="6" Margin="0,6,12,12" Text="工作地线编号字号（mm）" />
+    <TextBox x:Name="GroundingPointNumberFontSizeInput" Grid.Row="6" Grid.Column="1" Margin="0,0,0,12" Style="{StaticResource DialogFieldStyle}" />
+    <StackPanel Grid.Row="8" Grid.ColumnSpan="2" HorizontalAlignment="Right" Orientation="Horizontal">
       <Button Style="{StaticResource DialogButtonStyle}" Content="应用" IsDefault="True" Click="OnApply" />
       <Button Style="{StaticResource DialogButtonStyle}" Margin="8,0,0,0" Content="取消" IsCancel="True" />
     </StackPanel>

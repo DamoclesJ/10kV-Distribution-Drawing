@@ -161,10 +161,15 @@ public sealed class OrthogonalRoute
         DocumentPoint second,
         DocumentPoint third)
     {
-        return first.XMillimeters == second.XMillimeters &&
+        bool collinear = first.XMillimeters == second.XMillimeters &&
                second.XMillimeters == third.XMillimeters ||
                first.YMillimeters == second.YMillimeters &&
                second.YMillimeters == third.YMillimeters;
+        return collinear &&
+               second.XMillimeters >= Math.Min(first.XMillimeters, third.XMillimeters) &&
+               second.XMillimeters <= Math.Max(first.XMillimeters, third.XMillimeters) &&
+               second.YMillimeters >= Math.Min(first.YMillimeters, third.YMillimeters) &&
+               second.YMillimeters <= Math.Max(first.YMillimeters, third.YMillimeters);
     }
 
     private static DocumentRect CreateBounds(IReadOnlyList<DocumentPoint> points)

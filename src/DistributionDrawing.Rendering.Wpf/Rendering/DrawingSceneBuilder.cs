@@ -365,10 +365,30 @@ public sealed class DrawingSceneBuilder
                         connection,
                         terminalAnchorById,
                         requiredWaypoints: overheadLine.SupportPoleIds.Select(poleId =>
-                            new RequiredRouteWaypoint(
+                        {
+                            DocumentPoint center = PoleProfessionalGeometry.GetPoleCenter(layout.Poles[poleId]);
+                            DocumentRect envelope = PoleProfessionalGeometry.GetOccupiedEnvelope(
+                                poleId, poleAttachments, deviceById.Values, layout, _metrics);
+                            int supportIndex = overheadLine.SupportPoleIds.ToList().IndexOf(poleId);
+                            double Stub(DocumentPoint adjacent) =>
+                                DirectionalExtent(center, adjacent, envelope) +
+                                _metrics.Line.GroundingAccessClearance +
+                                _metrics.Line.GroundingAccessMarkerDiameter +
+                                _metrics.Line.ConnectionThickness;
+                            double predecessor = supportIndex > 0
+                                ? Stub(PoleProfessionalGeometry.GetPoleCenter(
+                                    layout.Poles[overheadLine.SupportPoleIds[supportIndex - 1]])) : 0;
+                            double successor = supportIndex + 1 < overheadLine.SupportPoleIds.Count
+                                ? Stub(PoleProfessionalGeometry.GetPoleCenter(
+                                    layout.Poles[overheadLine.SupportPoleIds[supportIndex + 1]])) : 0;
+                            return new RequiredRouteWaypoint(
                                 poleId,
-                                PoleProfessionalGeometry.GetPoleCenter(layout.Poles[poleId])))
-                            .ToArray()));
+                                center,
+                                CompositeSourceIds: poleAttachments.Where(item => item.PoleId == poleId)
+                                    .Select(item => item.AttachmentId).ToArray(),
+                                PredecessorMinimumStubLength: predecessor,
+                                SuccessorMinimumStubLength: successor);
+                        }).ToArray()));
                 }
             }
 
@@ -626,6 +646,30 @@ public sealed class DrawingSceneBuilder
             elements,
             new SelectionHitTestIndex(hitTestEntries),
             routes: routes);
+    }
+
+    private static double DirectionalExtent(
+        DocumentPoint center,
+        DocumentPoint adjacent,
+        DocumentRect envelope)
+    {
+        if (adjacent.XMillimeters < center.XMillimeters)
+        {
+            return center.XMillimeters - envelope.XMillimeters;
+        }
+        if (adjacent.XMillimeters > center.XMillimeters)
+        {
+            return envelope.XMillimeters + envelope.WidthMillimeters - center.XMillimeters;
+        }
+        if (adjacent.YMillimeters < center.YMillimeters)
+        {
+            return center.YMillimeters - envelope.YMillimeters;
+        }
+        if (adjacent.YMillimeters > center.YMillimeters)
+        {
+            return envelope.YMillimeters + envelope.HeightMillimeters - center.YMillimeters;
+        }
+        return 0;
     }
 
     private static DocumentRect CreateBounds(

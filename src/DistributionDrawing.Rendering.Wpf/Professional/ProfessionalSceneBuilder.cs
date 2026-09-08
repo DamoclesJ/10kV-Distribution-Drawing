@@ -21,14 +21,12 @@ public sealed record ProfessionalSceneResult(
 /// </summary>
 public sealed class ProfessionalSceneBuilder
 {
-    private readonly SymbolLibrary _symbolLibrary;
     private readonly GroundingPresentationAnchorResolver _groundingAnchorResolver;
     private readonly GroundingAccessPointAnchorResolver _accessPointAnchorResolver;
 
     public ProfessionalSceneBuilder(SymbolLibrary symbolLibrary)
     {
         ArgumentNullException.ThrowIfNull(symbolLibrary);
-        _symbolLibrary = symbolLibrary;
         _groundingAnchorResolver = new GroundingPresentationAnchorResolver();
         _accessPointAnchorResolver = new GroundingAccessPointAnchorResolver();
     }
@@ -65,7 +63,7 @@ public sealed class ProfessionalSceneBuilder
             {
                 diagnostics.Add(new SceneBuildDiagnostic(
                     "GroundingAccessPointAnchorMissing",
-                    $"验电接地点 '{point.GroundingAccessPointId}' 无法解析导线半边。",
+                    $"验电接地环 '{point.GroundingAccessPointId}' 无法解析导线半边。",
                     SelectionTargetKind.GroundingAccessPoint,
                     point.GroundingAccessPointId));
                 continue;
@@ -77,7 +75,7 @@ public sealed class ProfessionalSceneBuilder
                 bounds,
                 Colors.Black,
                 DrawingMetrics.Default.Line.ConnectionThickness,
-                Colors.Black));
+                Colors.Black) { TargetId = point.GroundingAccessPointId });
             hitTestEntries.Add(new SelectionHitTestEntry(
                 new SelectionReference(
                     SelectionTargetKind.GroundingAccessPoint,
@@ -104,14 +102,19 @@ public sealed class ProfessionalSceneBuilder
                 continue;
             }
 
-            elements.AddRange(CreateGroundingPointElements(groundingPoint, anchor));
-            hitTestEntries.Add(
-                new SelectionHitTestEntry(
-                    new SelectionReference(
-                        SelectionTargetKind.GroundingPoint,
-                        groundingPoint.GroundingPointId),
-                    MarkerBounds(anchor.Position, 7),
-                    60));
+            IReadOnlyList<SceneElement> groundingElements = CreateGroundingPointElements(groundingPoint, anchor);
+            elements.AddRange(groundingElements);
+            foreach (SceneLine line in groundingElements.OfType<SceneLine>())
+            {
+                // The leader's target end remains available for direct GAP selection.
+                if (line.Start == anchor.Position) continue;
+                DocumentRect bounds = SceneGeometryBounds.Expand(
+                    SceneGeometryBounds.FromPoints([line.Start, line.End]),
+                    DrawingMetrics.Default.Grounding.HitPadding);
+                hitTestEntries.Add(new SelectionHitTestEntry(
+                    new SelectionReference(SelectionTargetKind.GroundingPoint, groundingPoint.GroundingPointId),
+                    bounds, 80));
+            }
         }
 
         foreach (WorkScope workScope in document.WorkScopes)
@@ -161,21 +164,37 @@ public sealed class ProfessionalSceneBuilder
         GroundingPoint groundingPoint,
         GroundingPresentationAnchor anchor)
     {
-        DocumentPoint end = Move(
+        DrawingMetrics metrics = DrawingMetrics.Default;
+        GroundingDrawingMetrics grounding = metrics.Grounding;
+        DocumentPoint stemTop = Move(
             anchor.Position,
-            anchor.Direction,
-            DrawingMetrics.Default.Routing.PortStubLength);
-        string? label = groundingPoint.Number ?? groundingPoint.Location;
+            anchor.Direction == TerminalAnchorDirection.Left
+                ? TerminalAnchorDirection.Left : TerminalAnchorDirection.Right,
+            grounding.LeaderLength);
+        DocumentPoint stemBottom = new(stemTop.XMillimeters,
+            stemTop.YMillimeters + grounding.StemLength);
         var elements = new List<SceneElement>
         {
-            new SceneRectangle(
-                MarkerBounds(anchor.Position, 5),
-                Colors.DarkGreen,
-                0.9)
+            new SceneLine(anchor.Position, stemTop, Colors.DarkGreen, metrics.General.StandardStrokeThickness),
+            new SceneLine(stemTop, stemBottom, Colors.DarkGreen, metrics.General.StandardStrokeThickness)
         };
-        elements.AddRange(
-            _symbolLibrary.CreateGroundingLine(anchor.Position, end, label));
-        return elements;
+        double[] widths = [grounding.TopBarWidth, grounding.MiddleBarWidth, grounding.BottomBarWidth];
+        for (int index = 0; index < widths.Length; index++)
+        {
+            double y = stemBottom.YMillimeters + index * grounding.BarSpacing;
+            elements.Add(new SceneLine(
+                new DocumentPoint(stemBottom.XMillimeters - widths[index] / 2, y),
+                new DocumentPoint(stemBottom.XMillimeters + widths[index] / 2, y),
+                Colors.DarkGreen, metrics.General.StandardStrokeThickness));
+        }
+        if (!string.IsNullOrWhiteSpace(groundingPoint.Number))
+        {
+            elements.Add(new SceneText(new DocumentPoint(
+                stemTop.XMillimeters + grounding.NumberOffset.XMillimeters,
+                stemTop.YMillimeters + grounding.NumberOffset.YMillimeters),
+                groundingPoint.Number, Colors.DarkGreen, metrics.Typography.GroundingPointNumberFontSize));
+        }
+        return elements.Select(element => element with { TargetId = groundingPoint.GroundingPointId }).ToArray();
     }
 
     private static DocumentPoint Move(

@@ -176,7 +176,7 @@
           </ToggleButton>
           <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="验电接地环"
                         Click="OnAddGroundingAccessPoint">
-            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.WorkGrounding}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="验电接地环" /></StackPanel>
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.GroundingAccessPoint}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="验电接地环" /></StackPanel>
           </ToggleButton>
           <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="工作地线"
                         IsChecked="{Binding Toolbox.IsGroundingPointActive, Mode=OneWay}" Command="{Binding AddGroundingPointCommand}">
@@ -310,7 +310,7 @@
             <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           Click="OnAddGroundingAccessPoint">
               <StackPanel Orientation="Horizontal">
-                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.WorkGrounding}"
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.GroundingAccessPoint}"
                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                       StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
                 <TextBlock VerticalAlignment="Center" Text="验电接地环" />
@@ -689,7 +689,7 @@
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
             <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
-                       Text="验电接地点" />
+                       Text="验电接地环" />
             <TextBlock x:Name="GroundingAccessPointStatusText"
                        Margin="0,4,0,6"
                        TextWrapping="Wrap" />
@@ -698,7 +698,7 @@
                       Content="添加工作地线"
                       Margin="0,0,4,0"
                       Click="OnAddGroundingPointFromAccessPoint" />
-              <Button Content="删除验电接地点"
+              <Button Content="删除验电接地环"
                       Click="OnRemoveGroundingAccessPoint" />
             </WrapPanel>
           </StackPanel>

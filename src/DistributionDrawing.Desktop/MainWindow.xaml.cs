@@ -309,8 +309,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        IReadOnlyList<GroundingAccessCandidate> candidates =
-            GroundingAccessPointCreationService.GetCandidates(session, pole.Id);
+        IReadOnlyList<GroundingAccessCandidate> candidates;
+        try
+        {
+            candidates = GroundingAccessPointCreationService.GetCandidates(session, pole.Id);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            _messageService.ShowError("无法添加验电接地环", exception.Message);
+            return;
+        }
         if (candidates.Count == 0)
         {
             _messageService.ShowError(
@@ -1746,7 +1754,7 @@ public partial class MainWindow : Window
         _pendingGroundingTarget = null;
         _selectionManager.Clear();
         GroundingPointEditorPanel.Visibility = Visibility.Visible;
-        GroundingPointTerminalText.Text = "请在图面中选择验电接地点或合法电缆侧端子";
+        GroundingPointTerminalText.Text = "请在图面中选择验电接地环或合法电缆侧端子";
         GroundingPointLocationInput.Text = string.Empty;
         GroundingPointNumberInput.Text = string.Empty;
         GroundingPointNoteInput.Text = string.Empty;
@@ -2012,7 +2020,7 @@ public partial class MainWindow : Window
             {
                 ShowCommandError(
                     "接地目标选择失败",
-                    "点击位置没有可用的验电接地点或电缆侧端子。");
+                    "点击位置没有可用的验电接地环或电缆侧端子。");
                 e.Handled = true;
                 return;
             }
@@ -2026,7 +2034,7 @@ public partial class MainWindow : Window
                     groundingTarget.TargetId));
             GroundingPointTerminalText.Text = groundingTarget.Kind ==
                                               GroundingTargetKind.GroundingAccessPoint
-                ? $"已选择验电接地点：{groundingTarget.TargetId}"
+                ? $"已选择验电接地环：{groundingTarget.TargetId}"
                 : $"已选择电缆侧端子：{groundingTarget.TargetId}";
             e.Handled = true;
             return;
@@ -2710,7 +2718,7 @@ public partial class MainWindow : Window
             _selectionManager.Selected is not
             { Kind: SelectionTargetKind.GroundingAccessPoint, ObjectId: var accessPointId })
         {
-            ShowCommandError("无法添加工作地线", "请先选择一个验电接地点。");
+            ShowCommandError("无法添加工作地线", "请先选择一个验电接地环。");
             return;
         }
 
@@ -2743,7 +2751,7 @@ public partial class MainWindow : Window
             _selectionManager.Selected is not
             { Kind: SelectionTargetKind.GroundingAccessPoint, ObjectId: var accessPointId })
         {
-            ShowCommandError("无法删除验电接地点", "请先选择一个验电接地点。");
+            ShowCommandError("无法删除验电接地环", "请先选择一个验电接地环。");
             return;
         }
 
@@ -2758,7 +2766,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            ShowCommandError("验电接地点删除失败", exception.Message);
+            ShowCommandError("验电接地环删除失败", exception.Message);
         }
     }
 
@@ -3019,7 +3027,7 @@ public partial class MainWindow : Window
             GroundingPointEditorPanel.Visibility = Visibility.Visible;
             GroundingPointTerminalText.Text = groundingPoint.Target.Kind ==
                                               GroundingTargetKind.GroundingAccessPoint
-                ? "已绑定到验电接地点"
+                ? "已绑定到验电接地环"
                 : "已绑定到兼容/电缆侧端子";
             GroundingPointLocationInput.Text = groundingPoint.Location;
             GroundingPointNumberInput.Text = groundingPoint.Number ?? string.Empty;

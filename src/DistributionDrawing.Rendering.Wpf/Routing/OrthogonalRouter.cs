@@ -13,6 +13,8 @@ public sealed class OrthogonalRouter
         _metrics = metrics ?? DrawingMetrics.Default;
     }
 
+    internal double PortStubLength => _metrics.Routing.PortStubLength;
+
     public OrthogonalRoute Route(
         ConnectionRouteRequest request,
         IEnumerable<RoutingObstacle> obstacles,
@@ -95,7 +97,10 @@ public sealed class OrthogonalRouter
                 request.Start.Position,
                 startStub,
                 endStub,
-                request.End.Position);
+                request.End.Position,
+                startDirection,
+                endOutwardDirection,
+                pathfindingObstacles);
         }
 
         Candidate[] scoredCandidates = candidates
@@ -118,7 +123,10 @@ public sealed class OrthogonalRouter
                 request.Start.Position,
                 startStub,
                 endStub,
-                request.End.Position);
+                request.End.Position,
+                startDirection,
+                endOutwardDirection,
+                pathfindingObstacles);
         }
 
         return scoredCandidates
@@ -134,12 +142,15 @@ public sealed class OrthogonalRouter
             .First();
     }
 
-    private static OrthogonalRoute CreateFallbackRoute(
+    private OrthogonalRoute CreateFallbackRoute(
         ConnectionRouteRequest request,
         DocumentPoint start,
         DocumentPoint startStub,
         DocumentPoint endStub,
-        DocumentPoint end)
+        DocumentPoint end,
+        TerminalAnchorDirection startDirection,
+        TerminalAnchorDirection endOutwardDirection,
+        IReadOnlyList<RoutingObstacle> obstacles)
     {
         var points = new List<DocumentPoint> { start, startStub };
         if (startStub.XMillimeters != endStub.XMillimeters &&
@@ -150,12 +161,22 @@ public sealed class OrthogonalRouter
 
         points.Add(endStub);
         points.Add(end);
-        return new OrthogonalRoute(
+        OrthogonalRoute route = new(
             request.ConnectionId,
             request.ConnectionType,
             request.StartTerminalId,
             request.EndTerminalId,
             points);
+        if (!HasTerminalStubs(route, start, startDirection, request.Start.MinimumStubLength,
+                end, endOutwardDirection, request.End.MinimumStubLength) ||
+            route.Segments.Any(segment => obstacles.Any(obstacle =>
+                IntersectsInterior(segment, obstacle.Bounds))))
+        {
+            throw new InvalidOperationException(
+                "无法在当前杆间距或障碍物条件下生成满足最小导线段的线路。 ");
+        }
+
+        return route;
     }
 
     private static bool StartsInDirection(

@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Implementation / Review in progress / Grounding Scope Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Implementation / Review / Validation in progress / Grounding Scope Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
 
@@ -95,7 +95,7 @@ OverheadLine
 
 ### 3.4 GroundingAccessPoint 与架空接地合同
 
-验电接地环 / 接地线夹正式建模为 `GroundingAccessPoint`。它是具有 Stable ID 的永久、轻量 Electrical / Professional entity，不是 Device、`SwitchDevice`、`Terminal` 或 Annotation。架空侧新建工作地线统一采用：
+验电接地环正式建模为 `GroundingAccessPoint`。它是具有 Stable ID 的永久、轻量 Electrical / Professional entity，不是 Device、`SwitchDevice`、`Terminal` 或 Annotation。架空侧新建工作地线统一采用：
 
 ```text
 Overhead conductor
@@ -369,6 +369,16 @@ Closure evidence:
 ### WP-EM-04 — GroundingAccessPoint & GroundingTarget Vertical Slice
 
 完成 GAP Domain behavior、`AdjacentPoleId` physical half-edge identity、stable identity、唯一性、create/delete、`GroundingTarget` behavior、GroundingPoint target binding 与 Number policy、Pole / OverheadLine deletion guards、support-pole-aware basic presentation、commands、selection、Inspector、basic GAP rendering、clipboard、Undo / Redo、Canvas / PNG basic consistency、V7 integration 和 legacy Terminal-target compatibility。不得分割 `OverheadLine`，不得将复杂 presentation layout 塞入本 WP。
+
+Windows validation findings fix pass（candidate `d3b34a733e21a706f7e27d899c8354d50fec0626` 后，待 Review）：
+
+- 本轮用户授权修复 Pole / mounted switch / GAP 共存、组合图元外缘至 GAP 可见边缘的固定 2 mm 间距、GroundingPoint 独立 Selection / Delete、正式接地图元、Toolbox icon、中文术语及工作地线编号字号。固定尺度使用现有 mm 逻辑坐标，不持久化 GAP 坐标或 offset。
+- 开关端点替换保留原 OverheadLine 与 GAP；真实删除的 occupied GAP guard 继续有效。路由仍由 RequiredRouteWaypoint → OrthogonalRoutePlanner → OrthogonalRouter 生成，保留支撑杆折返点，仅对本线路支撑杆的组合设备排除内部 obstacle。
+- GAP Canvas / PNG 仍为实心圆点；Toolbox icon 为竖线加小方框。工作地线为竖向 stem 与三条递减横线，并显示自身 Number。
+- 字号按用户确认沿用全部既有字号的会话级设置；应用后重建 scene，Canvas / PNG 共用；不新增字号持久化机制。
+- GroundingPointLayout 当前只有 V7 DTO scaffold。RuntimeLayoutDocument、Desktop mapper 和历史 drag 实现均未接通该对象；Desktop mapper 当前不保留非空 GroundingPointLayouts。拖动的完整交互与默认 leader 位置仍需产品确认，本轮不接通 drag。该限制不能被描述为 Save/Reopen layout 已通过。
+- macOS 可运行 Domain / Infrastructure 自动化测试，但缺少 Microsoft.WindowsDesktop.App，WPF / Desktop 场景只能编译。Windows 原始 crash stack trace 尚未取得；候选方向解析异常逃逸与路由丢失折返点的调用链是源码审计结论，仍需 Windows 复测确认。
+- 状态保持 Implementation / Review / Validation in progress；不代表 Windows validated 或 Closure。WP-EM-05 仍为 Not Started / Planned。
 
 ### WP-EM-05 — Grounding Layout & Interaction Closure
 

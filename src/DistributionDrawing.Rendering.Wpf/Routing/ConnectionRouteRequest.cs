@@ -16,4 +16,8 @@ public sealed record ConnectionRouteRequest(
 
 public readonly record struct RequiredRouteWaypoint(
     Guid SourceId,
-    DocumentPoint Position);
+    DocumentPoint Position,
+    double MinimumStubLength = 0,
+    IReadOnlyList<Guid>? CompositeSourceIds = null,
+    double PredecessorMinimumStubLength = 0,
+    double SuccessorMinimumStubLength = 0);

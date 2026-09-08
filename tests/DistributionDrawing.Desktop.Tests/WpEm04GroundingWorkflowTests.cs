@@ -3,6 +3,12 @@ using System.Runtime.ExceptionServices;
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.GroundingAccessPointCreation;
+using DistributionDrawing.Desktop.Clipboard;
+using DistributionDrawing.Desktop.DrawingTools;
+using DistributionDrawing.Desktop.DrawingTypography;
+using DistributionDrawing.Rendering.Wpf.Metrics;
+using DistributionDrawing.Rendering.Wpf.PropertyInspector;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Professional;
@@ -20,6 +26,7 @@ using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
 
+[Collection("WP-EM-04 typography")]
 public sealed class WpEm04GroundingWorkflowTests : IDisposable
 {
     private readonly List<string> _paths = [];
@@ -55,6 +62,26 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
                 out GroundingAccessHalfEdge halfEdge));
             Assert.Equal(DirectionText(halfEdge), candidate.VisualDirection);
         }
+    }
+
+    [Fact]
+    public void DuplicateGroundingPointNumber_UsesIndependentCommandHistory()
+    {
+        RunOnSta(() =>
+        {
+            Scenario scenario = CreateScenario();
+            GroundingAccessCandidate first = GroundingAccessPointCreationService.GetCandidates(scenario.Session, scenario.Middle.Pole.Id)[0];
+            GroundingAccessCandidate second = GroundingAccessPointCreationService.GetCandidates(scenario.Session, scenario.Middle.Pole.Id)[1];
+            scenario.Session.CommandStack.ExecuteCommand(GroundingAccessPointCreationService.CreateCommand(
+                scenario.Session, first, GroundingAccessLineSide.SmallerNumberSide, true), scenario.Session.RebuildScene);
+            scenario.Session.CommandStack.ExecuteCommand(GroundingAccessPointCreationService.CreateCommand(
+                scenario.Session, second, GroundingAccessLineSide.LargerNumberSide, true), scenario.Session.RebuildScene);
+            GroundingPoint target = Assert.Single(scenario.Session.PersistenceSession.Domain.GroundingPoints,
+                point => point.Number == "L02");
+            var editor = new PropertyEditor(scenario.Session.SelectionResolver, scenario.Session.CommandStack, scenario.Session.Layout);
+            SelectionReference reference = new(SelectionTargetKind.GroundingPoint, target.GroundingPointId);
+            Assert.False(editor.TryEdit(reference, PropertyCommandFactory.GroundingPointNumberPropertyKey, "L01").IsSuccess);
+        });
     }
 
     [Theory]
@@ -171,6 +198,36 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         Assert.All(poleSwitch.Creation.SwitchDevice.TerminalIds, terminalId => Assert.False(
             ProfessionalCommandFactory.IsEligibleNewTerminalTarget(
                 session.PersistenceSession.Domain, terminalId)));
+        foreach (Guid terminalId in new[] { ringCableTerminal, termination.Creation.CableSideTerminal.Id })
+        {
+            session.CommandStack.ExecuteCommand(new ProfessionalCommandFactory().CreateAddGroundingPoint(
+                session.PersistenceSession.Domain, GroundingTarget.ForTerminal(terminalId), "电缆侧"));
+        }
+        session.RebuildScene();
+        Assert.Empty(session.Scene.Diagnostics);
+        foreach (GroundingPoint point in session.PersistenceSession.Domain.GroundingPoints)
+        {
+            SceneLine[] lines = session.Scene.Elements.OfType<SceneLine>().Where(line => line.TargetId == point.GroundingPointId).ToArray();
+            Assert.Equal(5, lines.Length);
+            Assert.DoesNotContain(session.Scene.Elements, element => element.TargetId == point.GroundingPointId && element is SceneRectangle);
+        }
+    }
+
+    [Fact]
+    public void SwitchEndpointDirectionResolution_AllowsCreatingGapWithoutException()
+    {
+        Scenario scenario = CreateScenario();
+        ProjectRuntimeSession session = scenario.Session;
+        AddPoleSwitchAttachmentCommand command = new DeviceCommandFactory().CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain, session.Layout, scenario.Start.Pole.Id,
+            SwitchKind.IsolationSwitch, PoleProfessionalGeometry.GetDefaultAttachmentOffset(SwitchKind.IsolationSwitch));
+        session.CommandStack.ExecuteCommand(command, session.RebuildScene);
+        GroundingAccessCandidate candidate = Assert.Single(
+            GroundingAccessPointCreationService.GetCandidates(session, scenario.Start.Pole.Id));
+        session.CommandStack.ExecuteCommand(GroundingAccessPointCreationService.CreateCommand(
+            session, candidate, GroundingAccessLineSide.LargerNumberSide, false), session.RebuildScene);
+        Assert.Empty(session.Scene.Diagnostics);
+        Assert.Single(session.PersistenceSession.Domain.GroundingAccessPoints);
     }
 
     [Fact]
@@ -202,6 +259,139 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             Assert.True(marker.Bounds.WidthMillimeters > 0);
             Assert.True(result.WidthPixels > 0);
             Assert.True(stream.Length > 0);
+        });
+    }
+
+    [Fact]
+    public void SelectEditDeleteGroundingPoint_ReleasesGapForClipboardAndPreservesUndoIdentity()
+    {
+        Scenario scenario = CreateScenario();
+        ProjectRuntimeSession session = scenario.Session;
+        var document = session.PersistenceSession.Domain;
+        GroundingAccessCandidate candidate = GroundingAccessPointCreationService.GetCandidates(session, scenario.Middle.Pole.Id)[0];
+        session.CommandStack.ExecuteCommand(GroundingAccessPointCreationService.CreateCommand(session, candidate,
+            GroundingAccessLineSide.SmallerNumberSide, true), session.RebuildScene);
+        GroundingAccessPoint gap = Assert.Single(document.GroundingAccessPoints);
+        GroundingPoint gp = Assert.Single(document.GroundingPoints);
+        session.CommandStack.MarkSaved();
+        Assert.False(session.IsDirty);
+        SelectionReference[] structure =
+        [
+            new(SelectionTargetKind.Device, scenario.Start.Pole.Id),
+            new(SelectionTargetKind.Device, scenario.Middle.Pole.Id),
+            new(SelectionTargetKind.Device, scenario.End.Pole.Id),
+            new(SelectionTargetKind.Connection, candidate.ConnectionId)
+        ];
+        var clipboard = new DrawingClipboardService();
+        session.SelectionManager.Replace(structure);
+        Assert.False(clipboard.Copy(session).IsSuccess);
+        var gapReference = new SelectionReference(SelectionTargetKind.GroundingAccessPoint, gap.GroundingAccessPointId);
+        Assert.Equal("验电接地环", session.PropertyProjector.Project(session.SelectionResolver.Resolve(gapReference)).ObjectType);
+        Assert.Throws<InvalidOperationException>(() => session.CommandStack.ExecuteCommand(
+            new SelectionDeletePlanner().Create(session, SelectionSet.Create([gapReference])), session.RebuildScene));
+        Assert.False(session.IsDirty);
+        Assert.Same(gp, Assert.Single(document.GroundingPoints));
+        SceneLine stem = Assert.Single(session.Scene.Elements.OfType<SceneLine>(), line =>
+            line.TargetId == gp.GroundingPointId && line.Start.XMillimeters == line.End.XMillimeters);
+        SelectionReference gpReference = session.Scene.HitTestIndex.HitTest(stem.End)!;
+        Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingPoint, gp.GroundingPointId), gpReference);
+        session.SelectionManager.Select(gpReference);
+        Assert.Equal("工作地线", session.PropertyProjector.Project(session.SelectionResolver.Resolve(gpReference)).ObjectType);
+        var editor = new PropertyEditor(session.SelectionResolver, session.CommandStack, session.Layout);
+        Assert.True(editor.TryEdit(gpReference, PropertyCommandFactory.GroundingPointNumberPropertyKey, " L03 ").IsSuccess);
+        session.RebuildScene();
+        Assert.Equal("L03", gp.Number);
+        Assert.True(session.CommandStack.Undo());
+        Assert.Equal("L01", gp.Number);
+        Assert.True(session.CommandStack.Redo());
+        session.CommandStack.ExecuteCommand(new SelectionDeletePlanner().Create(session, SelectionSet.Create([gpReference])), session.RebuildScene);
+        Assert.Empty(document.GroundingPoints);
+        Assert.Same(gap, document.GetGroundingAccessPoint(gap.GroundingAccessPointId));
+        Assert.True(session.CommandStack.Undo());
+        Assert.Equal(gp.GroundingPointId, Assert.Single(document.GroundingPoints).GroundingPointId);
+        Assert.True(session.CommandStack.Redo());
+        Assert.True(session.IsDirty);
+        session.RebuildScene();
+        Assert.DoesNotContain(session.SelectionManager.SelectionSet.SelectedReferences,
+            item => item.Kind == SelectionTargetKind.GroundingPoint && item.ObjectId == gp.GroundingPointId);
+        session.SelectionManager.Replace(structure);
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+        GroundingAccessPoint pasted = Assert.Single(document.GroundingAccessPoints, point =>
+            point.ConnectionId != gap.ConnectionId && point.LineSide == gap.LineSide);
+        Assert.NotEqual(gap.GroundingAccessPointId, pasted.GroundingAccessPointId);
+        Assert.NotEqual(gap.PoleId, pasted.PoleId);
+        Assert.NotEqual(gap.AdjacentPoleId, pasted.AdjacentPoleId);
+        Assert.Empty(session.Scene.Diagnostics);
+    }
+
+    [Fact]
+    public void FontDialogAndSceneRebuild_UseSessionTypographyForCanvasAndPng()
+    {
+        RunOnSta(() =>
+        {
+            Scenario scenario = CreateScenario();
+            GroundingAccessCandidate candidate = GroundingAccessPointCreationService.GetCandidates(scenario.Session, scenario.Start.Pole.Id)[0];
+            scenario.Session.CommandStack.ExecuteCommand(GroundingAccessPointCreationService.CreateCommand(scenario.Session,
+                candidate, GroundingAccessLineSide.LargerNumberSide, true), scenario.Session.RebuildScene);
+            GroundingPoint gp = Assert.Single(scenario.Session.PersistenceSession.Domain.GroundingPoints);
+            DrawingTypographyMetrics typography = DrawingMetrics.Default.Typography;
+            double before = typography.GroundingPointNumberFontSize;
+            var dialog = new DrawingTypographyDialog();
+            Assert.NotNull(dialog.FindName("GroundingPointNumberFontSizeInput"));
+            dialog.Close();
+            try
+            {
+                typography.Update(typography.CabinetNameFontSize, typography.LineNameFontSize,
+                    typography.IntervalNumberFontSize, typography.SwitchNumberFontSize,
+                    typography.PoleNumberFontSize, typography.PTLabelFontSize, before + 2);
+                scenario.Session.RebuildScene();
+                SceneText label = Assert.Single(scenario.Session.Scene.Elements.OfType<SceneText>(), text => text.TargetId == gp.GroundingPointId);
+                Assert.Equal(before + 2, label.FontSizeMillimeters);
+                using var stream = new MemoryStream();
+                new DrawingSceneBitmapRenderer().RenderPng(scenario.Session.Scene, stream, new DrawingSceneBitmapOptions(Dpi: 96));
+                Assert.True(stream.Length > 0);
+                Assert.Equal(before + 2, label.FontSizeMillimeters);
+            }
+            finally
+            {
+                typography.Update(typography.CabinetNameFontSize, typography.LineNameFontSize,
+                    typography.IntervalNumberFontSize, typography.SwitchNumberFontSize,
+                    typography.PoleNumberFontSize, typography.PTLabelFontSize, before);
+            }
+        });
+    }
+
+    [Fact]
+    public void ToolboxGroundingAccessIcon_HasVerticalLeadAndSquare_DistinctFromGroundingSymbol()
+    {
+        RunOnSta(() =>
+        {
+            var resources = new System.Windows.ResourceDictionary
+            {
+                Source = new Uri("/DistributionDrawing.Desktop;component/Themes/DesktopIcons.xaml", UriKind.Relative)
+            };
+            var gap = (System.Windows.Media.Geometry)resources["Icon.GroundingAccessPoint"];
+            var grounding = (System.Windows.Media.Geometry)resources["Icon.WorkGrounding"];
+            System.Windows.Media.PathGeometry geometry = gap.GetFlattenedPathGeometry();
+            Assert.Equal(2, geometry.Figures.Count);
+            Assert.Equal(new System.Windows.Point(12, 3), geometry.Figures[0].StartPoint);
+            Assert.Equal(new System.Windows.Point(12, 15), geometry.Figures[0].Segments.OfType<System.Windows.Media.LineSegment>().Single().Point);
+            Assert.True(geometry.Figures[1].IsClosed);
+            var squarePoints = geometry.Figures[1].Segments
+                .SelectMany(segment => segment switch
+                {
+                    System.Windows.Media.LineSegment line => new[] { line.Point },
+                    System.Windows.Media.PolyLineSegment poly => poly.Points.ToArray(),
+                    _ => Array.Empty<System.Windows.Point>()
+                })
+                .Append(geometry.Figures[1].StartPoint)
+                .ToArray();
+            Assert.Equal(9, squarePoints.Min(point => point.X));
+            Assert.Equal(15, squarePoints.Min(point => point.Y));
+            Assert.Equal(15, squarePoints.Max(point => point.X));
+            Assert.Equal(21, squarePoints.Max(point => point.Y));
+            Assert.NotEqual(gap.ToString(), grounding.ToString());
         });
     }
 
@@ -303,3 +493,6 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         AddPoleCommand Middle,
         AddPoleCommand End);
 }
+
+[CollectionDefinition("WP-EM-04 typography", DisableParallelization = true)]
+public sealed class WpEm04TypographyCollection;

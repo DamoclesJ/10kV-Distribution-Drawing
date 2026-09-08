@@ -144,19 +144,20 @@ public sealed class GroundingPresentationAnchorResolverTests
             new RuntimeLayoutDocument(
                 scenario.Layout,
                 new Dictionary<Guid, RingCabinetLayout>()));
-        SelectionHitTestEntry leftHit = Assert.Single(scene.HitTestIndex.Entries,
-            entry => entry.Target.Kind == SelectionTargetKind.GroundingPoint &&
-                     entry.Target.ObjectId == leftPoint.GroundingPointId);
-        SelectionHitTestEntry rightHit = Assert.Single(scene.HitTestIndex.Entries,
-            entry => entry.Target.Kind == SelectionTargetKind.GroundingPoint &&
-                     entry.Target.ObjectId == rightPoint.GroundingPointId);
-        DocumentPoint leftAnchor = Center(leftHit.Bounds);
-        DocumentPoint rightAnchor = Center(rightHit.Bounds);
+        DocumentPoint leftAnchor = Resolve(scenario, leftPoint).Position;
+        DocumentPoint rightAnchor = Resolve(scenario, rightPoint).Position;
 
         Assert.Contains(scene.Elements.OfType<SceneLine>(), line =>
             line.Start == leftAnchor && line.End.XMillimeters < line.Start.XMillimeters);
         Assert.Contains(scene.Elements.OfType<SceneLine>(), line =>
             line.Start == rightAnchor && line.End.XMillimeters > line.Start.XMillimeters);
+        foreach (GroundingPoint point in new[] { leftPoint, rightPoint })
+        {
+            SceneLine stem = Assert.Single(scene.Elements.OfType<SceneLine>(), line =>
+                line.TargetId == point.GroundingPointId && line.Start.XMillimeters == line.End.XMillimeters);
+            Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingPoint, point.GroundingPointId),
+                scene.HitTestIndex.HitTest(stem.End));
+        }
         Assert.Empty(scene.Diagnostics);
     }
 

@@ -144,7 +144,7 @@ public sealed class PropertyProjector
             item.Target == GroundingTarget.ForGroundingAccessPoint(point.GroundingAccessPointId));
         return Snapshot(
             selection,
-            "验电接地点 / 接地线夹",
+            "验电接地环",
             $"{pole.PoleNumber}杆 {LineSideText(point.LineSide)}",
             [
                 Section(
@@ -173,7 +173,7 @@ public sealed class PropertyProjector
             Pole? pole = point is null ? null : document.Devices.OfType<Pole>()
                 .SingleOrDefault(item => item.Id == point.PoleId);
             return (
-                "验电接地点",
+                "验电接地环",
                 point is null ? "目标缺失" : $"{pole?.PoleNumber ?? point.PoleId.ToString()}杆 {LineSideText(point.LineSide)}");
         }
 

@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -19,6 +20,40 @@ public sealed record PoleAttachmentGeometry(
 /// </summary>
 public static class PoleProfessionalGeometry
 {
+    public static DocumentRect GetOccupiedEnvelope(
+        Guid poleId,
+        DrawingDocument document,
+        DrawingLayout layout,
+        DrawingMetrics? metrics = null) => GetOccupiedEnvelope(
+            poleId, document.PoleAttachments, document.Devices, layout, metrics);
+
+    public static DocumentRect GetOccupiedEnvelope(
+        Guid poleId,
+        IEnumerable<PoleAttachment> attachments,
+        IEnumerable<Device> devices,
+        DrawingLayout layout,
+        DrawingMetrics? metrics = null)
+    {
+        DrawingMetrics effective = metrics ?? DrawingMetrics.Default;
+        PoleLayout pole = layout.Poles[poleId];
+        DocumentRect bounds = GetPoleBounds(pole, effective);
+        foreach (PoleAttachment attachment in attachments.Where(item => item.PoleId == poleId))
+        {
+            Device device = devices.Single(item => item.Id == attachment.AttachedDeviceId);
+            DocumentRect attached = GetAttachmentGeometry(pole,
+                layout.Attachments[attachment.AttachmentId],
+                SymbolLibrary.ResolveAttachmentKind(device), effective).LogicalBounds;
+            double left = Math.Min(bounds.XMillimeters, attached.XMillimeters);
+            double top = Math.Min(bounds.YMillimeters, attached.YMillimeters);
+            bounds = new DocumentRect(left, top,
+                Math.Max(bounds.XMillimeters + bounds.WidthMillimeters,
+                    attached.XMillimeters + attached.WidthMillimeters) - left,
+                Math.Max(bounds.YMillimeters + bounds.HeightMillimeters,
+                    attached.YMillimeters + attached.HeightMillimeters) - top);
+        }
+        return Expand(bounds, effective.General.StandardStrokeThickness / 2);
+    }
+
     public static DocumentPoint GetDefaultAttachmentOffset(
         SwitchKind kind,
         DrawingMetrics? metrics = null)

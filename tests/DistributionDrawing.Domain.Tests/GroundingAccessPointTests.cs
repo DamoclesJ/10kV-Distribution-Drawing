@@ -180,6 +180,71 @@ public sealed class GroundingAccessPointTests
         Assert.Same(access, Assert.Single(scenario.Document.GroundingAccessPoints));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EndpointReplacement_PreservesFreeAndOccupiedGap_AndRejectsInvalidReplacementAtomically(bool occupied)
+    {
+        Scenario scenario = CreateScenario();
+        DrawingDocument document = scenario.Document;
+        GroundingAccessPoint gap = document.CreateGroundingAccessPoint(Guid.NewGuid(), scenario.Connection.Id,
+            scenario.Start.Id, scenario.Middle.Id, GroundingAccessLineSide.LargerNumberSide);
+        if (occupied) document.CreateGroundingPoint(Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId), "大号侧", "L01");
+        Terminal replacementTerminal = scenario.Start.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        document.AddTerminal(replacementTerminal);
+        OverheadLine line = Assert.Single(document.OverheadLines);
+        Connection before = scenario.Connection;
+        var after = new Connection(before.Id, before.Type, replacementTerminal.Id, before.EndTerminalId,
+            before.DisplayName, before.VoltageLevel);
+        document.ReplaceOverheadConnection(before, after, line);
+        Assert.Same(gap, Assert.Single(document.GroundingAccessPoints));
+        Assert.Same(line, Assert.Single(document.OverheadLines));
+        Assert.Same(after, Assert.Single(document.Connections));
+        document.ReplaceOverheadConnection(after, before, line);
+        Assert.Same(gap, Assert.Single(document.GroundingAccessPoints));
+
+        Terminal invalidTerminal = scenario.Middle.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        document.AddTerminal(invalidTerminal);
+        var invalid = new Connection(before.Id, before.Type, invalidTerminal.Id, before.EndTerminalId,
+            before.DisplayName, before.VoltageLevel);
+        Assert.Throws<InvalidOperationException>(() => document.ReplaceOverheadConnection(before, invalid, line));
+        Assert.Same(before, Assert.Single(document.Connections));
+        Assert.Same(line, Assert.Single(document.OverheadLines));
+        Assert.Same(gap, Assert.Single(document.GroundingAccessPoints));
+        Assert.Equal(occupied ? 1 : 0, document.GroundingPoints.Count);
+    }
+
+    [Fact]
+    public void EndpointReplacement_RejectsStaleOrMetadataChangingSnapshots()
+    {
+        Scenario scenario = CreateScenario();
+        DrawingDocument document = scenario.Document;
+        OverheadLine line = Assert.Single(document.OverheadLines);
+        Connection before = scenario.Connection;
+        Terminal replacement = scenario.Start.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        document.AddTerminal(replacement);
+
+        Connection changedCurrent = new(before.Id, before.Type, before.StartTerminalId,
+            before.EndTerminalId, "已修改", before.VoltageLevel);
+        document.ReplaceOverheadConnection(before, changedCurrent, line);
+        Connection endpointOnly = new(before.Id, before.Type, replacement.Id,
+            before.EndTerminalId, before.DisplayName, before.VoltageLevel);
+        Assert.Throws<InvalidOperationException>(() => document.ReplaceOverheadConnection(before, endpointOnly, line));
+        Assert.Same(changedCurrent, Assert.Single(document.Connections));
+
+        Assert.Throws<InvalidOperationException>(() => document.ReplaceOverheadConnection(
+            changedCurrent,
+            new(before.Id, before.Type, replacement.Id, before.EndTerminalId, "不允许", before.VoltageLevel), line));
+        Assert.Same(changedCurrent, Assert.Single(document.Connections));
+        Assert.Throws<InvalidOperationException>(() => document.ReplaceOverheadConnection(
+            changedCurrent,
+            new(before.Id, before.Type, replacement.Id, before.EndTerminalId, changedCurrent.DisplayName, "6kV"), line));
+        Assert.Throws<InvalidOperationException>(() => document.ReplaceOverheadConnection(
+            changedCurrent,
+            new(before.Id, ConnectionType.Cable, replacement.Id, before.EndTerminalId, changedCurrent.DisplayName, before.VoltageLevel), line));
+    }
+
     private static Scenario CreateScenario()
     {
         DrawingDocument document = TestFixtures.CreateDocument();
