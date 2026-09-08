@@ -264,6 +264,68 @@ public sealed class WpEm04WindowsValidationTests
         AssertVerticalClearance(scene, gap, ActualRenderedEnvelope(scene, start.Pole.Id, runtime.DrawingLayout), pole, adjacent);
     }
 
+    [Theory]
+    [InlineData(TerminalAnchorDirection.Right)]
+    [InlineData(TerminalAnchorDirection.Left)]
+    [InlineData(TerminalAnchorDirection.Up)]
+    [InlineData(TerminalAnchorDirection.Down)]
+    public void GroundingAccessAnchor_UsesClearanceEnvelopeWithSafeBoundary(
+        TerminalAnchorDirection direction)
+    {
+        double required = DrawingMetrics.Default.Line.GroundingAccessClearance +
+            (DrawingMetrics.Default.Line.GroundingAccessMarkerDiameter +
+             DrawingMetrics.Default.Line.ConnectionThickness) / 2;
+        double[] perpendicularSeparations = [0, 0.1, required - 0.01, required, required + 0.01];
+        DocumentPoint endPoint = direction switch
+        {
+            TerminalAnchorDirection.Right => new(300, 0),
+            TerminalAnchorDirection.Left => new(-300, 0),
+            TerminalAnchorDirection.Up => new(0, -300),
+            _ => new(0, 300)
+        };
+        var (document, runtime, start, end, gap) = BuildLineScene(
+            new DocumentPoint(0, 0), endPoint, addSwitch: false);
+        DocumentRect envelope = PoleProfessionalGeometry.GetOccupiedEnvelope(
+            start.Pole.Id, document, runtime.DrawingLayout, DrawingMetrics.Default);
+        DocumentPoint pole = PoleProfessionalGeometry.GetPoleCenter(
+            runtime.DrawingLayout.Poles[start.Pole.Id]);
+        DocumentPoint adjacent = PoleProfessionalGeometry.GetPoleCenter(
+            runtime.DrawingLayout.Poles[end.Pole.Id]);
+        Connection connection = Assert.Single(document.Connections);
+
+        foreach (double separation in perpendicularSeparations)
+        {
+            DocumentPoint origin = direction is TerminalAnchorDirection.Left or TerminalAnchorDirection.Right
+                ? new DocumentPoint(pole.XMillimeters,
+                    envelope.YMillimeters + envelope.HeightMillimeters + separation)
+                : new DocumentPoint(
+                    envelope.XMillimeters + envelope.WidthMillimeters + separation,
+                    pole.YMillimeters);
+            DocumentPoint firstTurn = Move(origin, direction, 100);
+            DocumentPoint secondTurn = direction is TerminalAnchorDirection.Left or TerminalAnchorDirection.Right
+                ? new DocumentPoint(firstTurn.XMillimeters, adjacent.YMillimeters)
+                : new DocumentPoint(adjacent.XMillimeters, firstTurn.YMillimeters);
+            var route = new OrthogonalRoute(
+                connection.Id,
+                connection.Type,
+                connection.StartTerminalId,
+                connection.EndTerminalId,
+                [origin, firstTurn, secondTurn, adjacent]);
+            var routes = new Dictionary<Guid, OrthogonalRoute> { [connection.Id] = route };
+
+            Assert.True(new GroundingAccessPointAnchorResolver().TryResolve(
+                gap, document, runtime.DrawingLayout, routes, out GroundingPresentationAnchor anchor));
+            DocumentPoint expected = separation < required
+                ? ForbiddenEnvelopeExit(origin, direction, envelope, required)
+                : origin;
+            Assert.Equal(direction, anchor.Direction);
+            Assert.Equal(expected.XMillimeters, anchor.Position.XMillimeters, 8);
+            Assert.Equal(expected.YMillimeters, anchor.Position.YMillimeters, 8);
+            AssertMarkerCenterOutsideForbiddenEnvelope(anchor.Position, envelope, required);
+            Assert.Contains(route.Segments, segment => Contains(segment, anchor.Position));
+        }
+    }
+
     private static (DrawingDocument Document, RuntimeLayoutDocument Runtime, AddPoleCommand Start,
         AddPoleCommand End, GroundingAccessPoint Gap) BuildLineScene(DocumentPoint startPoint, DocumentPoint endPoint, bool addSwitch)
     {
@@ -286,6 +348,49 @@ public sealed class WpEm04WindowsValidationTests
         }
         return (document, runtime, start, end, gap);
     }
+
+    private static DocumentPoint ForbiddenEnvelopeExit(
+        DocumentPoint origin,
+        TerminalAnchorDirection direction,
+        DocumentRect envelope,
+        double required) => direction switch
+        {
+            TerminalAnchorDirection.Left => new(envelope.XMillimeters - required,
+                origin.YMillimeters),
+            TerminalAnchorDirection.Right => new(
+                envelope.XMillimeters + envelope.WidthMillimeters + required,
+                origin.YMillimeters),
+            TerminalAnchorDirection.Up => new(origin.XMillimeters,
+                envelope.YMillimeters - required),
+            _ => new(origin.XMillimeters,
+                envelope.YMillimeters + envelope.HeightMillimeters + required)
+        };
+
+    private static void AssertMarkerCenterOutsideForbiddenEnvelope(
+        DocumentPoint center,
+        DocumentRect envelope,
+        double required)
+    {
+        Assert.True(
+            center.XMillimeters <= envelope.XMillimeters - required ||
+            center.XMillimeters >= envelope.XMillimeters + envelope.WidthMillimeters + required ||
+            center.YMillimeters <= envelope.YMillimeters - required ||
+            center.YMillimeters >= envelope.YMillimeters + envelope.HeightMillimeters + required);
+    }
+
+    private static DocumentPoint Move(
+        DocumentPoint point,
+        TerminalAnchorDirection direction,
+        double distance) => direction switch
+        {
+            TerminalAnchorDirection.Left => new(point.XMillimeters - distance,
+                point.YMillimeters),
+            TerminalAnchorDirection.Right => new(point.XMillimeters + distance,
+                point.YMillimeters),
+            TerminalAnchorDirection.Up => new(point.XMillimeters,
+                point.YMillimeters - distance),
+            _ => new(point.XMillimeters, point.YMillimeters + distance)
+        };
 
     private static void AssertNoDuplicatePoints(OrthogonalRoute route)
     {
@@ -372,7 +477,14 @@ public sealed class WpEm04WindowsValidationTests
         add.Execute();
         DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
         Assert.Empty(scene.Diagnostics);
-        Assert.NotNull(scene.Elements.Single(element => element.TargetId == gap.GroundingAccessPointId));
+        OrthogonalRoute route = Assert.Single(scene.Routes, item => item.ConnectionId == connection.Id);
+        AssertNoBacktracking(route);
+        SceneEllipse marker = Marker(scene, gap);
+        Assert.Equal(gap.GroundingAccessPointId, marker.TargetId);
+        Assert.Single(scene.HitTestIndex.Entries, entry =>
+            entry.Target.Kind == SelectionTargetKind.GroundingAccessPoint &&
+            entry.Target.ObjectId == gap.GroundingAccessPointId);
+        AssertMarkerOnRoute(scene, gap);
         AssertCompositeClearance(
             scene,
             gap,

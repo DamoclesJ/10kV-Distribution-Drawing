@@ -50,21 +50,17 @@ public sealed class GroundingAccessPointAnchorResolver
             halfEdge.DirectionPoint);
         DocumentRect envelope = PoleProfessionalGeometry.GetOccupiedEnvelope(
             point.PoleId, document, layout, _metrics);
-        double extent = direction switch
-        {
-            TerminalAnchorDirection.Left => Math.Max(0,
-                halfEdge.ConductorOrigin.XMillimeters - envelope.XMillimeters),
-            TerminalAnchorDirection.Right => Math.Max(0,
-                envelope.XMillimeters + envelope.WidthMillimeters -
-                halfEdge.ConductorOrigin.XMillimeters),
-            TerminalAnchorDirection.Up => Math.Max(0,
-                halfEdge.ConductorOrigin.YMillimeters - envelope.YMillimeters),
-            _ => Math.Max(0,
-                envelope.YMillimeters + envelope.HeightMillimeters -
-                halfEdge.ConductorOrigin.YMillimeters)
-        };
-        double distance = extent + _metrics.Line.GroundingAccessClearance +
+        double requiredCenterSeparation = _metrics.Line.GroundingAccessClearance +
             (_metrics.Line.GroundingAccessMarkerDiameter + _metrics.Line.ConnectionThickness) / 2;
+        DocumentRect forbiddenEnvelope = new(
+            envelope.XMillimeters - requiredCenterSeparation,
+            envelope.YMillimeters - requiredCenterSeparation,
+            envelope.WidthMillimeters + requiredCenterSeparation * 2,
+            envelope.HeightMillimeters + requiredCenterSeparation * 2);
+        double distance = DirectionalExitDistance(
+            halfEdge.ConductorOrigin,
+            direction,
+            forbiddenEnvelope);
         DocumentPoint position = Move(halfEdge.ConductorOrigin, direction, distance);
         if (!route.Segments.Any(segment => Contains(segment, position)))
         {
@@ -75,6 +71,29 @@ public sealed class GroundingAccessPointAnchorResolver
             position,
             direction);
         return true;
+    }
+
+    private static double DirectionalExitDistance(
+        DocumentPoint origin,
+        TerminalAnchorDirection direction,
+        DocumentRect forbiddenEnvelope)
+    {
+        bool withinHorizontalSpan = origin.XMillimeters > forbiddenEnvelope.XMillimeters &&
+            origin.XMillimeters < forbiddenEnvelope.XMillimeters + forbiddenEnvelope.WidthMillimeters;
+        bool withinVerticalSpan = origin.YMillimeters > forbiddenEnvelope.YMillimeters &&
+            origin.YMillimeters < forbiddenEnvelope.YMillimeters + forbiddenEnvelope.HeightMillimeters;
+        return direction switch
+        {
+            TerminalAnchorDirection.Left when withinVerticalSpan =>
+                Math.Max(0, origin.XMillimeters - forbiddenEnvelope.XMillimeters),
+            TerminalAnchorDirection.Right when withinVerticalSpan => Math.Max(0,
+                forbiddenEnvelope.XMillimeters + forbiddenEnvelope.WidthMillimeters - origin.XMillimeters),
+            TerminalAnchorDirection.Up when withinHorizontalSpan =>
+                Math.Max(0, origin.YMillimeters - forbiddenEnvelope.YMillimeters),
+            TerminalAnchorDirection.Down when withinHorizontalSpan => Math.Max(0,
+                forbiddenEnvelope.YMillimeters + forbiddenEnvelope.HeightMillimeters - origin.YMillimeters),
+            _ => 0
+        };
     }
 
     private static bool Contains(OrthogonalRouteSegment segment, DocumentPoint point) =>
