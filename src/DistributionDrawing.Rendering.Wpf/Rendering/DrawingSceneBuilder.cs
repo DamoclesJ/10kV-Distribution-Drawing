@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -135,7 +136,8 @@ public sealed class DrawingSceneBuilder
             document.OverheadLines,
             terminalAnchors,
             layout.RingCabinetLayouts,
-            layout.CableRouteGuides);
+            layout.CableRouteGuides,
+            document.GroundingAccessPoints);
 
         var elements = baseScene.Elements.ToList();
         var hitTestEntries = baseScene.HitTestIndex.Entries.ToList();
@@ -185,7 +187,8 @@ public sealed class DrawingSceneBuilder
             overheadLines: overheadLines,
             terminalAnchors: null,
             ringCabinetLayouts: null,
-            cableRouteGuides: null);
+            cableRouteGuides: null,
+            groundingAccessPoints: null);
     }
 
     public DrawingScene Build(
@@ -209,7 +212,8 @@ public sealed class DrawingSceneBuilder
             overheadLines,
             terminalAnchors: null,
             ringCabinetLayouts: null,
-            cableRouteGuides: null);
+            cableRouteGuides: null,
+            groundingAccessPoints: null);
     }
 
     private DrawingScene BuildCore(
@@ -223,7 +227,8 @@ public sealed class DrawingSceneBuilder
         IEnumerable<OverheadLine> overheadLines,
         TerminalAnchorIndex? terminalAnchors,
         IReadOnlyDictionary<Guid, RingCabinetLayout>? ringCabinetLayouts,
-        IReadOnlyDictionary<Guid, CableRouteGuide>? cableRouteGuides)
+        IReadOnlyDictionary<Guid, CableRouteGuide>? cableRouteGuides,
+        IReadOnlyCollection<GroundingAccessPoint>? groundingAccessPoints)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(poles);
@@ -370,17 +375,24 @@ public sealed class DrawingSceneBuilder
                             DocumentRect envelope = PoleProfessionalGeometry.GetOccupiedEnvelope(
                                 poleId, poleAttachments, deviceById.Values, layout, _metrics);
                             int supportIndex = overheadLine.SupportPoleIds.ToList().IndexOf(poleId);
-                            double Stub(DocumentPoint adjacent) =>
-                                DirectionalExtent(center, adjacent, envelope) +
-                                _metrics.Line.GroundingAccessClearance +
-                                _metrics.Line.GroundingAccessMarkerDiameter +
-                                _metrics.Line.ConnectionThickness;
+                            double Stub(Guid adjacentPoleId, DocumentPoint adjacent) =>
+                                groundingAccessPoints?.Any(point =>
+                                    point.ConnectionId == overheadLine.ConnectionId &&
+                                    point.PoleId == poleId &&
+                                    point.AdjacentPoleId == adjacentPoleId) == true
+                                    ? DirectionalExtent(center, adjacent, envelope) +
+                                      _metrics.Line.GroundingAccessClearance +
+                                      (_metrics.Line.GroundingAccessMarkerDiameter +
+                                       _metrics.Line.ConnectionThickness) / 2
+                                    : 0;
                             double predecessor = supportIndex > 0
-                                ? Stub(PoleProfessionalGeometry.GetPoleCenter(
-                                    layout.Poles[overheadLine.SupportPoleIds[supportIndex - 1]])) : 0;
+                                ? Stub(overheadLine.SupportPoleIds[supportIndex - 1],
+                                    PoleProfessionalGeometry.GetPoleCenter(
+                                        layout.Poles[overheadLine.SupportPoleIds[supportIndex - 1]])) : 0;
                             double successor = supportIndex + 1 < overheadLine.SupportPoleIds.Count
-                                ? Stub(PoleProfessionalGeometry.GetPoleCenter(
-                                    layout.Poles[overheadLine.SupportPoleIds[supportIndex + 1]])) : 0;
+                                ? Stub(overheadLine.SupportPoleIds[supportIndex + 1],
+                                    PoleProfessionalGeometry.GetPoleCenter(
+                                        layout.Poles[overheadLine.SupportPoleIds[supportIndex + 1]])) : 0;
                             return new RequiredRouteWaypoint(
                                 poleId,
                                 center,

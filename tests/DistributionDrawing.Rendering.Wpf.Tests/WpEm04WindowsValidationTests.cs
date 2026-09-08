@@ -81,7 +81,6 @@ public sealed class WpEm04WindowsValidationTests
     [InlineData(SwitchKind.LoadSwitch)]
     [InlineData(SwitchKind.IsolationSwitch)]
     [InlineData(SwitchKind.CircuitBreaker)]
-    [InlineData(SwitchKind.GroundSwitch)]
     [InlineData(SwitchKind.DropoutFuse)]
     public void EveryLegalPoleSwitchKind_CoexistsWithGap(SwitchKind kind)
     {
@@ -106,6 +105,13 @@ public sealed class WpEm04WindowsValidationTests
         Assert.NotNull(scene.Elements.Single(element => element.TargetId == gap.GroundingAccessPointId));
         AssertClearance(scene, gap, ActualRenderedEnvelope(scene, start.Pole.Id, runtime.DrawingLayout), false);
         AssertMarkerWithinAdjacentCapacity(scene, gap, runtime.DrawingLayout);
+    }
+
+    [Fact]
+    public void GroundSwitchStandalonePoleAttachment_IsRejectedByCreationPolicy()
+    {
+        Assert.Throws<ArgumentException>(() => new PoleSwitchAttachmentCreationFactory().Create(
+            Guid.NewGuid(), SwitchKind.GroundSwitch, new DocumentPoint(0, 0)));
     }
 
     [Fact]
@@ -140,9 +146,9 @@ public sealed class WpEm04WindowsValidationTests
 
     [Theory]
     [InlineData(0, 0, 100, 0, 20, 60)]
-    [InlineData(100, 0, 0, 0, 60, 20)]
+    [InlineData(100, 0, 0, 0, 20, 60)]
     [InlineData(0, 0, 0, 100, 20, 60)]
-    [InlineData(0, 100, 0, 0, 60, 20)]
+    [InlineData(0, 100, 0, 0, 20, 60)]
     public void RequiredWaypoint_UsesIndependentDirectionalStubRequirements(
         double startX, double startY, double endX, double endY,
         double predecessorStub, double successorStub)
@@ -150,15 +156,18 @@ public sealed class WpEm04WindowsValidationTests
         Guid startId = Guid.NewGuid();
         Guid endId = Guid.NewGuid();
         Guid poleId = Guid.NewGuid();
+        DocumentPoint waypoint = startX == endX
+            ? new DocumentPoint(startX, startY + (endY - startY) * 0.3)
+            : new DocumentPoint(startX + (endX - startX) * 0.3, startY);
         var request = new ConnectionRouteRequest(Guid.NewGuid(), ConnectionType.OverheadLine,
             startId, endId,
             new TerminalAnchor(startId, new DocumentPoint(startX, startY), TerminalAnchorDirection.Auto),
             new TerminalAnchor(endId, new DocumentPoint(endX, endY), TerminalAnchorDirection.Auto),
-            RequiredWaypoints: [new RequiredRouteWaypoint(poleId, new DocumentPoint(50, 0),
+            RequiredWaypoints: [new RequiredRouteWaypoint(poleId, waypoint,
                 PredecessorMinimumStubLength: predecessorStub,
                 SuccessorMinimumStubLength: successorStub)]);
         OrthogonalRoute route = new OrthogonalRoutePlanner().Plan([request], []).Single();
-        Assert.Contains(route.Points, point => point == new DocumentPoint(50, 0));
+        Assert.Contains(route.Points, point => point == waypoint);
         Assert.All(route.Segments, segment => Assert.True(segment.IsHorizontal || segment.IsVertical));
     }
 

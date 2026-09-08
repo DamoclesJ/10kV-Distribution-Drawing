@@ -225,17 +225,17 @@ public sealed class GroundingAccessPointTests
         Terminal replacement = scenario.Start.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
         document.AddTerminal(replacement);
 
-        Connection changedCurrent = new(before.Id, before.Type, before.StartTerminalId,
-            before.EndTerminalId, "已修改", before.VoltageLevel);
+        Connection changedCurrent = new(before.Id, before.Type, replacement.Id,
+            before.EndTerminalId, before.DisplayName, before.VoltageLevel);
         document.ReplaceOverheadConnection(before, changedCurrent, line);
-        Connection endpointOnly = new(before.Id, before.Type, replacement.Id,
+        Connection endpointOnly = new(before.Id, before.Type, before.StartTerminalId,
             before.EndTerminalId, before.DisplayName, before.VoltageLevel);
         Assert.Throws<InvalidOperationException>(() => document.ReplaceOverheadConnection(before, endpointOnly, line));
         Assert.Same(changedCurrent, Assert.Single(document.Connections));
 
         Assert.Throws<InvalidOperationException>(() => document.ReplaceOverheadConnection(
             changedCurrent,
-            new(before.Id, before.Type, replacement.Id, before.EndTerminalId, "不允许", before.VoltageLevel), line));
+            new(before.Id, before.Type, before.StartTerminalId, before.EndTerminalId, "不允许", before.VoltageLevel), line));
         Assert.Same(changedCurrent, Assert.Single(document.Connections));
         Assert.Throws<InvalidOperationException>(() => document.ReplaceOverheadConnection(
             changedCurrent,

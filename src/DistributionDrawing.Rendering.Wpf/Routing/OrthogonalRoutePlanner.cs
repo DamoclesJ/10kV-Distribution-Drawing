@@ -70,7 +70,10 @@ public sealed class OrthogonalRoutePlanner
                 Start = start,
                 End = end,
                 PreferredHorizontalY = null,
-                RequiredWaypoints = null
+                RequiredWaypoints = null,
+                EnforceRequiredStubConstraints =
+                    MinimumStub(passagePoints[index], outgoing: true) > 0 ||
+                    MinimumStub(passagePoints[index + 1], outgoing: false) > 0
             };
             OrthogonalRoute leg = _router.Route(legRequest, routeObstacles, planned);
             points.AddRange(index == 0 ? leg.Points : leg.Points.Skip(1));
@@ -90,7 +93,8 @@ public sealed class OrthogonalRoutePlanner
             request.ConnectionType,
             request.StartTerminalId,
             request.EndTerminalId,
-            points);
+            points,
+            waypoints.Select(item => item.Position));
 
         void ValidateCollinearCapacity(TerminalAnchor startAnchor, TerminalAnchor endAnchor)
         {
@@ -102,8 +106,7 @@ public sealed class OrthogonalRoutePlanner
             double span = startAnchor.Position.XMillimeters == endAnchor.Position.XMillimeters
                 ? Math.Abs(startAnchor.Position.YMillimeters - endAnchor.Position.YMillimeters)
                 : Math.Abs(startAnchor.Position.XMillimeters - endAnchor.Position.XMillimeters);
-            double required = Math.Max(_router.PortStubLength, startAnchor.MinimumStubLength) +
-                Math.Max(_router.PortStubLength, endAnchor.MinimumStubLength);
+            double required = startAnchor.MinimumStubLength + endAnchor.MinimumStubLength;
             if (span < required)
             {
                 throw new InvalidOperationException("杆间距不足，无法容纳所需导线段和接地环间隙。");

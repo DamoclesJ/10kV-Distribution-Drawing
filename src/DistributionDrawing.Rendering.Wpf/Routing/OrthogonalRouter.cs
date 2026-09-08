@@ -13,8 +13,6 @@ public sealed class OrthogonalRouter
         _metrics = metrics ?? DrawingMetrics.Default;
     }
 
-    internal double PortStubLength => _metrics.Routing.PortStubLength;
-
     public OrthogonalRoute Route(
         ConnectionRouteRequest request,
         IEnumerable<RoutingObstacle> obstacles,
@@ -167,10 +165,11 @@ public sealed class OrthogonalRouter
             request.StartTerminalId,
             request.EndTerminalId,
             points);
-        if (!HasTerminalStubs(route, start, startDirection, request.Start.MinimumStubLength,
-                end, endOutwardDirection, request.End.MinimumStubLength) ||
-            route.Segments.Any(segment => obstacles.Any(obstacle =>
-                IntersectsInterior(segment, obstacle.Bounds))))
+        if (request.EnforceRequiredStubConstraints &&
+            (!HasTerminalStubs(route, start, startDirection, request.Start.MinimumStubLength,
+                 end, endOutwardDirection, request.End.MinimumStubLength) ||
+             route.Segments.Any(segment => obstacles.Any(obstacle =>
+                 IntersectsInterior(segment, obstacle.Bounds)))))
         {
             throw new InvalidOperationException(
                 "无法在当前杆间距或障碍物条件下生成满足最小导线段的线路。 ");

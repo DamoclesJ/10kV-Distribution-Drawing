@@ -337,6 +337,15 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             GroundingPoint gp = Assert.Single(scenario.Session.PersistenceSession.Domain.GroundingPoints);
             DrawingTypographyMetrics typography = DrawingMetrics.Default.Typography;
             double before = typography.GroundingPointNumberFontSize;
+            System.Windows.Application application = System.Windows.Application.Current ?? new System.Windows.Application();
+            if (!application.Resources.MergedDictionaries.Any(dictionary =>
+                    dictionary.Source?.OriginalString.Contains("DesktopTheme.xaml", StringComparison.Ordinal) == true))
+            {
+                application.Resources.MergedDictionaries.Add(new System.Windows.ResourceDictionary
+                {
+                    Source = new Uri("/DistributionDrawing.Desktop;component/Themes/DesktopTheme.xaml", UriKind.Relative)
+                });
+            }
             var dialog = new DrawingTypographyDialog();
             Assert.NotNull(dialog.FindName("GroundingPointNumberFontSizeInput"));
             dialog.Close();

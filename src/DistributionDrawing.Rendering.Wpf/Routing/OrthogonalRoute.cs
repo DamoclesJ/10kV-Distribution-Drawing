@@ -27,7 +27,8 @@ public sealed class OrthogonalRoute
         ConnectionType connectionType,
         Guid startTerminalId,
         Guid endTerminalId,
-        IEnumerable<DocumentPoint> points)
+        IEnumerable<DocumentPoint> points,
+        IEnumerable<DocumentPoint>? preservedPoints = null)
     {
         if (connectionId == Guid.Empty)
         {
@@ -45,7 +46,7 @@ public sealed class OrthogonalRoute
         }
 
         ArgumentNullException.ThrowIfNull(points);
-        DocumentPoint[] normalized = Normalize(points);
+        DocumentPoint[] normalized = Normalize(points, preservedPoints);
         if (normalized.Length < 2)
         {
             throw new ArgumentException("A route requires at least two distinct points.", nameof(points));
@@ -113,8 +114,11 @@ public sealed class OrthogonalRoute
         return Points[^1];
     }
 
-    private static DocumentPoint[] Normalize(IEnumerable<DocumentPoint> points)
+    private static DocumentPoint[] Normalize(
+        IEnumerable<DocumentPoint> points,
+        IEnumerable<DocumentPoint>? preservedPoints)
     {
+        HashSet<DocumentPoint> preserved = preservedPoints?.ToHashSet() ?? [];
         var values = new List<DocumentPoint>();
         foreach (DocumentPoint point in points)
         {
@@ -144,7 +148,7 @@ public sealed class OrthogonalRoute
         foreach (DocumentPoint point in values)
         {
             merged.Add(point);
-            while (merged.Count >= 3 && AreCollinear(
+            while (merged.Count >= 3 && !preserved.Contains(merged[^2]) && AreCollinear(
                        merged[^3],
                        merged[^2],
                        merged[^1]))

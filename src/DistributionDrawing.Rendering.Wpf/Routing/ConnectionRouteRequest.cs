@@ -12,7 +12,8 @@ public sealed record ConnectionRouteRequest(
     TerminalAnchor Start,
     TerminalAnchor End,
     double? PreferredHorizontalY = null,
-    IReadOnlyList<RequiredRouteWaypoint>? RequiredWaypoints = null);
+    IReadOnlyList<RequiredRouteWaypoint>? RequiredWaypoints = null,
+    bool EnforceRequiredStubConstraints = false);
 
 public readonly record struct RequiredRouteWaypoint(
     Guid SourceId,
