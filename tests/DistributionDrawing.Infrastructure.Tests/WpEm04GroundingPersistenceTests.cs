@@ -45,9 +45,19 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         GroundingAccessPoint gap = Assert.Single(restored.GroundingAccessPoints);
         Assert.Equal(fixture.Gap.AdjacentPoleId, gap.AdjacentPoleId);
         Assert.Contains(restored.GroundingPoints, point =>
-            point.Target == GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId));
+            point.Target == GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId) &&
+            point.Number == "L01");
         Assert.Contains(restored.GroundingPoints, point =>
-            point.Target == GroundingTarget.ForTerminal(fixture.StartTerminalId));
+            point.Target == GroundingTarget.ForTerminal(fixture.StartTerminalId) &&
+            point.Number == "S02");
+        GroundingPoint restoredCustom = restored.GetGroundingPoint(
+            fixture.CustomGroundingPoint.GroundingPointId);
+        Assert.Equal(fixture.CustomGroundingPoint.Target, restoredCustom.Target);
+        Assert.Equal("CustomGround", restoredCustom.Number);
+        GroundingPoint restoredLegacy = restored.GetGroundingPoint(
+            fixture.LegacyMismatchedGroundingPoint.GroundingPointId);
+        Assert.Equal(fixture.LegacyMismatchedGroundingPoint.Target, restoredLegacy.Target);
+        Assert.Equal("L77", restoredLegacy.Number);
     }
 
     [Fact]
@@ -127,6 +137,10 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         Terminal endTerminal = end.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
         document.AddTerminal(startTerminal);
         document.AddTerminal(endTerminal);
+        Terminal customTerminal = unrelated.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        Terminal legacyMismatchedTerminal = end.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        document.AddTerminal(customTerminal);
+        document.AddTerminal(legacyMismatchedTerminal);
         var connection = new Connection(
             Guid.NewGuid(), ConnectionType.OverheadLine,
             startTerminal.Id, endTerminal.Id, "测试架空线", "10kV");
@@ -142,8 +156,24 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
             "大号侧", "L01");
         document.CreateGroundingPoint(
             Guid.NewGuid(), GroundingTarget.ForTerminal(startTerminal.Id),
-            "legacy terminal", "L02");
-        return new Fixture(document, domainOnly, start, middle, end, unrelated, gap, startTerminal.Id);
+            "legacy terminal", "S02");
+        GroundingPoint customGroundingPoint = document.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForTerminal(customTerminal.Id),
+            "custom terminal", "CustomGround");
+        GroundingPoint legacyMismatchedGroundingPoint = document.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForTerminal(legacyMismatchedTerminal.Id),
+            "legacy mismatched prefix", "L77");
+        return new Fixture(
+            document,
+            domainOnly,
+            start,
+            middle,
+            end,
+            unrelated,
+            gap,
+            startTerminal.Id,
+            customGroundingPoint,
+            legacyMismatchedGroundingPoint);
     }
 
     private static Pole AddPole(DrawingDocument document, string number)
@@ -180,5 +210,7 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         Pole End,
         Pole Unrelated,
         GroundingAccessPoint Gap,
-        Guid StartTerminalId);
+        Guid StartTerminalId,
+        GroundingPoint CustomGroundingPoint,
+        GroundingPoint LegacyMismatchedGroundingPoint);
 }

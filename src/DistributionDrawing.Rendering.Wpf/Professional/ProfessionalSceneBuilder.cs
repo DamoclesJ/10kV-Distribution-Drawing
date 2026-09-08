@@ -107,9 +107,29 @@ public sealed class ProfessionalSceneBuilder
             foreach (SceneLine line in groundingElements.OfType<SceneLine>())
             {
                 // The leader's target end remains available for direct GAP selection.
-                if (line.Start == anchor.Position) continue;
+                DocumentPoint hitStart = line.Start;
+                if (line.Start == anchor.Position)
+                {
+                    if (groundingPoint.Target.Kind != GroundingTargetKind.GroundingAccessPoint ||
+                        line.Start.XMillimeters != line.End.XMillimeters ||
+                        line.End.YMillimeters <= line.Start.YMillimeters)
+                    {
+                        continue;
+                    }
+                    double markerExclusion =
+                        (DrawingMetrics.Default.Line.GroundingAccessMarkerDiameter +
+                         DrawingMetrics.Default.Line.ConnectionThickness) / 2 +
+                        DrawingMetrics.Default.Line.GroundingAccessHitPadding;
+                    hitStart = new DocumentPoint(
+                        line.Start.XMillimeters,
+                        Math.Min(line.End.YMillimeters, line.Start.YMillimeters + markerExclusion));
+                    if (hitStart == line.End)
+                    {
+                        continue;
+                    }
+                }
                 DocumentRect bounds = SceneGeometryBounds.Expand(
-                    SceneGeometryBounds.FromPoints([line.Start, line.End]),
+                    SceneGeometryBounds.FromPoints([hitStart, line.End]),
                     DrawingMetrics.Default.Grounding.HitPadding);
                 hitTestEntries.Add(new SelectionHitTestEntry(
                     new SelectionReference(SelectionTargetKind.GroundingPoint, groundingPoint.GroundingPointId),
@@ -166,22 +186,41 @@ public sealed class ProfessionalSceneBuilder
     {
         DrawingMetrics metrics = DrawingMetrics.Default;
         GroundingDrawingMetrics grounding = metrics.Grounding;
-        DocumentPoint stemTop = Move(
-            anchor.Position,
-            anchor.Direction == TerminalAnchorDirection.Left
-                ? TerminalAnchorDirection.Left : TerminalAnchorDirection.Right,
-            grounding.LeaderLength);
+        bool gapTarget = groundingPoint.Target.Kind == GroundingTargetKind.GroundingAccessPoint;
+        bool verticalGap = gapTarget &&
+            anchor.Direction is TerminalAnchorDirection.Up or TerminalAnchorDirection.Down;
+        double leaderLength = verticalGap
+            ? grounding.TopBarWidth / 2 + grounding.HitPadding
+            : grounding.LeaderLength;
+        DocumentPoint stemTop = gapTarget && !verticalGap
+            ? anchor.Position
+            : Move(
+                anchor.Position,
+                anchor.Direction == TerminalAnchorDirection.Left
+                    ? TerminalAnchorDirection.Left : TerminalAnchorDirection.Right,
+                leaderLength);
         DocumentPoint stemBottom = new(stemTop.XMillimeters,
             stemTop.YMillimeters + grounding.StemLength);
-        var elements = new List<SceneElement>
+        var elements = new List<SceneElement>();
+        if (stemTop != anchor.Position)
         {
-            new SceneLine(anchor.Position, stemTop, Colors.DarkGreen, metrics.General.StandardStrokeThickness),
-            new SceneLine(stemTop, stemBottom, Colors.DarkGreen, metrics.General.StandardStrokeThickness)
-        };
+            elements.Add(new SceneLine(
+                anchor.Position,
+                stemTop,
+                Colors.DarkGreen,
+                metrics.General.StandardStrokeThickness));
+        }
+        elements.Add(new SceneLine(
+            stemTop,
+            stemBottom,
+            Colors.DarkGreen,
+            metrics.General.StandardStrokeThickness));
         double[] widths = [grounding.TopBarWidth, grounding.MiddleBarWidth, grounding.BottomBarWidth];
+        double bottomBarY = stemBottom.YMillimeters;
         for (int index = 0; index < widths.Length; index++)
         {
             double y = stemBottom.YMillimeters + index * grounding.BarSpacing;
+            bottomBarY = y;
             elements.Add(new SceneLine(
                 new DocumentPoint(stemBottom.XMillimeters - widths[index] / 2, y),
                 new DocumentPoint(stemBottom.XMillimeters + widths[index] / 2, y),
@@ -189,10 +228,14 @@ public sealed class ProfessionalSceneBuilder
         }
         if (!string.IsNullOrWhiteSpace(groundingPoint.Number))
         {
+            double fontSize = metrics.Typography.GroundingPointNumberFontSize;
             elements.Add(new SceneText(new DocumentPoint(
-                stemTop.XMillimeters + grounding.NumberOffset.XMillimeters,
-                stemTop.YMillimeters + grounding.NumberOffset.YMillimeters),
-                groundingPoint.Number, Colors.DarkGreen, metrics.Typography.GroundingPointNumberFontSize));
+                stemTop.XMillimeters,
+                bottomBarY + grounding.BarSpacing),
+                groundingPoint.Number,
+                Colors.DarkGreen,
+                fontSize,
+                SceneTextHorizontalAlignment.Center));
         }
         return elements.Select(element => element with { TargetId = groundingPoint.GroundingPointId }).ToArray();
     }

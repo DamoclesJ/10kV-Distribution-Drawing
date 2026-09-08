@@ -58,8 +58,15 @@ public sealed record SceneRectangle(
     Color? Fill = null,
     SceneStrokeStyle StrokeStyle = SceneStrokeStyle.Solid) : SceneElement;
 
+public enum SceneTextHorizontalAlignment
+{
+    Left,
+    Center
+}
+
 public sealed record SceneText(
     DocumentPoint Origin,
     string Text,
     Color Foreground,
-    double FontSizeMillimeters) : SceneElement;
+    double FontSizeMillimeters,
+    SceneTextHorizontalAlignment HorizontalAlignment = SceneTextHorizontalAlignment.Left) : SceneElement;

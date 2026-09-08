@@ -232,6 +232,108 @@ public sealed class WpEm04GroundingAccessTests
     }
 
     [Fact]
+    public void NumberAllocator_UsesIndependentLAndSNamespaces()
+    {
+        SceneFixture fixture = CreateFixture();
+        AddNumberedTerminalGrounding(fixture.Document, fixture.Connection.StartTerminalId, " L01 ");
+        AddNumberedTerminalGrounding(fixture.Document, fixture.Connection.EndTerminalId, "L03");
+        Terminal s01Terminal = fixture.Unrelated.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        Terminal s03Terminal = fixture.Unrelated.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        Terminal customTerminal = fixture.Unrelated.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        fixture.Document.AddTerminal(s01Terminal);
+        fixture.Document.AddTerminal(s03Terminal);
+        fixture.Document.AddTerminal(customTerminal);
+        AddNumberedTerminalGrounding(fixture.Document, s01Terminal.Id, "S01");
+        AddNumberedTerminalGrounding(fixture.Document, s03Terminal.Id, " S03 ");
+        AddNumberedTerminalGrounding(fixture.Document, customTerminal.Id, "CustomGround");
+
+        Assert.Equal("L02", ProfessionalCommandFactory.AllocateGroundingPointNumber(
+            fixture.Document, GroundingTargetKind.GroundingAccessPoint));
+        Assert.Equal("S02", ProfessionalCommandFactory.AllocateGroundingPointNumber(
+            fixture.Document, GroundingTargetKind.Terminal));
+
+        fixture.Document.RemoveGroundingPoint(fixture.Document.GroundingPoints.Single(
+            point => point.Number == "L01").GroundingPointId);
+        fixture.Document.RemoveGroundingPoint(fixture.Document.GroundingPoints.Single(
+            point => point.Number == "S01").GroundingPointId);
+        Assert.Equal("L01", ProfessionalCommandFactory.AllocateGroundingPointNumber(
+            fixture.Document, GroundingTargetKind.GroundingAccessPoint));
+        Assert.Equal("S01", ProfessionalCommandFactory.AllocateGroundingPointNumber(
+            fixture.Document, GroundingTargetKind.Terminal));
+    }
+
+    [Fact]
+    public void NumberAllocator_AdvancesFrom99To100AndTreatsThreeDigitLeadingZeroAsStandard()
+    {
+        SceneFixture fixture = CreateFixture();
+        void AddNumber(string number)
+        {
+            Terminal terminal = fixture.Unrelated.CreateOverheadAnchorTerminal(Guid.NewGuid());
+            fixture.Document.AddTerminal(terminal);
+            fixture.Document.CreateGroundingPoint(
+                Guid.NewGuid(),
+                GroundingTarget.ForTerminal(terminal.Id),
+                "编号边界",
+                number);
+        }
+
+        foreach (int number in Enumerable.Range(1, 99))
+        {
+            AddNumber($"L{number:D2}");
+            AddNumber($"S{number:D2}");
+        }
+        AddNumber("L001");
+        AddNumber("S001");
+
+        Assert.Equal("L100", ProfessionalCommandFactory.AllocateGroundingPointNumber(
+            fixture.Document, GroundingTargetKind.GroundingAccessPoint));
+        Assert.Equal("S100", ProfessionalCommandFactory.AllocateGroundingPointNumber(
+            fixture.Document, GroundingTargetKind.Terminal));
+    }
+
+    [Fact]
+    public void GapTargetCreation_UsesFirstFreeLNumberWithoutNumberInput()
+    {
+        SceneFixture fixture = CreateFixture();
+        GroundingAccessPoint[] gaps =
+        [
+            fixture.Document.CreateGroundingAccessPoint(
+                Guid.NewGuid(), fixture.Connection.Id, fixture.Start.Id, fixture.Middle.Id,
+                GroundingAccessLineSide.LargerNumberSide),
+            fixture.Document.CreateGroundingAccessPoint(
+                Guid.NewGuid(), fixture.Connection.Id, fixture.Middle.Id, fixture.Start.Id,
+                GroundingAccessLineSide.SmallerNumberSide),
+            fixture.Document.CreateGroundingAccessPoint(
+                Guid.NewGuid(), fixture.Connection.Id, fixture.Middle.Id, fixture.End.Id,
+                GroundingAccessLineSide.LargerNumberSide),
+            fixture.Document.CreateGroundingAccessPoint(
+                Guid.NewGuid(), fixture.Connection.Id, fixture.End.Id, fixture.Middle.Id,
+                GroundingAccessLineSide.SmallerNumberSide)
+        ];
+        var factory = new ProfessionalCommandFactory();
+        var stack = new CommandStack();
+        foreach (GroundingAccessPoint gap in gaps.Take(3))
+        {
+            stack.ExecuteCommand(factory.CreateAddGroundingPoint(
+                fixture.Document,
+                GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
+                "线路侧"));
+        }
+        Assert.Equal(
+            ["L01", "L02", "L03"],
+            fixture.Document.GroundingPoints.Select(point => point.Number!).ToArray());
+
+        GroundingPoint l02 = fixture.Document.GroundingPoints.Single(point => point.Number == "L02");
+        stack.ExecuteCommand(factory.CreateRemoveGroundingPoint(fixture.Document, l02.GroundingPointId));
+        stack.ExecuteCommand(factory.CreateAddGroundingPoint(
+            fixture.Document,
+            GroundingTarget.ForGroundingAccessPoint(gaps[3].GroundingAccessPointId),
+            "线路侧"));
+        Assert.Contains(fixture.Document.GroundingPoints,
+            point => point.Number == "L02" && point.Target.TargetId == gaps[3].GroundingAccessPointId);
+    }
+
+    [Fact]
     public void FreeLineCascadeUndoRestoresGap_AndOccupiedFailureIsAtomic()
     {
         SceneFixture fixture = CreateFixture();

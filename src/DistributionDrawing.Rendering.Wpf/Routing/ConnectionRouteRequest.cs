@@ -21,4 +21,6 @@ public readonly record struct RequiredRouteWaypoint(
     double MinimumStubLength = 0,
     IReadOnlyList<Guid>? CompositeSourceIds = null,
     double PredecessorMinimumStubLength = 0,
-    double SuccessorMinimumStubLength = 0);
+    double SuccessorMinimumStubLength = 0,
+    bool AllowStartEndpointSubstitution = false,
+    bool AllowEndEndpointSubstitution = false);

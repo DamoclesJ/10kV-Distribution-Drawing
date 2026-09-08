@@ -40,9 +40,12 @@ public static class DrawingSceneBoundsCalculator
                         text.FontSizeMillimeters,
                         text.Text.Length * text.FontSizeMillimeters);
                     double textHeight = Math.Max(1, text.FontSizeMillimeters * 1.3);
+                    double textX = text.HorizontalAlignment == SceneTextHorizontalAlignment.Center
+                        ? text.Origin.XMillimeters - textWidth / 2
+                        : text.Origin.XMillimeters;
                     accumulator.Include(
                         new DocumentRect(
-                            text.Origin.XMillimeters,
+                            textX,
                             text.Origin.YMillimeters,
                             textWidth,
                             textHeight),

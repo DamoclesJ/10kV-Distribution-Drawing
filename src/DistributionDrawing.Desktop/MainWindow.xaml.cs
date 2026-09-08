@@ -1756,6 +1756,8 @@ public partial class MainWindow : Window
         GroundingPointEditorPanel.Visibility = Visibility.Visible;
         GroundingPointTerminalText.Text = "请在图面中选择验电接地环或合法电缆侧端子";
         GroundingPointLocationInput.Text = string.Empty;
+        GroundingPointNumberLabel.Visibility = Visibility.Collapsed;
+        GroundingPointNumberInput.Visibility = Visibility.Collapsed;
         GroundingPointNumberInput.Text = string.Empty;
         GroundingPointNoteInput.Text = string.Empty;
         UpdateCanvasStatus();
@@ -2661,7 +2663,7 @@ public partial class MainWindow : Window
                 _activeSource.Document,
                 groundingTarget,
                 GroundingPointLocationInput.Text,
-                GroundingPointNumberInput.Text,
+                null,
                 GroundingPointNoteInput.Text);
             AddGroundingPointCommand addCommand = (AddGroundingPointCommand)command;
             _commandStack.ExecuteCommand(addCommand);
@@ -3030,6 +3032,8 @@ public partial class MainWindow : Window
                 ? "已绑定到验电接地环"
                 : "已绑定到兼容/电缆侧端子";
             GroundingPointLocationInput.Text = groundingPoint.Location;
+            GroundingPointNumberLabel.Visibility = Visibility.Visible;
+            GroundingPointNumberInput.Visibility = Visibility.Visible;
             GroundingPointNumberInput.Text = groundingPoint.Number ?? string.Empty;
             GroundingPointNoteInput.Text = groundingPoint.Note ?? string.Empty;
             return;
@@ -3038,6 +3042,8 @@ public partial class MainWindow : Window
         if (_groundingPointPickMode)
         {
             GroundingPointEditorPanel.Visibility = Visibility.Visible;
+            GroundingPointNumberLabel.Visibility = Visibility.Collapsed;
+            GroundingPointNumberInput.Visibility = Visibility.Collapsed;
             return;
         }
 

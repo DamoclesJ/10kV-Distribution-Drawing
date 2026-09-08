@@ -35,19 +35,57 @@ public sealed class OrthogonalRoutePlanner
         IReadOnlyList<RoutingObstacle> obstacles,
         IReadOnlyList<OrthogonalRoute> planned)
     {
-        RequiredRouteWaypoint[] waypoints = request.RequiredWaypoints?.ToArray() ?? [];
-        if (waypoints.Length == 0)
+        RequiredRouteWaypoint[] allWaypoints = request.RequiredWaypoints?.ToArray() ?? [];
+        if (allWaypoints.Length == 0)
         {
             return _router.Route(request, obstacles, planned);
         }
 
-        HashSet<Guid> requiredSourceIds = waypoints.Select(item => item.SourceId).ToHashSet();
-        requiredSourceIds.UnionWith(waypoints.SelectMany(item => item.CompositeSourceIds ?? []));
+        HashSet<Guid> requiredSourceIds = allWaypoints.Select(item => item.SourceId).ToHashSet();
+        requiredSourceIds.UnionWith(allWaypoints.SelectMany(item => item.CompositeSourceIds ?? []));
         RoutingObstacle[] routeObstacles = obstacles
             .Where(obstacle => !requiredSourceIds.Contains(obstacle.SourceId))
             .ToArray();
+        bool substituteStart = allWaypoints.Length >= 2 &&
+            allWaypoints[0].AllowStartEndpointSubstitution &&
+            CanSubstituteEndpoint(request.Start, allWaypoints[0].Position, allWaypoints[1].Position,
+                SuccessorMinimumStub(allWaypoints[0]));
+        bool substituteEnd = allWaypoints.Length >= 2 &&
+            allWaypoints[^1].AllowEndEndpointSubstitution &&
+            CanSubstituteEndpoint(request.End, allWaypoints[^1].Position, allWaypoints[^2].Position,
+                PredecessorMinimumStub(allWaypoints[^1]));
+        double startTransferredStub = substituteStart
+            ? RemainingStub(SuccessorMinimumStub(allWaypoints[0]),
+                request.Start.Position, allWaypoints[0].Position)
+            : 0;
+        double endTransferredStub = substituteEnd
+            ? RemainingStub(PredecessorMinimumStub(allWaypoints[^1]),
+                request.End.Position, allWaypoints[^1].Position)
+            : 0;
+        RequiredRouteWaypoint[] waypoints = allWaypoints
+            .Skip(substituteStart ? 1 : 0)
+            .Take(allWaypoints.Length - (substituteStart ? 1 : 0) - (substituteEnd ? 1 : 0))
+            .ToArray();
+        TerminalAnchor requestStart = request.Start with
+        {
+            MinimumStubLength = Math.Max(request.Start.MinimumStubLength, startTransferredStub)
+        };
+        TerminalAnchor requestEnd = request.End with
+        {
+            MinimumStubLength = Math.Max(request.End.MinimumStubLength, endTransferredStub)
+        };
+        if (waypoints.Length == 0)
+        {
+            return _router.Route(request with
+            {
+                Start = requestStart,
+                End = requestEnd,
+                RequiredWaypoints = null,
+                EnforceRequiredStubConstraints = startTransferredStub > 0 || endTransferredStub > 0
+            }, routeObstacles, planned);
+        }
         DocumentPoint[] passagePoints =
-            [request.Start.Position, .. waypoints.Select(item => item.Position), request.End.Position];
+            [requestStart.Position, .. waypoints.Select(item => item.Position), requestEnd.Position];
         passagePoints = passagePoints
             .Where((point, index) => index == 0 || point != passagePoints[index - 1])
             .ToArray();
@@ -55,13 +93,13 @@ public sealed class OrthogonalRoutePlanner
         for (int index = 0; index < passagePoints.Length - 1; index++)
         {
             TerminalAnchor start = index == 0
-                ? request.Start with { MinimumStubLength = Math.Max(request.Start.MinimumStubLength,
-                    MinimumStub(request.Start.Position, outgoing: true)) }
+                ? requestStart with { MinimumStubLength = Math.Max(requestStart.MinimumStubLength,
+                    MinimumStub(requestStart.Position, outgoing: true)) }
                 : new TerminalAnchor(request.StartTerminalId, passagePoints[index],
                     MinimumStubLength: MinimumStub(passagePoints[index], outgoing: true));
             TerminalAnchor end = index == passagePoints.Length - 2
-                ? request.End with { MinimumStubLength = Math.Max(request.End.MinimumStubLength,
-                    MinimumStub(request.End.Position, outgoing: false)) }
+                ? requestEnd with { MinimumStubLength = Math.Max(requestEnd.MinimumStubLength,
+                    MinimumStub(requestEnd.Position, outgoing: false)) }
                 : new TerminalAnchor(request.EndTerminalId, passagePoints[index + 1],
                     MinimumStubLength: MinimumStub(passagePoints[index + 1], outgoing: false));
             ValidateCollinearCapacity(start, end);
@@ -72,6 +110,8 @@ public sealed class OrthogonalRoutePlanner
                 PreferredHorizontalY = null,
                 RequiredWaypoints = null,
                 EnforceRequiredStubConstraints =
+                    index == 0 && startTransferredStub > 0 ||
+                    index == passagePoints.Length - 2 && endTransferredStub > 0 ||
                     MinimumStub(passagePoints[index], outgoing: true) > 0 ||
                     MinimumStub(passagePoints[index + 1], outgoing: false) > 0
             };
@@ -111,6 +151,73 @@ public sealed class OrthogonalRoutePlanner
             {
                 throw new InvalidOperationException("杆间距不足，无法容纳所需导线段和接地环间隙。");
             }
+        }
+
+        static double PredecessorMinimumStub(RequiredRouteWaypoint waypoint) =>
+            waypoint.PredecessorMinimumStubLength > 0
+                ? waypoint.PredecessorMinimumStubLength
+                : waypoint.MinimumStubLength;
+
+        static double SuccessorMinimumStub(RequiredRouteWaypoint waypoint) =>
+            waypoint.SuccessorMinimumStubLength > 0
+                ? waypoint.SuccessorMinimumStubLength
+                : waypoint.MinimumStubLength;
+
+        static double RemainingStub(
+            double requiredFromPole,
+            DocumentPoint endpoint,
+            DocumentPoint pole) => Math.Max(0, requiredFromPole - Distance(endpoint, pole));
+
+        static double Distance(DocumentPoint first, DocumentPoint second)
+        {
+            double deltaX = first.XMillimeters - second.XMillimeters;
+            double deltaY = first.YMillimeters - second.YMillimeters;
+            return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+        }
+
+        static bool CanSubstituteEndpoint(
+            TerminalAnchor endpoint,
+            DocumentPoint pole,
+            DocumentPoint adjacent,
+            double requiredFromPole)
+        {
+            const double tolerance = 0.000001;
+            double endpointDistance = Distance(endpoint.Position, pole);
+            if (endpointDistance <= tolerance ||
+                requiredFromPole > 0 && requiredFromPole <= endpointDistance)
+            {
+                return false;
+            }
+
+            if (Math.Abs(adjacent.YMillimeters - pole.YMillimeters) <= tolerance &&
+                Math.Abs(endpoint.Position.YMillimeters - pole.YMillimeters) <= tolerance)
+            {
+                bool towardRight = adjacent.XMillimeters > pole.XMillimeters;
+                return endpoint.Direction == (towardRight
+                           ? TerminalAnchorDirection.Right
+                           : TerminalAnchorDirection.Left) &&
+                       (towardRight
+                           ? endpoint.Position.XMillimeters > pole.XMillimeters &&
+                             endpoint.Position.XMillimeters < adjacent.XMillimeters
+                           : endpoint.Position.XMillimeters < pole.XMillimeters &&
+                             endpoint.Position.XMillimeters > adjacent.XMillimeters);
+            }
+
+            if (Math.Abs(adjacent.XMillimeters - pole.XMillimeters) <= tolerance &&
+                Math.Abs(endpoint.Position.XMillimeters - pole.XMillimeters) <= tolerance)
+            {
+                bool towardDown = adjacent.YMillimeters > pole.YMillimeters;
+                return endpoint.Direction == (towardDown
+                           ? TerminalAnchorDirection.Down
+                           : TerminalAnchorDirection.Up) &&
+                       (towardDown
+                           ? endpoint.Position.YMillimeters > pole.YMillimeters &&
+                             endpoint.Position.YMillimeters < adjacent.YMillimeters
+                           : endpoint.Position.YMillimeters < pole.YMillimeters &&
+                             endpoint.Position.YMillimeters > adjacent.YMillimeters);
+            }
+
+            return false;
         }
     }
 }

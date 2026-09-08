@@ -52,8 +52,56 @@ public static class SupportPoleAwareRouteBuilder
             halfEdge = new GroundingAccessHalfEdge(pole, backward);
             return true;
         }
+        bool endpointPole = poleIndex == 0 || poleIndex == line.SupportPoleIds.Count - 1;
+        if (endpointPole &&
+            layout.Poles.TryGetValue(adjacentPoleId, out PoleLayout? adjacentLayout) &&
+            TryFindEndpointDirection(
+                route,
+                pole,
+                PoleProfessionalGeometry.GetPoleCenter(adjacentLayout),
+                poleIndex == 0,
+                out DocumentPoint endpointDirection))
+        {
+            halfEdge = new GroundingAccessHalfEdge(pole, endpointDirection);
+            return true;
+        }
 
         halfEdge = default;
+        return false;
+    }
+
+    private static bool TryFindEndpointDirection(
+        OrthogonalRoute route,
+        DocumentPoint pole,
+        DocumentPoint adjacent,
+        bool useStart,
+        out DocumentPoint direction)
+    {
+        OrthogonalRouteSegment segment = useStart ? route.Segments[0] : route.Segments[^1];
+        DocumentPoint endpoint = useStart ? segment.Start : segment.End;
+        DocumentPoint other = useStart ? segment.End : segment.Start;
+        if (adjacent.XMillimeters != pole.XMillimeters &&
+            endpoint.YMillimeters == pole.YMillimeters &&
+            other.YMillimeters == pole.YMillimeters &&
+            (adjacent.XMillimeters > pole.XMillimeters
+                ? endpoint.XMillimeters > pole.XMillimeters && other.XMillimeters > endpoint.XMillimeters
+                : endpoint.XMillimeters < pole.XMillimeters && other.XMillimeters < endpoint.XMillimeters))
+        {
+            direction = other;
+            return true;
+        }
+        if (adjacent.YMillimeters != pole.YMillimeters &&
+            endpoint.XMillimeters == pole.XMillimeters &&
+            other.XMillimeters == pole.XMillimeters &&
+            (adjacent.YMillimeters > pole.YMillimeters
+                ? endpoint.YMillimeters > pole.YMillimeters && other.YMillimeters > endpoint.YMillimeters
+                : endpoint.YMillimeters < pole.YMillimeters && other.YMillimeters < endpoint.YMillimeters))
+        {
+            direction = other;
+            return true;
+        }
+
+        direction = default;
         return false;
     }
 

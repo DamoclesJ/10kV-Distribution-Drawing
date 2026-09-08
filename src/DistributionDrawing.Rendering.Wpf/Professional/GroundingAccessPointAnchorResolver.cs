@@ -59,34 +59,26 @@ public sealed class GroundingAccessPointAnchorResolver
         };
         double distance = extent + _metrics.Line.GroundingAccessClearance +
             (_metrics.Line.GroundingAccessMarkerDiameter + _metrics.Line.ConnectionThickness) / 2;
-        double localSpan = route.Segments
-            .Where(segment => segment.Start == halfEdge.PoleCenter || segment.End == halfEdge.PoleCenter)
-            .Where(segment => segment.IsHorizontal ==
-                (direction is TerminalAnchorDirection.Left or TerminalAnchorDirection.Right))
-            .Where(segment => direction switch
-            {
-                TerminalAnchorDirection.Left => segment.Start.XMillimeters < halfEdge.PoleCenter.XMillimeters ||
-                    segment.End.XMillimeters < halfEdge.PoleCenter.XMillimeters,
-                TerminalAnchorDirection.Right => segment.Start.XMillimeters > halfEdge.PoleCenter.XMillimeters ||
-                    segment.End.XMillimeters > halfEdge.PoleCenter.XMillimeters,
-                TerminalAnchorDirection.Up => segment.Start.YMillimeters < halfEdge.PoleCenter.YMillimeters ||
-                    segment.End.YMillimeters < halfEdge.PoleCenter.YMillimeters,
-                _ => segment.Start.YMillimeters > halfEdge.PoleCenter.YMillimeters ||
-                    segment.End.YMillimeters > halfEdge.PoleCenter.YMillimeters
-            })
-            .Select(segment => segment.Length)
-            .DefaultIfEmpty(0)
-            .Max();
-        if (distance > localSpan)
+        DocumentPoint position = Move(halfEdge.PoleCenter, direction, distance);
+        if (!route.Segments.Any(segment => Contains(segment, position)))
         {
             anchor = default;
             return false;
         }
         anchor = new GroundingPresentationAnchor(
-            Move(halfEdge.PoleCenter, direction, distance),
+            position,
             direction);
         return true;
     }
+
+    private static bool Contains(OrthogonalRouteSegment segment, DocumentPoint point) =>
+        segment.IsHorizontal
+            ? point.YMillimeters == segment.Start.YMillimeters &&
+              point.XMillimeters >= Math.Min(segment.Start.XMillimeters, segment.End.XMillimeters) &&
+              point.XMillimeters <= Math.Max(segment.Start.XMillimeters, segment.End.XMillimeters)
+            : point.XMillimeters == segment.Start.XMillimeters &&
+              point.YMillimeters >= Math.Min(segment.Start.YMillimeters, segment.End.YMillimeters) &&
+              point.YMillimeters <= Math.Max(segment.Start.YMillimeters, segment.End.YMillimeters);
 
     private static TerminalAnchorDirection ResolveDirection(DocumentPoint from, DocumentPoint to)
     {

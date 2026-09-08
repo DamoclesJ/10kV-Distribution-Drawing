@@ -180,7 +180,12 @@ public sealed class DrawingSceneRenderer
             CreateBrush(text.Foreground),
             pixelsPerDip);
 
-        context.DrawText(formattedText, _coordinates.ToPoint(text.Origin));
+        Point origin = _coordinates.ToPoint(text.Origin);
+        if (text.HorizontalAlignment == SceneTextHorizontalAlignment.Center)
+        {
+            origin.X -= formattedText.WidthIncludingTrailingWhitespace / 2;
+        }
+        context.DrawText(formattedText, origin);
     }
 
     private Pen CreatePen(

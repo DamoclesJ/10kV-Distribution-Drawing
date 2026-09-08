@@ -203,6 +203,9 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             session.CommandStack.ExecuteCommand(new ProfessionalCommandFactory().CreateAddGroundingPoint(
                 session.PersistenceSession.Domain, GroundingTarget.ForTerminal(terminalId), "电缆侧"));
         }
+        Assert.Equal(
+            ["S01", "S02"],
+            session.PersistenceSession.Domain.GroundingPoints.Select(point => point.Number!).ToArray());
         session.RebuildScene();
         Assert.Empty(session.Scene.Diagnostics);
         foreach (GroundingPoint point in session.PersistenceSession.Domain.GroundingPoints)
@@ -211,6 +214,66 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             Assert.Equal(5, lines.Length);
             Assert.DoesNotContain(session.Scene.Elements, element => element.TargetId == point.GroundingPointId && element is SceneRectangle);
         }
+    }
+
+    [Fact]
+    public void CableSideCreation_UsesFirstFreeSNumbersAcrossBothLegalTargetKinds()
+    {
+        ProjectRuntimeSession session = CreateSession("cable grounding numbers");
+        var devices = new DeviceCommandFactory();
+        var professional = new ProfessionalCommandFactory();
+        AddPoleCommand pole = devices.CreateAddPole(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new DocumentPoint(20, 20));
+        pole.Execute();
+        AddCableTerminationAttachmentCommand termination = devices.CreateAddCableTerminationAttachment(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            pole.Pole.Id,
+            "终端",
+            new DocumentPoint(10, 0));
+        termination.Execute();
+        AddRingCabinetCommand cabinet = devices.CreateAddRingCabinet(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new RingCabinetCreationConfiguration(
+                "测试柜",
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
+            new DocumentPoint(200, 20));
+        cabinet.Execute();
+        Guid[] cableTargets =
+        [
+            termination.Creation.CableSideTerminal.Id,
+            .. cabinet.Cabinet.Intervals.Select(interval => interval.CableTerminalId).OfType<Guid>()
+        ];
+        Assert.True(cableTargets.Length >= 4);
+
+        var stack = new CommandStack();
+        foreach (Guid terminalId in cableTargets.Take(3))
+        {
+            stack.ExecuteCommand(professional.CreateAddGroundingPoint(
+                session.PersistenceSession.Domain,
+                GroundingTarget.ForTerminal(terminalId),
+                "电缆侧"));
+        }
+        Assert.Equal(
+            ["S01", "S02", "S03"],
+            session.PersistenceSession.Domain.GroundingPoints.Select(point => point.Number!).ToArray());
+
+        GroundingPoint s02 = session.PersistenceSession.Domain.GroundingPoints.Single(
+            point => point.Number == "S02");
+        stack.ExecuteCommand(professional.CreateRemoveGroundingPoint(
+            session.PersistenceSession.Domain,
+            s02.GroundingPointId));
+        stack.ExecuteCommand(professional.CreateAddGroundingPoint(
+            session.PersistenceSession.Domain,
+            GroundingTarget.ForTerminal(cableTargets[3]),
+            "电缆侧"));
+        Assert.Contains(session.PersistenceSession.Domain.GroundingPoints,
+            point => point.Number == "S02" && point.Target.TargetId == cableTargets[3]);
     }
 
     [Fact]

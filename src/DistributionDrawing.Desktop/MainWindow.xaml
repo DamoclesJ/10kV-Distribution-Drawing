@@ -668,7 +668,8 @@
                        Text="位置说明" />
             <TextBox x:Name="GroundingPointLocationInput"
                      Margin="0,2,0,2" />
-            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+            <TextBlock x:Name="GroundingPointNumberLabel"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        Text="编号" />
             <TextBox x:Name="GroundingPointNumberInput"
                      Margin="0,2,0,2" />

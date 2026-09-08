@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Windows;
+using System.Windows.Media;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
@@ -27,6 +30,59 @@ public sealed class WpEm04WindowsValidationTests
         AssertNoDuplicatePoints(route);
         AssertClearance(scene, gap, ActualRenderedEnvelope(scene, start.Pole.Id, runtime.DrawingLayout), false);
         AssertMarkerWithinAdjacentCapacity(scene, gap, runtime.DrawingLayout);
+    }
+
+    [Fact]
+    public void StraightTwoSegmentLine_AddMiddleSwitch_RemainsMonotonicAcrossUndoRedo()
+    {
+        StraightSwitchScenario scenario = CreateStraightSwitchScenario(addGaps: false);
+        var builder = new DrawingSceneBuilder();
+        var stack = new CommandStack();
+        DrawingScene before = builder.Build(scenario.Document, scenario.Runtime);
+        AssertStraightTwoSegmentScene(before);
+
+        stack.ExecuteCommand(scenario.AddSwitch, () => builder.Build(scenario.Document, scenario.Runtime));
+        DrawingScene added = builder.Build(scenario.Document, scenario.Runtime);
+        AssertStraightTwoSegmentScene(added);
+
+        Assert.True(stack.Undo());
+        AssertStraightTwoSegmentScene(builder.Build(scenario.Document, scenario.Runtime));
+        Assert.True(stack.Redo());
+        AssertStraightTwoSegmentScene(builder.Build(scenario.Document, scenario.Runtime));
+
+        ICommand remove = new DeviceCommandFactory().CreateRemovePoleSwitchAndBypass(
+            scenario.Document,
+            scenario.Runtime,
+            scenario.AddSwitch.Creation.Attachment.AttachmentId);
+        stack.ExecuteCommand(remove, () => builder.Build(scenario.Document, scenario.Runtime));
+        AssertStraightTwoSegmentScene(builder.Build(scenario.Document, scenario.Runtime));
+        Assert.True(stack.Undo());
+        AssertStraightTwoSegmentScene(builder.Build(scenario.Document, scenario.Runtime));
+    }
+
+    [Fact]
+    public void StraightTwoSegmentLine_TwoGapsAndMiddleSwitch_RemainNaturalAndResolvable()
+    {
+        StraightSwitchScenario scenario = CreateStraightSwitchScenario(addGaps: true);
+        var builder = new DrawingSceneBuilder();
+        var stack = new CommandStack();
+        GroundingAccessPoint[] gaps = scenario.Document.GroundingAccessPoints.ToArray();
+
+        stack.ExecuteCommand(scenario.AddSwitch, () => builder.Build(scenario.Document, scenario.Runtime));
+        DrawingScene scene = builder.Build(scenario.Document, scenario.Runtime);
+
+        AssertStraightTwoSegmentScene(scene);
+        Assert.All(gaps, gap =>
+        {
+            Assert.Same(gap, scenario.Document.GetGroundingAccessPoint(gap.GroundingAccessPointId));
+            AssertMarkerWithinAdjacentCapacity(scene, gap, scenario.Runtime.DrawingLayout);
+        });
+        DocumentRect envelope = ActualRenderedEnvelope(
+            scene,
+            scenario.Middle.Pole.Id,
+            scenario.Runtime.DrawingLayout);
+        AssertClearance(scene, gaps.Single(gap => gap.AdjacentPoleId == scenario.Left.Pole.Id), envelope, true);
+        AssertClearance(scene, gaps.Single(gap => gap.AdjacentPoleId == scenario.Right.Pole.Id), envelope, false);
     }
 
     [Theory]
@@ -228,13 +284,36 @@ public sealed class WpEm04WindowsValidationTests
             document.CreateGroundingAccessPoint(Guid.NewGuid(), right.Id, poles[1].Pole.Id, poles[2].Pole.Id,
                 GroundingAccessLineSide.LargerNumberSide)
         ];
-        document.CreateGroundingPoint(Guid.NewGuid(), GroundingTarget.ForGroundingAccessPoint(gaps[1].GroundingAccessPointId),
+        GroundingPoint groundingPoint = document.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForGroundingAccessPoint(gaps[1].GroundingAccessPointId),
             "大号侧", "L01");
+        void AssertNaturalState(DrawingScene scene)
+        {
+            Assert.Empty(scene.Diagnostics);
+            Assert.Equal(splitConnections ? 2 : 1, scene.Routes.Count);
+            Assert.All(scene.Routes, route =>
+            {
+                AssertStraightHorizontal(route);
+                AssertNoDuplicatePoints(route);
+            });
+            DocumentPoint middle = PoleProfessionalGeometry.GetPoleCenter(
+                runtime.DrawingLayout.Poles[poles[1].Pole.Id]);
+            Assert.Contains(scene.Routes.SelectMany(route => route.Points), point => point == middle);
+            Assert.NotEqual(gaps[0].AdjacentPoleId, gaps[1].AdjacentPoleId);
+            Assert.All(gaps, gap =>
+            {
+                Assert.Same(gap, document.GetGroundingAccessPoint(gap.GroundingAccessPointId));
+                _ = Marker(scene, gap);
+                AssertMarkerWithinAdjacentCapacity(scene, gap, runtime.DrawingLayout);
+            });
+            Assert.Contains(scene.Elements, element =>
+                element.TargetId == groundingPoint.GroundingPointId);
+        }
         DrawingScene initial = builder.Build(document, runtime);
+        AssertNaturalState(initial);
         if (!switchFirst) stack.ExecuteCommand(add, () => builder.Build(document, runtime));
         DrawingScene withSwitch = builder.Build(document, runtime);
-        Assert.Empty(withSwitch.Diagnostics);
-        Assert.All(gaps, gap => Assert.Same(gap, document.GetGroundingAccessPoint(gap.GroundingAccessPointId)));
+        AssertNaturalState(withSwitch);
         DocumentRect envelope = ActualRenderedEnvelope(withSwitch, poles[1].Pole.Id, runtime.DrawingLayout);
         AssertClearance(withSwitch, gaps[0], envelope, leftSide: true);
         AssertClearance(withSwitch, gaps[1], envelope, leftSide: false);
@@ -242,16 +321,23 @@ public sealed class WpEm04WindowsValidationTests
 
         Assert.True(stack.Undo());
         DrawingScene withoutSwitch = builder.Build(document, runtime);
+        AssertNaturalState(withoutSwitch);
         Assert.True(Center(Marker(withoutSwitch, gaps[1])).XMillimeters < Center(Marker(withSwitch, gaps[1])).XMillimeters);
         Assert.True(stack.Redo());
-        Assert.Equal(Marker(withSwitch, gaps[1]), Marker(builder.Build(document, runtime), gaps[1]));
+        DrawingScene redoneSwitch = builder.Build(document, runtime);
+        AssertNaturalState(redoneSwitch);
+        Assert.Equal(Marker(withSwitch, gaps[1]), Marker(redoneSwitch, gaps[1]));
         ICommand remove = devices.CreateRemovePoleSwitchAndBypass(document, runtime, add.Creation.Attachment.AttachmentId);
         stack.ExecuteCommand(remove, () => builder.Build(document, runtime));
-        Assert.Equal(Marker(withoutSwitch, gaps[1]), Marker(builder.Build(document, runtime), gaps[1]));
+        DrawingScene removedSwitch = builder.Build(document, runtime);
+        AssertNaturalState(removedSwitch);
+        Assert.Equal(Marker(withoutSwitch, gaps[1]), Marker(removedSwitch, gaps[1]));
         Assert.True(stack.Undo());
-        Assert.Equal(Marker(withSwitch, gaps[1]), Marker(builder.Build(document, runtime), gaps[1]));
+        DrawingScene restoredSwitch = builder.Build(document, runtime);
+        AssertNaturalState(restoredSwitch);
+        Assert.Equal(Marker(withSwitch, gaps[1]), Marker(restoredSwitch, gaps[1]));
         Assert.True(stack.Redo());
-        Assert.All(gaps, gap => Assert.Same(gap, document.GetGroundingAccessPoint(gap.GroundingAccessPointId)));
+        AssertNaturalState(builder.Build(document, runtime));
     }
 
     [Fact]
@@ -264,8 +350,13 @@ public sealed class WpEm04WindowsValidationTests
         Assert.Equal(2, route.Segments.Count);
     }
 
-    [Fact]
-    public void GroundingSymbol_HasStableIdentityThreeBarsNumberAndIndependentHitRegion()
+    [Theory]
+    [InlineData("L01")]
+    [InlineData("S01")]
+    [InlineData("L100")]
+    [InlineData("CustomGround")]
+    public void GroundingSymbol_HasStableIdentityThreeBarsAndActuallyCenteredNumber(
+        string groundingNumber)
     {
         var document = new DrawingDocument(Guid.NewGuid(), "Grounding symbol");
         var runtime = new RuntimeLayoutDocument(new DrawingLayout(), new Dictionary<Guid, RingCabinetLayout>());
@@ -282,11 +373,13 @@ public sealed class WpEm04WindowsValidationTests
         GroundingAccessPoint gap = document.CreateGroundingAccessPoint(Guid.NewGuid(), connection.Id,
             start.Pole.Id, end.Pole.Id, GroundingAccessLineSide.LargerNumberSide);
         GroundingPoint gp = document.CreateGroundingPoint(Guid.NewGuid(),
-            GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId), "大号侧", "L01");
+            GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId), "大号侧", groundingNumber);
         DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
         SceneElement[] elements = scene.Elements.Where(element => element.TargetId == gp.GroundingPointId).ToArray();
         Assert.DoesNotContain(elements, element => element is SceneRectangle);
+        Assert.Equal(4, elements.OfType<SceneLine>().Count());
         SceneLine stem = Assert.Single(elements.OfType<SceneLine>(), line => line.Start.XMillimeters == line.End.XMillimeters);
+        Assert.Equal(Center(Marker(scene, gap)), stem.Start);
         SceneLine[] bars = elements.OfType<SceneLine>().Where(line => line.Start.YMillimeters >= stem.End.YMillimeters)
             .OrderBy(line => line.Start.YMillimeters).ToArray();
         Assert.Equal(3, bars.Length);
@@ -294,8 +387,12 @@ public sealed class WpEm04WindowsValidationTests
         Assert.True(Width(bars[0]) > Width(bars[1]) && Width(bars[1]) > Width(bars[2]));
         Assert.Equal(DrawingMetrics.Default.Grounding.StemLength, stem.End.YMillimeters - stem.Start.YMillimeters);
         SceneText number = Assert.Single(elements.OfType<SceneText>());
-        Assert.Equal("L01", number.Text);
+        Assert.Equal(groundingNumber, number.Text);
         Assert.Equal(DrawingMetrics.Default.Typography.GroundingPointNumberFontSize, number.FontSizeMillimeters);
+        Assert.Equal(SceneTextHorizontalAlignment.Center, number.HorizontalAlignment);
+        Assert.Equal(stem.End.XMillimeters, number.Origin.XMillimeters, 8);
+        Assert.True(number.Origin.YMillimeters > bars[^1].Start.YMillimeters);
+        AssertActuallyCentered(number, stem.End.XMillimeters);
         Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingPoint, gp.GroundingPointId),
             scene.HitTestIndex.HitTest(stem.End));
         Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingAccessPoint, gap.GroundingAccessPointId),
@@ -304,6 +401,107 @@ public sealed class WpEm04WindowsValidationTests
         var overlapping = new SelectionHitTestIndex([new(new(SelectionTargetKind.GroundingAccessPoint, gap.GroundingAccessPointId), hit.Bounds, 70), hit]);
         Assert.Equal(gp.GroundingPointId, overlapping.HitTest(stem.End)!.ObjectId);
         AssertClearance(scene, gap, ActualRenderedEnvelope(scene, start.Pole.Id, runtime.DrawingLayout), false);
+    }
+
+    private static StraightSwitchScenario CreateStraightSwitchScenario(bool addGaps)
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "straight switch insertion");
+        var runtime = new RuntimeLayoutDocument(new DrawingLayout(), new Dictionary<Guid, RingCabinetLayout>());
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand left = factory.CreateAddPole(document, runtime, new DocumentPoint(0, 0));
+        AddPoleCommand middle = factory.CreateAddPole(document, runtime, new DocumentPoint(160, 0));
+        AddPoleCommand right = factory.CreateAddPole(document, runtime, new DocumentPoint(320, 0));
+        left.Execute();
+        middle.Execute();
+        right.Execute();
+
+        Connection AddLine(AddPoleCommand start, AddPoleCommand end)
+        {
+            var connection = new Connection(
+                Guid.NewGuid(),
+                ConnectionType.OverheadLine,
+                start.Terminal.Id,
+                end.Terminal.Id,
+                "line",
+                "10kV");
+            document.AddConnection(connection);
+            document.AddOverheadLine(new OverheadLine(
+                connection.Id,
+                "JKLYJ",
+                [start.Pole.Id, end.Pole.Id]));
+            runtime.DrawingLayout.Add(new OverheadLineLayout(
+                connection.Id,
+                start.Layout.Position,
+                end.Layout.Position));
+            return connection;
+        }
+
+        Connection leftLine = AddLine(left, middle);
+        Connection rightLine = AddLine(middle, right);
+        if (addGaps)
+        {
+            document.CreateGroundingAccessPoint(
+                Guid.NewGuid(), leftLine.Id, middle.Pole.Id, left.Pole.Id,
+                GroundingAccessLineSide.SmallerNumberSide);
+            document.CreateGroundingAccessPoint(
+                Guid.NewGuid(), rightLine.Id, middle.Pole.Id, right.Pole.Id,
+                GroundingAccessLineSide.LargerNumberSide);
+        }
+
+        AddPoleSwitchAttachmentCommand addSwitch = factory.CreateAddPoleSwitchAttachment(
+            document,
+            runtime,
+            middle.Pole.Id,
+            SwitchKind.IsolationSwitch,
+            PoleProfessionalGeometry.GetDefaultAttachmentOffset(SwitchKind.IsolationSwitch));
+        return new StraightSwitchScenario(document, runtime, left, middle, right, addSwitch);
+    }
+
+    private static void AssertStraightHorizontal(OrthogonalRoute route)
+    {
+        Assert.All(route.Segments, segment => Assert.True(segment.IsHorizontal));
+        DocumentPoint start = route.Points[0];
+        DocumentPoint end = route.Points[^1];
+        double direction = Math.Sign(end.XMillimeters - start.XMillimeters);
+        Assert.NotEqual(0, direction);
+        Assert.All(route.Segments, segment =>
+            Assert.Equal(direction, Math.Sign(segment.End.XMillimeters - segment.Start.XMillimeters)));
+        Assert.Equal(
+            Math.Abs(end.XMillimeters - start.XMillimeters),
+            route.Segments.Sum(segment => segment.Length),
+            8);
+    }
+
+    private static void AssertStraightTwoSegmentScene(DrawingScene scene)
+    {
+        Assert.Empty(scene.Diagnostics);
+        Assert.Equal(2, scene.Routes.Count);
+        Assert.All(scene.Routes, AssertStraightHorizontal);
+    }
+
+    private static void AssertActuallyCentered(SceneText text, double expectedCenterX)
+    {
+        var coordinates = new DocumentCoordinateSystem();
+        var formatted = new FormattedText(
+            text.Text,
+            CultureInfo.GetCultureInfo("zh-CN"),
+            FlowDirection.LeftToRight,
+            new Typeface("Microsoft YaHei"),
+            coordinates.MillimetersToDip(text.FontSizeMillimeters),
+            Brushes.Black,
+            1);
+        Point topLeft = coordinates.ToPoint(text.Origin);
+        topLeft.X -= formatted.WidthIncludingTrailingWhitespace / 2;
+        Rect expectedBounds = formatted.BuildGeometry(topLeft).Bounds;
+        DrawingGroup rendered = new DrawingSceneRenderer().RenderDrawing(
+            new DrawingScene([text]),
+            pixelsPerDip: 1);
+
+        Assert.Equal(expectedBounds.Left, rendered.Bounds.Left, 6);
+        Assert.Equal(expectedBounds.Right, rendered.Bounds.Right, 6);
+        double renderedCenter = coordinates.DipToMillimeters(
+            rendered.Bounds.Left + rendered.Bounds.Width / 2);
+        Assert.InRange(renderedCenter, expectedCenterX - 0.5, expectedCenterX + 0.5);
     }
 
     private static double Width(SceneLine line) => line.End.XMillimeters - line.Start.XMillimeters;
@@ -386,4 +584,12 @@ public sealed class WpEm04WindowsValidationTests
             center.XMillimeters >= Math.Min(segment.Start.XMillimeters, segment.End.XMillimeters) &&
             center.XMillimeters <= Math.Max(segment.Start.XMillimeters, segment.End.XMillimeters));
     }
+
+    private sealed record StraightSwitchScenario(
+        DrawingDocument Document,
+        RuntimeLayoutDocument Runtime,
+        AddPoleCommand Left,
+        AddPoleCommand Middle,
+        AddPoleCommand Right,
+        AddPoleSwitchAttachmentCommand AddSwitch);
 }

@@ -9,10 +9,6 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 
 public sealed class ProfessionalCommandFactory
 {
-    private static readonly Regex StandardGroundingNumber = new(
-        "^L(?<number>[0-9]{2,})$",
-        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-
     public ICommand CreateAddGroundingPoint(
         DrawingDocument document,
         Guid terminalId,
@@ -70,7 +66,7 @@ public sealed class ProfessionalCommandFactory
                 groundingPointId ?? Guid.NewGuid(),
                 target,
                 location.Trim(),
-                NormalizeNewNumber(document, number),
+                NormalizeNewNumber(document, target, number),
                 NormalizeOptional(note)));
     }
 
@@ -148,7 +144,9 @@ public sealed class ProfessionalCommandFactory
                 GroundingTarget.ForGroundingAccessPoint(
                     addAccessPoint.After.GroundingAccessPointId),
                 location.Trim(),
-                AllocateGroundingPointNumber(document),
+                AllocateGroundingPointNumber(
+                    document,
+                    GroundingTargetKind.GroundingAccessPoint),
                 NormalizeOptional(note)));
         return new CompositeProfessionalCommand([addAccessPoint, addGroundingPoint]);
     }
@@ -239,10 +237,13 @@ public sealed class ProfessionalCommandFactory
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
-    private static string NormalizeNewNumber(DrawingDocument document, string? value)
+    private static string NormalizeNewNumber(
+        DrawingDocument document,
+        GroundingTarget target,
+        string? value)
     {
         string number = string.IsNullOrWhiteSpace(value)
-            ? AllocateGroundingPointNumber(document)
+            ? AllocateGroundingPointNumber(document, target.Kind)
             : value.Trim();
         if (document.GroundingPoints.Any(point =>
                 string.Equals(point.Number, number, StringComparison.OrdinalIgnoreCase)))
@@ -254,13 +255,27 @@ public sealed class ProfessionalCommandFactory
         return number;
     }
 
-    public static string AllocateGroundingPointNumber(DrawingDocument document)
+    public static string AllocateGroundingPointNumber(DrawingDocument document) =>
+        AllocateGroundingPointNumber(document, GroundingTargetKind.GroundingAccessPoint);
+
+    public static string AllocateGroundingPointNumber(
+        DrawingDocument document,
+        GroundingTargetKind targetKind)
     {
         ArgumentNullException.ThrowIfNull(document);
+        if (!Enum.IsDefined(targetKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetKind));
+        }
+
+        string prefix = targetKind == GroundingTargetKind.GroundingAccessPoint ? "L" : "S";
+        var standardNumber = new Regex(
+            $"^{prefix}(?<number>[0-9]{{2,}})$",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         HashSet<int> occupied = document.GroundingPoints
             .Select(point => point.Number)
             .OfType<string>()
-            .Select(number => StandardGroundingNumber.Match(number.Trim()))
+            .Select(number => standardNumber.Match(number.Trim()))
             .Where(match => match.Success)
             .Select(match => int.TryParse(
                 match.Groups["number"].Value,
@@ -274,7 +289,7 @@ public sealed class ProfessionalCommandFactory
         {
             available = checked(available + 1);
         }
-        return $"L{available:D2}";
+        return $"{prefix}{available:D2}";
     }
 
     public static bool IsEligibleNewTerminalTarget(

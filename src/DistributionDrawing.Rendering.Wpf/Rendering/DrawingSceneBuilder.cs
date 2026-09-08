@@ -393,13 +393,29 @@ public sealed class DrawingSceneBuilder
                                 ? Stub(overheadLine.SupportPoleIds[supportIndex + 1],
                                     PoleProfessionalGeometry.GetPoleCenter(
                                         layout.Poles[overheadLine.SupportPoleIds[supportIndex + 1]])) : 0;
+                            bool MountedEndpoint(Guid terminalId) => poleAttachments.Any(attachment =>
+                                attachment.PoleId == poleId &&
+                                deviceById.TryGetValue(attachment.AttachedDeviceId, out Device? device) &&
+                                device switch
+                                {
+                                    SwitchDevice poleSwitch => poleSwitch.OwnsTerminal(terminalId),
+                                    CableTermination termination =>
+                                        termination.CableSideTerminalId == terminalId ||
+                                        termination.OverheadSideTerminalId == terminalId,
+                                    _ => false
+                                });
                             return new RequiredRouteWaypoint(
                                 poleId,
                                 center,
                                 CompositeSourceIds: poleAttachments.Where(item => item.PoleId == poleId)
                                     .Select(item => item.AttachmentId).ToArray(),
                                 PredecessorMinimumStubLength: predecessor,
-                                SuccessorMinimumStubLength: successor);
+                                SuccessorMinimumStubLength: successor,
+                                AllowStartEndpointSubstitution: supportIndex == 0 &&
+                                    MountedEndpoint(connection.StartTerminalId),
+                                AllowEndEndpointSubstitution:
+                                    supportIndex == overheadLine.SupportPoleIds.Count - 1 &&
+                                    MountedEndpoint(connection.EndTerminalId));
                         }).ToArray()));
                 }
             }
