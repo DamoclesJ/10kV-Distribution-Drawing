@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / Grounding Scope Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
 
@@ -174,7 +174,7 @@ WP-EM-01 已实现的 `Pole + Switch` legacy Terminal-target presentation anchor
 
 WP-EM-04 basic GAP marker 为对应架空导线上的实心小圆点，直径约为 conductor stroke width 的 2.5 倍，并使用 Rendering typed metric。从 Pole 沿 `AdjacentPoleId` 对应 half-edge 方向使用固定 visual clearance 放置；不保存 screen coordinates、offset 或 clearance，不支持拖动。存在柱上设备时仍以该真实 half-edge 为定位基础。高级 `GroundingAccessClearance`、leader 与可调布局继续留给 WP-EM-05。
 
-工作地线使用标准矢量 grounding symbol：一根竖向主 stem，下端三条以 stem 为中心、由上到下逐渐变短的水平横线。不得继续使用含义不明确的小方框或 bitmap。符号尺度与 Pole 保持合理专业比例，并由 Rendering metric 控制；用户调整 leader 时符号本身大小固定，不保存 symbol scale。
+WP-EM-04 已完成标准矢量 grounding symbol：一根竖向主 stem，下端三条以 stem 为中心、由上到下逐渐变短的水平横线。不得继续使用含义不明确的小方框或 bitmap。符号尺度与 Pole 保持合理专业比例，并由 Rendering metric 控制；用户调整 leader 时符号本身大小固定，不保存 symbol scale。WP-EM-05 只 refinement 其 layout、routing 与 interaction，不重新实现该 symbol。
 
 架空 GAP-target `GroundingPoint` 的默认路径从架空导线接地点引至 grounding symbol。用户选择后可拖动 symbol，以增减 leader 长度并在水平、竖直方向避让标签和其它专业信息；该操作只修改 `GroundingPointLayout`，不得改变 `GroundingTarget`、`GroundingAccessPoint` 或 topology。
 
@@ -388,18 +388,31 @@ Final closure contract:
 - Final Windows runtime validation reported all discovered tests passed with failed = 0 and skipped = 0. Domain.Tests 113/113, Infrastructure.Tests 80/80, and the full solution build passed.
 - GUI acceptance passed for mounted-switch pole movement without loop/U-turn/backtracking, GAP and mounted-switch coexistence, vertical GAP half-edge presentation, RingCabinet and local CableTermination GroundingPoint locations, and Lxx/Sxx numbering. No separate GUI Save/Reopen result is asserted here beyond the automated persistence coverage.
 
-Deferred / Post-EM-04 UX improvement (not closure blockers):
+Deferred / Post-EM-04 UX findings are formally routed as follows and are not WP-EM-04 closure blockers:
 
-1. Pole-drag route continuity / hysteresis across legal route-family changes.
-2. GAP / GroundingPoint presentation continuity during route-family changes.
-3. Last-valid-position when minimum-stub or obstacle-safe routing is not satisfiable.
-4. Non-modal feedback during continuous drag instead of modal errors.
+- Grounding-specific GAP / GroundingPoint presentation continuity during legal route rebuilds belongs to WP-EM-05.
+- Generic pole/device drag route continuity, legal route-family hysteresis, illegal-geometry last-valid-position, and continuous-drag non-modal feedback belong to WP-EM-08.
 
 An existing presentation behavior in which some polyline routes do not pass through the visual pole center was reverified as predating GAP and is out of scope for WP-EM-04.
 
 ### WP-EM-05 — Grounding Layout & Interaction Closure
 
-完成 standard grounding symbol、`GroundingAccessClearance`、`GroundingPointLayout`、drag / leader adjustment、架空 GAP advanced professional placement、Cable-side Terminal elbow route、Location selector、target affordance / tolerance、crossing bridge，以及 Windows professional visual acceptance。
+**状态：Not Started / Planned（Next Work Package）**
+
+完成 Grounding 自身的专业显示、可调布局和 interaction closure，使 WP-EM-04 已完成的 Grounding electrical model 达到日常工作票绘制可用状态。范围包括：
+
+- `GroundingPointLayout` runtime 与 V7 integration；
+- grounding symbol drag、`SymbolOffset` Undo / Redo 及 Save / Reopen；
+- grounding leader length / position adjustment、grounding-specific clearance refinement 与 GAP-target advanced presentation；
+- Cable-side Terminal grounding route；
+- target affordance / hit tolerance / highlight 与 Location interaction closure；
+- grounding leader crossing bridge / `LineJumpDecorator`；
+- Canvas / PNG consistency 与 Windows professional visual acceptance；
+- grounding-specific GAP / GroundingPoint presentation continuity。
+
+Grounding-specific continuity 必须在合法 route 重算后保持 `GroundingTarget` identity、GAP identity、`AdjacentPoleId` 与 `GroundingPointLayout.SymbolOffset`；GAP marker 不得跳到另一 half-edge，GroundingPoint anchor / leader 不得错误反向、丢失或重新绑定，最终 presentation 必须保持专业一致。为实现这些 grounding-specific 结果，不得在 WP-EM-05 建立通用 route hysteresis infrastructure。
+
+Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以及 `GroundingTarget` / GAP model 均为 WP-EM-04 已完成事实，不得在 WP-EM-05 作为新业务能力重复实现。
 
 ### WP-EM-06 — Transformer Vertical Slice
 
@@ -409,20 +422,33 @@ An existing presentation behavior in which some polyline routes do not pass thro
 
 完成 `BoxStation`、`IndoorStation`、one/two `IncomingFeeder`、feeder-owned `IsolationSwitch`、cable-only connection、independent feeder topology、GroundingPoint integration、aggregate create/delete、professional rendering、selection、inspector、clipboard、Undo / Redo 和 V7 integration。
 
-### WP-EM-08 — Electrical Model Closure Integration
+### WP-EM-08 — Electrical Model Interaction Stabilization
+
+候选范围包括：
+
+- pole/device drag route continuity 与 legal route-family hysteresis；
+- last-valid-position 与 illegal geometry handling；
+- continuous-drag non-modal feedback；
+- cross-device interaction regression；
+- stabilized drag/routing 下的 grounding presentation regression；
+- Pole / Switch / Transformer / CustomerStation drag behavior。
+
+最终详细 Scope 可在 WP-EM-05～WP-EM-07 实施过程中继续收集真实 interaction case 后冻结，但 WP-EM-08 已正式进入阶段计划。该 WP 不包含 waypoint editor、manual route editor、generic diagram routing engine rewrite、Annotation、Energization、new Electrical Device 或 arbitrary layout framework。
+
+### WP-EM-09 — Electrical Model Closure Integration
 
 只进行：
 
 - V6 / V7 regression matrix；
-- save/open、copy/paste、undo/redo；
-- delete dependency；
-- topology graph；
-- grounding diagnostics、layout 与 interaction regression；
-- Windows runtime 与 professional visual validation；
-- file upgrade validation；
+- save/open、copy/paste、Undo/Redo；
+- dependency deletion；
+- topology、grounding、Transformer 与 CustomerStation regression；
+- WP-EM-08 interaction stabilization regression；
+- V6 → V7 upgrade；
+- Windows runtime validation 与 professional visual acceptance；
 - integration defect fixes。
 
-不得在 WP-EM-08 扩展新业务范围。
+不得在 WP-EM-09 增加新业务能力。
 
 ## 9. 阶段执行状态
 
@@ -436,4 +462,6 @@ An existing presentation behavior in which some polyline routes do not pass thro
 - WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice 已完成并 Closed，包含 Windows 最终验证；
 - WP-EM-04 requirements refinement、implementation、review、Windows runtime validation 和 GUI acceptance 已完成，WP-EM-04 Closed；
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint` vertical slice 已完成，Transformer、CustomerStation 尚未实现；
-- 后续 WP 必须按 WP-EM-01 → WP-EM-08 顺序推进，任何范围变化需重新治理确认。
+- Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
+- WP-EM-05 尚未开始，是 Next Work Package；
+- 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。

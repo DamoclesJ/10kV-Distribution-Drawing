@@ -14,7 +14,7 @@ Post-V1 remains the roadmap level; no V1.1, V1.2, or V2.0 scope is defined here.
 
 The first confirmed implementation stage is [Post-V1 Electrical Model Closure](POST_V1_ELECTRICAL_MODEL_CLOSURE.md). Its goal is to close the principal Electrical Model gaps needed for actual 10kV work-ticket drawing and establish the unified FormatVersion 7 persistence baseline before any future Annotation / Work-ticket Presentation Layer.
 
-The Grounding Scope Amendment is complete and frozen. The confirmed Work Package order is now WP-EM-01 through WP-EM-08:
+The Grounding Scope Amendment is complete and frozen. The Interaction Stabilization Amendment establishes the confirmed Work Package order as WP-EM-01 through WP-EM-09:
 
 1. WP-EM-01 Grounding Presentation Anchor Separation — Completed
 2. WP-EM-02 V7 Format & Migration Foundation — Completed
@@ -23,8 +23,9 @@ The Grounding Scope Amendment is complete and frozen. The confirmed Work Package
 5. WP-EM-05 Grounding Layout & Interaction Closure — Not Started / Planned (prerequisite satisfied)
 6. WP-EM-06 Transformer Vertical Slice
 7. WP-EM-07 CustomerStation Vertical Slice
-8. WP-EM-08 Electrical Model Closure Integration
+8. WP-EM-08 Electrical Model Interaction Stabilization
+9. WP-EM-09 Electrical Model Closure Integration
 
 This ordering does not define a new release version. Annotation and Energization remain Post-V1 candidates and are outside this stage.
 
-WP-EM-04 closed at implementation baseline `b15166c96bcf03a38acd2a27d98b597d04b60d4d` after implementation, review, automated validation, Windows runtime validation, and GUI acceptance. Deferred pole-drag continuity and related dynamic-routing UX remain future work; WP-EM-05 has not started.
+WP-EM-04 closed at implementation baseline `b15166c96bcf03a38acd2a27d98b597d04b60d4d` after implementation, review, automated validation, Windows runtime validation, and GUI acceptance. Grounding-specific presentation continuity is assigned to WP-EM-05. Generic drag and routing stabilization is assigned to WP-EM-08, while final integration and regression move to WP-EM-09. WP-EM-05 has not started and remains the next Work Package.
