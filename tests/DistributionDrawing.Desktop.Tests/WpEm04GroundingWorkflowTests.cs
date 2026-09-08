@@ -312,11 +312,12 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             professional.CreateAddGroundingPoint(
                 session.PersistenceSession.Domain,
                 GroundingTarget.ForTerminal(firstInterval.CableTerminalId!.Value));
+        first.Execute();
+
         AddGroundingPointCommand second = (AddGroundingPointCommand)
             professional.CreateAddGroundingPoint(
                 session.PersistenceSession.Domain,
                 GroundingTarget.ForTerminal(secondInterval.CableTerminalId!.Value));
-        first.Execute();
         second.Execute();
 
         Assert.Equal("新11KB5负4间隔", first.After.Location);
