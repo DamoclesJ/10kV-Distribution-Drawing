@@ -185,6 +185,10 @@ public sealed class DrawingSceneRenderer
         {
             Rect visibleBounds = formattedText.BuildGeometry(new Point()).Bounds;
             origin.X -= visibleBounds.Left + visibleBounds.Width / 2;
+            Geometry geometry = formattedText.BuildGeometry(origin);
+            geometry.Freeze();
+            context.DrawGeometry(CreateBrush(text.Foreground), null, geometry);
+            return;
         }
         context.DrawText(formattedText, origin);
     }

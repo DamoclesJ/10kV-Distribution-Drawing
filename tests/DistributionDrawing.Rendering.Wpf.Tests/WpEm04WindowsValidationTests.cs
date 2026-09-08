@@ -388,7 +388,25 @@ public sealed class WpEm04WindowsValidationTests
             });
             DocumentPoint middle = PoleProfessionalGeometry.GetPoleCenter(
                 runtime.DrawingLayout.Poles[poles[1].Pole.Id]);
-            Assert.Contains(scene.Routes.SelectMany(route => route.Points), point => point == middle);
+            SwitchDevice? mountedSwitch = document.Devices.OfType<SwitchDevice>().SingleOrDefault();
+            if (mountedSwitch is null)
+            {
+                Assert.Contains(scene.Routes.SelectMany(route => route.Points), point => point == middle);
+            }
+            else
+            {
+                TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+                    document,
+                    runtime.DrawingLayout,
+                    runtime.RingCabinetLayouts,
+                    document.Connections,
+                    document.CableSegments);
+                Assert.All(mountedSwitch.TerminalIds, terminalId =>
+                {
+                    Assert.True(anchors.TryGet(terminalId, out TerminalAnchor anchor));
+                    Assert.Contains(anchor.Position, scene.Routes.SelectMany(route => route.Points));
+                });
+            }
             Assert.NotEqual(gaps[0].AdjacentPoleId, gaps[1].AdjacentPoleId);
             Assert.All(gaps, gap =>
             {
