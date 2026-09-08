@@ -1756,6 +1756,7 @@ public partial class MainWindow : Window
         GroundingPointEditorPanel.Visibility = Visibility.Visible;
         GroundingPointTerminalText.Text = "请在图面中选择验电接地环或合法电缆侧端子";
         GroundingPointLocationInput.Text = string.Empty;
+        GroundingPointLocationInput.IsReadOnly = true;
         GroundingPointNumberLabel.Visibility = Visibility.Collapsed;
         GroundingPointNumberInput.Visibility = Visibility.Collapsed;
         GroundingPointNumberInput.Text = string.Empty;
@@ -2015,6 +2016,12 @@ public partial class MainWindow : Window
 
         if (_groundingPointPickMode)
         {
+            if (_activeSource?.Document is not DrawingDocument document)
+            {
+                ShowCommandError("接地目标选择失败", "当前场景没有可编辑的 DrawingDocument 工程。");
+                e.Handled = true;
+                return;
+            }
             GroundingTarget? groundingTarget = HitTestGroundingTarget(
                 documentPoint,
                 _viewport.Transform.ViewDistanceToDocument(8));
@@ -2028,16 +2035,18 @@ public partial class MainWindow : Window
             }
 
             _pendingGroundingTarget = groundingTarget;
+            string defaultLocation = GroundingPointLocationResolver.ResolveDefault(
+                document,
+                groundingTarget);
             _selectionManager.Select(
                 new SelectionReference(
                     groundingTarget.Kind == GroundingTargetKind.GroundingAccessPoint
                         ? SelectionTargetKind.GroundingAccessPoint
                         : SelectionTargetKind.Terminal,
                     groundingTarget.TargetId));
-            GroundingPointTerminalText.Text = groundingTarget.Kind ==
-                                              GroundingTargetKind.GroundingAccessPoint
-                ? $"已选择验电接地环：{groundingTarget.TargetId}"
-                : $"已选择电缆侧端子：{groundingTarget.TargetId}";
+            GroundingPointTerminalText.Text = $"已选择位置：{defaultLocation}";
+            GroundingPointLocationInput.Text = defaultLocation;
+            GroundingPointLocationInput.IsReadOnly = true;
             e.Handled = true;
             return;
         }
@@ -2662,7 +2671,7 @@ public partial class MainWindow : Window
             ICommand command = _professionalCommandFactory.CreateAddGroundingPoint(
                 _activeSource.Document,
                 groundingTarget,
-                GroundingPointLocationInput.Text,
+                null,
                 null,
                 GroundingPointNoteInput.Text);
             AddGroundingPointCommand addCommand = (AddGroundingPointCommand)command;
@@ -2726,15 +2735,10 @@ public partial class MainWindow : Window
 
         try
         {
-            GroundingAccessPoint point = document.GetGroundingAccessPoint(accessPointId);
-            string location = point.LineSide == GroundingAccessLineSide.SmallerNumberSide
-                ? "小号侧"
-                : "大号侧";
             AddGroundingPointCommand command = (AddGroundingPointCommand)
                 _professionalCommandFactory.CreateAddGroundingPoint(
                     document,
-                    GroundingTarget.ForGroundingAccessPoint(accessPointId),
-                    location);
+                    GroundingTarget.ForGroundingAccessPoint(accessPointId));
             _commandStack.ExecuteCommand(command);
             RefreshDrawingScene();
             _selectionManager.Select(new SelectionReference(
@@ -3032,6 +3036,7 @@ public partial class MainWindow : Window
                 ? "已绑定到验电接地环"
                 : "已绑定到兼容/电缆侧端子";
             GroundingPointLocationInput.Text = groundingPoint.Location;
+            GroundingPointLocationInput.IsReadOnly = false;
             GroundingPointNumberLabel.Visibility = Visibility.Visible;
             GroundingPointNumberInput.Visibility = Visibility.Visible;
             GroundingPointNumberInput.Text = groundingPoint.Number ?? string.Empty;
@@ -3042,6 +3047,7 @@ public partial class MainWindow : Window
         if (_groundingPointPickMode)
         {
             GroundingPointEditorPanel.Visibility = Visibility.Visible;
+            GroundingPointLocationInput.IsReadOnly = true;
             GroundingPointNumberLabel.Visibility = Visibility.Collapsed;
             GroundingPointNumberInput.Visibility = Visibility.Collapsed;
             return;

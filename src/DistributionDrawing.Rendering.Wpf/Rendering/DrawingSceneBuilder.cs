@@ -375,6 +375,37 @@ public sealed class DrawingSceneBuilder
                             DocumentRect envelope = PoleProfessionalGeometry.GetOccupiedEnvelope(
                                 poleId, poleAttachments, deviceById.Values, layout, _metrics);
                             int supportIndex = overheadLine.SupportPoleIds.ToList().IndexOf(poleId);
+                            bool MountedEndpoint(Guid terminalId) => poleAttachments.Any(attachment =>
+                                attachment.PoleId == poleId &&
+                                deviceById.TryGetValue(attachment.AttachedDeviceId, out Device? device) &&
+                                device is SwitchDevice poleSwitch &&
+                                poleSwitch.OwnsTerminal(terminalId));
+                            bool allowStartSubstitution = supportIndex == 0 &&
+                                MountedEndpoint(connection.StartTerminalId);
+                            bool allowEndSubstitution =
+                                supportIndex == overheadLine.SupportPoleIds.Count - 1 &&
+                                MountedEndpoint(connection.EndTerminalId);
+                            double EndpointStub(Guid terminalId)
+                            {
+                                TerminalAnchor terminal = terminalAnchorById[terminalId];
+                                double extent = terminal.Direction switch
+                                {
+                                    TerminalAnchorDirection.Left =>
+                                        Math.Max(0, terminal.Position.XMillimeters - envelope.XMillimeters),
+                                    TerminalAnchorDirection.Right => Math.Max(0,
+                                        envelope.XMillimeters + envelope.WidthMillimeters -
+                                        terminal.Position.XMillimeters),
+                                    TerminalAnchorDirection.Up =>
+                                        Math.Max(0, terminal.Position.YMillimeters - envelope.YMillimeters),
+                                    TerminalAnchorDirection.Down => Math.Max(0,
+                                        envelope.YMillimeters + envelope.HeightMillimeters -
+                                        terminal.Position.YMillimeters),
+                                    _ => 0
+                                };
+                                return extent + _metrics.Line.GroundingAccessClearance +
+                                    (_metrics.Line.GroundingAccessMarkerDiameter +
+                                     _metrics.Line.ConnectionThickness) / 2;
+                            }
                             double Stub(Guid adjacentPoleId, DocumentPoint adjacent) =>
                                 groundingAccessPoints?.Any(point =>
                                     point.ConnectionId == overheadLine.ConnectionId &&
@@ -393,14 +424,14 @@ public sealed class DrawingSceneBuilder
                                 ? Stub(overheadLine.SupportPoleIds[supportIndex + 1],
                                     PoleProfessionalGeometry.GetPoleCenter(
                                         layout.Poles[overheadLine.SupportPoleIds[supportIndex + 1]])) : 0;
-                            bool MountedEndpoint(Guid terminalId) => poleAttachments.Any(attachment =>
-                                attachment.PoleId == poleId &&
-                                deviceById.TryGetValue(attachment.AttachedDeviceId, out Device? device) &&
-                                device switch
-                                {
-                                    SwitchDevice poleSwitch => poleSwitch.OwnsTerminal(terminalId),
-                                    _ => false
-                                });
+                            if (allowStartSubstitution && successor > 0)
+                            {
+                                successor = EndpointStub(connection.StartTerminalId);
+                            }
+                            if (allowEndSubstitution && predecessor > 0)
+                            {
+                                predecessor = EndpointStub(connection.EndTerminalId);
+                            }
                             return new RequiredRouteWaypoint(
                                 poleId,
                                 center,
@@ -408,11 +439,8 @@ public sealed class DrawingSceneBuilder
                                     .Select(item => item.AttachmentId).ToArray(),
                                 PredecessorMinimumStubLength: predecessor,
                                 SuccessorMinimumStubLength: successor,
-                                AllowStartEndpointSubstitution: supportIndex == 0 &&
-                                    MountedEndpoint(connection.StartTerminalId),
-                                AllowEndEndpointSubstitution:
-                                    supportIndex == overheadLine.SupportPoleIds.Count - 1 &&
-                                    MountedEndpoint(connection.EndTerminalId));
+                                AllowStartEndpointSubstitution: allowStartSubstitution,
+                                AllowEndEndpointSubstitution: allowEndSubstitution);
                         }).ToArray()));
                 }
             }

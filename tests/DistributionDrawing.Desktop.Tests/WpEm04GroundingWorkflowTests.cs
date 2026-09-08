@@ -11,6 +11,7 @@ using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Infrastructure.Persistence;
@@ -136,7 +137,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         GroundingPoint grounding = Assert.Single(
             scenario.Session.PersistenceSession.Domain.GroundingPoints);
         Assert.Equal(GroundingTargetKind.GroundingAccessPoint, grounding.Target.Kind);
-        Assert.Equal("小号侧", grounding.Location);
+        Assert.Equal("P-11杆小号侧", grounding.Location);
     }
 
     [Fact]
@@ -274,6 +275,183 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             "电缆侧"));
         Assert.Contains(session.PersistenceSession.Domain.GroundingPoints,
             point => point.Number == "S02" && point.Target.TargetId == cableTargets[3]);
+    }
+
+    [Fact]
+    public void CreationWithoutLocationInput_UsesTargetBusinessNamesInsteadOfInternalIds()
+    {
+        ProjectRuntimeSession session = CreateSession("grounding location defaults");
+        var devices = new DeviceCommandFactory();
+        var professional = new ProfessionalCommandFactory();
+        AddRingCabinetCommand firstCabinet = devices.CreateAddRingCabinet(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new RingCabinetCreationConfiguration(
+                "新11KB5",
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
+            new DocumentPoint(100, 20));
+        AddRingCabinetCommand secondCabinet = devices.CreateAddRingCabinet(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new RingCabinetCreationConfiguration(
+                "东环路1号环网柜",
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
+            new DocumentPoint(300, 20));
+        firstCabinet.Execute();
+        secondCabinet.Execute();
+        RingCabinetInterval firstInterval = firstCabinet.Cabinet.Intervals[0];
+        RingCabinetInterval secondInterval = secondCabinet.Cabinet.Intervals[1];
+        firstCabinet.Cabinet.RenameInterval(firstInterval.IntervalId, "负4");
+        secondCabinet.Cabinet.RenameInterval(secondInterval.IntervalId, "负6");
+
+        AddGroundingPointCommand first = (AddGroundingPointCommand)
+            professional.CreateAddGroundingPoint(
+                session.PersistenceSession.Domain,
+                GroundingTarget.ForTerminal(firstInterval.CableTerminalId!.Value));
+        AddGroundingPointCommand second = (AddGroundingPointCommand)
+            professional.CreateAddGroundingPoint(
+                session.PersistenceSession.Domain,
+                GroundingTarget.ForTerminal(secondInterval.CableTerminalId!.Value));
+        first.Execute();
+        second.Execute();
+
+        Assert.Equal("新11KB5负4间隔", first.After.Location);
+        Assert.Equal("东环路1号环网柜负6间隔", second.After.Location);
+        Assert.DoesNotContain(firstInterval.CableTerminalId.Value.ToString(), first.After.Location);
+        Assert.DoesNotContain(secondInterval.CableTerminalId.Value.ToString(), second.After.Location);
+    }
+
+    [Fact]
+    public void CableTerminationAndGapCreationWithoutLocationInput_UseReadableDefaults()
+    {
+        Scenario scenario = CreateScenario();
+        var devices = new DeviceCommandFactory();
+        var professional = new ProfessionalCommandFactory();
+        AddCableTerminationAttachmentCommand termination =
+            devices.CreateAddCableTerminationAttachment(
+                scenario.Session.PersistenceSession.Domain,
+                scenario.Session.Layout,
+                scenario.Start.Pole.Id,
+                "东侧电缆终端",
+                new DocumentPoint(10, 0));
+        termination.Execute();
+        AddGroundingPointCommand cableGround = (AddGroundingPointCommand)
+            professional.CreateAddGroundingPoint(
+                scenario.Session.PersistenceSession.Domain,
+                GroundingTarget.ForTerminal(termination.Creation.CableSideTerminal.Id));
+        cableGround.Execute();
+
+        GroundingAccessPoint gap = scenario.Session.PersistenceSession.Domain
+            .CreateGroundingAccessPoint(
+                Guid.NewGuid(),
+                Assert.Single(scenario.Session.PersistenceSession.Domain.Connections).Id,
+                scenario.Middle.Pole.Id,
+                scenario.Start.Pole.Id,
+                GroundingAccessLineSide.SmallerNumberSide);
+        AddGroundingPointCommand overheadGround = (AddGroundingPointCommand)
+            professional.CreateAddGroundingPoint(
+                scenario.Session.PersistenceSession.Domain,
+                GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId));
+        overheadGround.Execute();
+
+        Assert.Equal("东侧电缆终端", cableGround.After.Location);
+        Assert.Equal("P-11杆小号侧", overheadGround.After.Location);
+        Assert.Equal("S01", cableGround.After.Number);
+        Assert.Equal("L01", overheadGround.After.Number);
+    }
+
+    [Fact]
+    public void CableTerminationConnectedToRingInterval_UsesOwningBusinessLocation()
+    {
+        ProjectRuntimeSession session = CreateSession("connected grounding location");
+        var devices = new DeviceCommandFactory();
+        AddPoleCommand pole = devices.CreateAddPole(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new DocumentPoint(20, 20));
+        pole.Execute();
+        AddCableTerminationAttachmentCommand termination =
+            devices.CreateAddCableTerminationAttachment(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                pole.Pole.Id,
+                "本地终端名",
+                new DocumentPoint(10, 0));
+        termination.Execute();
+        AddRingCabinetCommand cabinet = devices.CreateAddRingCabinet(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new RingCabinetCreationConfiguration(
+                "滨河站环网柜",
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
+            new DocumentPoint(240, 20));
+        cabinet.Execute();
+        RingCabinetInterval interval = cabinet.Cabinet.Intervals[0];
+        cabinet.Cabinet.RenameInterval(interval.IntervalId, "备用馈线");
+        var connection = new Connection(
+            Guid.NewGuid(),
+            ConnectionType.Cable,
+            termination.Creation.CableSideTerminal.Id,
+            interval.CableTerminalId!.Value,
+            "连接电缆",
+            "10kV");
+        session.PersistenceSession.Domain.AddConnection(connection);
+
+        AddGroundingPointCommand command = (AddGroundingPointCommand)
+            new ProfessionalCommandFactory().CreateAddGroundingPoint(
+                session.PersistenceSession.Domain,
+                GroundingTarget.ForTerminal(
+                    termination.Creation.CableSideTerminal.Id));
+
+        Assert.Equal("滨河站环网柜备用馈线间隔", command.After.Location);
+        Assert.DoesNotContain(
+            termination.Creation.CableSideTerminal.Id.ToString(),
+            command.After.Location);
+    }
+
+    [Fact]
+    public void AutomaticallyCreatedLocation_RemainsInspectorEditableWithoutRetargeting()
+    {
+        Scenario scenario = CreateScenario();
+        DrawingDocument document = scenario.Session.PersistenceSession.Domain;
+        GroundingAccessPoint gap = document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            Assert.Single(document.Connections).Id,
+            scenario.Middle.Pole.Id,
+            scenario.Start.Pole.Id,
+            GroundingAccessLineSide.SmallerNumberSide);
+        AddGroundingPointCommand add = (AddGroundingPointCommand)
+            new ProfessionalCommandFactory().CreateAddGroundingPoint(
+                document,
+                GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId));
+        scenario.Session.CommandStack.ExecuteCommand(add, scenario.Session.RebuildScene);
+        GroundingTarget target = add.After.Target;
+        var reference = new SelectionReference(
+            SelectionTargetKind.GroundingPoint,
+            add.After.GroundingPointId);
+        var editor = new PropertyEditor(
+            scenario.Session.SelectionResolver,
+            scenario.Session.CommandStack,
+            scenario.Session.Layout);
+
+        PropertyEditResult result = editor.TryEdit(
+            reference,
+            PropertyCommandFactory.GroundingPointLocationPropertyKey,
+            " 自定义检修位置 ");
+
+        Assert.True(result.IsSuccess);
+        GroundingPoint groundingPoint = document.GetGroundingPoint(add.After.GroundingPointId);
+        Assert.Equal("自定义检修位置", groundingPoint.Location);
+        Assert.Equal(target, groundingPoint.Target);
+        Assert.True(scenario.Session.CommandStack.Undo());
+        Assert.Equal("P-11杆小号侧", groundingPoint.Location);
+        Assert.Equal(target, groundingPoint.Target);
     }
 
     [Fact]

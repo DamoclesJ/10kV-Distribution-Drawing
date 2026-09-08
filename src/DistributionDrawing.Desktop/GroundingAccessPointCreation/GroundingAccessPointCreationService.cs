@@ -96,17 +96,13 @@ public static class GroundingAccessPointCreationService
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(candidate);
         ProfessionalCommandFactory commands = factory ?? new ProfessionalCommandFactory();
-        string location = side == GroundingAccessLineSide.SmallerNumberSide
-            ? "小号侧"
-            : "大号侧";
         return addGroundingPoint
             ? commands.CreateAddGroundingAccessPointWithGroundingPoint(
                 session.PersistenceSession.Domain,
                 candidate.ConnectionId,
                 candidate.PoleId,
                 candidate.AdjacentPoleId,
-                side,
-                location)
+                side)
             : commands.CreateAddGroundingAccessPoint(
                 session.PersistenceSession.Domain,
                 candidate.ConnectionId,
@@ -151,8 +147,8 @@ public static class GroundingAccessPointCreationService
             throw new InvalidOperationException("无法从正式线路解析验电接地环方向。");
         }
 
-        double dx = halfEdge.DirectionPoint.XMillimeters - halfEdge.PoleCenter.XMillimeters;
-        double dy = halfEdge.DirectionPoint.YMillimeters - halfEdge.PoleCenter.YMillimeters;
+        double dx = halfEdge.DirectionPoint.XMillimeters - halfEdge.ConductorOrigin.XMillimeters;
+        double dy = halfEdge.DirectionPoint.YMillimeters - halfEdge.ConductorOrigin.YMillimeters;
         return dx < 0 ? "左侧" : dx > 0 ? "右侧" : dy < 0 ? "上侧" : "下侧";
     }
 }

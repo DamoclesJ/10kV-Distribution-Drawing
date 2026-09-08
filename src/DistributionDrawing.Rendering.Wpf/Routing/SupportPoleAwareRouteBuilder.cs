@@ -7,6 +7,7 @@ namespace DistributionDrawing.Rendering.Wpf.Routing;
 
 public readonly record struct GroundingAccessHalfEdge(
     DocumentPoint PoleCenter,
+    DocumentPoint ConductorOrigin,
     DocumentPoint DirectionPoint);
 
 public static class SupportPoleAwareRouteBuilder
@@ -44,25 +45,23 @@ public static class SupportPoleAwareRouteBuilder
         DocumentPoint pole = PoleProfessionalGeometry.GetPoleCenter(poleLayout);
         if (successor && TryFindForwardDirection(route, pole, out DocumentPoint forward))
         {
-            halfEdge = new GroundingAccessHalfEdge(pole, forward);
+            halfEdge = new GroundingAccessHalfEdge(pole, pole, forward);
             return true;
         }
         if (predecessor && TryFindBackwardDirection(route, pole, out DocumentPoint backward))
         {
-            halfEdge = new GroundingAccessHalfEdge(pole, backward);
+            halfEdge = new GroundingAccessHalfEdge(pole, pole, backward);
             return true;
         }
         bool endpointPole = poleIndex == 0 || poleIndex == line.SupportPoleIds.Count - 1;
         if (endpointPole &&
-            layout.Poles.TryGetValue(adjacentPoleId, out PoleLayout? adjacentLayout) &&
             TryFindEndpointDirection(
                 route,
-                pole,
-                PoleProfessionalGeometry.GetPoleCenter(adjacentLayout),
                 poleIndex == 0,
+                out DocumentPoint endpoint,
                 out DocumentPoint endpointDirection))
         {
-            halfEdge = new GroundingAccessHalfEdge(pole, endpointDirection);
+            halfEdge = new GroundingAccessHalfEdge(pole, endpoint, endpointDirection);
             return true;
         }
 
@@ -72,37 +71,20 @@ public static class SupportPoleAwareRouteBuilder
 
     private static bool TryFindEndpointDirection(
         OrthogonalRoute route,
-        DocumentPoint pole,
-        DocumentPoint adjacent,
         bool useStart,
+        out DocumentPoint endpoint,
         out DocumentPoint direction)
     {
+        if (route.Segments.Count == 0)
+        {
+            endpoint = default;
+            direction = default;
+            return false;
+        }
         OrthogonalRouteSegment segment = useStart ? route.Segments[0] : route.Segments[^1];
-        DocumentPoint endpoint = useStart ? segment.Start : segment.End;
-        DocumentPoint other = useStart ? segment.End : segment.Start;
-        if (adjacent.XMillimeters != pole.XMillimeters &&
-            endpoint.YMillimeters == pole.YMillimeters &&
-            other.YMillimeters == pole.YMillimeters &&
-            (adjacent.XMillimeters > pole.XMillimeters
-                ? endpoint.XMillimeters > pole.XMillimeters && other.XMillimeters > endpoint.XMillimeters
-                : endpoint.XMillimeters < pole.XMillimeters && other.XMillimeters < endpoint.XMillimeters))
-        {
-            direction = other;
-            return true;
-        }
-        if (adjacent.YMillimeters != pole.YMillimeters &&
-            endpoint.XMillimeters == pole.XMillimeters &&
-            other.XMillimeters == pole.XMillimeters &&
-            (adjacent.YMillimeters > pole.YMillimeters
-                ? endpoint.YMillimeters > pole.YMillimeters && other.YMillimeters > endpoint.YMillimeters
-                : endpoint.YMillimeters < pole.YMillimeters && other.YMillimeters < endpoint.YMillimeters))
-        {
-            direction = other;
-            return true;
-        }
-
-        direction = default;
-        return false;
+        endpoint = useStart ? segment.Start : segment.End;
+        direction = useStart ? segment.End : segment.Start;
+        return endpoint != direction;
     }
 
     private static bool TryFindForwardDirection(

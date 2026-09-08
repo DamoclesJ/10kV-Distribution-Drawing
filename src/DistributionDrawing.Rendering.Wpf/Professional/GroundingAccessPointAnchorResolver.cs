@@ -46,20 +46,26 @@ public sealed class GroundingAccessPointAnchorResolver
         }
 
         TerminalAnchorDirection direction = ResolveDirection(
-            halfEdge.PoleCenter,
+            halfEdge.ConductorOrigin,
             halfEdge.DirectionPoint);
         DocumentRect envelope = PoleProfessionalGeometry.GetOccupiedEnvelope(
             point.PoleId, document, layout, _metrics);
         double extent = direction switch
         {
-            TerminalAnchorDirection.Left => halfEdge.PoleCenter.XMillimeters - envelope.XMillimeters,
-            TerminalAnchorDirection.Right => envelope.XMillimeters + envelope.WidthMillimeters - halfEdge.PoleCenter.XMillimeters,
-            TerminalAnchorDirection.Up => halfEdge.PoleCenter.YMillimeters - envelope.YMillimeters,
-            _ => envelope.YMillimeters + envelope.HeightMillimeters - halfEdge.PoleCenter.YMillimeters
+            TerminalAnchorDirection.Left => Math.Max(0,
+                halfEdge.ConductorOrigin.XMillimeters - envelope.XMillimeters),
+            TerminalAnchorDirection.Right => Math.Max(0,
+                envelope.XMillimeters + envelope.WidthMillimeters -
+                halfEdge.ConductorOrigin.XMillimeters),
+            TerminalAnchorDirection.Up => Math.Max(0,
+                halfEdge.ConductorOrigin.YMillimeters - envelope.YMillimeters),
+            _ => Math.Max(0,
+                envelope.YMillimeters + envelope.HeightMillimeters -
+                halfEdge.ConductorOrigin.YMillimeters)
         };
         double distance = extent + _metrics.Line.GroundingAccessClearance +
             (_metrics.Line.GroundingAccessMarkerDiameter + _metrics.Line.ConnectionThickness) / 2;
-        DocumentPoint position = Move(halfEdge.PoleCenter, direction, distance);
+        DocumentPoint position = Move(halfEdge.ConductorOrigin, direction, distance);
         if (!route.Segments.Any(segment => Contains(segment, position)))
         {
             anchor = default;

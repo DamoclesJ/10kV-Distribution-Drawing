@@ -47,20 +47,14 @@ public sealed class OrthogonalRoutePlanner
             .Where(obstacle => !requiredSourceIds.Contains(obstacle.SourceId))
             .ToArray();
         bool substituteStart = allWaypoints.Length >= 2 &&
-            allWaypoints[0].AllowStartEndpointSubstitution &&
-            CanSubstituteEndpoint(request.Start, allWaypoints[0].Position, allWaypoints[1].Position,
-                SuccessorMinimumStub(allWaypoints[0]));
+            allWaypoints[0].AllowStartEndpointSubstitution;
         bool substituteEnd = allWaypoints.Length >= 2 &&
-            allWaypoints[^1].AllowEndEndpointSubstitution &&
-            CanSubstituteEndpoint(request.End, allWaypoints[^1].Position, allWaypoints[^2].Position,
-                PredecessorMinimumStub(allWaypoints[^1]));
+            allWaypoints[^1].AllowEndEndpointSubstitution;
         double startTransferredStub = substituteStart
-            ? RemainingStub(SuccessorMinimumStub(allWaypoints[0]),
-                request.Start.Position, allWaypoints[0].Position)
+            ? SuccessorMinimumStub(allWaypoints[0])
             : 0;
         double endTransferredStub = substituteEnd
-            ? RemainingStub(PredecessorMinimumStub(allWaypoints[^1]),
-                request.End.Position, allWaypoints[^1].Position)
+            ? PredecessorMinimumStub(allWaypoints[^1])
             : 0;
         RequiredRouteWaypoint[] waypoints = allWaypoints
             .Skip(substituteStart ? 1 : 0)
@@ -163,71 +157,5 @@ public sealed class OrthogonalRoutePlanner
                 ? waypoint.SuccessorMinimumStubLength
                 : waypoint.MinimumStubLength;
 
-        static double RemainingStub(
-            double requiredFromPole,
-            DocumentPoint endpoint,
-            DocumentPoint pole) => Math.Max(0, requiredFromPole - Distance(endpoint, pole));
-
-        static double Distance(DocumentPoint first, DocumentPoint second)
-        {
-            double deltaX = first.XMillimeters - second.XMillimeters;
-            double deltaY = first.YMillimeters - second.YMillimeters;
-            return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
-        }
-
-        static bool CanSubstituteEndpoint(
-            TerminalAnchor endpoint,
-            DocumentPoint pole,
-            DocumentPoint adjacent,
-            double requiredFromPole)
-        {
-            const double tolerance = 0.000001;
-            double endpointDistance = Distance(endpoint.Position, pole);
-            if (endpointDistance <= tolerance ||
-                requiredFromPole > 0 && requiredFromPole <= endpointDistance)
-            {
-                return false;
-            }
-
-            if (Math.Abs(adjacent.YMillimeters - pole.YMillimeters) <= tolerance &&
-                Math.Abs(endpoint.Position.YMillimeters - pole.YMillimeters) <= tolerance)
-            {
-                bool towardRight = adjacent.XMillimeters > pole.XMillimeters;
-                bool pointsTowardAdjacent = endpoint.Direction == (towardRight
-                    ? TerminalAnchorDirection.Right
-                    : TerminalAnchorDirection.Left);
-                bool liesBetweenPoleAndAdjacent = towardRight
-                    ? endpoint.Position.XMillimeters > pole.XMillimeters &&
-                      endpoint.Position.XMillimeters < adjacent.XMillimeters
-                    : endpoint.Position.XMillimeters < pole.XMillimeters &&
-                      endpoint.Position.XMillimeters > adjacent.XMillimeters;
-                bool liesOnOppositeSideOfPole = towardRight
-                    ? endpoint.Position.XMillimeters < pole.XMillimeters
-                    : endpoint.Position.XMillimeters > pole.XMillimeters;
-                return pointsTowardAdjacent &&
-                       (liesBetweenPoleAndAdjacent || liesOnOppositeSideOfPole);
-            }
-
-            if (Math.Abs(adjacent.XMillimeters - pole.XMillimeters) <= tolerance &&
-                Math.Abs(endpoint.Position.XMillimeters - pole.XMillimeters) <= tolerance)
-            {
-                bool towardDown = adjacent.YMillimeters > pole.YMillimeters;
-                bool pointsTowardAdjacent = endpoint.Direction == (towardDown
-                    ? TerminalAnchorDirection.Down
-                    : TerminalAnchorDirection.Up);
-                bool liesBetweenPoleAndAdjacent = towardDown
-                    ? endpoint.Position.YMillimeters > pole.YMillimeters &&
-                      endpoint.Position.YMillimeters < adjacent.YMillimeters
-                    : endpoint.Position.YMillimeters < pole.YMillimeters &&
-                      endpoint.Position.YMillimeters > adjacent.YMillimeters;
-                bool liesOnOppositeSideOfPole = towardDown
-                    ? endpoint.Position.YMillimeters < pole.YMillimeters
-                    : endpoint.Position.YMillimeters > pole.YMillimeters;
-                return pointsTowardAdjacent &&
-                       (liesBetweenPoleAndAdjacent || liesOnOppositeSideOfPole);
-            }
-
-            return false;
-        }
     }
 }

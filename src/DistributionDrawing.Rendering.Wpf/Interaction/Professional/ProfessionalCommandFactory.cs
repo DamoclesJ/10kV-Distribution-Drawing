@@ -12,7 +12,7 @@ public sealed class ProfessionalCommandFactory
     public ICommand CreateAddGroundingPoint(
         DrawingDocument document,
         Guid terminalId,
-        string location,
+        string? location = null,
         string? number = null,
         string? note = null,
         Guid? groundingPointId = null)
@@ -36,7 +36,7 @@ public sealed class ProfessionalCommandFactory
     public ICommand CreateAddGroundingPoint(
         DrawingDocument document,
         GroundingTarget target,
-        string location,
+        string? location = null,
         string? number = null,
         string? note = null,
         Guid? groundingPointId = null)
@@ -53,19 +53,16 @@ public sealed class ProfessionalCommandFactory
                 "The selected terminal is not eligible for a new grounding point.");
         }
 
-        if (string.IsNullOrWhiteSpace(location))
-        {
-            throw new ArgumentException(
-                "Grounding point location cannot be empty.",
-                nameof(location));
-        }
+        string normalizedLocation = string.IsNullOrWhiteSpace(location)
+            ? GroundingPointLocationResolver.ResolveDefault(document, target)
+            : location.Trim();
 
         return new AddGroundingPointCommand(
             document,
             new GroundingPointCommandSnapshot(
                 groundingPointId ?? Guid.NewGuid(),
                 target,
-                location.Trim(),
+                normalizedLocation,
                 NormalizeNewNumber(document, target, number),
                 NormalizeOptional(note)));
     }
@@ -122,7 +119,7 @@ public sealed class ProfessionalCommandFactory
         Guid poleId,
         Guid adjacentPoleId,
         GroundingAccessLineSide lineSide,
-        string location,
+        string? location = null,
         string? note = null)
     {
         AddGroundingAccessPointCommand addAccessPoint = CreateAddGroundingAccessPoint(
@@ -131,19 +128,17 @@ public sealed class ProfessionalCommandFactory
             poleId,
             adjacentPoleId,
             lineSide);
-        if (string.IsNullOrWhiteSpace(location))
-        {
-            throw new ArgumentException(
-                "Grounding point location cannot be empty.",
-                nameof(location));
-        }
+        string normalizedLocation = string.IsNullOrWhiteSpace(location)
+            ? GroundingPointLocationResolver.ResolveGroundingAccessPoint(
+                document, poleId, lineSide)
+            : location.Trim();
         ICommand addGroundingPoint = new AddGroundingPointCommand(
             document,
             new GroundingPointCommandSnapshot(
                 Guid.NewGuid(),
                 GroundingTarget.ForGroundingAccessPoint(
                     addAccessPoint.After.GroundingAccessPointId),
-                location.Trim(),
+                normalizedLocation,
                 AllocateGroundingPointNumber(
                     document,
                     GroundingTargetKind.GroundingAccessPoint),
