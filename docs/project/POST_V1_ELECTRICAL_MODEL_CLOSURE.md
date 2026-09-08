@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Implementation / Review / Validation in progress / Grounding Scope Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / Grounding Scope Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
 
@@ -364,21 +364,38 @@ Closure evidence:
 - Windows automated tests: Domain.Tests 101/101, Infrastructure.Tests 76/76, Rendering.Wpf.Tests 358/358, Desktop.Tests 173/173, ProjectPersistenceRoundTrip 24/24; failed = 0, skipped = 0.
 - Windows manual validation: passed. With no external cable, present → absent removes only the terminal triangle and preserves the interval internal lead; absent → present restores the triangle with stable lead geometry. With an external Cable / Connection, terminal removal remains blocked and Cable / topology are preserved. GroundingPoint and WorkScope dependency protection also remains enforced.
 - Absent-terminal rendering produces no triangle, terminal anchor, or cable target.
-- FormatVersion remains V7; no new migration was added; WP-EM-04 is in Implementation / Review.
+- FormatVersion remains V7; no new migration was added; WP-EM-04 is now Closed as recorded below.
 
-### WP-EM-04 — GroundingAccessPoint & GroundingTarget Vertical Slice
+### WP-EM-04 — GroundingAccessPoint & GroundingTarget Vertical Slice — Closed
 
-完成 GAP Domain behavior、`AdjacentPoleId` physical half-edge identity、stable identity、唯一性、create/delete、`GroundingTarget` behavior、GroundingPoint target binding 与 Number policy、Pole / OverheadLine deletion guards、support-pole-aware basic presentation、commands、selection、Inspector、basic GAP rendering、clipboard、Undo / Redo、Canvas / PNG basic consistency、V7 integration 和 legacy Terminal-target compatibility。不得分割 `OverheadLine`，不得将复杂 presentation layout 塞入本 WP。
+**Implementation:** Complete
+**Review:** Passed
+**Automated Validation:** Passed
+**Windows Runtime Validation:** Passed
+**GUI Acceptance:** Passed
+**Closure baseline:** `b15166c96bcf03a38acd2a27d98b597d04b60d4d` — `fix(grounding): use local cable termination location`
 
-Windows validation findings fix pass（candidate `d3b34a733e21a706f7e27d899c8354d50fec0626` 后，待 Review）：
+Final closure contract:
 
-- 本轮用户授权修复 Pole / mounted switch / GAP 共存、组合图元外缘至 GAP 可见边缘的固定 2 mm 间距、GroundingPoint 独立 Selection / Delete、正式接地图元、Toolbox icon、中文术语及工作地线编号字号。固定尺度使用现有 mm 逻辑坐标，不持久化 GAP 坐标或 offset。
-- 开关端点替换保留原 OverheadLine 与 GAP；真实删除的 occupied GAP guard 继续有效。路由仍由 RequiredRouteWaypoint → OrthogonalRoutePlanner → OrthogonalRouter 生成，保留支撑杆折返点，仅对本线路支撑杆的组合设备排除内部 obstacle。
-- GAP Canvas / PNG 仍为实心圆点；Toolbox icon 为竖线加小方框。工作地线为竖向 stem 与三条递减横线，并显示自身 Number。
-- 字号按用户确认沿用全部既有字号的会话级设置；应用后重建 scene，Canvas / PNG 共用；不新增字号持久化机制。
-- GroundingPointLayout 当前只有 V7 DTO scaffold。RuntimeLayoutDocument、Desktop mapper 和历史 drag 实现均未接通该对象；Desktop mapper 当前不保留非空 GroundingPointLayouts。拖动的完整交互与默认 leader 位置仍需产品确认，本轮不接通 drag。该限制不能被描述为 Save/Reopen layout 已通过。
-- macOS 可运行 Domain / Infrastructure 自动化测试，但缺少 Microsoft.WindowsDesktop.App，WPF / Desktop 场景只能编译。Windows 原始 crash stack trace 尚未取得；候选方向解析异常逃逸与路由丢失折返点的调用链是源码审计结论，仍需 Windows 复测确认。
-- 状态保持 Implementation / Review / Validation in progress；不代表 Windows validated 或 Closure。WP-EM-05 仍为 Not Started / Planned。
+- `GroundingAccessPoint` is an independent Professional entity with stable `(ConnectionId, PoleId, AdjacentPoleId)` physical half-edge identity, `LineSide` as display semantics, no `ElectricalNode`, no topology split, and protected occupied-GAP lifecycle.
+- `GroundingTarget` is one typed `Terminal` or `GroundingAccessPoint` target. New GroundingPoint creation follows the frozen whitelist; legacy terminal-target load/render compatibility remains.
+- GroundingPoint numbering remains independent first-free `Lxx` for overhead GAP targets and `Sxx` for cable-side targets, with hole reuse, `99 → 100`, global string uniqueness, custom edit support, and legacy/custom persistence.
+- GroundingPoint `LocationDescription` is a human-readable derived field. Creation resolves it from the typed target without manual input; RingCabinet uses the actual `{DisplayName}{Interval.DisplayName}间隔` fields, while local CableTermination uses `{PoleNumber}杆电缆终端` with the documented readable fallback. Inspector edits do not change target identity.
+- Routing authority remains `ConnectionRouteRequest → RequiredRouteWaypoint → OrthogonalRoutePlanner → OrthogonalRouter → final OrthogonalRoute`. Mounted-switch endpoint substitution is ownership-based (`PoleAttachment.PoleId` plus `SwitchDevice.OwnsTerminal`) for first/last support endpoints, not collinearity-based; intermediate support facts remain intact and no-backtracking constraints remain scoped to the formal mounted endpoint path.
+- GAP clearance is resolved from the final route and the complete pole-plus-mounted-device composite envelope. Canvas and PNG use the same solid marker and centralized metrics; rotated mounted-switch cases require the earliest legal point on the correct half-edge with clearance at least the minimum.
+- GroundingPoint rendering uses the formal three-bar symbol with centered Number; manual symbol dragging and layout persistence are outside this WP.
+- Clipboard and persistence contracts remain intact: GroundingPoints are not copied, occupied GAP dependencies are protected, GAP identity remapping preserves `LineSide`, FormatVersion remains V7, and no migration was added.
+- Final Windows runtime validation reported all discovered tests passed with failed = 0 and skipped = 0. Domain.Tests 113/113, Infrastructure.Tests 80/80, and the full solution build passed.
+- GUI acceptance passed for mounted-switch pole movement without loop/U-turn/backtracking, GAP and mounted-switch coexistence, vertical GAP half-edge presentation, RingCabinet and local CableTermination GroundingPoint locations, and Lxx/Sxx numbering. No separate GUI Save/Reopen result is asserted here beyond the automated persistence coverage.
+
+Deferred / Post-EM-04 UX improvement (not closure blockers):
+
+1. Pole-drag route continuity / hysteresis across legal route-family changes.
+2. GAP / GroundingPoint presentation continuity during route-family changes.
+3. Last-valid-position when minimum-stub or obstacle-safe routing is not satisfiable.
+4. Non-modal feedback during continuous drag instead of modal errors.
+
+An existing presentation behavior in which some polyline routes do not pass through the visual pole center was reverified as predating GAP and is out of scope for WP-EM-04.
 
 ### WP-EM-05 — Grounding Layout & Interaction Closure
 
@@ -417,6 +434,6 @@ Windows validation findings fix pass（candidate `d3b34a733e21a706f7e27d899c8354
 - Post-V1 Grounding Scope Amendment 已完成并冻结；
 - WP-EM-02 V7 Format & Migration Foundation 已完成代码 Review、自动验证和 Windows 最终验证；
 - WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice 已完成并 Closed，包含 Windows 最终验证；
-- WP-EM-04 requirements refinement 已完成，当前处于 Implementation / Review；
-- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint` 正处于 WP-EM-04 Implementation / Review，Transformer、CustomerStation 尚未实现；
+- WP-EM-04 requirements refinement、implementation、review、Windows runtime validation 和 GUI acceptance 已完成，WP-EM-04 Closed；
+- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint` vertical slice 已完成，Transformer、CustomerStation 尚未实现；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-08 顺序推进，任何范围变化需重新治理确认。

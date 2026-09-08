@@ -19,10 +19,12 @@ The Grounding Scope Amendment is complete and frozen. The confirmed Work Package
 1. WP-EM-01 Grounding Presentation Anchor Separation — Completed
 2. WP-EM-02 V7 Format & Migration Foundation — Completed
 3. WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice — Completed / Closed
-4. WP-EM-04 GroundingAccessPoint & GroundingTarget Vertical Slice — Implementation / Review / Validation in progress
-5. WP-EM-05 Grounding Layout & Interaction Closure — Not Started / Planned
+4. WP-EM-04 GroundingAccessPoint & GroundingTarget Vertical Slice — Closed / Completed
+5. WP-EM-05 Grounding Layout & Interaction Closure — Not Started / Planned (prerequisite satisfied)
 6. WP-EM-06 Transformer Vertical Slice
 7. WP-EM-07 CustomerStation Vertical Slice
 8. WP-EM-08 Electrical Model Closure Integration
 
 This ordering does not define a new release version. Annotation and Energization remain Post-V1 candidates and are outside this stage.
+
+WP-EM-04 closed at implementation baseline `b15166c96bcf03a38acd2a27d98b597d04b60d4d` after implementation, review, automated validation, Windows runtime validation, and GUI acceptance. Deferred pole-drag continuity and related dynamic-routing UX remain future work; WP-EM-05 has not started.
