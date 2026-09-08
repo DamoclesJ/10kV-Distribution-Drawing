@@ -389,7 +389,7 @@ public sealed class WpEm04WindowsValidationTests
             DocumentPoint middle = PoleProfessionalGeometry.GetPoleCenter(
                 runtime.DrawingLayout.Poles[poles[1].Pole.Id]);
             SwitchDevice? mountedSwitch = document.Devices.OfType<SwitchDevice>().SingleOrDefault();
-            if (mountedSwitch is null)
+            if (mountedSwitch is null || !splitConnections)
             {
                 Assert.Contains(scene.Routes.SelectMany(route => route.Points), point => point == middle);
             }
