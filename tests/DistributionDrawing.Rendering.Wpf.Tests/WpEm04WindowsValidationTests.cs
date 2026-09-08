@@ -233,10 +233,28 @@ public sealed class WpEm04WindowsValidationTests
     {
         var (document, runtime, start, end, gap) = BuildLineScene(new DocumentPoint(0, 0), new DocumentPoint(0, endY), true);
         DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
+        Assert.Empty(scene.Diagnostics);
         OrthogonalRoute route = Assert.Single(scene.Routes, item => item.ConnectionId == gap.ConnectionId);
+        AssertNoBacktracking(route);
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts,
+            document.Connections,
+            document.CableSegments);
+        Assert.True(anchors.TryGet(route.StartTerminalId, out TerminalAnchor startTerminal));
+        Assert.Equal(startTerminal.Position, route.Points[0]);
+        Assert.True(IsInDirection(route.Segments[0], startTerminal.Direction));
+        Assert.True(route.Segments[0].Length >= DrawingMetrics.Default.Routing.PortStubLength);
         SceneEllipse marker = Marker(scene, gap);
+        SelectionHitTestEntry markerHit = Assert.Single(scene.HitTestIndex.Entries, entry =>
+            entry.Target.Kind == SelectionTargetKind.GroundingAccessPoint &&
+            entry.Target.ObjectId == gap.GroundingAccessPointId);
+        Assert.Equal(gap.GroundingAccessPointId, marker.TargetId);
+        Assert.Equal(SelectionTargetKind.GroundingAccessPoint, markerHit.Target.Kind);
         DocumentPoint pole = PoleProfessionalGeometry.GetPoleCenter(runtime.DrawingLayout.Poles[start.Pole.Id]);
         DocumentPoint adjacent = PoleProfessionalGeometry.GetPoleCenter(runtime.DrawingLayout.Poles[end.Pole.Id]);
+        Assert.DoesNotContain(pole, route.Points);
         DocumentPoint center = Center(marker);
         Assert.Contains(route.Segments, segment => segment.IsVertical &&
             center.XMillimeters == segment.Start.XMillimeters &&
@@ -273,6 +291,61 @@ public sealed class WpEm04WindowsValidationTests
     {
         Assert.DoesNotContain(route.Points.Zip(route.Points.Skip(1)), pair => pair.First == pair.Second);
     }
+
+    private static void AssertNoBacktracking(OrthogonalRoute route)
+    {
+        AssertNoDuplicatePoints(route);
+        for (int firstIndex = 0; firstIndex < route.Segments.Count; firstIndex++)
+        {
+            OrthogonalRouteSegment first = route.Segments[firstIndex];
+            for (int secondIndex = firstIndex + 1;
+                 secondIndex < route.Segments.Count;
+                 secondIndex++)
+            {
+                OrthogonalRouteSegment second = route.Segments[secondIndex];
+                bool oppositeHorizontalOverlap = first.IsHorizontal && second.IsHorizontal &&
+                    first.Start.YMillimeters == second.Start.YMillimeters &&
+                    Math.Sign(first.End.XMillimeters - first.Start.XMillimeters) !=
+                    Math.Sign(second.End.XMillimeters - second.Start.XMillimeters) &&
+                    IntervalOverlap(
+                        first.Start.XMillimeters,
+                        first.End.XMillimeters,
+                        second.Start.XMillimeters,
+                        second.End.XMillimeters) > 0;
+                bool oppositeVerticalOverlap = first.IsVertical && second.IsVertical &&
+                    first.Start.XMillimeters == second.Start.XMillimeters &&
+                    Math.Sign(first.End.YMillimeters - first.Start.YMillimeters) !=
+                    Math.Sign(second.End.YMillimeters - second.Start.YMillimeters) &&
+                    IntervalOverlap(
+                        first.Start.YMillimeters,
+                        first.End.YMillimeters,
+                        second.Start.YMillimeters,
+                        second.End.YMillimeters) > 0;
+                Assert.False(
+                    oppositeHorizontalOverlap || oppositeVerticalOverlap,
+                    $"Unexpected backtracking in route: {string.Join(" -> ", route.Points)}");
+            }
+        }
+    }
+
+    private static double IntervalOverlap(double firstStart, double firstEnd,
+        double secondStart, double secondEnd) => Math.Max(0,
+        Math.Min(Math.Max(firstStart, firstEnd), Math.Max(secondStart, secondEnd)) -
+        Math.Max(Math.Min(firstStart, firstEnd), Math.Min(secondStart, secondEnd)));
+
+    private static bool IsInDirection(OrthogonalRouteSegment segment,
+        TerminalAnchorDirection direction) => direction switch
+        {
+            TerminalAnchorDirection.Left => segment.IsHorizontal &&
+                segment.End.XMillimeters < segment.Start.XMillimeters,
+            TerminalAnchorDirection.Right => segment.IsHorizontal &&
+                segment.End.XMillimeters > segment.Start.XMillimeters,
+            TerminalAnchorDirection.Up => segment.IsVertical &&
+                segment.End.YMillimeters < segment.Start.YMillimeters,
+            TerminalAnchorDirection.Down => segment.IsVertical &&
+                segment.End.YMillimeters > segment.Start.YMillimeters,
+            _ => false
+        };
 
     [Theory]
     [InlineData(SwitchKind.LoadSwitch)]

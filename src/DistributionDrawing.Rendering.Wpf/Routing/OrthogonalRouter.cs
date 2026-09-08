@@ -80,6 +80,8 @@ public sealed class OrthogonalRouter
                 request.End.Position,
                 endOutwardDirection,
                 request.End.MinimumStubLength))
+            .Where(candidate => !request.DisallowBacktracking ||
+                !HasBacktracking(candidate.Route))
             .GroupBy(candidate => string.Join(
                 ";",
                 candidate.Route.Points.Select(point =>
@@ -140,6 +142,47 @@ public sealed class OrthogonalRouter
             .First();
     }
 
+    private static bool HasBacktracking(OrthogonalRoute route)
+    {
+        for (int firstIndex = 0; firstIndex < route.Segments.Count; firstIndex++)
+        {
+            OrthogonalRouteSegment first = route.Segments[firstIndex];
+            for (int secondIndex = firstIndex + 1;
+                 secondIndex < route.Segments.Count;
+                 secondIndex++)
+            {
+                OrthogonalRouteSegment second = route.Segments[secondIndex];
+                if (first.IsHorizontal && second.IsHorizontal &&
+                    first.Start.YMillimeters == second.Start.YMillimeters &&
+                    Math.Sign(first.End.XMillimeters - first.Start.XMillimeters) !=
+                    Math.Sign(second.End.XMillimeters - second.Start.XMillimeters) &&
+                    OverlapLength(
+                        first.Start.XMillimeters,
+                        first.End.XMillimeters,
+                        second.Start.XMillimeters,
+                        second.End.XMillimeters) > 0)
+                {
+                    return true;
+                }
+
+                if (first.IsVertical && second.IsVertical &&
+                    first.Start.XMillimeters == second.Start.XMillimeters &&
+                    Math.Sign(first.End.YMillimeters - first.Start.YMillimeters) !=
+                    Math.Sign(second.End.YMillimeters - second.Start.YMillimeters) &&
+                    OverlapLength(
+                        first.Start.YMillimeters,
+                        first.End.YMillimeters,
+                        second.Start.YMillimeters,
+                        second.End.YMillimeters) > 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private OrthogonalRoute CreateFallbackRoute(
         ConnectionRouteRequest request,
         DocumentPoint start,
@@ -165,11 +208,12 @@ public sealed class OrthogonalRouter
             request.StartTerminalId,
             request.EndTerminalId,
             points);
-        if (request.EnforceRequiredStubConstraints &&
+        if ((request.DisallowBacktracking && HasBacktracking(route)) ||
+            (request.EnforceRequiredStubConstraints &&
             (!HasTerminalStubs(route, start, startDirection, request.Start.MinimumStubLength,
                  end, endOutwardDirection, request.End.MinimumStubLength) ||
              route.Segments.Any(segment => obstacles.Any(obstacle =>
-                 IntersectsInterior(segment, obstacle.Bounds)))))
+                 IntersectsInterior(segment, obstacle.Bounds))))))
         {
             throw new InvalidOperationException(
                 "无法在当前杆间距或障碍物条件下生成满足最小导线段的线路。 ");

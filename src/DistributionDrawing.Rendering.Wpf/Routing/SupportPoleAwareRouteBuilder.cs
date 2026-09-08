@@ -43,16 +43,6 @@ public static class SupportPoleAwareRouteBuilder
         }
 
         DocumentPoint pole = PoleProfessionalGeometry.GetPoleCenter(poleLayout);
-        if (successor && TryFindForwardDirection(route, pole, out DocumentPoint forward))
-        {
-            halfEdge = new GroundingAccessHalfEdge(pole, pole, forward);
-            return true;
-        }
-        if (predecessor && TryFindBackwardDirection(route, pole, out DocumentPoint backward))
-        {
-            halfEdge = new GroundingAccessHalfEdge(pole, pole, backward);
-            return true;
-        }
         bool endpointPole = poleIndex == 0 || poleIndex == line.SupportPoleIds.Count - 1;
         if (endpointPole &&
             layout.Poles.TryGetValue(adjacentPoleId, out PoleLayout? adjacentLayout) &&
@@ -65,6 +55,16 @@ public static class SupportPoleAwareRouteBuilder
                 out DocumentPoint endpointDirection))
         {
             halfEdge = new GroundingAccessHalfEdge(pole, endpoint, endpointDirection);
+            return true;
+        }
+        if (successor && TryFindForwardDirection(route, pole, out DocumentPoint forward))
+        {
+            halfEdge = new GroundingAccessHalfEdge(pole, pole, forward);
+            return true;
+        }
+        if (predecessor && TryFindBackwardDirection(route, pole, out DocumentPoint backward))
+        {
+            halfEdge = new GroundingAccessHalfEdge(pole, pole, backward);
             return true;
         }
 

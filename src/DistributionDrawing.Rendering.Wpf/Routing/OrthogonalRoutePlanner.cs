@@ -75,7 +75,8 @@ public sealed class OrthogonalRoutePlanner
                 Start = requestStart,
                 End = requestEnd,
                 RequiredWaypoints = null,
-                EnforceRequiredStubConstraints = startTransferredStub > 0 || endTransferredStub > 0
+                EnforceRequiredStubConstraints = startTransferredStub > 0 || endTransferredStub > 0,
+                DisallowBacktracking = request.DisallowBacktracking || substituteStart || substituteEnd
             }, routeObstacles, planned);
         }
         DocumentPoint[] passagePoints =
@@ -107,7 +108,10 @@ public sealed class OrthogonalRoutePlanner
                     index == 0 && startTransferredStub > 0 ||
                     index == passagePoints.Length - 2 && endTransferredStub > 0 ||
                     MinimumStub(passagePoints[index], outgoing: true) > 0 ||
-                    MinimumStub(passagePoints[index + 1], outgoing: false) > 0
+                    MinimumStub(passagePoints[index + 1], outgoing: false) > 0,
+                DisallowBacktracking = request.DisallowBacktracking ||
+                    (index == 0 && substituteStart) ||
+                    (index == passagePoints.Length - 2 && substituteEnd)
             };
             OrthogonalRoute leg = _router.Route(legRequest, routeObstacles, planned);
             points.AddRange(index == 0 ? leg.Points : leg.Points.Skip(1));
