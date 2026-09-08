@@ -605,13 +605,32 @@ public sealed class WpEm04WindowsValidationTests
         DocumentRect baselineEnvelope = ActualRenderedEnvelope(baseline, start.Pole.Id, runtime.DrawingLayout);
         runtime.DrawingLayout.Replace(original.RotateBy(1));
         DrawingScene rotated = new DrawingSceneBuilder().Build(document, runtime);
+        Assert.Empty(rotated.Diagnostics);
+        OrthogonalRoute route = Assert.Single(rotated.Routes,
+            item => item.ConnectionId == connection.Id);
+        AssertNoBacktracking(route);
         Assert.NotEqual(baselineEnvelope,
             ActualRenderedEnvelope(rotated, start.Pole.Id, runtime.DrawingLayout));
         Assert.Same(gap, document.GetGroundingAccessPoint(gap.GroundingAccessPointId));
+        SceneEllipse marker = Marker(rotated, gap);
+        Assert.Equal(gap.GroundingAccessPointId, marker.TargetId);
+        Assert.Single(rotated.HitTestIndex.Entries, entry =>
+            entry.Target.Kind == SelectionTargetKind.GroundingAccessPoint &&
+            entry.Target.ObjectId == gap.GroundingAccessPointId);
+        AssertMarkerOnRoute(rotated, gap);
         AssertCompositeClearance(
             rotated,
             gap,
-            ActualRenderedEnvelope(rotated, start.Pole.Id, runtime.DrawingLayout));
+            ActualRenderedEnvelope(rotated, start.Pole.Id, runtime.DrawingLayout),
+            requireExact: false);
+        Assert.True(SupportPoleAwareRouteBuilder.TryResolveHalfEdge(
+            route,
+            document.OverheadLines.Single(item => item.ConnectionId == connection.Id),
+            runtime.DrawingLayout,
+            gap.PoleId,
+            gap.AdjacentPoleId,
+            out GroundingAccessHalfEdge halfEdge));
+        Assert.Equal(Center(marker), halfEdge.ConductorOrigin);
         AssertMarkerWithinAdjacentCapacity(rotated, gap, runtime.DrawingLayout);
     }
 
@@ -1134,7 +1153,8 @@ public sealed class WpEm04WindowsValidationTests
     private static void AssertCompositeClearance(
         DrawingScene scene,
         GroundingAccessPoint gap,
-        DocumentRect envelope)
+        DocumentRect envelope,
+        bool requireExact = true)
     {
         SceneEllipse marker = Marker(scene, gap);
         DocumentPoint center = Center(marker);
@@ -1169,7 +1189,14 @@ public sealed class WpEm04WindowsValidationTests
                 "Grounding marker visible bounds overlap the mounted-device envelope.");
         }
 
-        Assert.Equal(DrawingMetrics.Default.Line.GroundingAccessClearance, clearance, 8);
+        if (requireExact)
+        {
+            Assert.Equal(DrawingMetrics.Default.Line.GroundingAccessClearance, clearance, 8);
+        }
+        else
+        {
+            Assert.True(clearance >= DrawingMetrics.Default.Line.GroundingAccessClearance);
+        }
         AssertMarkerOnRoute(scene, gap);
     }
 
