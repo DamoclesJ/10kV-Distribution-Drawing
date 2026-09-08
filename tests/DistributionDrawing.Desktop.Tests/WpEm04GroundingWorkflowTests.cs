@@ -359,14 +359,14 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
                 GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId));
         overheadGround.Execute();
 
-        Assert.Equal("东侧电缆终端", cableGround.After.Location);
+        Assert.Equal("P-10杆电缆终端", cableGround.After.Location);
         Assert.Equal("P-11杆小号侧", overheadGround.After.Location);
         Assert.Equal("S01", cableGround.After.Number);
         Assert.Equal("L01", overheadGround.After.Number);
     }
 
     [Fact]
-    public void CableTerminationConnectedToRingInterval_UsesOwningBusinessLocation()
+    public void CableTerminationConnectedToRingInterval_UsesLocalPoleLocationWhileRingTargetUsesCabinetLocation()
     {
         ProjectRuntimeSession session = CreateSession("connected grounding location");
         var devices = new DeviceCommandFactory();
@@ -375,6 +375,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             session.Layout,
             new DocumentPoint(20, 20));
         pole.Execute();
+        pole.Pole.RenamePoleNumber("P-01");
         AddCableTerminationAttachmentCommand termination =
             devices.CreateAddCableTerminationAttachment(
                 session.PersistenceSession.Domain,
@@ -404,16 +405,25 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             "10kV");
         session.PersistenceSession.Domain.AddConnection(connection);
 
-        AddGroundingPointCommand command = (AddGroundingPointCommand)
+        AddGroundingPointCommand ringCommand = (AddGroundingPointCommand)
+            new ProfessionalCommandFactory().CreateAddGroundingPoint(
+                session.PersistenceSession.Domain,
+                GroundingTarget.ForTerminal(interval.CableTerminalId.Value));
+        ringCommand.Execute();
+
+        AddGroundingPointCommand cableCommand = (AddGroundingPointCommand)
             new ProfessionalCommandFactory().CreateAddGroundingPoint(
                 session.PersistenceSession.Domain,
                 GroundingTarget.ForTerminal(
                     termination.Creation.CableSideTerminal.Id));
+        cableCommand.Execute();
 
-        Assert.Equal("滨河站环网柜备用馈线间隔", command.After.Location);
+        Assert.Equal("滨河站环网柜备用馈线间隔", ringCommand.After.Location);
+        Assert.Equal("P-01杆电缆终端", cableCommand.After.Location);
+        Assert.NotEqual(ringCommand.After.Location, cableCommand.After.Location);
         Assert.DoesNotContain(
             termination.Creation.CableSideTerminal.Id.ToString(),
-            command.After.Location);
+            cableCommand.After.Location);
     }
 
     [Fact]
