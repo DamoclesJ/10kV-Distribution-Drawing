@@ -1,4 +1,5 @@
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Professional;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
 
@@ -8,7 +9,8 @@ public sealed record SelectionHitTestEntry(
     int Priority,
     DocumentPoint? SegmentStart = null,
     DocumentPoint? SegmentEnd = null,
-    bool CanStartDrag = true);
+    bool CanStartDrag = true,
+    GroundingPresentationAnchor? GroundingAnchor = null);
 
 public sealed class SelectionHitTestIndex
 {

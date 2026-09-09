@@ -45,12 +45,24 @@ public sealed class GroundingPointLayoutResolver
         }
 
         DocumentPoint defaultTop = ResolveDefaultSymbolTop(groundingPoint, anchor);
+        GroundingPresentationPolicy policy = groundingPoint.Target.Kind ==
+            GroundingTargetKind.GroundingAccessPoint
+            ? GroundingPresentationPolicy.GroundingAccessPoint
+            : anchor.Policy;
         DocumentPoint offset = manualLayout?.SymbolOffset ?? new DocumentPoint(0, 0);
+        if (policy == GroundingPresentationPolicy.GroundingAccessPoint &&
+            manualLayout is not null)
+        {
+            offset = NormalizeGapOffset(offset, anchor.Direction);
+        }
+        bool effectiveManual = manualLayout is not null &&
+            (offset.XMillimeters != 0 || offset.YMillimeters != 0);
         DocumentPoint symbolTop = Translate(defaultTop, offset);
         IReadOnlyList<OrthogonalRouteSegment> leader = ResolveLeader(
-            groundingPoint.Target.Kind == GroundingTargetKind.GroundingAccessPoint,
+            policy,
             anchor,
-            symbolTop);
+            symbolTop,
+            effectiveManual);
 
         GroundingDrawingMetrics grounding = _metrics.Grounding;
         DocumentPoint stemBottom = new(
@@ -140,10 +152,25 @@ public sealed class GroundingPointLayoutResolver
     }
 
     private IReadOnlyList<OrthogonalRouteSegment> ResolveLeader(
-        bool allowDirectVertical,
+        GroundingPresentationPolicy policy,
         GroundingPresentationAnchor anchor,
-        DocumentPoint symbolTop)
+        DocumentPoint symbolTop,
+        bool isManual)
     {
+        if (policy == GroundingPresentationPolicy.RingCabinetCableTerminal)
+        {
+            return ResolveRingCabinetLeader(anchor, symbolTop);
+        }
+
+        if (policy == GroundingPresentationPolicy.GroundingAccessPoint &&
+            isManual)
+        {
+            return ResolveGapLeader(anchor, symbolTop);
+        }
+
+        bool allowDirectVertical = policy is
+            GroundingPresentationPolicy.GroundingAccessPoint or
+            GroundingPresentationPolicy.PoleCableTermination;
         if (allowDirectVertical && anchor.Position == symbolTop)
         {
             return [];
@@ -162,9 +189,13 @@ public sealed class GroundingPointLayoutResolver
         TerminalAnchorDirection direction = anchor.Direction == TerminalAnchorDirection.Auto
             ? TerminalAnchorDirection.Right
             : anchor.Direction;
-        double stub = Math.Max(
-            _metrics.Routing.PortStubLength,
-            anchor.MinimumStubLength);
+        double stub = isManual && policy is
+            (GroundingPresentationPolicy.GroundingAccessPoint or
+             GroundingPresentationPolicy.PoleCableTermination)
+            ? 0
+            : Math.Max(
+                _metrics.Routing.PortStubLength,
+                anchor.MinimumStubLength);
         DocumentPoint first = Move(anchor.Position, direction, stub);
         AddPoint(points, first);
         double entryY = Math.Min(
@@ -210,6 +241,138 @@ public sealed class GroundingPointLayoutResolver
 
         AddPoint(points, symbolTop);
         return Segments(points);
+    }
+
+    private IReadOnlyList<OrthogonalRouteSegment> ResolveRingCabinetLeader(
+        GroundingPresentationAnchor anchor,
+        DocumentPoint symbolTop)
+    {
+        var points = new List<DocumentPoint>();
+        AddPoint(points, anchor.Position);
+        double side = Math.Sign(symbolTop.XMillimeters - anchor.Position.XMillimeters);
+        if (side == 0) side = 1;
+
+        if (symbolTop.YMillimeters >= anchor.Position.YMillimeters)
+        {
+            AddPoint(points, new DocumentPoint(symbolTop.XMillimeters, anchor.Position.YMillimeters));
+            AddPoint(points, symbolTop);
+            return Segments(points);
+        }
+
+        double corridor = Math.Max(
+            _metrics.Grounding.LeaderLength,
+            Math.Abs(symbolTop.XMillimeters - anchor.Position.XMillimeters) +
+            _metrics.Grounding.BarSpacing);
+        double corridorX = anchor.Position.XMillimeters + side * corridor;
+        if (Math.Sign(symbolTop.XMillimeters - corridorX) == side)
+        {
+            corridorX = symbolTop.XMillimeters - side * _metrics.Grounding.BarSpacing;
+        }
+        double upperY = symbolTop.YMillimeters - _metrics.Grounding.BarSpacing;
+        AddPoint(points, new DocumentPoint(corridorX, anchor.Position.YMillimeters));
+        AddPoint(points, new DocumentPoint(corridorX, upperY));
+        AddPoint(points, new DocumentPoint(symbolTop.XMillimeters, upperY));
+        AddPoint(points, symbolTop);
+        return Segments(points);
+    }
+
+    private IReadOnlyList<OrthogonalRouteSegment> ResolveGapLeader(
+        GroundingPresentationAnchor anchor,
+        DocumentPoint symbolTop)
+    {
+        if (anchor.Position == symbolTop)
+        {
+            return [];
+        }
+
+        TerminalAnchorDirection direction = anchor.Direction == TerminalAnchorDirection.Auto
+            ? TerminalAnchorDirection.Right
+            : anchor.Direction;
+        var points = new List<DocumentPoint>();
+        AddPoint(points, anchor.Position);
+        if (anchor.Position.XMillimeters == symbolTop.XMillimeters &&
+            symbolTop.YMillimeters > anchor.Position.YMillimeters)
+        {
+            AddPoint(points, symbolTop);
+            return Segments(points);
+        }
+
+        bool symbolBelow = symbolTop.YMillimeters > anchor.Position.YMillimeters;
+        bool symbolSameLevel = symbolTop.YMillimeters == anchor.Position.YMillimeters;
+        if (symbolBelow || symbolSameLevel)
+        {
+            AddPoint(points, new DocumentPoint(
+                symbolTop.XMillimeters,
+                anchor.Position.YMillimeters));
+            AddPoint(points, symbolTop);
+            return Segments(points);
+        }
+
+        double entryY = symbolTop.YMillimeters -
+            _metrics.Grounding.BarSpacing;
+        if (direction is TerminalAnchorDirection.Left or TerminalAnchorDirection.Right)
+        {
+            double side = direction == TerminalAnchorDirection.Left ? -1 : 1;
+            double corridorX = anchor.Position.XMillimeters +
+                side * Math.Max(_metrics.Grounding.BarSpacing, 0.5);
+            if (corridorX == symbolTop.XMillimeters)
+            {
+                corridorX +=
+                    side * Math.Max(_metrics.Grounding.BarSpacing, 0.5);
+            }
+            AddPoint(points, new DocumentPoint(corridorX, anchor.Position.YMillimeters));
+            AddPoint(points, new DocumentPoint(corridorX, entryY));
+            AddPoint(points, new DocumentPoint(symbolTop.XMillimeters, entryY));
+        }
+        else
+        {
+            double side = Math.Sign(symbolTop.XMillimeters - anchor.Position.XMillimeters);
+            if (side == 0)
+            {
+                side = direction == TerminalAnchorDirection.Up ? 1 : -1;
+            }
+            double corridorX = anchor.Position.XMillimeters +
+                side * Math.Max(_metrics.Grounding.BarSpacing, 0.5);
+            if (corridorX == symbolTop.XMillimeters)
+            {
+                corridorX +=
+                    side * Math.Max(_metrics.Grounding.BarSpacing, 0.5);
+            }
+            AddPoint(points, new DocumentPoint(corridorX, anchor.Position.YMillimeters));
+            AddPoint(points, new DocumentPoint(corridorX, entryY));
+            AddPoint(points, new DocumentPoint(symbolTop.XMillimeters, entryY));
+        }
+
+        AddPoint(points, symbolTop);
+        return Segments(points);
+    }
+
+    private DocumentPoint NormalizeGapOffset(
+        DocumentPoint offset,
+        TerminalAnchorDirection direction)
+    {
+        double dx = offset.XMillimeters;
+        double dy = offset.YMillimeters;
+        double outward = direction switch
+        {
+            TerminalAnchorDirection.Left => -dx,
+            TerminalAnchorDirection.Right => dx,
+            TerminalAnchorDirection.Up => -dy,
+            TerminalAnchorDirection.Down => dy,
+            _ => dy
+        };
+        if (outward <= _metrics.Grounding.ManualSnapTolerance)
+        {
+            if (direction is TerminalAnchorDirection.Left or TerminalAnchorDirection.Right)
+            {
+                dx = 0;
+            }
+            else if (direction is TerminalAnchorDirection.Up or TerminalAnchorDirection.Down)
+            {
+                dy = 0;
+            }
+        }
+        return new DocumentPoint(dx, dy);
     }
 
     private DocumentRect EstimateNumberBounds(DocumentPoint origin, string number)

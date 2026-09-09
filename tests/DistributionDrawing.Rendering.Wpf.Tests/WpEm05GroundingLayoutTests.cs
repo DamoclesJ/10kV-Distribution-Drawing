@@ -143,6 +143,36 @@ public sealed class WpEm05GroundingLayoutTests
     }
 
     [Fact]
+    public void PoleCableTerminationManualOffset_AllowsDirectVerticalConnection()
+    {
+        Guid pointId = Guid.NewGuid();
+        GroundingPoint point = GroundingPoint.Create(
+            pointId,
+            GroundingTarget.ForTerminal(Guid.NewGuid()),
+            "电缆终端",
+            "S01");
+        var anchor = new GroundingPresentationAnchor(
+            new DocumentPoint(100, 100),
+            TerminalAnchorDirection.Up,
+            Policy: GroundingPresentationPolicy.PoleCableTermination);
+        var automatic = new GroundingPointLayoutResolver().Resolve(point, anchor, null);
+        var manual = new GroundingPointLayout(
+            pointId,
+            new DocumentPoint(
+                anchor.Position.XMillimeters - automatic.SymbolTop.XMillimeters,
+                anchor.Position.YMillimeters + 20 - automatic.SymbolTop.YMillimeters));
+
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            anchor,
+            manual);
+
+        Assert.Single(resolved.LeaderSegments);
+        Assert.True(resolved.LeaderSegments[0].IsVertical);
+        Assert.Equal(resolved.SymbolTop, resolved.LeaderSegments[0].End);
+    }
+
+    [Fact]
     public void RingCabinetCableTerminal_UsesRealDownwardOutwardDirection()
     {
         var document = new DrawingDocument(Guid.NewGuid(), "Ring grounding");
@@ -180,12 +210,333 @@ public sealed class WpEm05GroundingLayoutTests
             null);
         OrthogonalRouteSegment first = resolved.LeaderSegments[0];
         Assert.Equal(anchor.Position, first.Start);
-        Assert.True(first.IsVertical);
-        Assert.True(first.End.YMillimeters > first.Start.YMillimeters);
+        Assert.True(first.IsHorizontal);
+        Assert.True(first.End.XMillimeters > first.Start.XMillimeters);
         OrthogonalRouteSegment final = resolved.LeaderSegments[^1];
         Assert.True(final.IsVertical);
         Assert.True(final.End.YMillimeters > final.Start.YMillimeters);
         Assert.Equal(resolved.SymbolTop, final.End);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-1)]
+    public void RingCabinetCableTerminal_AboveUsesNonOverlappingDogleg(int side)
+    {
+        GroundingPoint point = GroundingPoint.Create(
+            Guid.NewGuid(),
+            GroundingTarget.ForTerminal(Guid.NewGuid()),
+            "环网柜电缆侧",
+            "S01");
+        var anchor = new GroundingPresentationAnchor(
+            new DocumentPoint(100, 100),
+            TerminalAnchorDirection.Down,
+            Policy: GroundingPresentationPolicy.RingCabinetCableTerminal);
+        var offset = new DocumentPoint(side * 80, -180);
+
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            anchor,
+            new GroundingPointLayout(point.GroundingPointId, offset));
+
+        Assert.True(resolved.LeaderSegments[0].IsHorizontal);
+        Assert.True(resolved.LeaderSegments[^1].IsVertical);
+        Assert.True(resolved.LeaderSegments[^1].End.YMillimeters >
+                    resolved.LeaderSegments[^1].Start.YMillimeters);
+        Assert.Equal(resolved.SymbolTop, resolved.LeaderSegments[^1].End);
+        Assert.DoesNotContain(resolved.LeaderSegments, segment => segment.Length == 0);
+        AssertNoReverseOverlap(resolved.LeaderSegments);
+    }
+
+    [Theory]
+    [InlineData(TerminalAnchorDirection.Left, 20, 7)]
+    [InlineData(TerminalAnchorDirection.Right, 20, 7)]
+    [InlineData(TerminalAnchorDirection.Up, 7, -20)]
+    [InlineData(TerminalAnchorDirection.Down, 7, 20)]
+    public void GapManualOffsetProjectsInwardComponentAndPreservesPerpendicular(
+        TerminalAnchorDirection direction,
+        double outwardMagnitude,
+        double perpendicular)
+    {
+        GroundingPoint point = GroundingPoint.Create(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(Guid.NewGuid()),
+            "线路侧",
+            "L01");
+        DocumentPoint offset = direction switch
+        {
+            TerminalAnchorDirection.Left => new DocumentPoint(-outwardMagnitude, perpendicular),
+            TerminalAnchorDirection.Right => new DocumentPoint(outwardMagnitude, perpendicular),
+            TerminalAnchorDirection.Up => new DocumentPoint(perpendicular, -outwardMagnitude),
+            _ => new DocumentPoint(perpendicular, outwardMagnitude)
+        };
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            new GroundingPresentationAnchor(
+                new DocumentPoint(100, 100),
+                direction,
+                Policy: GroundingPresentationPolicy.GroundingAccessPoint),
+            new GroundingPointLayout(point.GroundingPointId, offset));
+
+        Assert.Equal(offset, new DocumentPoint(
+            resolved.SymbolTop.XMillimeters - resolved.DefaultSymbolTop.XMillimeters,
+            resolved.SymbolTop.YMillimeters - resolved.DefaultSymbolTop.YMillimeters));
+    }
+
+    [Fact]
+    public void GapInwardManualOffsetClampsToDefaultBoundary()
+    {
+        GroundingPoint point = GroundingPoint.Create(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(Guid.NewGuid()),
+            "线路侧",
+            "L01");
+        var resolver = new GroundingPointLayoutResolver();
+        var anchor = new GroundingPresentationAnchor(
+            new DocumentPoint(100, 100),
+            TerminalAnchorDirection.Right,
+            Policy: GroundingPresentationPolicy.GroundingAccessPoint);
+        GroundingPointResolvedLayout resolved = resolver.Resolve(
+            point,
+            anchor,
+            new GroundingPointLayout(point.GroundingPointId, new DocumentPoint(-20, 7)));
+
+        Assert.Equal(0, resolved.SymbolTop.XMillimeters - resolved.DefaultSymbolTop.XMillimeters);
+        Assert.Equal(7, resolved.SymbolTop.YMillimeters - resolved.DefaultSymbolTop.YMillimeters);
+    }
+
+    [Theory]
+    [InlineData(TerminalAnchorDirection.Left)]
+    [InlineData(TerminalAnchorDirection.Right)]
+    [InlineData(TerminalAnchorDirection.Up)]
+    [InlineData(TerminalAnchorDirection.Down)]
+    public void GapInwardManualOffsetClampsForEveryDirection(
+        TerminalAnchorDirection direction)
+    {
+        GroundingPoint point = GroundingPoint.Create(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(Guid.NewGuid()),
+            "线路侧",
+            "L01");
+        DocumentPoint inward = direction switch
+        {
+            TerminalAnchorDirection.Left => new DocumentPoint(5, 9),
+            TerminalAnchorDirection.Right => new DocumentPoint(-5, 9),
+            TerminalAnchorDirection.Up => new DocumentPoint(9, 5),
+            _ => new DocumentPoint(9, -5)
+        };
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            new GroundingPresentationAnchor(
+                new DocumentPoint(100, 100),
+                direction,
+                Policy: GroundingPresentationPolicy.GroundingAccessPoint),
+            new GroundingPointLayout(point.GroundingPointId, inward));
+
+        Assert.Equal(9, direction is TerminalAnchorDirection.Left or TerminalAnchorDirection.Right
+            ? resolved.SymbolTop.YMillimeters - resolved.DefaultSymbolTop.YMillimeters
+            : resolved.SymbolTop.XMillimeters - resolved.DefaultSymbolTop.XMillimeters);
+        Assert.Equal(0, direction is TerminalAnchorDirection.Left or TerminalAnchorDirection.Right
+            ? resolved.SymbolTop.XMillimeters - resolved.DefaultSymbolTop.XMillimeters
+            : resolved.SymbolTop.YMillimeters - resolved.DefaultSymbolTop.YMillimeters);
+    }
+
+    [Fact]
+    public void GapOffsetConstraint_UsesOneMillimeterSnapTolerance()
+    {
+        var constraint = new GroundingPointOffsetConstraint(
+            new GroundingPresentationAnchor(
+                new DocumentPoint(100, 100),
+                TerminalAnchorDirection.Right,
+                Policy: GroundingPresentationPolicy.GroundingAccessPoint));
+
+        Assert.Equal(
+            new DocumentPoint(2, 7),
+            constraint.Normalize(new DocumentPoint(2, 7)));
+        Assert.Equal(
+            new DocumentPoint(0, 7),
+            constraint.Normalize(new DocumentPoint(0.5, 7)));
+        Assert.Equal(
+            new DocumentPoint(0, 7),
+            constraint.Normalize(new DocumentPoint(-5, 7)));
+    }
+
+    [Fact]
+    public void GapDragWritesNormalizedOffsetAndUndoRedoRestoresStates()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "GAP drag normalization");
+        var runtime = new RuntimeLayoutDocument(
+            new DrawingLayout(),
+            new Dictionary<Guid, RingCabinetLayout>());
+        Guid gapId = Guid.NewGuid();
+        GroundingPoint point = document.CreateGroundingPoint(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(gapId),
+            "线路侧",
+            "L01");
+        var before = new GroundingPointLayout(
+            point.GroundingPointId,
+            new DocumentPoint(10, 4));
+        runtime.SetGroundingPointLayout(before);
+        var anchor = new GroundingPresentationAnchor(
+            new DocumentPoint(100, 100),
+            TerminalAnchorDirection.Right,
+            Policy: GroundingPresentationPolicy.GroundingAccessPoint);
+        var hit = new SelectionHitTestEntry(
+            new SelectionReference(
+                SelectionTargetKind.GroundingPoint,
+                point.GroundingPointId),
+            new DocumentRect(0, 0, 20, 20),
+            80,
+            GroundingAnchor: anchor);
+        var controller = new GroundingPointDragController();
+
+        Assert.True(controller.TryBeginDrag(
+            hit,
+            new DocumentPoint(0, 0),
+            document,
+            runtime));
+        Assert.True(controller.UpdatePreview(new DocumentPoint(-20, 0)));
+        Assert.Equal(
+            new DocumentPoint(0, 4),
+            runtime.GroundingPointLayouts[point.GroundingPointId].SymbolOffset);
+
+        ICommand command = Assert.IsAssignableFrom<ICommand>(controller.Commit());
+        command.Undo();
+        Assert.Equal(before, runtime.GroundingPointLayouts[point.GroundingPointId]);
+        command.Redo();
+        Assert.Equal(
+            new DocumentPoint(0, 4),
+            runtime.GroundingPointLayouts[point.GroundingPointId].SymbolOffset);
+    }
+
+    [Fact]
+    public void GapBoundaryAboveUsesOutwardCorridorWithoutReverseOverlap()
+    {
+        GroundingPoint point = GroundingPoint.Create(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(Guid.NewGuid()),
+            "线路侧",
+            "L01");
+        var anchor = new GroundingPresentationAnchor(
+            new DocumentPoint(100, 100),
+            TerminalAnchorDirection.Right,
+            Policy: GroundingPresentationPolicy.GroundingAccessPoint);
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            anchor,
+            new GroundingPointLayout(
+                point.GroundingPointId,
+                new DocumentPoint(0, -40)));
+
+        Assert.DoesNotContain(resolved.LeaderSegments, segment => segment.Length == 0);
+        Assert.Equal(resolved.SymbolTop, resolved.LeaderSegments[^1].End);
+        Assert.True(resolved.LeaderSegments[^1].IsVertical);
+        Assert.True(resolved.LeaderSegments[^1].End.YMillimeters >
+                    resolved.LeaderSegments[^1].Start.YMillimeters);
+        AssertNoReverseOverlap(resolved.LeaderSegments);
+    }
+
+    [Theory]
+    [InlineData(TerminalAnchorDirection.Right, 20, -18)]
+    [InlineData(TerminalAnchorDirection.Right, 20, -17)]
+    [InlineData(TerminalAnchorDirection.Right, 20, -38)]
+    [InlineData(TerminalAnchorDirection.Left, -20, -18)]
+    [InlineData(TerminalAnchorDirection.Left, -20, -17)]
+    [InlineData(TerminalAnchorDirection.Left, -20, -38)]
+    public void GapHorizontalManualStatesAvoidReverseOverlap(
+        TerminalAnchorDirection direction,
+        double xOffset,
+        double yOffset)
+    {
+        GroundingPoint point = GroundingPoint.Create(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(Guid.NewGuid()),
+            "线路侧",
+            "L01");
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            new GroundingPresentationAnchor(
+                new DocumentPoint(100, 100),
+                direction,
+                Policy: GroundingPresentationPolicy.GroundingAccessPoint),
+            new GroundingPointLayout(
+                point.GroundingPointId,
+                new DocumentPoint(xOffset, yOffset)));
+
+        AssertNoReverseOverlap(resolved.LeaderSegments);
+        Assert.DoesNotContain(resolved.LeaderSegments, segment => segment.Length == 0);
+        Assert.True(resolved.LeaderSegments[^1].IsVertical);
+        Assert.True(resolved.LeaderSegments[^1].End.YMillimeters >
+                    resolved.LeaderSegments[^1].Start.YMillimeters);
+    }
+
+    [Fact]
+    public void RealSceneGroundingHitCarriesGapConstraintIntoDragController()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "GAP wiring");
+        var runtime = new RuntimeLayoutDocument(
+            new DrawingLayout(),
+            new Dictionary<Guid, RingCabinetLayout>());
+        var devices = new DeviceCommandFactory();
+        AddPoleCommand start = devices.CreateAddPole(document, runtime, new DocumentPoint(0, 0));
+        AddPoleCommand end = devices.CreateAddPole(document, runtime, new DocumentPoint(200, 0));
+        start.Execute();
+        end.Execute();
+        var connection = new Connection(
+            Guid.NewGuid(),
+            ConnectionType.OverheadLine,
+            start.Terminal.Id,
+            end.Terminal.Id,
+            "测试线路",
+            "10kV");
+        document.AddConnection(connection);
+        document.AddOverheadLine(new OverheadLine(
+            connection.Id,
+            "JKLYJ",
+            [start.Pole.Id, end.Pole.Id]));
+        runtime.DrawingLayout.Add(new OverheadLineLayout(
+            connection.Id,
+            start.Layout.Position,
+            end.Layout.Position));
+        GroundingAccessPoint gap = document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            connection.Id,
+            start.Pole.Id,
+            end.Pole.Id,
+            GroundingAccessLineSide.LargerNumberSide);
+        GroundingPoint point = document.CreateGroundingPoint(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
+            "线路侧",
+            "L01");
+        runtime.SetGroundingPointLayout(new GroundingPointLayout(
+            point.GroundingPointId,
+            new DocumentPoint(10, 0)));
+
+        DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
+        SelectionReference reference = new(
+            SelectionTargetKind.GroundingPoint,
+            point.GroundingPointId);
+        SelectionHitTestEntry hit = Assert.Single(
+            scene.HitTestIndex.FindAll(reference),
+            entry => entry.CanStartDrag && entry.GroundingAnchor is not null);
+        GroundingPresentationAnchor anchor = hit.GroundingAnchor!.Value;
+        Assert.Equal(
+            GroundingPresentationPolicy.GroundingAccessPoint,
+            anchor.Policy);
+        Assert.Equal(TerminalAnchorDirection.Right, anchor.Direction);
+
+        var controller = new GroundingPointDragController();
+        Assert.True(controller.TryBeginDrag(
+            hit,
+            new DocumentPoint(0, 0),
+            document,
+            runtime));
+        Assert.True(controller.UpdatePreview(new DocumentPoint(-20, 0)));
+        Assert.Equal(
+            new DocumentPoint(0, 0),
+            runtime.GroundingPointLayouts[point.GroundingPointId].SymbolOffset);
     }
 
     [Fact]
@@ -376,6 +727,35 @@ public sealed class WpEm05GroundingLayoutTests
         Assert.Equal(2, projected.OfType<SceneLine>().Count());
     }
 
+    [Fact]
+    public void PositiveCollinearOverlapDetection_RejectsOverlapButAllowsEndpointTouch()
+    {
+        var verticalForward = new OrthogonalRouteSegment(
+            new DocumentPoint(10, 0),
+            new DocumentPoint(10, 20),
+            0);
+        var verticalReverse = new OrthogonalRouteSegment(
+            new DocumentPoint(10, 15),
+            new DocumentPoint(10, 5),
+            1);
+        var horizontalForward = new OrthogonalRouteSegment(
+            new DocumentPoint(0, 30),
+            new DocumentPoint(20, 30),
+            0);
+        var horizontalReverse = new OrthogonalRouteSegment(
+            new DocumentPoint(15, 30),
+            new DocumentPoint(5, 30),
+            1);
+        var endpointTouch = new OrthogonalRouteSegment(
+            new DocumentPoint(10, 20),
+            new DocumentPoint(10, 30),
+            2);
+
+        Assert.True(HasPositiveCollinearOverlap(verticalForward, verticalReverse));
+        Assert.True(HasPositiveCollinearOverlap(horizontalForward, horizontalReverse));
+        Assert.False(HasPositiveCollinearOverlap(verticalForward, endpointTouch));
+    }
+
     private static (DrawingDocument Document, GroundingPoint Point) CreateGroundingDocument()
     {
         PoleCreationResult result = new PoleCreationFactory().Create("P-1");
@@ -395,4 +775,51 @@ public sealed class WpEm05GroundingLayoutTests
     private static DocumentPoint Center(DocumentRect bounds) => new(
         bounds.XMillimeters + bounds.WidthMillimeters / 2,
         bounds.YMillimeters + bounds.HeightMillimeters / 2);
+
+    private static void AssertNoReverseOverlap(
+        IReadOnlyList<OrthogonalRouteSegment> segments)
+    {
+        for (int i = 0; i < segments.Count; i++)
+        {
+            for (int j = i + 1; j < segments.Count; j++)
+            {
+                OrthogonalRouteSegment first = segments[i];
+                OrthogonalRouteSegment second = segments[j];
+                Assert.False(
+                    HasPositiveCollinearOverlap(first, second),
+                    $"Segments {i} and {j} have positive-length collinear overlap.");
+            }
+        }
+    }
+
+    private static bool HasPositiveCollinearOverlap(
+        OrthogonalRouteSegment first,
+        OrthogonalRouteSegment second)
+    {
+        if (first.IsVertical && second.IsVertical &&
+            first.Start.XMillimeters == second.Start.XMillimeters)
+        {
+            double overlap = Math.Min(
+                    Math.Max(first.Start.YMillimeters, first.End.YMillimeters),
+                    Math.Max(second.Start.YMillimeters, second.End.YMillimeters)) -
+                Math.Max(
+                    Math.Min(first.Start.YMillimeters, first.End.YMillimeters),
+                    Math.Min(second.Start.YMillimeters, second.End.YMillimeters));
+            return overlap > 0;
+        }
+
+        if (first.IsHorizontal && second.IsHorizontal &&
+            first.Start.YMillimeters == second.Start.YMillimeters)
+        {
+            double overlap = Math.Min(
+                    Math.Max(first.Start.XMillimeters, first.End.XMillimeters),
+                    Math.Max(second.Start.XMillimeters, second.End.XMillimeters)) -
+                Math.Max(
+                    Math.Min(first.Start.XMillimeters, first.End.XMillimeters),
+                    Math.Min(second.Start.XMillimeters, second.End.XMillimeters));
+            return overlap > 0;
+        }
+
+        return false;
+    }
 }

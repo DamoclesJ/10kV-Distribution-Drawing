@@ -19,7 +19,8 @@ public sealed record DrawingMetrics(
     public GroundingDrawingMetrics Grounding { get; init; } = new(
         LeaderLength: 18, StemLength: 12, BarSpacing: 3,
         TopBarWidth: 12, MiddleBarWidth: 8, BottomBarWidth: 4,
-        HitPadding: 2, NumberOffset: new DocumentPoint(8, 0));
+        HitPadding: 2, NumberOffset: new DocumentPoint(8, 0),
+        ManualSnapTolerance: 1);
 
     public static DrawingMetrics Default { get; } = new(
         new GeneralDrawingMetrics(
@@ -101,7 +102,8 @@ public sealed record GroundingDrawingMetrics(
     double MiddleBarWidth,
     double BottomBarWidth,
     double HitPadding,
-    DocumentPoint NumberOffset);
+    DocumentPoint NumberOffset,
+    double ManualSnapTolerance);
 
 public sealed record GeneralDrawingMetrics(
     double StandardStrokeThickness,

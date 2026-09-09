@@ -155,14 +155,16 @@ public sealed class ProfessionalSceneBuilder
                 hitTestEntries,
                 reference,
                 Expand(resolved.BodyBounds, DrawingMetrics.Default.Grounding.HitPadding),
-                markerExclusion);
+                markerExclusion,
+                resolved.TargetAnchor);
             if (resolved.NumberBounds is DocumentRect numberBounds)
             {
                 AddGroundingBodyHitEntries(
                     hitTestEntries,
                     reference,
                     Expand(numberBounds, DrawingMetrics.Default.Grounding.HitPadding),
-                    markerExclusion);
+                    markerExclusion,
+                    resolved.TargetAnchor);
             }
         }
 
@@ -274,11 +276,16 @@ public sealed class ProfessionalSceneBuilder
         ICollection<SelectionHitTestEntry> entries,
         SelectionReference reference,
         DocumentRect bounds,
-        DocumentRect? markerExclusion)
+        DocumentRect? markerExclusion,
+        GroundingPresentationAnchor anchor)
     {
         foreach (DocumentRect hitBounds in Exclude(bounds, markerExclusion))
         {
-            entries.Add(new SelectionHitTestEntry(reference, hitBounds, 80));
+            entries.Add(new SelectionHitTestEntry(
+                reference,
+                hitBounds,
+                80,
+                GroundingAnchor: anchor));
         }
     }
 

@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -11,7 +12,16 @@ namespace DistributionDrawing.Rendering.Wpf.Professional;
 public readonly record struct GroundingPresentationAnchor(
     DocumentPoint Position,
     TerminalAnchorDirection Direction,
-    double MinimumStubLength = 0);
+    double MinimumStubLength = 0,
+    GroundingPresentationPolicy Policy = GroundingPresentationPolicy.StandardTerminal);
+
+public enum GroundingPresentationPolicy
+{
+    GroundingAccessPoint,
+    PoleCableTermination,
+    RingCabinetCableTerminal,
+    StandardTerminal
+}
 
 /// <summary>
 /// Resolves transient grounding presentation geometry without changing the
@@ -60,6 +70,32 @@ public sealed class GroundingPresentationAnchorResolver
             return false;
         }
 
+        if (document.Devices.OfType<CableTermination>().Any(device =>
+                device.CableSideTerminalId == terminalId))
+        {
+            presentationAnchor = new GroundingPresentationAnchor(
+                terminalAnchor.Position,
+                terminalAnchor.Direction == TerminalAnchorDirection.Auto
+                    ? TerminalAnchorDirection.Right
+                    : terminalAnchor.Direction,
+                terminalAnchor.MinimumStubLength,
+                GroundingPresentationPolicy.PoleCableTermination);
+            return true;
+        }
+
+        if (document.Devices.OfType<RingCabinet>().Any(cabinet =>
+                cabinet.Intervals.Any(interval => interval.CableTerminalId == terminalId)))
+        {
+            presentationAnchor = new GroundingPresentationAnchor(
+                terminalAnchor.Position,
+                terminalAnchor.Direction == TerminalAnchorDirection.Auto
+                    ? TerminalAnchorDirection.Right
+                    : terminalAnchor.Direction,
+                terminalAnchor.MinimumStubLength,
+                GroundingPresentationPolicy.RingCabinetCableTerminal);
+            return true;
+        }
+
         SwitchDevice? switchDevice = document.Devices
             .OfType<SwitchDevice>()
             .SingleOrDefault(device =>
@@ -72,7 +108,8 @@ public sealed class GroundingPresentationAnchorResolver
                 terminalAnchor.Direction == TerminalAnchorDirection.Auto
                     ? TerminalAnchorDirection.Right
                     : terminalAnchor.Direction,
-                terminalAnchor.MinimumStubLength);
+                terminalAnchor.MinimumStubLength,
+                GroundingPresentationPolicy.StandardTerminal);
             return true;
         }
 

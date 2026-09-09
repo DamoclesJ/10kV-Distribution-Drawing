@@ -1,6 +1,7 @@
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
@@ -37,6 +38,9 @@ public sealed class GroundingPointDragController
             hit.Target.ObjectId,
             out GroundingPointLayout? before);
         DocumentPoint startOffset = before?.SymbolOffset ?? new DocumentPoint(0, 0);
+        GroundingPointOffsetConstraint? constraint = hit.GroundingAnchor is GroundingPresentationAnchor anchor
+            ? new GroundingPointOffsetConstraint(anchor)
+            : null;
         _drag = new DragState(
             document,
             layout,
@@ -44,7 +48,8 @@ public sealed class GroundingPointDragController
             pointer,
             startOffset,
             before,
-            startOffset);
+            startOffset,
+            constraint);
         return true;
     }
 
@@ -55,6 +60,7 @@ public sealed class GroundingPointDragController
         DocumentPoint current = new(
             drag.StartOffset.XMillimeters + pointer.XMillimeters - drag.StartPointer.XMillimeters,
             drag.StartOffset.YMillimeters + pointer.YMillimeters - drag.StartPointer.YMillimeters);
+        current = drag.Constraint?.Normalize(current) ?? current;
         if (current == drag.CurrentOffset)
         {
             return false;
@@ -116,5 +122,6 @@ public sealed class GroundingPointDragController
         DocumentPoint StartPointer,
         DocumentPoint StartOffset,
         GroundingPointLayout? Before,
-        DocumentPoint CurrentOffset);
+        DocumentPoint CurrentOffset,
+        GroundingPointOffsetConstraint? Constraint);
 }

@@ -69,7 +69,8 @@ public sealed class GroundingAccessPointAnchorResolver
         }
         anchor = new GroundingPresentationAnchor(
             position,
-            direction);
+            direction,
+            Policy: GroundingPresentationPolicy.GroundingAccessPoint);
         return true;
     }
 
