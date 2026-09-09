@@ -249,6 +249,12 @@ internal static class ProjectLayoutRuntimeMapper
                 guide.CableSegmentId,
                 guide.HorizontalYMillimeters))
             .ToArray();
+        var groundingPointLayouts = runtime.GroundingPointLayouts.Values
+            .OrderBy(layout => layout.GroundingPointId)
+            .Select(layout => new ProjectGroundingPointLayoutDto(
+                layout.GroundingPointId,
+                Point(layout.SymbolOffset)))
+            .ToArray();
 
         return new ProjectLayoutSnapshot(new ProjectLayoutDto(
             domain.Id,
@@ -260,7 +266,7 @@ internal static class ProjectLayoutRuntimeMapper
             cableRouteGuides,
             [],
             [],
-            []));
+            groundingPointLayouts));
     }
 
     public static RuntimeLayoutDocument ToRuntime(
@@ -358,7 +364,17 @@ internal static class ProjectLayoutRuntimeMapper
                 dto => new CableRouteGuide(
                     dto.CableSegmentId,
                     dto.HorizontalYMillimeters));
-        return new RuntimeLayoutDocument(drawingLayout, cabinetLayouts, cableRouteGuides);
+        Dictionary<Guid, GroundingPointLayout> groundingPointLayouts =
+            snapshot.GroundingPointLayouts.ToDictionary(
+                dto => dto.GroundingPointId,
+                dto => new GroundingPointLayout(
+                    dto.GroundingPointId,
+                    Point(dto.SymbolOffset)));
+        return new RuntimeLayoutDocument(
+            drawingLayout,
+            cabinetLayouts,
+            cableRouteGuides,
+            groundingPointLayouts);
     }
 
     private static ProjectPointDto Point(DocumentPoint point)

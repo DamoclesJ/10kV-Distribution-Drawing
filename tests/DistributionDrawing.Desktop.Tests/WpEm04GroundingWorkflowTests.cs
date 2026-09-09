@@ -212,7 +212,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         foreach (GroundingPoint point in session.PersistenceSession.Domain.GroundingPoints)
         {
             SceneLine[] lines = session.Scene.Elements.OfType<SceneLine>().Where(line => line.TargetId == point.GroundingPointId).ToArray();
-            Assert.Equal(5, lines.Length);
+            Assert.True(lines.Length >= 5);
             Assert.DoesNotContain(session.Scene.Elements, element => element.TargetId == point.GroundingPointId && element is SceneRectangle);
         }
     }
@@ -544,7 +544,9 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         Assert.False(session.IsDirty);
         Assert.Same(gp, Assert.Single(document.GroundingPoints));
         SceneLine stem = Assert.Single(session.Scene.Elements.OfType<SceneLine>(), line =>
-            line.TargetId == gp.GroundingPointId && line.Start.XMillimeters == line.End.XMillimeters);
+            line.TargetId == gp.GroundingPointId &&
+            line.Start.XMillimeters == line.End.XMillimeters &&
+            line.End.YMillimeters - line.Start.YMillimeters == DrawingMetrics.Default.Grounding.StemLength);
         SelectionReference gpReference = session.Scene.HitTestIndex.HitTest(stem.End)!;
         Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingPoint, gp.GroundingPointId), gpReference);
         session.SelectionManager.Select(gpReference);

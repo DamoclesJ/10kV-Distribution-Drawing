@@ -10,7 +10,8 @@ namespace DistributionDrawing.Rendering.Wpf.Professional;
 
 public readonly record struct GroundingPresentationAnchor(
     DocumentPoint Position,
-    TerminalAnchorDirection Direction);
+    TerminalAnchorDirection Direction,
+    double MinimumStubLength = 0);
 
 /// <summary>
 /// Resolves transient grounding presentation geometry without changing the
@@ -68,7 +69,10 @@ public sealed class GroundingPresentationAnchorResolver
         {
             presentationAnchor = new GroundingPresentationAnchor(
                 terminalAnchor.Position,
-                TerminalAnchorDirection.Right);
+                terminalAnchor.Direction == TerminalAnchorDirection.Auto
+                    ? TerminalAnchorDirection.Right
+                    : terminalAnchor.Direction,
+                terminalAnchor.MinimumStubLength);
             return true;
         }
 

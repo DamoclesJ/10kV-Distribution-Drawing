@@ -7,7 +7,8 @@ public sealed record SelectionHitTestEntry(
     DocumentRect Bounds,
     int Priority,
     DocumentPoint? SegmentStart = null,
-    DocumentPoint? SegmentEnd = null);
+    DocumentPoint? SegmentEnd = null,
+    bool CanStartDrag = true);
 
 public sealed class SelectionHitTestIndex
 {

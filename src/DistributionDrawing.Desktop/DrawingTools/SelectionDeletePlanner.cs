@@ -108,6 +108,7 @@ public sealed class SelectionDeletePlanner
         {
             commands.Add(_professionalCommandFactory.CreateRemoveGroundingPoint(
                 document,
+                layout,
                 groundingPointId));
         }
 

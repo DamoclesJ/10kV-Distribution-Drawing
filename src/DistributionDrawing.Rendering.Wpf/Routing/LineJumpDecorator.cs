@@ -37,6 +37,41 @@ public sealed class LineJumpDecorator
         return elements;
     }
 
+    /// <summary>
+    /// Decorates presentation-only orthogonal segments at explicitly derived
+    /// crossings. It does not require or create a Connection identity.
+    /// </summary>
+    public IReadOnlyList<SceneElement> ProjectPresentationSegments(
+        IEnumerable<OrthogonalRouteSegment> segments,
+        IEnumerable<(int SegmentIndex, DocumentPoint Position)> crossings,
+        Color stroke,
+        double? thicknessMillimeters = null)
+    {
+        ArgumentNullException.ThrowIfNull(segments);
+        ArgumentNullException.ThrowIfNull(crossings);
+        double thickness = thicknessMillimeters ?? _metrics.Line.ConnectionThickness;
+        ILookup<int, DocumentPoint> crossingBySegment = crossings.ToLookup(
+            item => item.SegmentIndex,
+            item => item.Position);
+        var elements = new List<SceneElement>();
+        foreach (OrthogonalRouteSegment segment in segments)
+        {
+            DocumentPoint[] jumps = SelectSafeJumps(
+                    segment,
+                    crossingBySegment[segment.Index]
+                        .OrderBy(point => DistanceAlong(segment, point)))
+                .ToArray();
+            ProjectSegment(
+                segment,
+                jumps,
+                stroke,
+                SceneStrokeStyle.Solid,
+                thickness,
+                elements);
+        }
+        return elements;
+    }
+
     private bool ShouldJump(
         OrthogonalRoute route,
         OrthogonalRouteSegment segment,

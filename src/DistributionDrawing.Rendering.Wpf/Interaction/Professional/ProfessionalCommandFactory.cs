@@ -2,6 +2,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Professional;
+using DistributionDrawing.Rendering.Wpf.Layout;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -71,11 +72,20 @@ public sealed class ProfessionalCommandFactory
         DrawingDocument document,
         Guid groundingPointId)
     {
+        return CreateRemoveGroundingPoint(document, null, groundingPointId);
+    }
+
+    public ICommand CreateRemoveGroundingPoint(
+        DrawingDocument document,
+        RuntimeLayoutDocument? layout,
+        Guid groundingPointId)
+    {
         ArgumentNullException.ThrowIfNull(document);
         return new RemoveGroundingPointCommand(
             document,
             GroundingPointCommandSnapshot.From(
-                document.GetGroundingPoint(groundingPointId)));
+                document.GetGroundingPoint(groundingPointId)),
+            layout);
     }
 
     public AddGroundingAccessPointCommand CreateAddGroundingAccessPoint(

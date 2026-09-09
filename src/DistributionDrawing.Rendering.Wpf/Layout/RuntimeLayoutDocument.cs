@@ -8,11 +8,13 @@ public sealed class RuntimeLayoutDocument
 {
     private readonly Dictionary<Guid, RingCabinetLayout> _ringCabinetLayouts;
     private readonly Dictionary<Guid, CableRouteGuide> _cableRouteGuides;
+    private readonly Dictionary<Guid, GroundingPointLayout> _groundingPointLayouts;
 
     public RuntimeLayoutDocument(
         DrawingLayout drawingLayout,
         IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
-        IReadOnlyDictionary<Guid, CableRouteGuide>? cableRouteGuides = null)
+        IReadOnlyDictionary<Guid, CableRouteGuide>? cableRouteGuides = null,
+        IReadOnlyDictionary<Guid, GroundingPointLayout>? groundingPointLayouts = null)
     {
         ArgumentNullException.ThrowIfNull(drawingLayout);
         ArgumentNullException.ThrowIfNull(ringCabinetLayouts);
@@ -20,6 +22,9 @@ public sealed class RuntimeLayoutDocument
         DrawingLayout = drawingLayout;
         _ringCabinetLayouts = ringCabinetLayouts.ToDictionary(pair => pair.Key, pair => pair.Value);
         _cableRouteGuides = cableRouteGuides?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? [];
+        _groundingPointLayouts = groundingPointLayouts?.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value) ?? [];
     }
 
     public DrawingLayout DrawingLayout { get; }
@@ -29,6 +34,9 @@ public sealed class RuntimeLayoutDocument
 
     public IReadOnlyDictionary<Guid, CableRouteGuide> CableRouteGuides => _cableRouteGuides;
 
+    public IReadOnlyDictionary<Guid, GroundingPointLayout> GroundingPointLayouts =>
+        _groundingPointLayouts;
+
     public void SetCableRouteGuide(CableRouteGuide guide)
     {
         ArgumentNullException.ThrowIfNull(guide);
@@ -37,6 +45,15 @@ public sealed class RuntimeLayoutDocument
 
     public bool RemoveCableRouteGuide(Guid cableSegmentId) =>
         _cableRouteGuides.Remove(cableSegmentId);
+
+    public void SetGroundingPointLayout(GroundingPointLayout layout)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        _groundingPointLayouts[layout.GroundingPointId] = layout;
+    }
+
+    public bool RemoveGroundingPointLayout(Guid groundingPointId) =>
+        _groundingPointLayouts.Remove(groundingPointId);
 
     public void AddRingCabinet(RingCabinetLayout layout)
     {

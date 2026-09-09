@@ -5,8 +5,10 @@ using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
+using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
 using Xunit;
@@ -78,6 +80,68 @@ public sealed class GroundingPresentationAnchorResolverTests
         Assert.NotEqual(electricalLeft.Position, left.Position);
         Assert.Equal(scenario.Switch.TerminalIds[0], leftPoint.TerminalId);
         Assert.Equal(scenario.Switch.TerminalIds[1], rightPoint.TerminalId);
+    }
+
+    [Fact]
+    public void CableTerminationTarget_UsesItsRealUpwardAnchorInsteadOfHardCodedRight()
+    {
+        PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
+            "P-cable",
+            PoleType.Cement,
+            null,
+            [],
+            includeCableTerminal: true);
+        DrawingDocument document = CreateDocument(result);
+        CableTermination termination = Assert.Single(result.Devices.OfType<CableTermination>());
+        PoleAttachment attachment = Assert.Single(result.Attachments);
+        var drawingLayout = new DrawingLayout();
+        drawingLayout.Add(new PoleLayout(result.Pole.Id, new DocumentPoint(40, 50)));
+        drawingLayout.Add(new AttachmentLayout(
+            attachment.AttachmentId,
+            new DocumentPoint(2, -10)));
+        GroundingPoint point = document.CreateGroundingPoint(
+            Guid.NewGuid(),
+            termination.CableSideTerminalId,
+            "电缆侧",
+            "S01");
+        TerminalAnchorIndex terminals = TerminalAnchorIndex.Build(
+            document,
+            drawingLayout,
+            new Dictionary<Guid, RingCabinetLayout>());
+
+        Assert.True(new GroundingPresentationAnchorResolver().TryResolve(
+            point,
+            document,
+            drawingLayout,
+            terminals,
+            out GroundingPresentationAnchor anchor));
+        Assert.Equal(TerminalAnchorDirection.Up, anchor.Direction);
+        var layoutResolver = new GroundingPointLayoutResolver();
+        GroundingPointResolvedLayout automatic = layoutResolver.Resolve(
+            point,
+            anchor,
+            null);
+        double leaderLength = DrawingMetrics.Default.Grounding.LeaderLength;
+        var manual = new GroundingPointLayout(
+            point.GroundingPointId,
+            new DocumentPoint(
+                anchor.Position.XMillimeters - automatic.SymbolTop.XMillimeters,
+                anchor.Position.YMillimeters + leaderLength * 2 -
+                automatic.SymbolTop.YMillimeters));
+        GroundingPointResolvedLayout resolved = layoutResolver.Resolve(
+            point,
+            anchor,
+            manual);
+        Assert.Equal(anchor.Position.XMillimeters, resolved.SymbolTop.XMillimeters);
+        Assert.True(resolved.SymbolTop.YMillimeters > anchor.Position.YMillimeters);
+        OrthogonalRouteSegment first = resolved.LeaderSegments[0];
+        Assert.Equal(anchor.Position, first.Start);
+        Assert.Equal(anchor.Position.XMillimeters, first.End.XMillimeters);
+        Assert.True(first.End.YMillimeters < first.Start.YMillimeters);
+        OrthogonalRouteSegment final = resolved.LeaderSegments[^1];
+        Assert.True(final.IsVertical);
+        Assert.True(final.End.YMillimeters > final.Start.YMillimeters);
+        Assert.Equal(resolved.SymbolTop, final.End);
     }
 
     [Fact]
@@ -154,7 +218,9 @@ public sealed class GroundingPresentationAnchorResolverTests
         foreach (GroundingPoint point in new[] { leftPoint, rightPoint })
         {
             SceneLine stem = Assert.Single(scene.Elements.OfType<SceneLine>(), line =>
-                line.TargetId == point.GroundingPointId && line.Start.XMillimeters == line.End.XMillimeters);
+                line.TargetId == point.GroundingPointId &&
+                line.Start.XMillimeters == line.End.XMillimeters &&
+                line.End.YMillimeters - line.Start.YMillimeters == DrawingMetrics.Default.Grounding.StemLength);
             Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingPoint, point.GroundingPointId),
                 scene.HitTestIndex.HitTest(stem.End));
         }

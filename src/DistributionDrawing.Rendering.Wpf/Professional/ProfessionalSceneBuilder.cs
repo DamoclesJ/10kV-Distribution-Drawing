@@ -23,25 +23,32 @@ public sealed class ProfessionalSceneBuilder
 {
     private readonly GroundingPresentationAnchorResolver _groundingAnchorResolver;
     private readonly GroundingAccessPointAnchorResolver _accessPointAnchorResolver;
+    private readonly GroundingPointLayoutResolver _groundingLayoutResolver;
+    private readonly GroundingLeaderCrossingDecorator _groundingCrossingDecorator;
 
     public ProfessionalSceneBuilder(SymbolLibrary symbolLibrary)
     {
         ArgumentNullException.ThrowIfNull(symbolLibrary);
         _groundingAnchorResolver = new GroundingPresentationAnchorResolver();
         _accessPointAnchorResolver = new GroundingAccessPointAnchorResolver();
+        _groundingLayoutResolver = new GroundingPointLayoutResolver();
+        _groundingCrossingDecorator = new GroundingLeaderCrossingDecorator();
     }
 
     public ProfessionalSceneResult Build(
         DrawingDocument document,
         DrawingLayout drawingLayout,
         IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
+        IReadOnlyDictionary<Guid, GroundingPointLayout> groundingPointLayouts,
         IEnumerable<OrthogonalRoute> routes)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(drawingLayout);
         ArgumentNullException.ThrowIfNull(ringCabinetLayouts);
+        ArgumentNullException.ThrowIfNull(groundingPointLayouts);
         ArgumentNullException.ThrowIfNull(routes);
-        IReadOnlyDictionary<Guid, OrthogonalRoute> routeByConnectionId = routes
+        OrthogonalRoute[] routeArray = routes.ToArray();
+        IReadOnlyDictionary<Guid, OrthogonalRoute> routeByConnectionId = routeArray
             .ToDictionary(route => route.ConnectionId);
 
         TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
@@ -51,6 +58,7 @@ public sealed class ProfessionalSceneBuilder
         var elements = new List<SceneElement>();
         var hitTestEntries = new List<SelectionHitTestEntry>();
         var diagnostics = new List<SceneBuildDiagnostic>();
+        var gapMarkerBounds = new Dictionary<Guid, DocumentRect>();
 
         foreach (GroundingAccessPoint point in document.GroundingAccessPoints)
         {
@@ -71,6 +79,7 @@ public sealed class ProfessionalSceneBuilder
 
             double diameter = DrawingMetrics.Default.Line.GroundingAccessMarkerDiameter;
             DocumentRect bounds = MarkerBounds(anchor.Position, diameter);
+            gapMarkerBounds[point.GroundingAccessPointId] = bounds;
             elements.Add(new SceneEllipse(
                 bounds,
                 Colors.Black,
@@ -102,38 +111,58 @@ public sealed class ProfessionalSceneBuilder
                 continue;
             }
 
-            IReadOnlyList<SceneElement> groundingElements = CreateGroundingPointElements(groundingPoint, anchor);
+            groundingPointLayouts.TryGetValue(
+                groundingPoint.GroundingPointId,
+                out GroundingPointLayout? manualLayout);
+            GroundingPointResolvedLayout resolved = _groundingLayoutResolver.Resolve(
+                groundingPoint,
+                anchor,
+                manualLayout);
+            IReadOnlyList<SceneElement> groundingElements = CreateGroundingPointElements(
+                groundingPoint,
+                resolved,
+                routeArray);
             elements.AddRange(groundingElements);
-            foreach (SceneLine line in groundingElements.OfType<SceneLine>())
+            SelectionReference reference = new(
+                SelectionTargetKind.GroundingPoint,
+                groundingPoint.GroundingPointId);
+            foreach (OrthogonalRouteSegment segment in resolved.LeaderSegments)
             {
-                // The leader's target end remains available for direct GAP selection.
-                DocumentPoint hitStart = line.Start;
-                if (line.Start == anchor.Position)
-                {
-                    if (groundingPoint.Target.Kind != GroundingTargetKind.GroundingAccessPoint ||
-                        line.Start.XMillimeters != line.End.XMillimeters ||
-                        line.End.YMillimeters <= line.Start.YMillimeters)
-                    {
-                        continue;
-                    }
-                    double markerExclusion =
-                        (DrawingMetrics.Default.Line.GroundingAccessMarkerDiameter +
-                         DrawingMetrics.Default.Line.ConnectionThickness) / 2 +
-                        DrawingMetrics.Default.Line.GroundingAccessHitPadding;
-                    hitStart = new DocumentPoint(
-                        line.Start.XMillimeters,
-                        Math.Min(line.End.YMillimeters, line.Start.YMillimeters + markerExclusion));
-                    if (hitStart == line.End)
-                    {
-                        continue;
-                    }
-                }
+                DocumentPoint hitStart = TrimGapMarkerStart(
+                    groundingPoint,
+                    resolved.TargetAnchor.Position,
+                    segment);
+                if (hitStart == segment.End) continue;
                 DocumentRect bounds = SceneGeometryBounds.Expand(
-                    SceneGeometryBounds.FromPoints([hitStart, line.End]),
+                    SceneGeometryBounds.FromPoints([hitStart, segment.End]),
                     DrawingMetrics.Default.Grounding.HitPadding);
                 hitTestEntries.Add(new SelectionHitTestEntry(
-                    new SelectionReference(SelectionTargetKind.GroundingPoint, groundingPoint.GroundingPointId),
-                    bounds, 80));
+                    reference,
+                    bounds,
+                    80,
+                    hitStart,
+                    segment.End,
+                    CanStartDrag: false));
+            }
+            DocumentRect? markerExclusion =
+                groundingPoint.Target.Kind == GroundingTargetKind.GroundingAccessPoint &&
+                gapMarkerBounds.TryGetValue(
+                    groundingPoint.Target.TargetId,
+                    out DocumentRect targetMarkerBounds)
+                    ? targetMarkerBounds
+                    : null;
+            AddGroundingBodyHitEntries(
+                hitTestEntries,
+                reference,
+                Expand(resolved.BodyBounds, DrawingMetrics.Default.Grounding.HitPadding),
+                markerExclusion);
+            if (resolved.NumberBounds is DocumentRect numberBounds)
+            {
+                AddGroundingBodyHitEntries(
+                    hitTestEntries,
+                    reference,
+                    Expand(numberBounds, DrawingMetrics.Default.Grounding.HitPadding),
+                    markerExclusion);
             }
         }
 
@@ -182,56 +211,33 @@ public sealed class ProfessionalSceneBuilder
 
     private IReadOnlyList<SceneElement> CreateGroundingPointElements(
         GroundingPoint groundingPoint,
-        GroundingPresentationAnchor anchor)
+        GroundingPointResolvedLayout layout,
+        IEnumerable<OrthogonalRoute> electricalRoutes)
     {
         DrawingMetrics metrics = DrawingMetrics.Default;
-        GroundingDrawingMetrics grounding = metrics.Grounding;
-        bool gapTarget = groundingPoint.Target.Kind == GroundingTargetKind.GroundingAccessPoint;
-        bool verticalGap = gapTarget &&
-            anchor.Direction is TerminalAnchorDirection.Up or TerminalAnchorDirection.Down;
-        double leaderLength = verticalGap
-            ? grounding.TopBarWidth / 2 + grounding.HitPadding
-            : grounding.LeaderLength;
-        DocumentPoint stemTop = gapTarget && !verticalGap
-            ? anchor.Position
-            : Move(
-                anchor.Position,
-                anchor.Direction == TerminalAnchorDirection.Left
-                    ? TerminalAnchorDirection.Left : TerminalAnchorDirection.Right,
-                leaderLength);
-        DocumentPoint stemBottom = new(stemTop.XMillimeters,
-            stemTop.YMillimeters + grounding.StemLength);
-        var elements = new List<SceneElement>();
-        if (stemTop != anchor.Position)
-        {
-            elements.Add(new SceneLine(
-                anchor.Position,
-                stemTop,
+        var elements = _groundingCrossingDecorator.Project(
+                layout.LeaderSegments,
+                electricalRoutes,
                 Colors.DarkGreen,
-                metrics.General.StandardStrokeThickness));
-        }
+                metrics.General.StandardStrokeThickness)
+            .ToList();
         elements.Add(new SceneLine(
-            stemTop,
-            stemBottom,
+            layout.Stem.Start,
+            layout.Stem.End,
             Colors.DarkGreen,
             metrics.General.StandardStrokeThickness));
-        double[] widths = [grounding.TopBarWidth, grounding.MiddleBarWidth, grounding.BottomBarWidth];
-        double bottomBarY = stemBottom.YMillimeters;
-        for (int index = 0; index < widths.Length; index++)
+        foreach (OrthogonalRouteSegment bar in layout.Bars)
         {
-            double y = stemBottom.YMillimeters + index * grounding.BarSpacing;
-            bottomBarY = y;
             elements.Add(new SceneLine(
-                new DocumentPoint(stemBottom.XMillimeters - widths[index] / 2, y),
-                new DocumentPoint(stemBottom.XMillimeters + widths[index] / 2, y),
+                bar.Start,
+                bar.End,
                 Colors.DarkGreen, metrics.General.StandardStrokeThickness));
         }
-        if (!string.IsNullOrWhiteSpace(groundingPoint.Number))
+        if (layout.NumberOrigin is DocumentPoint numberOrigin)
         {
             double fontSize = metrics.Typography.GroundingPointNumberFontSize;
-            elements.Add(new SceneText(new DocumentPoint(
-                stemTop.XMillimeters,
-                bottomBarY + grounding.BarSpacing),
+            elements.Add(new SceneText(
+                numberOrigin,
                 groundingPoint.Number,
                 Colors.DarkGreen,
                 fontSize,
@@ -240,24 +246,88 @@ public sealed class ProfessionalSceneBuilder
         return elements.Select(element => element with { TargetId = groundingPoint.GroundingPointId }).ToArray();
     }
 
-    private static DocumentPoint Move(
-        DocumentPoint start,
-        TerminalAnchorDirection direction,
-        double distance) => direction switch
+    private static DocumentPoint TrimGapMarkerStart(
+        GroundingPoint groundingPoint,
+        DocumentPoint anchor,
+        OrthogonalRouteSegment segment)
+    {
+        if (groundingPoint.Target.Kind != GroundingTargetKind.GroundingAccessPoint ||
+            segment.Start != anchor)
         {
-            TerminalAnchorDirection.Left => new DocumentPoint(
-                start.XMillimeters - distance,
-                start.YMillimeters),
-            TerminalAnchorDirection.Up => new DocumentPoint(
-                start.XMillimeters,
-                start.YMillimeters - distance),
-            TerminalAnchorDirection.Down => new DocumentPoint(
-                start.XMillimeters,
-                start.YMillimeters + distance),
-            _ => new DocumentPoint(
-                start.XMillimeters + distance,
-                start.YMillimeters)
-        };
+            return segment.Start;
+        }
+        double exclusion =
+            (DrawingMetrics.Default.Line.GroundingAccessMarkerDiameter +
+             DrawingMetrics.Default.Line.ConnectionThickness) / 2 +
+            DrawingMetrics.Default.Line.GroundingAccessHitPadding;
+        double length = segment.Length;
+        if (length <= exclusion) return segment.End;
+        double ratio = exclusion / length;
+        return new DocumentPoint(
+            segment.Start.XMillimeters +
+            (segment.End.XMillimeters - segment.Start.XMillimeters) * ratio,
+            segment.Start.YMillimeters +
+            (segment.End.YMillimeters - segment.Start.YMillimeters) * ratio);
+    }
+
+    private static void AddGroundingBodyHitEntries(
+        ICollection<SelectionHitTestEntry> entries,
+        SelectionReference reference,
+        DocumentRect bounds,
+        DocumentRect? markerExclusion)
+    {
+        foreach (DocumentRect hitBounds in Exclude(bounds, markerExclusion))
+        {
+            entries.Add(new SelectionHitTestEntry(reference, hitBounds, 80));
+        }
+    }
+
+    private static IEnumerable<DocumentRect> Exclude(
+        DocumentRect bounds,
+        DocumentRect? exclusion)
+    {
+        if (exclusion is not DocumentRect value)
+        {
+            yield return bounds;
+            yield break;
+        }
+
+        double left = Math.Max(bounds.XMillimeters, value.XMillimeters);
+        double top = Math.Max(bounds.YMillimeters, value.YMillimeters);
+        double right = Math.Min(
+            bounds.XMillimeters + bounds.WidthMillimeters,
+            value.XMillimeters + value.WidthMillimeters);
+        double bottom = Math.Min(
+            bounds.YMillimeters + bounds.HeightMillimeters,
+            value.YMillimeters + value.HeightMillimeters);
+        if (left >= right || top >= bottom)
+        {
+            yield return bounds;
+            yield break;
+        }
+
+        foreach (DocumentRect remainder in new[]
+                 {
+                     new DocumentRect(
+                         bounds.XMillimeters,
+                         bounds.YMillimeters,
+                         left - bounds.XMillimeters,
+                         bounds.HeightMillimeters),
+                     new DocumentRect(
+                         right,
+                         bounds.YMillimeters,
+                         bounds.XMillimeters + bounds.WidthMillimeters - right,
+                         bounds.HeightMillimeters),
+                     new DocumentRect(left, bounds.YMillimeters, right - left,
+                         top - bounds.YMillimeters),
+                     new DocumentRect(left, bottom, right - left,
+                         bounds.YMillimeters + bounds.HeightMillimeters - bottom)
+                 }.Where(rectangle =>
+                     rectangle.WidthMillimeters > 0 && rectangle.HeightMillimeters > 0))
+        {
+            yield return remainder;
+        }
+    }
 
     private static IReadOnlyList<SceneElement> CreateBoundaryElements(
         DocumentPoint position,

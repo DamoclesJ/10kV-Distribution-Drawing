@@ -52,6 +52,8 @@ public partial class MainWindow : Window
     private readonly ProfessionalCommandFactory _professionalCommandFactory = new();
     private readonly DeviceDragController _deviceDrag = new();
     private readonly CableRouteDragController _cableRouteDrag = new();
+    private readonly GroundingPointDragController _groundingPointDrag = new();
+    private readonly GroundingTargetPicker _groundingTargetPicker = new();
     private SelectionRectangleController _selectionRectangle;
     private readonly SceneSelectionQuery _sceneSelectionQuery = new();
     private SelectionObjectResolver _selectionResolver = new();
@@ -85,6 +87,7 @@ public partial class MainWindow : Window
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
     private GroundingTarget? _pendingGroundingTarget;
+    private GroundingTargetCandidate? _hoveredGroundingTarget;
     private WorkScopePickState _workScopePickState;
     private DocumentPoint? _contextMenuWorldPoint;
     private BoundaryPointCommandValue? _pendingWorkScopeStartBoundary;
@@ -573,7 +576,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
+        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive || _groundingPointDrag.IsActive)
         {
             CancelDeviceDrag();
             return;
@@ -635,6 +638,7 @@ public partial class MainWindow : Window
                _placement.Mode == PlacementMode.Idle &&
                !_deviceDrag.IsActive &&
                !_cableRouteDrag.IsActive &&
+               !_groundingPointDrag.IsActive &&
                !_selectionRectangle.IsActive &&
                !_viewport.IsPanning &&
                !_groundingPointPickMode &&
@@ -675,7 +679,7 @@ public partial class MainWindow : Window
     private void OnSelectAllRequested()
     {
         if (_currentScene is null || _drawingTools.IsActive ||
-            _deviceDrag.IsActive || _cableRouteDrag.IsActive ||
+            _deviceDrag.IsActive || _cableRouteDrag.IsActive || _groundingPointDrag.IsActive ||
             _viewport.IsPanning || _selectionRectangle.IsActive)
         {
             return;
@@ -790,7 +794,7 @@ public partial class MainWindow : Window
             _cableConnection.Cancel();
         }
 
-        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive && !_groundingPointDrag.IsActive)
         {
             return true;
         }
@@ -814,9 +818,7 @@ public partial class MainWindow : Window
 
         try
         {
-            ICommand? command = _cableRouteDrag.IsActive
-                ? _cableRouteDrag.Commit()
-                : _deviceDrag.Commit();
+            ICommand? command = CommitActiveDrag();
             DrawingSurface.ReleaseMouseCapture();
             if (command is not null)
             {
@@ -981,6 +983,7 @@ public partial class MainWindow : Window
         _intervalPreview.Cancel();
         bool layoutChanged = _deviceDrag.Cancel();
         layoutChanged |= _cableRouteDrag.Cancel();
+        layoutChanged |= _groundingPointDrag.Cancel();
         if (layoutChanged && _workspace.CurrentSession is { } session)
         {
             session.RebuildScene();
@@ -1061,6 +1064,7 @@ public partial class MainWindow : Window
     {
         _deviceDrag.Cancel();
         _cableRouteDrag.Cancel();
+        _groundingPointDrag.Cancel();
         EndCanvasPan();
         _drawingTools.Cancel();
         DrawingSurface.ReleaseMouseCapture();
@@ -1068,6 +1072,7 @@ public partial class MainWindow : Window
         _activeSource = null;
         _groundingPointPickMode = false;
         _pendingGroundingTarget = null;
+        _hoveredGroundingTarget = null;
         ResetWorkScopePick();
         _selectionResolver.SetSource(null);
         _selectionManager.Clear();
@@ -1096,7 +1101,7 @@ public partial class MainWindow : Window
 
     private void OnZoomIn(object sender, RoutedEventArgs e)
     {
-        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive && !_groundingPointDrag.IsActive)
         {
             _viewport.ZoomIn();
             UpdateConnectionPointerFromCurrentMouse();
@@ -1105,7 +1110,7 @@ public partial class MainWindow : Window
 
     private void OnZoomOut(object sender, RoutedEventArgs e)
     {
-        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive && !_groundingPointDrag.IsActive)
         {
             _viewport.ZoomOut();
             UpdateConnectionPointerFromCurrentMouse();
@@ -1114,7 +1119,7 @@ public partial class MainWindow : Window
 
     private void OnFitDrawing(object sender, RoutedEventArgs e)
     {
-        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive && !_groundingPointDrag.IsActive)
         {
             _viewport.Fit(_currentScene);
             UpdateConnectionPointerFromCurrentMouse();
@@ -1220,7 +1225,7 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseWheelEventArgs e)
     {
-        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
+        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive || _groundingPointDrag.IsActive)
         {
             return;
         }
@@ -1236,7 +1241,8 @@ public partial class MainWindow : Window
     {
         if (e.ChangedButton != System.Windows.Input.MouseButton.Middle ||
             _deviceDrag.IsActive ||
-            _cableRouteDrag.IsActive)
+            _cableRouteDrag.IsActive ||
+            _groundingPointDrag.IsActive)
         {
             return;
         }
@@ -1263,7 +1269,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive)
+        if (_deviceDrag.IsActive || _cableRouteDrag.IsActive || _groundingPointDrag.IsActive)
         {
             CancelDeviceDrag();
             e.Handled = true;
@@ -1443,6 +1449,7 @@ public partial class MainWindow : Window
     {
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
+        changed |= _groundingPointDrag.Cancel();
         bool selectionRectangleCanceled = _selectionRectangle.Cancel();
         if (changed)
         {
@@ -1463,6 +1470,7 @@ public partial class MainWindow : Window
     {
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
+        changed |= _groundingPointDrag.Cancel();
         if (!changed)
         {
             return;
@@ -1474,6 +1482,17 @@ public partial class MainWindow : Window
         }
 
         RefreshDrawingScene();
+    }
+
+    private ICommand? CommitActiveDrag()
+    {
+        if (_groundingPointDrag.IsActive)
+        {
+            return _groundingPointDrag.Commit();
+        }
+        return _cableRouteDrag.IsActive
+            ? _cableRouteDrag.Commit()
+            : _deviceDrag.Commit();
     }
 
     private void OnApplyIntervalConfiguration(object sender, RoutedEventArgs e)
@@ -1752,6 +1771,7 @@ public partial class MainWindow : Window
         _groundingPointPickMode = true;
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.AddGroundingPoint);
         _pendingGroundingTarget = null;
+        _hoveredGroundingTarget = null;
         _selectionManager.Clear();
         GroundingPointEditorPanel.Visibility = Visibility.Visible;
         GroundingPointTerminalText.Text = "请在图面中选择验电接地环或合法电缆侧端子";
@@ -1778,6 +1798,7 @@ public partial class MainWindow : Window
         _drawingTools.Cancel();
         _groundingPointPickMode = false;
         _pendingGroundingTarget = null;
+        _hoveredGroundingTarget = null;
         ResetWorkScopePick();
         _workScopePickState = WorkScopePickState.PickingBoundaryA;
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.AddWorkScope);
@@ -2022,10 +2043,10 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 return;
             }
-            GroundingTarget? groundingTarget = HitTestGroundingTarget(
+            GroundingTargetCandidate? candidate = ResolveGroundingTargetCandidate(
                 documentPoint,
                 _viewport.Transform.ViewDistanceToDocument(8));
-            if (groundingTarget is null)
+            if (candidate is null)
             {
                 ShowCommandError(
                     "接地目标选择失败",
@@ -2033,7 +2054,14 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 return;
             }
+            if (candidate.IsOccupied)
+            {
+                ShowCommandError("接地目标选择失败", "该接地目标已经安装工作地线。");
+                e.Handled = true;
+                return;
+            }
 
+            GroundingTarget groundingTarget = candidate.Target;
             _pendingGroundingTarget = groundingTarget;
             string defaultLocation = GroundingPointLocationResolver.ResolveDefault(
                 document,
@@ -2148,7 +2176,8 @@ public partial class MainWindow : Window
         }
 
         bool dragStarted;
-        if (_selectionManager.SelectionCount > 1 && targetWasSelected)
+        if (_selectionManager.SelectionCount > 1 && targetWasSelected &&
+            target.Kind != SelectionTargetKind.GroundingPoint)
         {
             dragStarted = _deviceDrag.TryBeginGroupDrag(
                 _selectionManager.SelectionSet,
@@ -2160,31 +2189,42 @@ public partial class MainWindow : Window
         else
         {
             _selectionManager.Select(target);
-            ResolvedSelection? dragSelection = _selectionResolver.Resolve(target);
-            PoleAttachment? attachment = dragSelection?.PoleAttachment;
-            Device? attachedDevice = attachment is null
-                ? null
-                : session.PersistenceSession.Domain.Devices.SingleOrDefault(device =>
-                    device.Id == attachment.AttachedDeviceId);
-            dragStarted = attachment is not null &&
-                          attachedDevice is CableTermination
-                ? _deviceDrag.TryBeginAttachmentDrag(
-                    target,
-                    attachment.AttachmentId,
+            if (target.Kind == SelectionTargetKind.GroundingPoint && hit is not null)
+            {
+                dragStarted = _groundingPointDrag.TryBeginDrag(
+                    hit,
                     documentPoint,
-                    session.Layout,
-                    attachment.PoleId,
-                    true)
-                : attachedDevice is SwitchDevice
-                    ? false
-                    : (hit is not null && _cableRouteDrag.TryBeginDrag(
-                       hit,
-                       _currentScene.HitTestIndex.FindAll(target),
-                       session.Layout)) ||
-                  _deviceDrag.TryBeginDrag(
-                      target,
-                      documentPoint,
-                      session.Layout);
+                    session.PersistenceSession.Domain,
+                    session.Layout);
+            }
+            else
+            {
+                ResolvedSelection? dragSelection = _selectionResolver.Resolve(target);
+                PoleAttachment? attachment = dragSelection?.PoleAttachment;
+                Device? attachedDevice = attachment is null
+                    ? null
+                    : session.PersistenceSession.Domain.Devices.SingleOrDefault(device =>
+                        device.Id == attachment.AttachedDeviceId);
+                dragStarted = attachment is not null &&
+                              attachedDevice is CableTermination
+                    ? _deviceDrag.TryBeginAttachmentDrag(
+                        target,
+                        attachment.AttachmentId,
+                        documentPoint,
+                        session.Layout,
+                        attachment.PoleId,
+                        true)
+                    : attachedDevice is SwitchDevice
+                        ? false
+                        : (hit is not null && _cableRouteDrag.TryBeginDrag(
+                           hit,
+                           _currentScene.HitTestIndex.FindAll(target),
+                           session.Layout)) ||
+                      _deviceDrag.TryBeginDrag(
+                          target,
+                          documentPoint,
+                          session.Layout);
+            }
         }
 
         if (dragStarted)
@@ -2193,6 +2233,7 @@ public partial class MainWindow : Window
             {
                 _deviceDrag.Cancel();
                 _cableRouteDrag.Cancel();
+                _groundingPointDrag.Cancel();
             }
         }
 
@@ -2203,6 +2244,7 @@ public partial class MainWindow : Window
     {
         _groundingPointPickMode = false;
         _pendingGroundingTarget = null;
+        _hoveredGroundingTarget = null;
         ResetWorkScopePick();
     }
 
@@ -2248,6 +2290,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_groundingPointPickMode)
+        {
+            _hoveredGroundingTarget = ResolveGroundingTargetCandidate(
+                _viewport.Transform.ViewToDocument(point),
+                _viewport.Transform.ViewDistanceToDocument(8));
+            RenderCurrentScene();
+            e.Handled = true;
+            return;
+        }
+
         if (_selectionRectangle.IsActive)
         {
             _selectionRectangle.Update(
@@ -2257,7 +2309,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        if ((!_deviceDrag.IsActive && !_cableRouteDrag.IsActive) ||
+        if ((!_deviceDrag.IsActive && !_cableRouteDrag.IsActive &&
+             !_groundingPointDrag.IsActive) ||
             e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
         {
             return;
@@ -2266,9 +2319,12 @@ public partial class MainWindow : Window
         DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
         try
         {
-            if (_cableRouteDrag.IsActive
+            bool changed = _groundingPointDrag.IsActive
+                ? _groundingPointDrag.UpdatePreview(documentPoint)
+                : _cableRouteDrag.IsActive
                     ? _cableRouteDrag.UpdatePreview(documentPoint)
-                    : _deviceDrag.UpdatePreview(documentPoint))
+                    : _deviceDrag.UpdatePreview(documentPoint);
+            if (changed)
             {
                 RefreshDrawingScene();
             }
@@ -2285,8 +2341,15 @@ public partial class MainWindow : Window
 
     private void OnDrawingSurfaceMouseLeave(
         object sender,
-        System.Windows.Input.MouseEventArgs e) =>
+        System.Windows.Input.MouseEventArgs e)
+    {
         _placement.HidePreview();
+        if (_hoveredGroundingTarget is not null)
+        {
+            _hoveredGroundingTarget = null;
+            RenderCurrentScene();
+        }
+    }
 
     private void OnDrawingSurfaceMouseLeftButtonUp(
         object sender,
@@ -2303,7 +2366,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive)
+        if (!_deviceDrag.IsActive && !_cableRouteDrag.IsActive &&
+            !_groundingPointDrag.IsActive)
         {
             return;
         }
@@ -2312,9 +2376,7 @@ public partial class MainWindow : Window
         bool commandRecorded = false;
         try
         {
-            command = _cableRouteDrag.IsActive
-                ? _cableRouteDrag.Commit()
-                : _deviceDrag.Commit();
+            command = CommitActiveDrag();
             DrawingSurface.ReleaseMouseCapture();
             if (command is not null)
             {
@@ -2678,6 +2740,7 @@ public partial class MainWindow : Window
             _commandStack.ExecuteCommand(addCommand);
             _groundingPointPickMode = false;
             _pendingGroundingTarget = null;
+            _hoveredGroundingTarget = null;
             RefreshDrawingScene();
             _selectionManager.Select(
                 new SelectionReference(
@@ -2708,6 +2771,7 @@ public partial class MainWindow : Window
         {
             ICommand command = _professionalCommandFactory.CreateRemoveGroundingPoint(
                 _activeSource.Document,
+                _workspace.CurrentSession!.Layout,
                 groundingPointId);
             _commandStack.ExecuteCommand(command);
             _selectionManager.Clear();
@@ -3210,6 +3274,7 @@ public partial class MainWindow : Window
     {
         _groundingPointPickMode = false;
         _pendingGroundingTarget = null;
+        _hoveredGroundingTarget = null;
         ResetWorkScopePick();
         _currentScene = scene;
         _activeSource = source;
@@ -3301,28 +3366,20 @@ public partial class MainWindow : Window
             .FirstOrDefault();
     }
 
-    private GroundingTarget? HitTestGroundingTarget(
+    private GroundingTargetCandidate? ResolveGroundingTargetCandidate(
         DocumentPoint point,
         double toleranceMillimeters)
     {
-        if (_activeSource?.Document is not { } document || _currentScene is null)
+        if (_workspace.CurrentSession is not { } session || _currentScene is null)
         {
             return null;
         }
-
-        SelectionReference? sceneTarget = _currentScene.HitTestIndex.HitTest(
+        return _groundingTargetPicker.Resolve(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            _currentScene,
             point,
             toleranceMillimeters);
-        if (sceneTarget is { Kind: SelectionTargetKind.GroundingAccessPoint })
-        {
-            return GroundingTarget.ForGroundingAccessPoint(sceneTarget.ObjectId);
-        }
-
-        Guid? terminalId = HitTestTerminal(point, toleranceMillimeters);
-        return terminalId is Guid value &&
-               ProfessionalCommandFactory.IsEligibleNewTerminalTarget(document, value)
-            ? GroundingTarget.ForTerminal(value)
-            : null;
     }
 
     private static void ShowCommandError(string title, string message)
@@ -3343,6 +3400,8 @@ public partial class MainWindow : Window
         var elements = _currentScene.Elements.ToList();
         elements.AddRange(_intervalPreview.Elements);
         elements.AddRange(_drawingTools.CreateTransientElements());
+        elements.AddRange(_groundingTargetPicker.CreateAffordance(
+            _hoveredGroundingTarget));
         elements.AddRange(
             SelectionOverlayBuilder.CreateElements(
                 _currentScene.HitTestIndex,

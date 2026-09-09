@@ -158,6 +158,7 @@ public sealed class DrawingSceneBuilder
             document,
             layout.DrawingLayout,
             layout.RingCabinetLayouts,
+            layout.GroundingPointLayouts,
             baseScene.Routes);
         elements.AddRange(professionalScene.Elements);
         hitTestEntries.AddRange(professionalScene.HitTestEntries);

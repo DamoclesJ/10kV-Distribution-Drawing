@@ -721,6 +721,11 @@ public sealed class WpEm04WindowsValidationTests
         GroundingPoint groundingPoint = document.CreateGroundingPoint(
             Guid.NewGuid(), GroundingTarget.ForGroundingAccessPoint(gaps[1].GroundingAccessPointId),
             "大号侧", "L01");
+        var manualOffset = new GroundingPointLayout(
+            groundingPoint.GroundingPointId,
+            new DocumentPoint(14, -7));
+        runtime.SetGroundingPointLayout(manualOffset);
+        (double X, double Y)? expectedSymbolDelta = null;
         void AssertNaturalState(DrawingScene scene)
         {
             Assert.Empty(scene.Diagnostics);
@@ -760,6 +765,22 @@ public sealed class WpEm04WindowsValidationTests
             });
             Assert.Contains(scene.Elements, element =>
                 element.TargetId == groundingPoint.GroundingPointId);
+            Assert.Equal(
+                manualOffset,
+                runtime.GroundingPointLayouts[groundingPoint.GroundingPointId]);
+            SceneLine stem = Assert.Single(scene.Elements.OfType<SceneLine>(), line =>
+                line.TargetId == groundingPoint.GroundingPointId &&
+                line.Start.XMillimeters == line.End.XMillimeters &&
+                line.End.YMillimeters - line.Start.YMillimeters ==
+                DrawingMetrics.Default.Grounding.StemLength);
+            DocumentPoint marker = Center(Marker(scene, gaps[1]));
+            var symbolDelta = (
+                stem.Start.XMillimeters - marker.XMillimeters,
+                stem.Start.YMillimeters - marker.YMillimeters);
+            expectedSymbolDelta ??= symbolDelta;
+            Assert.Equal(expectedSymbolDelta.Value, symbolDelta);
+            Assert.Equal(gaps[1].GroundingAccessPointId, groundingPoint.Target.TargetId);
+            Assert.Equal(GroundingAccessLineSide.LargerNumberSide, gaps[1].LineSide);
         }
         DrawingScene initial = builder.Build(document, runtime);
         AssertNaturalState(initial);
@@ -829,9 +850,11 @@ public sealed class WpEm04WindowsValidationTests
         DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
         SceneElement[] elements = scene.Elements.Where(element => element.TargetId == gp.GroundingPointId).ToArray();
         Assert.DoesNotContain(elements, element => element is SceneRectangle);
-        Assert.Equal(4, elements.OfType<SceneLine>().Count());
-        SceneLine stem = Assert.Single(elements.OfType<SceneLine>(), line => line.Start.XMillimeters == line.End.XMillimeters);
-        Assert.Equal(Center(Marker(scene, gap)), stem.Start);
+        SceneLine stem = Assert.Single(elements.OfType<SceneLine>(), line =>
+            line.Start.XMillimeters == line.End.XMillimeters &&
+            line.End.YMillimeters - line.Start.YMillimeters == DrawingMetrics.Default.Grounding.StemLength);
+        Assert.Contains(elements.OfType<SceneLine>(), line =>
+            line.Start == Center(Marker(scene, gap)) && line.End == stem.Start);
         SceneLine[] bars = elements.OfType<SceneLine>().Where(line => line.Start.YMillimeters >= stem.End.YMillimeters)
             .OrderBy(line => line.Start.YMillimeters).ToArray();
         Assert.Equal(3, bars.Length);
@@ -847,6 +870,12 @@ public sealed class WpEm04WindowsValidationTests
         AssertActuallyCentered(number, stem.End.XMillimeters);
         Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingPoint, gp.GroundingPointId),
             scene.HitTestIndex.HitTest(stem.End));
+        Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingPoint, gp.GroundingPointId),
+            scene.HitTestIndex.HitTest(number.Origin));
+        SelectionHitTestEntry[] groundingHits = scene.HitTestIndex.FindAll(
+            new SelectionReference(SelectionTargetKind.GroundingPoint, gp.GroundingPointId)).ToArray();
+        Assert.Contains(groundingHits, hit => hit.CanStartDrag);
+        Assert.Contains(groundingHits, hit => !hit.CanStartDrag && hit.SegmentStart is not null);
         Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingAccessPoint, gap.GroundingAccessPointId),
             scene.HitTestIndex.HitTest(Center(Marker(scene, gap))));
         SelectionHitTestEntry hit = scene.HitTestIndex.Find(new SelectionReference(SelectionTargetKind.GroundingPoint, gp.GroundingPointId))!;
