@@ -878,7 +878,15 @@ public sealed class WpEm04WindowsValidationTests
         Assert.Contains(groundingHits, hit => !hit.CanStartDrag && hit.SegmentStart is not null);
         Assert.Equal(new SelectionReference(SelectionTargetKind.GroundingAccessPoint, gap.GroundingAccessPointId),
             scene.HitTestIndex.HitTest(Center(Marker(scene, gap))));
-        SelectionHitTestEntry hit = scene.HitTestIndex.Find(new SelectionReference(SelectionTargetKind.GroundingPoint, gp.GroundingPointId))!;
+        SelectionHitTestEntry hit = Assert.Single(
+            groundingHits,
+            entry =>
+                entry.CanStartDrag &&
+                entry.SegmentStart is null &&
+                stem.End.XMillimeters >= entry.Bounds.XMillimeters &&
+                stem.End.XMillimeters <= entry.Bounds.XMillimeters + entry.Bounds.WidthMillimeters &&
+                stem.End.YMillimeters >= entry.Bounds.YMillimeters &&
+                stem.End.YMillimeters <= entry.Bounds.YMillimeters + entry.Bounds.HeightMillimeters);
         var overlapping = new SelectionHitTestIndex([new(new(SelectionTargetKind.GroundingAccessPoint, gap.GroundingAccessPointId), hit.Bounds, 70), hit]);
         Assert.Equal(gp.GroundingPointId, overlapping.HitTest(stem.End)!.ObjectId);
         AssertClearance(scene, gap, ActualRenderedEnvelope(scene, start.Pole.Id, runtime.DrawingLayout), false);
