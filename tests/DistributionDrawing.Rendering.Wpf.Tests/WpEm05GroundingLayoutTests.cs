@@ -364,14 +364,11 @@ public sealed class WpEm05GroundingLayoutTests
     [Fact]
     public void GapDragWritesNormalizedOffsetAndUndoRedoRestoresStates()
     {
-        var document = new DrawingDocument(Guid.NewGuid(), "GAP drag normalization");
-        var runtime = new RuntimeLayoutDocument(
-            new DrawingLayout(),
-            new Dictionary<Guid, RingCabinetLayout>());
-        Guid gapId = Guid.NewGuid();
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingAccessPoint gap) =
+            CreateGapScenario("GAP drag normalization");
         GroundingPoint point = document.CreateGroundingPoint(
             Guid.NewGuid(),
-            GroundingTarget.ForGroundingAccessPoint(gapId),
+            GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
             "线路侧",
             "L01");
         var before = new GroundingPointLayout(
@@ -454,57 +451,38 @@ public sealed class WpEm05GroundingLayoutTests
             GroundingTarget.ForGroundingAccessPoint(Guid.NewGuid()),
             "线路侧",
             "L01");
+        var anchor = new GroundingPresentationAnchor(
+            new DocumentPoint(100, 100),
+            direction,
+            Policy: GroundingPresentationPolicy.GroundingAccessPoint);
         GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
             point,
-            new GroundingPresentationAnchor(
-                new DocumentPoint(100, 100),
-                direction,
-                Policy: GroundingPresentationPolicy.GroundingAccessPoint),
+            anchor,
             new GroundingPointLayout(
                 point.GroundingPointId,
                 new DocumentPoint(xOffset, yOffset)));
 
         AssertNoReverseOverlap(resolved.LeaderSegments);
         Assert.DoesNotContain(resolved.LeaderSegments, segment => segment.Length == 0);
-        Assert.True(resolved.LeaderSegments[^1].IsVertical);
-        Assert.True(resolved.LeaderSegments[^1].End.YMillimeters >
-                    resolved.LeaderSegments[^1].Start.YMillimeters);
+        Assert.Equal(resolved.SymbolTop, resolved.LeaderSegments[^1].End);
+        if (resolved.SymbolTop.YMillimeters == anchor.Position.YMillimeters)
+        {
+            Assert.Single(resolved.LeaderSegments);
+            Assert.True(resolved.LeaderSegments[0].IsHorizontal);
+        }
+        else
+        {
+            Assert.True(resolved.LeaderSegments[^1].IsVertical);
+            Assert.True(resolved.LeaderSegments[^1].End.YMillimeters >
+                        resolved.LeaderSegments[^1].Start.YMillimeters);
+        }
     }
 
     [Fact]
     public void RealSceneGroundingHitCarriesGapConstraintIntoDragController()
     {
-        var document = new DrawingDocument(Guid.NewGuid(), "GAP wiring");
-        var runtime = new RuntimeLayoutDocument(
-            new DrawingLayout(),
-            new Dictionary<Guid, RingCabinetLayout>());
-        var devices = new DeviceCommandFactory();
-        AddPoleCommand start = devices.CreateAddPole(document, runtime, new DocumentPoint(0, 0));
-        AddPoleCommand end = devices.CreateAddPole(document, runtime, new DocumentPoint(200, 0));
-        start.Execute();
-        end.Execute();
-        var connection = new Connection(
-            Guid.NewGuid(),
-            ConnectionType.OverheadLine,
-            start.Terminal.Id,
-            end.Terminal.Id,
-            "测试线路",
-            "10kV");
-        document.AddConnection(connection);
-        document.AddOverheadLine(new OverheadLine(
-            connection.Id,
-            "JKLYJ",
-            [start.Pole.Id, end.Pole.Id]));
-        runtime.DrawingLayout.Add(new OverheadLineLayout(
-            connection.Id,
-            start.Layout.Position,
-            end.Layout.Position));
-        GroundingAccessPoint gap = document.CreateGroundingAccessPoint(
-            Guid.NewGuid(),
-            connection.Id,
-            start.Pole.Id,
-            end.Pole.Id,
-            GroundingAccessLineSide.LargerNumberSide);
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingAccessPoint gap) =
+            CreateGapScenario("GAP wiring");
         GroundingPoint point = document.CreateGroundingPoint(
             Guid.NewGuid(),
             GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
@@ -518,14 +496,21 @@ public sealed class WpEm05GroundingLayoutTests
         SelectionReference reference = new(
             SelectionTargetKind.GroundingPoint,
             point.GroundingPointId);
-        SelectionHitTestEntry hit = Assert.Single(
-            scene.HitTestIndex.FindAll(reference),
-            entry => entry.CanStartDrag && entry.GroundingAnchor is not null);
-        GroundingPresentationAnchor anchor = hit.GroundingAnchor!.Value;
-        Assert.Equal(
-            GroundingPresentationPolicy.GroundingAccessPoint,
-            anchor.Policy);
-        Assert.Equal(TerminalAnchorDirection.Right, anchor.Direction);
+        SelectionHitTestEntry[] draggableHits = scene.HitTestIndex.FindAll(reference)
+            .Where(entry => entry.CanStartDrag)
+            .ToArray();
+        Assert.NotEmpty(draggableHits);
+        Assert.All(draggableHits, entry =>
+        {
+            Assert.NotNull(entry.GroundingAnchor);
+            Assert.Equal(
+                GroundingPresentationPolicy.GroundingAccessPoint,
+                entry.GroundingAnchor.Value.Policy);
+            Assert.Equal(
+                TerminalAnchorDirection.Right,
+                entry.GroundingAnchor.Value.Direction);
+        });
+        SelectionHitTestEntry hit = draggableHits[0];
 
         var controller = new GroundingPointDragController();
         Assert.True(controller.TryBeginDrag(
@@ -754,6 +739,51 @@ public sealed class WpEm05GroundingLayoutTests
         Assert.True(HasPositiveCollinearOverlap(verticalForward, verticalReverse));
         Assert.True(HasPositiveCollinearOverlap(horizontalForward, horizontalReverse));
         Assert.False(HasPositiveCollinearOverlap(verticalForward, endpointTouch));
+    }
+
+    private static (
+        DrawingDocument Document,
+        RuntimeLayoutDocument Runtime,
+        GroundingAccessPoint Gap) CreateGapScenario(string name)
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), name);
+        var runtime = new RuntimeLayoutDocument(
+            new DrawingLayout(),
+            new Dictionary<Guid, RingCabinetLayout>());
+        var devices = new DeviceCommandFactory();
+        AddPoleCommand start = devices.CreateAddPole(
+            document,
+            runtime,
+            new DocumentPoint(0, 0));
+        AddPoleCommand end = devices.CreateAddPole(
+            document,
+            runtime,
+            new DocumentPoint(200, 0));
+        start.Execute();
+        end.Execute();
+        var connection = new Connection(
+            Guid.NewGuid(),
+            ConnectionType.OverheadLine,
+            start.Terminal.Id,
+            end.Terminal.Id,
+            "测试线路",
+            "10kV");
+        document.AddConnection(connection);
+        document.AddOverheadLine(new OverheadLine(
+            connection.Id,
+            "JKLYJ",
+            [start.Pole.Id, end.Pole.Id]));
+        runtime.DrawingLayout.Add(new OverheadLineLayout(
+            connection.Id,
+            start.Layout.Position,
+            end.Layout.Position));
+        GroundingAccessPoint gap = document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            connection.Id,
+            start.Pole.Id,
+            end.Pole.Id,
+            GroundingAccessLineSide.LargerNumberSide);
+        return (document, runtime, gap);
     }
 
     private static (DrawingDocument Document, GroundingPoint Point) CreateGroundingDocument()

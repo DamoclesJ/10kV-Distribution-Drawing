@@ -83,7 +83,7 @@ public sealed class GroundingPresentationAnchorResolverTests
     }
 
     [Fact]
-    public void CableTerminationTarget_UsesItsRealUpwardAnchorInsteadOfHardCodedRight()
+    public void CableTerminationTarget_UsesRealUpwardAnchorAndManualRouteCanCollapseToDirectVertical()
     {
         PoleCreationResult result = new PoleCreationFactory().CreateWithAttachments(
             "P-cable",
@@ -116,11 +116,16 @@ public sealed class GroundingPresentationAnchorResolverTests
             terminals,
             out GroundingPresentationAnchor anchor));
         Assert.Equal(TerminalAnchorDirection.Up, anchor.Direction);
+        Assert.Equal(GroundingPresentationPolicy.PoleCableTermination, anchor.Policy);
         var layoutResolver = new GroundingPointLayoutResolver();
         GroundingPointResolvedLayout automatic = layoutResolver.Resolve(
             point,
             anchor,
             null);
+        OrthogonalRouteSegment automaticFirst = automatic.LeaderSegments[0];
+        Assert.Equal(anchor.Position, automaticFirst.Start);
+        Assert.True(automaticFirst.IsVertical);
+        Assert.True(automaticFirst.End.YMillimeters < automaticFirst.Start.YMillimeters);
         double leaderLength = DrawingMetrics.Default.Grounding.LeaderLength;
         var manual = new GroundingPointLayout(
             point.GroundingPointId,
@@ -134,14 +139,12 @@ public sealed class GroundingPresentationAnchorResolverTests
             manual);
         Assert.Equal(anchor.Position.XMillimeters, resolved.SymbolTop.XMillimeters);
         Assert.True(resolved.SymbolTop.YMillimeters > anchor.Position.YMillimeters);
-        OrthogonalRouteSegment first = resolved.LeaderSegments[0];
-        Assert.Equal(anchor.Position, first.Start);
-        Assert.Equal(anchor.Position.XMillimeters, first.End.XMillimeters);
-        Assert.True(first.End.YMillimeters < first.Start.YMillimeters);
-        OrthogonalRouteSegment final = resolved.LeaderSegments[^1];
-        Assert.True(final.IsVertical);
-        Assert.True(final.End.YMillimeters > final.Start.YMillimeters);
-        Assert.Equal(resolved.SymbolTop, final.End);
+        OrthogonalRouteSegment manualSegment = Assert.Single(resolved.LeaderSegments);
+        Assert.Equal(anchor.Position, manualSegment.Start);
+        Assert.True(manualSegment.IsVertical);
+        Assert.True(manualSegment.End.YMillimeters > manualSegment.Start.YMillimeters);
+        Assert.Equal(resolved.SymbolTop, manualSegment.End);
+        Assert.True(manualSegment.Length > 0);
     }
 
     [Fact]
