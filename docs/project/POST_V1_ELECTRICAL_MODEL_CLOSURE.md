@@ -56,13 +56,99 @@ HasCableTerminal = CableTerminalId is not null
 
 `Transformer` 是顶层 Electrical Device，当前只建模 10kV 高压侧，并正式包含三种 `TransformerKind`：
 
-| TransformerKind | 业务含义 | 合法连接 | 安装与布局边界 |
-| --- | --- | --- | --- |
-| `PublicPoleMounted` | 柱上公变 | `OverheadLine` only | 独立顶层设备，不属于 `PoleAttachment` |
-| `DedicatedPoleMounted` | 柱上专变 | `OverheadLine` only | 独立顶层设备，不属于 `PoleAttachment` |
-| `PublicIndoor` | 站内公变 | `Cable` only | `TransformerLayout` 支持 Horizontal / Vertical |
+| TransformerKind | 业务含义 | professional glyph | 合法连接 | 安装与布局边界 |
+| --- | --- | --- | --- | --- |
+| `PublicPoleMounted` | 柱上公变 | 架空变台 | `OverheadLine` only | 独立顶层设备，不属于 `PoleAttachment` |
+| `DedicatedPoleMounted` | 柱上专变 | 用户架空变台 | `OverheadLine` only | 独立顶层设备，不属于 `PoleAttachment` |
+| `PublicIndoor` | 站内公变 | 配电变压器 | `Cable` only | `TransformerLayout` 支持 `Horizontal` / `Vertical` |
 
-三种 Transformer 当前均只有一个正式 10kV External Terminal，不实现 0.4kV / 低压侧。
+#### 3.2.1 Electrical model 与 identity
+
+WP-EM-06 冻结的最小 Domain 事实为：
+
+```text
+Transformer : Device
+├── Device.Id
+├── TransformerKind
+└── HvTerminalId
+```
+
+三种 Transformer 当前均只有一个正式 10kV External Terminal，并以 `HvTerminalId` 稳定标识。`Transformer` 在 WP-EM-06 中是 one-terminal topology leaf，因此不创建 Transformer `ElectricalNode`、LV Terminal、second Terminal、internal winding topology 或 low-voltage network。所有 glyph geometry 都只属于 professional presentation，不得创造 electrical facts。
+
+`Device.Id` 与 `HvTerminalId` 必须遵守既有 Stable ID 合同，并在 Command、Undo / Redo、Clipboard remap 和 Persistence round-trip 中保持各自身份语义。
+
+#### 3.2.2 Professional glyph contract
+
+三种 `TransformerKind` 必须使用三个独立 professional glyph：
+
+```text
+PublicPoleMounted    → 架空变台
+DedicatedPoleMounted → 用户架空变台
+PublicIndoor         → 配电变压器
+```
+
+不得以“同一个 Transformer glyph + 不同文字 label”作为三种业务类型的主要视觉区分。glyph 差异属于正式 professional presentation contract，但不表示三种 Transformer 具有不同 electrical topology；三者仍各自只有一个正式 `HvTerminalId`。
+
+`PublicPoleMounted` 使用 reference 中的“架空变台”专业图元：大型空心圆主体、圆内 T 形结构和下方两个附属小圆。唯一正式 HV presentation anchor 是 T 形结构朝线路方向的竖向 stem 末端，即图元底部中央的线路接入点；只有该位置映射 `Transformer.HvTerminalId`。大型圆、T 形结构和附属小圆均为 presentation geometry；附属小圆不得产生 `Pole`、`PoleId`、Terminal、`ElectricalNode` 或 `PoleAttachment`。
+
+`DedicatedPoleMounted` 使用 reference 中的“用户架空变台”专业图元：三角形主体和三角形下方两个附属小圆。唯一正式 HV presentation anchor 是三角形 apex；只有该位置映射 `Transformer.HvTerminalId`。其它几何不得产生 LV Terminal、fake `ElectricalNode`、fake `DropoutFuse`、`PoleAttachment` 或 second connection target。
+
+`PublicIndoor` 使用 reference 中的“配电变压器”专业图元，其核心为两个相交、尺寸相近的空心圆：
+
+- `Horizontal`：两圆左右排列，HV anchor 位于左侧中心；右侧 visual winding / lead 不形成 LV Terminal。
+- `Vertical`：同一专业图元采用上下排列，HV anchor 位于顶部中心；下侧 visual winding / lead 不形成 LV Terminal。
+
+双圆图形不创建第二 Terminal；两种 orientation 下均只有一个 10kV `HvTerminalId`。
+
+#### 3.2.3 Orientation contract
+
+Orientation 只属于 `TransformerLayout`，不得进入 Domain `Transformer` facts。`PublicIndoor` 支持 `Horizontal` 与 `Vertical`，正式 default 为 `Horizontal`，因为它直接对应当前 reference professional glyph baseline；`Vertical` 是正式允许的第二 layout orientation。
+
+`PublicPoleMounted` 与 `DedicatedPoleMounted` 没有用户可编辑的 Orientation 业务语义，各自 professional glyph 使用固定 canonical presentation。为兼容 V7 required typed `ProjectTransformerLayoutDto`，两种 pole-mounted kind 的 persisted `Orientation` 固定为 `Vertical`：
+
+- creation 写入 `Vertical`；
+- `Vertical` 是 canonical valid DTO value；
+- `Horizontal` 是 invalid value，runtime / persistence validation 必须拒绝；
+- mapper 不得静默忽略非法 value；
+- Inspector 不显示可编辑 Orientation。
+
+这里的 `Vertical` 只是统一 DTO contract 的 canonical value，不表示 pole-mounted glyph 是可旋转图元。WP-EM-06 不支持 arbitrary rotation、mirror、free angle 或 quarter-turn integer persistence。
+
+#### 3.2.4 Canvas label 与 naming boundary
+
+WP-EM-06 第一版不在 Canvas 固定增加“公变”“专变”“站内公变”label；三种业务类型由三个不同 professional glyph 表达。Inspector 可以显示由 `TransformerKind` 派生的中文业务含义：
+
+- `PublicPoleMounted` → 柱上公变；
+- `DedicatedPoleMounted` → 柱上专变；
+- `PublicIndoor` → 站内公变。
+
+这些中文名称是 derived UI text，不是独立 persisted field。WP-EM-06 不新增 `TransformerNumber`、`DeviceNumber`、editable `DisplayName`、capacity、model label 或 dispatch number，`ProjectTransformerDto` 不增加 naming field。未来若实际业务需要 Transformer 名称、编号、容量或铭牌信息，必须另行完成 typed model 与 persistence requirement refinement。
+
+#### 3.2.5 Pole affiliation 与 CustomerStation separation
+
+`PublicPoleMounted` 与 `DedicatedPoleMounted` 都是 top-level `Transformer` Device，不是 `PoleAttachment`。WP-EM-06 不增加 `PoleId`、`ParentPoleId`、`AttachmentId` 或其它 persisted affiliation。专业图中的“柱上”关系由 `TransformerLayout.Position`、邻近 Pole 的 presentation、`DropoutFuse` 与 short `OverheadLine` 共同表达；不得为了 Rendering 创建假的 Pole ownership。
+
+`CustomerStation` 的 `BoxStation` 不是 `TransformerKind`，用户箱变抽象图元属于 WP-EM-07 CustomerStation Vertical Slice。必须明确区分：
+
+```text
+DedicatedPoleMounted       → 用户架空变台
+CustomerStation.BoxStation → 用户箱变
+```
+
+两者不是同一个业务对象。`CustomerStation` 的 `IncomingFeeder`、`IsolationSwitch`、cable terminal 及其它 aggregate 结构不得进入 WP-EM-06 `Transformer`。
+
+#### 3.2.6 Connection、Grounding 与 WorkScope boundary
+
+连接合法性必须由正式 Domain connection validation 保证，不能只依赖 UI：
+
+- `PublicPoleMounted` 与 `DedicatedPoleMounted` 只允许作为 `OverheadLine` endpoint，不得直接作为 `Cable` endpoint；
+- `PublicIndoor` 只允许作为 `Cable` endpoint，不得直接作为 `OverheadLine` endpoint。
+
+WP-EM-06 不将 `Transformer.HvTerminalId` 加入新建 `GroundingPoint` 的 Terminal whitelist，不得修改 `ProfessionalCommandFactory.IsEligibleNewTerminalTarget` 或等价 whitelist 来开放 Transformer grounding。既有 defensive dependency protection 继续保留。
+
+WP-EM-06 也不主动开放 Transformer HV Terminal 作为新建 `WorkScope` boundary 的 UI / picking workflow，且不因本 WP 主动收紧或重构当前 Domain 通用 boundary validation。删除 Transformer 时，如已存在 `WorkScope` 或其它正式 dependency，必须通过既有 dependency guard 拒绝删除。是否正式开放 Transformer WorkScope boundary 留待独立 requirement decision。
+
+#### 3.2.7 DropoutFuse boundary
 
 柱上公变和柱上专变的上游通常存在 `DropoutFuse`，但它继续是独立 `SwitchDevice`：
 
@@ -73,7 +159,13 @@ OverheadLine
 → Transformer
 ```
 
-不得把 `DropoutFuse` 内嵌进 `Transformer`。
+`DropoutFuse` 保持独立 `SwitchDevice`、独立 `SwitchState`、独立 Terminal，其柱上安装保持独立 `PoleAttachment`。不得将它内嵌进 `Transformer`，不得把 fuse state 加入 `Transformer`，也不得把两者组成新的 aggregate。`Transformer` 只作为该链路最终的 one-terminal endpoint。
+
+#### 3.2.8 V7 与 implementation boundary
+
+WP-EM-06 的 `FormatVersion` 继续为 V7，并复用已预留的 typed `ProjectTransformerDto`、`ProjectTransformerKind`、`ProjectTransformerLayoutDto`、`ProjectTransformerOrientation`、`ProjectDomainDto.Transformers` 和 `ProjectLayoutDto.TransformerLayouts`。不得升级 V8，不得增加 property bag，不得使用 untyped Guid dictionary；现有 V6 → V7 empty Transformer migration 保持不变。
+
+WP-EM-06 不实现 `CustomerStation`，也不引入 generic route hysteresis、generic drag stabilization、last-valid-position、generic collision routing、Transformer grounding creation、Transformer WorkScope creation UX、Annotation、Work-ticket Presentation Layer、Energization Analysis、load-flow、0.4kV side 或 arbitrary rotation。
 
 ### 3.3 CustomerStation
 
@@ -418,7 +510,9 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-06 — Transformer Vertical Slice
 
-完成 three Transformer kinds、10kV terminal、create/delete、Cable / OverheadLine endpoint validation、professional symbols、`PublicIndoor` orientation、layout、selection、inspector、clipboard、Undo / Redo、V7 integration、topology graph compatibility，以及完整 `DropoutFuse → OverheadLine → Transformer` 场景。
+**状态：Requirements Frozen / Next Work Package（implementation 尚未开始）**
+
+正式需求合同以 3.2 节为准。实施范围包括 three Transformer kinds、各自独立的 professional glyph、单一 10kV HV terminal、create/delete、Cable / OverheadLine endpoint validation、`PublicIndoor` orientation、typed layout、selection、inspector、clipboard、Undo / Redo、V7 integration、topology graph compatibility，以及完整 `OverheadLine → DropoutFuse → short OverheadLine → Transformer` 场景。不得借该 Vertical Slice 引入 3.2 节排除的 CustomerStation、低压侧、额外 electrical facts 或通用 interaction infrastructure。
 
 ### WP-EM-07 — CustomerStation Vertical Slice
 
