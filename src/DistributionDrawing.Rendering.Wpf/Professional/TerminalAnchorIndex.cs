@@ -34,7 +34,8 @@ public sealed class TerminalAnchorIndex
         DrawingLayout drawingLayout,
         IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
         IEnumerable<Connection>? connections = null,
-        IEnumerable<CableSegment>? cableSegments = null)
+        IEnumerable<CableSegment>? cableSegments = null,
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(drawingLayout);
@@ -160,6 +161,27 @@ public sealed class TerminalAnchorIndex
                         leadWidth,
                         terminalTop - origin.YMillimeters));
             }
+        }
+
+        foreach (Transformer transformer in transformerLayouts is null
+                     ? []
+                     : document.Transformers)
+        {
+            if (!transformerLayouts!.TryGetValue(transformer.Id, out TransformerLayout? transformerLayout))
+            {
+                throw new InvalidOperationException(
+                    $"No layout exists for transformer '{transformer.Id}'.");
+            }
+
+            TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+                transformer,
+                transformerLayout,
+                DrawingMetrics.Default.Transformer);
+            Set(
+                anchors,
+                transformer.HvTerminalId,
+                geometry.HvAnchor,
+                geometry.HvDirection);
         }
 
         if (connections is not null && cableSegments is not null)

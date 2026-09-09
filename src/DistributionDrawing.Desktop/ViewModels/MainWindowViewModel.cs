@@ -79,6 +79,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand SelectCommand => Actions.Select;
     public ICommand CreatePoleCommand => Actions.CreatePole;
     public ICommand CreateRingCabinetCommand => Actions.CreateRingCabinet;
+    public ICommand CreateTransformerCommand => Actions.CreateTransformer;
     public ICommand CreateOverheadLineCommand => Actions.CreateOverheadLine;
     public ICommand CreateCableCommand => Actions.CreateCable;
     public ICommand AddCableTerminationCommand => Actions.AddCableTermination;

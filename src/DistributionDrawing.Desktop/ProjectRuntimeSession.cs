@@ -156,6 +156,7 @@ public sealed class ProjectRuntimeSession
             RingCabinet = cabinet,
             RingCabinetLayout = cabinetLayout,
             RingCabinetLayouts = layout.RingCabinetLayouts,
+            TransformerLayouts = layout.TransformerLayouts,
             DrawingLayout = layout.DrawingLayout,
             Poles = session.Domain.Devices.OfType<Pole>().ToArray(),
             Devices = session.Domain.Devices,
@@ -223,7 +224,8 @@ internal static class ProjectLayoutRuntimeMapper
             runtime.DrawingLayout,
             runtime.RingCabinetLayouts,
             domain.Connections,
-            domain.CableSegments);
+            domain.CableSegments,
+            runtime.TransformerLayouts);
         var overheadLines = runtime.DrawingLayout.OverheadLines.Values.Select(layout =>
         {
             Connection connection = domain.Connections.SingleOrDefault(
@@ -231,16 +233,12 @@ internal static class ProjectLayoutRuntimeMapper
                 ?? throw new InvalidDataException(
                     $"Connection '{layout.ConnectionId}' does not exist for layout snapshot.");
             DocumentPoint start = ResolvePersistedEndpoint(
-                domain,
                 anchors,
                 connection.StartTerminalId,
-                layout.Start,
                 connection.Id);
             DocumentPoint end = ResolvePersistedEndpoint(
-                domain,
                 anchors,
                 connection.EndTerminalId,
-                layout.End,
                 connection.Id);
 
             return new ProjectOverheadLineLayoutDto(
@@ -410,26 +408,13 @@ internal static class ProjectLayoutRuntimeMapper
     }
 
     private static DocumentPoint ResolvePersistedEndpoint(
-        DistributionDrawing.Domain.Documents.DrawingDocument domain,
         TerminalAnchorIndex anchors,
         Guid terminalId,
-        DocumentPoint existingLayoutEndpoint,
         Guid connectionId)
     {
         if (anchors.TryGet(terminalId, out TerminalAnchor anchor))
         {
             return anchor.Position;
-        }
-
-        Terminal terminal = domain.Terminals.Single(item => item.Id == terminalId);
-        if (terminal.OwnerType == TopologyOwnerType.Device &&
-            domain.Devices.OfType<Transformer>().Any(transformer =>
-                transformer.Id == terminal.OwnerId &&
-                transformer.HvTerminalId == terminal.Id))
-        {
-            // Slice B has no professional Transformer glyph/anchor yet. Preserve the
-            // command-owned millimeter endpoint until Slice C supplies that projection.
-            return existingLayoutEndpoint;
         }
 
         throw new InvalidDataException(

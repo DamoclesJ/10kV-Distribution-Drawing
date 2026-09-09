@@ -7,6 +7,7 @@ using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -88,6 +89,7 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
             runtime.PersistenceSession.Domain,
             runtime.Layout));
         ProjectSession reopened = new ProjectService().LoadProject(saved.FilePath);
+        ProjectRuntimeSession reopenedRuntime = ProjectRuntimeSession.Create(reopened);
         Connection restoredConnection = Assert.Single(reopened.Domain.Connections);
         var query = new ElectricalConnectivityQuery(
             new ElectricalConnectivityGraphBuilder().Build(reopened.Domain));
@@ -95,6 +97,17 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
         Assert.Equal(first.HvTerminal.Id, restoredConnection.StartTerminalId);
         Assert.Equal(second.HvTerminal.Id, restoredConnection.EndTerminalId);
         Assert.True(query.IsConnected(first.HvTerminal.Id, second.HvTerminal.Id));
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            reopened.Domain,
+            reopenedRuntime.Layout.DrawingLayout,
+            reopenedRuntime.Layout.RingCabinetLayouts,
+            reopened.Domain.Connections,
+            reopened.Domain.CableSegments,
+            reopenedRuntime.Layout.TransformerLayouts);
+        TerminalAnchor firstAnchor = AssertAnchor(anchors, first.HvTerminal.Id);
+        TerminalAnchor secondAnchor = AssertAnchor(anchors, second.HvTerminal.Id);
+        Assert.Contains(firstAnchor.Position, Assert.Single(reopenedRuntime.Scene.Routes).Points);
+        Assert.Contains(secondAnchor.Position, Assert.Single(reopenedRuntime.Scene.Routes).Points);
     }
 
     [Fact]
@@ -133,10 +146,29 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
                 pole.Layout.Position,
                 transformer.Layout.Position)).Execute();
 
-        ProjectSession saved = service.SaveProject(ProjectLayoutRuntimeMapper.ToSnapshot(
+        ProjectLayoutSnapshot currentSnapshot = ProjectLayoutRuntimeMapper.ToSnapshot(
             runtime.PersistenceSession.Domain,
-            runtime.Layout));
-        ProjectSession reopened = new ProjectService().LoadProject(saved.FilePath);
+            runtime.Layout);
+        ProjectOverheadLineLayoutDto currentLine = Assert.Single(currentSnapshot.OverheadLines);
+        var sliceBLayout = new ProjectLayoutSnapshot(currentSnapshot.Data with
+        {
+            OverheadLines =
+            [
+                currentLine with
+                {
+                    Start = new ProjectPointDto(
+                        pole.Layout.Position.XMillimeters,
+                        pole.Layout.Position.YMillimeters),
+                    End = new ProjectPointDto(
+                        transformer.Layout.Position.XMillimeters,
+                        transformer.Layout.Position.YMillimeters)
+                }
+            ]
+        });
+        ProjectSession saved = service.SaveProject(sliceBLayout);
+        var reopenedService = new ProjectService();
+        ProjectSession reopened = reopenedService.LoadProject(saved.FilePath);
+        ProjectRuntimeSession reopenedRuntime = ProjectRuntimeSession.Create(reopened);
         Connection restoredConnection = Assert.Single(reopened.Domain.Connections);
         OverheadLine restoredLine = Assert.Single(reopened.Domain.OverheadLines);
         var query = new ElectricalConnectivityQuery(
@@ -146,6 +178,29 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
         Assert.Equal(pole.Pole.Id, Assert.Single(restoredLine.SupportPoleIds));
         Assert.True(query.IsConnected(pole.Terminal.Id, transformer.HvTerminal.Id));
         Assert.DoesNotContain(transformer.Transformer.Id, restoredLine.SupportPoleIds);
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            reopened.Domain,
+            reopenedRuntime.Layout.DrawingLayout,
+            reopenedRuntime.Layout.RingCabinetLayouts,
+            reopened.Domain.Connections,
+            reopened.Domain.CableSegments,
+            reopenedRuntime.Layout.TransformerLayouts);
+        TerminalAnchor transformerAnchor = AssertAnchor(anchors, transformer.HvTerminal.Id);
+        Assert.Contains(transformerAnchor.Position, Assert.Single(reopenedRuntime.Scene.Routes).Points);
+        ProjectSession resaved = reopenedService.SaveProject(
+            ProjectLayoutRuntimeMapper.ToSnapshot(
+                reopenedRuntime.PersistenceSession.Domain,
+                reopenedRuntime.Layout));
+        ProjectOverheadLineLayoutDto persistedLine = Assert.Single(resaved.Layout.OverheadLines);
+        Assert.Equal(transformerAnchor.Position.XMillimeters, persistedLine.End.XMillimeters);
+        Assert.Equal(transformerAnchor.Position.YMillimeters, persistedLine.End.YMillimeters);
+        Assert.NotEqual(transformer.Layout.Position, transformerAnchor.Position);
+    }
+
+    private static TerminalAnchor AssertAnchor(TerminalAnchorIndex anchors, Guid terminalId)
+    {
+        Assert.True(anchors.TryGet(terminalId, out TerminalAnchor anchor));
+        return anchor;
     }
 
     public void Dispose()

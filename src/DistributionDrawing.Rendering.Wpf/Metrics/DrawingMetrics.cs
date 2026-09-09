@@ -16,6 +16,20 @@ public sealed record DrawingMetrics(
     AlignmentDrawingMetrics Alignment,
     LineJumpDrawingMetrics LineJump)
 {
+    public TransformerDrawingMetrics Transformer { get; init; } = new(
+        MainRadius: 12,
+        SmallCircleRadius: 2.5,
+        SmallCircleOffsetX: 5,
+        SmallCircleOffsetY: 15,
+        TeeHalfWidth: 6,
+        TeeTopY: -3,
+        TriangleHalfWidth: 11,
+        TriangleApexY: -12,
+        TriangleBaseY: 9,
+        IndoorCoilRadius: 8,
+        IndoorCoilCenterSpacing: 12,
+        HitPadding: 2);
+
     public GroundingDrawingMetrics Grounding { get; init; } = new(
         LeaderLength: 18, StemLength: 12, BarSpacing: 3,
         TopBarWidth: 12, MiddleBarWidth: 8, BottomBarWidth: 4,
@@ -93,6 +107,20 @@ public sealed record DrawingMetrics(
             Radius: 4,
             EndpointClearance: 2));
 }
+
+public sealed record TransformerDrawingMetrics(
+    double MainRadius,
+    double SmallCircleRadius,
+    double SmallCircleOffsetX,
+    double SmallCircleOffsetY,
+    double TeeHalfWidth,
+    double TeeTopY,
+    double TriangleHalfWidth,
+    double TriangleApexY,
+    double TriangleBaseY,
+    double IndoorCoilRadius,
+    double IndoorCoilCenterSpacing,
+    double HitPadding);
 
 public sealed record GroundingDrawingMetrics(
     double LeaderLength,

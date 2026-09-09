@@ -4,5 +4,6 @@ public enum PlacementMode
 {
     Idle,
     PlacingPole,
-    PlacingRingCabinet
+    PlacingRingCabinet,
+    PlacingTransformer
 }

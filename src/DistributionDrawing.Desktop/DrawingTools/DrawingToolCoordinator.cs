@@ -8,6 +8,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Layout;
 
 namespace DistributionDrawing.Desktop.DrawingTools;
 
@@ -72,6 +73,17 @@ public sealed class DrawingToolCoordinator
         _cableReconnect.Cancel();
         _poleSwitchAttachment.Cancel();
         _placement.BeginRingCabinet(configuration);
+    }
+
+    public void BeginTransformer(
+        TransformerKind transformerKind,
+        TransformerOrientation? orientation = null)
+    {
+        _overheadLine.Cancel();
+        _cableConnection.Cancel();
+        _cableReconnect.Cancel();
+        _poleSwitchAttachment.Cancel();
+        _placement.BeginTransformer(transformerKind, orientation);
     }
 
     public void BeginOverheadLine()

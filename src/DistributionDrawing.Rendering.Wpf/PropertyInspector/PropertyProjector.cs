@@ -62,6 +62,11 @@ public sealed class PropertyProjector
             return ProjectPole(selection);
         }
 
+        if (selection.Transformer is not null)
+        {
+            return ProjectTransformer(selection);
+        }
+
         if (selection.OverheadLine is not null)
         {
             return ProjectOverheadLine(selection);
@@ -319,6 +324,29 @@ public sealed class PropertyProjector
         return Snapshot(selection, "杆塔", pole.DisplayName ?? pole.PoleNumber, sections);
     }
 
+    private static PropertyInspectorSnapshot ProjectTransformer(ResolvedSelection selection)
+    {
+        Transformer transformer = selection.Transformer!;
+        string kindText = transformer.TransformerKind switch
+        {
+            TransformerKind.PublicPoleMounted => "柱上公变",
+            TransformerKind.DedicatedPoleMounted => "柱上专变",
+            TransformerKind.PublicIndoor => "站内公变",
+            _ => transformer.TransformerKind.ToString()
+        };
+        return Snapshot(
+            selection,
+            "变压器",
+            kindText,
+            [
+                Section(
+                    "专业属性",
+                    DomainRow("TransformerKind", "业务类型", kindText),
+                    DomainRow("VoltageLevel", "电压等级", Transformer.TenKilovolts)),
+                LayoutSection(selection.TransformerLayout)
+            ]);
+    }
+
     private static PropertyInspectorSnapshot ProjectOverheadLine(ResolvedSelection selection)
     {
         OverheadLine line = selection.OverheadLine!;
@@ -451,6 +479,12 @@ public sealed class PropertyProjector
                 LayoutRow("Start", "起点", FormatPoint(line.Start)),
                 LayoutRow("End", "终点", FormatPoint(line.End)),
                 LayoutRow("IsContinued", "延续图形", line.IsContinued)),
+            TransformerLayout transformer => Section(
+                "布局",
+                LayoutRow("Position", "位置", FormatPoint(transformer.Position)),
+                LayoutRow("Orientation", "方向", transformer.Orientation == TransformerOrientation.Horizontal
+                    ? "水平"
+                    : "垂直")),
             _ => new PropertySectionViewModel("布局", [])
         };
     }

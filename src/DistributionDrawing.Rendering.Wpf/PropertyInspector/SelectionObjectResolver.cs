@@ -51,6 +51,7 @@ public sealed class SelectionObjectResolver
             RingCabinetInterval = resolved.RingCabinetInterval,
             SwitchDevice = resolved.SwitchDevice,
             Pole = resolved.Pole,
+            Transformer = resolved.Transformer,
             PoleAttachment = resolved.PoleAttachment,
             AttachedDevice = resolved.AttachedDevice,
             CableTermination = resolved.CableTermination,
@@ -64,6 +65,7 @@ public sealed class SelectionObjectResolver
             RingCabinetLayout = resolved.RingCabinetLayout,
             RingCabinetIntervalLayout = resolved.RingCabinetIntervalLayout,
             PoleLayout = resolved.PoleLayout,
+            TransformerLayout = resolved.TransformerLayout,
             AttachmentLayout = resolved.AttachmentLayout,
             OverheadLineLayout = resolved.OverheadLineLayout,
             HitTestEntry = _source.HitTestIndex?.Find(reference)
@@ -122,6 +124,25 @@ public sealed class SelectionObjectResolver
 
     private ResolvedSelection? ResolveDevice(SelectionReference reference)
     {
+        Transformer? transformer = _source.Devices.OfType<Transformer>()
+            .SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
+        if (transformer is not null)
+        {
+            if (!_source.TransformerLayouts.TryGetValue(
+                    transformer.Id,
+                    out TransformerLayout? transformerLayout))
+            {
+                return null;
+            }
+
+            return new ResolvedSelection
+            {
+                Reference = reference,
+                Transformer = transformer,
+                TransformerLayout = transformerLayout
+            };
+        }
+
         Pole? pole = _source.Poles.SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
         if (pole is not null)
         {

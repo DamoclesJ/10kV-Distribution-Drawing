@@ -22,6 +22,8 @@ public sealed class ResolvedSelection
 
     public Pole? Pole { get; init; }
 
+    public Transformer? Transformer { get; init; }
+
     public PoleAttachment? PoleAttachment { get; init; }
 
     public Device? AttachedDevice { get; init; }
@@ -47,6 +49,8 @@ public sealed class ResolvedSelection
     public RingCabinetIntervalLayout? RingCabinetIntervalLayout { get; init; }
 
     public PoleLayout? PoleLayout { get; init; }
+
+    public TransformerLayout? TransformerLayout { get; init; }
 
     public AttachmentLayout? AttachmentLayout { get; init; }
 

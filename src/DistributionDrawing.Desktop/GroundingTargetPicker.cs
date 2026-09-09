@@ -54,7 +54,8 @@ public sealed class GroundingTargetPicker
             layout.DrawingLayout,
             layout.RingCabinetLayouts,
             document.Connections,
-            document.CableSegments);
+            document.CableSegments,
+            layout.TransformerLayouts);
         foreach (TerminalAnchor anchor in anchors.Anchors.Where(anchor =>
                      ProfessionalCommandFactory.IsEligibleNewTerminalTarget(
                          document,

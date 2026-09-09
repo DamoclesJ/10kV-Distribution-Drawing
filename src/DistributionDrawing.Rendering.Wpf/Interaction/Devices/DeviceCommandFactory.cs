@@ -16,6 +16,7 @@ public sealed class DeviceCommandFactory
     private readonly CableTerminationAttachmentCreationFactory
         _cableTerminationAttachmentCreationFactory;
     private readonly PoleSwitchAttachmentCreationFactory _poleSwitchAttachmentCreationFactory;
+    private readonly TransformerCreationFactory _transformerCreationFactory;
 
     public DeviceCommandFactory(
         RingCabinetCreationFactory? ringCabinetCreationFactory = null,
@@ -29,6 +30,7 @@ public sealed class DeviceCommandFactory
             cableTerminationAttachmentCreationFactory ??
             new CableTerminationAttachmentCreationFactory();
         _poleSwitchAttachmentCreationFactory = new PoleSwitchAttachmentCreationFactory();
+        _transformerCreationFactory = new TransformerCreationFactory();
     }
 
     public AddPoleCommand CreateAddPole(
@@ -66,6 +68,22 @@ public sealed class DeviceCommandFactory
             runtimeLayout,
             cabinet,
             _ringCabinetLayoutFactory.Create(cabinet, position));
+    }
+
+    public AddTransformerCommand CreateAddTransformer(
+        DrawingDocument document,
+        RuntimeLayoutDocument runtimeLayout,
+        TransformerKind transformerKind,
+        DocumentPoint position,
+        TransformerOrientation? orientation = null)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+        TransformerCreation creation = _transformerCreationFactory.Create(
+            transformerKind,
+            position,
+            orientation);
+        return new AddTransformerCommand(document, runtimeLayout, creation);
     }
 
     public AddRingCabinetCommand CreateAddRingCabinet(
@@ -189,7 +207,8 @@ public sealed class DeviceCommandFactory
             runtimeLayout.DrawingLayout,
             runtimeLayout.RingCabinetLayouts,
             document.Connections,
-            document.CableSegments);
+            document.CableSegments,
+            runtimeLayout.TransformerLayouts);
         var connectionPositions = attachedConnections.Select(connection =>
         {
             Guid poleTerminalId = poleTerminalIds.Contains(connection.StartTerminalId)
@@ -497,8 +516,12 @@ public sealed class DeviceCommandFactory
                 runtimeLayout,
                 cabinet,
                 runtimeLayout.RingCabinetLayouts[cabinet.Id]),
+            Transformer transformer => new RemoveTransformerCommand(
+                document,
+                runtimeLayout,
+                transformer.Id),
             _ => throw new InvalidOperationException(
-                "Only Pole and RingCabinet deletion is supported in this phase.")
+                "Only Pole, RingCabinet and Transformer deletion is supported in this phase.")
         };
     }
 

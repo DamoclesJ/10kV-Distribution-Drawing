@@ -40,7 +40,8 @@ public sealed class ProfessionalSceneBuilder
         DrawingLayout drawingLayout,
         IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
         IReadOnlyDictionary<Guid, GroundingPointLayout> groundingPointLayouts,
-        IEnumerable<OrthogonalRoute> routes)
+        IEnumerable<OrthogonalRoute> routes,
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(drawingLayout);
@@ -54,7 +55,8 @@ public sealed class ProfessionalSceneBuilder
         TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
             document,
             drawingLayout,
-            ringCabinetLayouts);
+            ringCabinetLayouts,
+            transformerLayouts: transformerLayouts);
         var elements = new List<SceneElement>();
         var hitTestEntries = new List<SelectionHitTestEntry>();
         var diagnostics = new List<SceneBuildDiagnostic>();

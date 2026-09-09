@@ -29,6 +29,7 @@ public sealed class DrawingSceneBuilder
     private readonly RouteCrossingDetector _crossingDetector;
     private readonly LineJumpDecorator _lineJumpDecorator;
     private readonly DrawingMetrics _metrics;
+    private readonly TransformerRenderer _transformerRenderer;
 
     public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
     {
@@ -43,6 +44,7 @@ public sealed class DrawingSceneBuilder
         _obstacleBuilder = new RoutingObstacleBuilder(_metrics);
         _crossingDetector = new RouteCrossingDetector(_metrics);
         _lineJumpDecorator = new LineJumpDecorator(_metrics);
+        _transformerRenderer = new TransformerRenderer(_metrics);
     }
 
     public DrawingScene Build(
@@ -124,7 +126,8 @@ public sealed class DrawingSceneBuilder
             layout.DrawingLayout,
             layout.RingCabinetLayouts,
             document.Connections,
-            document.CableSegments);
+            document.CableSegments,
+            layout.TransformerLayouts);
         DrawingScene baseScene = BuildCore(
             layout.DrawingLayout,
             document.Devices.OfType<Pole>(),
@@ -154,12 +157,38 @@ public sealed class DrawingSceneBuilder
             hitTestEntries.AddRange(cabinetScene.HitTestIndex.Entries);
         }
 
+        foreach (Transformer transformer in document.Transformers)
+        {
+            if (!layout.TransformerLayouts.TryGetValue(
+                    transformer.Id,
+                    out TransformerLayout? transformerLayout))
+            {
+                throw new InvalidOperationException(
+                    $"No layout exists for transformer '{transformer.Id}'.");
+            }
+
+            TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+                transformer,
+                transformerLayout,
+                _metrics.Transformer);
+            elements.AddRange(_transformerRenderer.Render(transformer, transformerLayout));
+            hitTestEntries.Add(new SelectionHitTestEntry(
+                new SelectionReference(SelectionTargetKind.Device, transformer.Id),
+                new DocumentRect(
+                    geometry.Bounds.XMillimeters - _metrics.Transformer.HitPadding,
+                    geometry.Bounds.YMillimeters - _metrics.Transformer.HitPadding,
+                    geometry.Bounds.WidthMillimeters + _metrics.Transformer.HitPadding * 2,
+                    geometry.Bounds.HeightMillimeters + _metrics.Transformer.HitPadding * 2),
+                20));
+        }
+
         ProfessionalSceneResult professionalScene = _professionalSceneBuilder.Build(
             document,
             layout.DrawingLayout,
             layout.RingCabinetLayouts,
             layout.GroundingPointLayouts,
-            baseScene.Routes);
+            baseScene.Routes,
+            layout.TransformerLayouts);
         elements.AddRange(professionalScene.Elements);
         hitTestEntries.AddRange(professionalScene.HitTestEntries);
 

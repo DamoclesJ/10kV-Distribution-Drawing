@@ -20,6 +20,10 @@ public sealed class PlacementController
     private PoleLayout? _previewPoleLayout;
     private RingCabinet? _previewCabinet;
     private RingCabinetLayout? _previewCabinetLayout;
+    private TransformerKind? _pendingTransformerKind;
+    private TransformerOrientation? _pendingTransformerOrientation;
+    private Transformer? _previewTransformer;
+    private TransformerLayout? _previewTransformerLayout;
     private DocumentPoint? _previewPosition;
     private const double PlacementGridSpacing = 10;
 
@@ -73,9 +77,35 @@ public sealed class PlacementController
         }
     }
 
+    public void BeginTransformer(
+        TransformerKind transformerKind,
+        TransformerOrientation? orientation = null)
+    {
+        _pendingRingCabinetConfiguration = null;
+        bool clearedVisiblePreview = ClearPreview();
+        ProjectRuntimeSession session = RequireSession();
+        AddTransformerCommand preview = _commandFactory.CreateAddTransformer(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            transformerKind,
+            new DocumentPoint(0, 0),
+            orientation);
+        _pendingTransformerKind = transformerKind;
+        _pendingTransformerOrientation = preview.Creation.Layout.Orientation;
+        _previewTransformer = preview.Creation.Transformer;
+        _previewTransformerLayout = preview.Creation.Layout;
+        Mode = PlacementMode.PlacingTransformer;
+        if (clearedVisiblePreview)
+        {
+            SceneChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public void Cancel()
     {
         _pendingRingCabinetConfiguration = null;
+        _pendingTransformerKind = null;
+        _pendingTransformerOrientation = null;
         Mode = PlacementMode.Idle;
         if (ClearPreview())
         {
@@ -114,14 +144,31 @@ public sealed class PlacementController
                     SelectionTargetKind.RingCabinet,
                     cabinet.Cabinet.Id);
                 break;
+            case PlacementMode.PlacingTransformer:
+                TransformerKind transformerKind = _pendingTransformerKind
+                    ?? throw new InvalidOperationException(
+                        "Transformer placement has no creation configuration.");
+                AddTransformerCommand transformer = _commandFactory.CreateAddTransformer(
+                    session.PersistenceSession.Domain,
+                    session.Layout,
+                    transformerKind,
+                    position,
+                    _pendingTransformerOrientation);
+                command = transformer;
+                selection = new SelectionReference(
+                    SelectionTargetKind.Device,
+                    transformer.Creation.Transformer.Id);
+                break;
             default:
                 return false;
         }
 
         session.CommandStack.ExecuteCommand(command);
-        if (Mode == PlacementMode.PlacingRingCabinet)
+        if (Mode is PlacementMode.PlacingRingCabinet or PlacementMode.PlacingTransformer)
         {
             _pendingRingCabinetConfiguration = null;
+            _pendingTransformerKind = null;
+            _pendingTransformerOrientation = null;
             Mode = PlacementMode.Idle;
         }
         _previewPosition = null;
@@ -179,6 +226,15 @@ public sealed class PlacementController
                 _sceneBuilder.Build(
                     _previewCabinet,
                     _previewCabinetLayout.MoveTo(position)).Elements,
+            PlacementMode.PlacingTransformer when _previewTransformer is not null &&
+                _previewTransformerLayout is not null =>
+                new TransformerRenderer().Render(
+                    _previewTransformer,
+                    new TransformerLayout(
+                        _previewTransformer.Id,
+                        position,
+                        _previewTransformerLayout.Orientation,
+                        _previewTransformer.TransformerKind)),
             _ => []
         };
         return elements
@@ -207,6 +263,8 @@ public sealed class PlacementController
         _previewPoleLayout = null;
         _previewCabinet = null;
         _previewCabinetLayout = null;
+        _previewTransformer = null;
+        _previewTransformerLayout = null;
         return changed;
     }
 

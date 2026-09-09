@@ -6,6 +6,10 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Desktop.DrawingTools;
+using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
@@ -98,6 +102,56 @@ public sealed class PlacementPreviewTests : IDisposable
         Assert.Empty(controller.CreatePreviewElements());
         Assert.Empty(session.PersistenceSession.Domain.Devices);
         Assert.False(session.CommandStack.IsDirty);
+    }
+
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted, TransformerOrientation.Vertical)]
+    [InlineData(TransformerKind.DedicatedPoleMounted, TransformerOrientation.Vertical)]
+    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Horizontal)]
+    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Vertical)]
+    public void TransformerPlacementUsesTypedCreationAndSelectsNewDevice(
+        TransformerKind kind,
+        TransformerOrientation orientation)
+    {
+        ProjectRuntimeSession session = CreateSession();
+        var controller = new PlacementController(() => session);
+
+        controller.BeginTransformer(kind, orientation);
+        controller.UpdatePointer(new DocumentPoint(23, 37), snapEnabled: true);
+
+        Assert.NotEmpty(controller.CreatePreviewElements());
+        Assert.Empty(session.PersistenceSession.Domain.Transformers);
+        Assert.True(controller.Place(new DocumentPoint(23, 37), snapEnabled: true));
+
+        Transformer transformer = Assert.Single(session.PersistenceSession.Domain.Transformers);
+        Assert.Equal(kind, transformer.TransformerKind);
+        Assert.Equal(new DocumentPoint(20, 40), session.Layout.TransformerLayouts[transformer.Id].Position);
+        Assert.Equal(orientation, session.Layout.TransformerLayouts[transformer.Id].Orientation);
+        Assert.Equal(new SelectionReference(SelectionTargetKind.Device, transformer.Id), session.SelectionManager.Selected);
+        Assert.Equal(PlacementMode.Idle, controller.Mode);
+    }
+
+    [Fact]
+    public void UnifiedDeleteRemovesTransformerAndUndoRestoresExactIdentity()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        TransformerCreation creation = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(30, 40));
+        new AddTransformerCommand(session.PersistenceSession.Domain, session.Layout, creation).Execute();
+        SelectionSet selection = SelectionSet.Create(
+            [new SelectionReference(SelectionTargetKind.Device, creation.Transformer.Id)]);
+        ICommand command = new SelectionDeletePlanner().Create(session, selection);
+
+        session.CommandStack.ExecuteCommand(command, session.RebuildScene);
+        Assert.Empty(session.PersistenceSession.Domain.Transformers);
+        Assert.Empty(session.Layout.TransformerLayouts);
+
+        Assert.True(session.CommandStack.Undo());
+        session.RebuildScene();
+        Assert.Same(creation.Transformer, Assert.Single(session.PersistenceSession.Domain.Transformers));
+        Assert.Same(creation.HvTerminal, Assert.Single(session.PersistenceSession.Domain.Terminals));
+        Assert.Same(creation.Layout, session.Layout.TransformerLayouts[creation.Transformer.Id]);
     }
 
     private ProjectRuntimeSession CreateSession()

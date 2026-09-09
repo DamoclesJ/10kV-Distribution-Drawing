@@ -121,6 +121,40 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.Equal(pastedTerminalId, redone.HvTerminalId);
     }
 
+    [Fact]
+    public void TransformerSceneHitSelection_CopyPasteClosesVisualWorkflow()
+    {
+        ProjectRuntimeSession session = CreateSession("变压器图面复制");
+        TransformerCreation creation = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(40, 50),
+            TransformerOrientation.Vertical);
+        new AddTransformerCommand(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            creation).Execute();
+        session.RebuildScene();
+        SelectionReference selected = Assert.IsType<SelectionReference>(
+            session.Scene.HitTestIndex.HitTest(creation.Layout.Position));
+        session.SelectionManager.Select(selected);
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        Assert.Equal(2, session.PersistenceSession.Domain.Transformers.Count);
+        Transformer pasted = Assert.Single(
+            session.PersistenceSession.Domain.Transformers,
+            item => item.Id != creation.Transformer.Id);
+        Assert.NotEqual(creation.HvTerminal.Id, pasted.HvTerminalId);
+        Assert.Equal(TransformerKind.PublicIndoor, pasted.TransformerKind);
+        Assert.Equal(
+            TransformerOrientation.Vertical,
+            session.Layout.TransformerLayouts[pasted.Id].Orientation);
+        Assert.Equal(new DocumentPoint(50, 60), session.Layout.TransformerLayouts[pasted.Id].Position);
+        Assert.Empty(session.PersistenceSession.Domain.Connections);
+    }
+
     [Theory]
     [InlineData(ConnectionType.Cable, TransformerKind.PublicIndoor)]
     [InlineData(ConnectionType.OverheadLine, TransformerKind.PublicPoleMounted)]

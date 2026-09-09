@@ -30,12 +30,14 @@ using DistributionDrawing.Desktop.Demo;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.RingCabinetCreation;
 using DistributionDrawing.Desktop.RingCabinetEditing;
+using DistributionDrawing.Desktop.TransformerCreationUi;
 using DistributionDrawing.Desktop.Viewport;
 using DistributionDrawing.Desktop.Services;
 using DistributionDrawing.Desktop.ViewModels;
 using DistributionDrawing.Desktop.SwitchOperation;
 using DistributionDrawing.Desktop.Actions;
 using DistributionDrawing.Desktop.Export;
+using DistributionDrawing.Desktop.WorkScopeCreation;
 using System.Windows.Threading;
 
 namespace DistributionDrawing.Desktop;
@@ -175,6 +177,7 @@ public partial class MainWindow : Window
                 Select = OnSelectModeRequested,
                 CreatePole = () => OnBeginPlacePole(this, new RoutedEventArgs()),
                 CreateRingCabinet = () => OnBeginPlaceRingCabinet(this, new RoutedEventArgs()),
+                CreateTransformer = () => OnBeginPlaceTransformer(this, new RoutedEventArgs()),
                 CreateOverheadLine = () => OnBeginOverheadLine(this, new RoutedEventArgs()),
                 CreateCable = () => OnBeginCable(this, new RoutedEventArgs()),
                 AddCableTermination = () => OnAddCableTermination(this, new RoutedEventArgs()),
@@ -245,6 +248,21 @@ public partial class MainWindow : Window
         CancelProfessionalPicking();
         _drawingTools.BeginRingCabinet(dialog.Configuration);
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateRingCabinet);
+        UpdateCanvasStatus();
+    }
+
+    private void OnBeginPlaceTransformer(object sender, RoutedEventArgs e)
+    {
+        var dialog = new TransformerCreationDialog { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        CancelDeviceDrag();
+        CancelProfessionalPicking();
+        _drawingTools.BeginTransformer(dialog.SelectedKind, dialog.SelectedOrientation);
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateTransformer);
         UpdateCanvasStatus();
     }
 
@@ -1180,6 +1198,8 @@ public partial class MainWindow : Window
                     "环网柜：单击图面放置，Esc 或右键退出",
                 DesktopToolMode.CreatePole =>
                     "杆塔：单击图面连续放置，Esc 或右键退出",
+                DesktopToolMode.CreateTransformer =>
+                    "变压器：单击图面放置，Esc 或右键退出",
                 _ when _currentScene?.Diagnostics.Count > 0 =>
                     $"专业显示错误：{_currentScene.Diagnostics[0].Message}",
                 _ => "选择对象"
@@ -1192,8 +1212,9 @@ public partial class MainWindow : Window
     private void UpdatePresentationState()
     {
         bool hasSession = _workspace.ActiveDocumentSession is not null;
-        bool hasDrawingContent = _currentScene?.Elements.Any(element =>
-            element.TargetId is not null) == true;
+        bool hasDrawingContent = _currentScene is { } scene &&
+            (scene.Elements.Any(element => element.TargetId is not null) ||
+             scene.HitTestIndex.Entries.Count > 0);
         _shellViewModel.UpdatePresentationState(hasSession, hasDrawingContent);
     }
 
@@ -1203,6 +1224,7 @@ public partial class MainWindow : Window
         {
             PlacementMode.PlacingPole => DesktopToolMode.CreatePole,
             PlacementMode.PlacingRingCabinet => DesktopToolMode.CreateRingCabinet,
+            PlacementMode.PlacingTransformer => DesktopToolMode.CreateTransformer,
             _ when _overheadLineConnection.IsActive => DesktopToolMode.CreateOverheadLine,
             _ when _cableConnection.IsActive => DesktopToolMode.CreateCable,
             _ when _poleSwitchAttachment.IsSelectingControlledConnection =>
@@ -3307,7 +3329,10 @@ public partial class MainWindow : Window
         DrawingScene scene = source.Document is not null
             ? _sceneBuilder.Build(
                 source.Document,
-                new RuntimeLayoutDocument(layout, source.RingCabinetLayouts))
+                new RuntimeLayoutDocument(
+                    layout,
+                    source.RingCabinetLayouts,
+                    transformerLayouts: source.TransformerLayouts))
             : _sceneBuilder.Build(
                 layout,
                 source.Poles,
@@ -3321,6 +3346,7 @@ public partial class MainWindow : Window
             Document = source.Document,
             DrawingLayout = layout,
             RingCabinetLayouts = source.RingCabinetLayouts,
+            TransformerLayouts = source.TransformerLayouts,
             Poles = source.Poles,
             Devices = source.Devices,
             PoleAttachments = source.PoleAttachments,
@@ -3353,8 +3379,12 @@ public partial class MainWindow : Window
             layout,
             _activeSource.RingCabinetLayouts,
             document.Connections,
-            document.CableSegments);
+            document.CableSegments,
+            _activeSource.TransformerLayouts);
         return anchors.Anchors
+            .Where(anchor => WorkScopeBoundaryTerminalEligibility.IsEligible(
+                document,
+                anchor.TerminalId))
             .Where(anchor =>
                 Math.Pow(anchor.Position.XMillimeters - point.XMillimeters, 2) +
                 Math.Pow(anchor.Position.YMillimeters - point.YMillimeters, 2) <=

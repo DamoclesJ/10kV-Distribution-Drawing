@@ -41,6 +41,7 @@ public sealed class SelectionDeletePlanner
         HashSet<Guid> overheadIds = [];
         HashSet<Guid> groundingPointIds = [];
         HashSet<Guid> groundingAccessPointIds = [];
+        HashSet<Guid> transformerIds = [];
 
         foreach (SelectionReference reference in selection.SelectedReferences)
         {
@@ -70,7 +71,14 @@ public sealed class SelectionDeletePlanner
                     }
                     else if (device is not Pole)
                     {
-                        throw new InvalidOperationException("当前对象不支持删除。");
+                        if (device is Transformer transformer)
+                        {
+                            transformerIds.Add(transformer.Id);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException("当前对象不支持删除。");
+                        }
                     }
 
                     break;
@@ -155,6 +163,11 @@ public sealed class SelectionDeletePlanner
             RingCabinetLayout cabinetLayout = layout.RingCabinetLayouts.GetValueOrDefault(cabinetId)
                 ?? throw new InvalidOperationException("所选环网柜的布局不存在。");
             commands.Add(new RemoveRingCabinetCommand(document, layout, cabinet, cabinetLayout));
+        }
+
+        foreach (Guid transformerId in transformerIds.OrderBy(id => id))
+        {
+            commands.Add(new RemoveTransformerCommand(document, layout, transformerId));
         }
 
         foreach (Guid poleId in poleIds.OrderBy(id => id))

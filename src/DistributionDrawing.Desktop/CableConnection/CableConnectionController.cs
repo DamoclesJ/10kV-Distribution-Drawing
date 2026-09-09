@@ -246,7 +246,8 @@ public sealed class CableConnectionController
             session.Layout.DrawingLayout,
             session.Layout.RingCabinetLayouts,
             session.PersistenceSession.Domain.Connections,
-            session.PersistenceSession.Domain.CableSegments);
+            session.PersistenceSession.Domain.CableSegments,
+            session.Layout.TransformerLayouts);
     }
 
     private static TerminalAnchor PickAnchor(

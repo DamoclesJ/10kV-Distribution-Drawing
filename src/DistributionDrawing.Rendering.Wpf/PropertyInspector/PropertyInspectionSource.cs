@@ -19,6 +19,9 @@ public sealed class PropertyInspectionSource
     public IReadOnlyDictionary<Guid, RingCabinetLayout> RingCabinetLayouts { get; init; } =
         new Dictionary<Guid, RingCabinetLayout>();
 
+    public IReadOnlyDictionary<Guid, TransformerLayout> TransformerLayouts { get; init; } =
+        new Dictionary<Guid, TransformerLayout>();
+
     public DrawingLayout? DrawingLayout { get; init; }
 
     public IReadOnlyList<Pole> Poles { get; init; } = [];
