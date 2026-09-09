@@ -397,7 +397,7 @@ An existing presentation behavior in which some polyline routes do not pass thro
 
 ### WP-EM-05 — Grounding Layout & Interaction Closure
 
-**状态：Not Started / Planned（Next Work Package）**
+**状态：Closed（Windows accepted with Known Limitation）**
 
 完成 Grounding 自身的专业显示、可调布局和 interaction closure，使 WP-EM-04 已完成的 Grounding electrical model 达到日常工作票绘制可用状态。范围包括：
 
@@ -410,7 +410,9 @@ An existing presentation behavior in which some polyline routes do not pass thro
 - Canvas / PNG consistency 与 Windows professional visual acceptance；
 - grounding-specific GAP / GroundingPoint presentation continuity。
 
-Grounding-specific continuity 必须在合法 route 重算后保持 `GroundingTarget` identity、GAP identity、`AdjacentPoleId` 与 `GroundingPointLayout.SymbolOffset`；GAP marker 不得跳到另一 half-edge，GroundingPoint anchor / leader 不得错误反向、丢失或重新绑定，最终 presentation 必须保持专业一致。为实现这些 grounding-specific 结果，不得在 WP-EM-05 建立通用 route hysteresis infrastructure。
+Grounding-specific continuity 在合法 route 重算后保持 `GroundingTarget` identity、GAP identity、`AdjacentPoleId` 与 `GroundingPointLayout.SymbolOffset`；GAP marker 不跳到另一 half-edge，GroundingPoint anchor / leader 不错误反向、丢失或重新绑定。WP-EM-05 已通过实现、代码 Review、自动验证和 Windows GUI acceptance。Windows acceptance 为 **Passed with Known Limitation**：RingCabinet cable-side GroundingPoint 在低频手工拖动到 cable terminal 上方时，grounding leader 仍可能与 interval internal vertical lead 发生视觉干涉。该问题仅属于 presentation，不改变 electrical facts、`GroundingTarget`、`RingCabinetLayout`、interval 或 Terminal geometry，不阻塞本次 closure，Disposition 为 Deferred。未来可独立评估将该场景限制在 terminal 上方区域之外，但当前不实现、不冻结为正式需求，也不重新打开 WP-EM-05。为实现 grounding-specific 结果，WP-EM-05 未建立通用 route hysteresis infrastructure。
+
+WP-EM-05 implementation baselines：`be7f2bd29875a112f01b8c93b7c85df6927b8871` (`feat(grounding): close layout and interaction workflow`)、`17a1dba489bcf37a21693d6b55df653153979002` (`test(grounding): adapt symbol hit regression`)、`3d35ed30909cfb8e57ccabca093431e178cc7627` (`fix(grounding): refine manual routing behavior`)、`ebd062ae876e85d7581ba8ebe3b894fd66b1b835` (`test(grounding): align routing regressions`) 和 `4f6b314a883d29b9c9afa1a385b5ec4c406809dc` (`fix(grounding): avoid ring cabinet lead overlap`)。
 
 Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以及 `GroundingTarget` / GAP model 均为 WP-EM-04 已完成事实，不得在 WP-EM-05 作为新业务能力重复实现。
 
@@ -463,5 +465,5 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 - WP-EM-04 requirements refinement、implementation、review、Windows runtime validation 和 GUI acceptance 已完成，WP-EM-04 Closed；
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint` vertical slice 已完成，Transformer、CustomerStation 尚未实现；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
-- WP-EM-05 尚未开始，是 Next Work Package；
+- WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred，WP-EM-06 成为 Next Work Package；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。

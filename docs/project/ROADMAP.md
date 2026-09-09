@@ -20,7 +20,7 @@ The Grounding Scope Amendment is complete and frozen. The Interaction Stabilizat
 2. WP-EM-02 V7 Format & Migration Foundation — Completed
 3. WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice — Completed / Closed
 4. WP-EM-04 GroundingAccessPoint & GroundingTarget Vertical Slice — Closed / Completed
-5. WP-EM-05 Grounding Layout & Interaction Closure — Not Started / Planned (prerequisite satisfied)
+5. WP-EM-05 Grounding Layout & Interaction Closure — Closed (Windows accepted with known limitation)
 6. WP-EM-06 Transformer Vertical Slice
 7. WP-EM-07 CustomerStation Vertical Slice
 8. WP-EM-08 Electrical Model Interaction Stabilization
@@ -28,4 +28,4 @@ The Grounding Scope Amendment is complete and frozen. The Interaction Stabilizat
 
 This ordering does not define a new release version. Annotation and Energization remain Post-V1 candidates and are outside this stage.
 
-WP-EM-04 closed at implementation baseline `b15166c96bcf03a38acd2a27d98b597d04b60d4d` after implementation, review, automated validation, Windows runtime validation, and GUI acceptance. Grounding-specific presentation continuity is assigned to WP-EM-05. Generic drag and routing stabilization is assigned to WP-EM-08, while final integration and regression move to WP-EM-09. WP-EM-05 has not started and remains the next Work Package.
+WP-EM-04 closed at implementation baseline `b15166c96bcf03a38acd2a27d98b597d04b60d4d` after implementation, review, automated validation, Windows runtime validation, and GUI acceptance. WP-EM-05 is now Closed after implementation, focused review, automated verification, and Windows GUI acceptance with one accepted, deferred RingCabinet above-terminal presentation limitation. Generic drag and routing stabilization remains assigned to WP-EM-08, while final integration and regression move to WP-EM-09. WP-EM-06 is the next Work Package.
