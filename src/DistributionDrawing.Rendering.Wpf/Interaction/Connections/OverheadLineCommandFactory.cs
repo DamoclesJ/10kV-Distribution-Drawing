@@ -100,9 +100,15 @@ public sealed class OverheadLineCommandFactory
     {
         Terminal terminal = document.Terminals.SingleOrDefault(item => item.Id == terminalId)
             ?? throw new InvalidOperationException($"Terminal '{terminalId}' does not exist.");
-        if (terminal.OwnerType != TopologyOwnerType.Device)
+        if (terminal.OwnerType == TopologyOwnerType.InternalAggregate)
         {
             return null;
+        }
+
+        if (terminal.OwnerType != TopologyOwnerType.Device)
+        {
+            throw new InvalidOperationException(
+                $"Terminal '{terminalId}' has an unsupported overhead-line owner.");
         }
 
         Device owner = document.Devices.Single(item => item.Id == terminal.OwnerId);
@@ -119,6 +125,21 @@ public sealed class OverheadLineCommandFactory
                     $"Device '{owner.Id}' must be attached to a pole before overhead connection.");
         }
 
-        return null;
+        if (owner is Transformer transformer)
+        {
+            if (transformer.TransformerKind == TransformerKind.PublicIndoor)
+            {
+                throw new InvalidOperationException(
+                    $"Indoor transformer '{transformer.Id}' does not allow overhead connection.");
+            }
+
+            // A pole-mounted Transformer remains a top-level device without
+            // PoleId affiliation. The opposite endpoint supplies the real
+            // support pole for the short overhead segment.
+            return null;
+        }
+
+        throw new InvalidOperationException(
+            $"Device '{owner.Id}' is not a supported overhead-line endpoint.");
     }
 }

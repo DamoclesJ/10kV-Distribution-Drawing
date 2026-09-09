@@ -44,6 +44,8 @@ public sealed class DrawingDocument
 
     public IReadOnlyList<Device> Devices => _devices;
 
+    public IReadOnlyList<Transformer> Transformers => _devices.OfType<Transformer>().ToArray();
+
     public IReadOnlyList<Terminal> Terminals => _terminals;
 
     public IReadOnlyList<ElectricalNode> ElectricalNodes => _electricalNodes;
@@ -87,6 +89,12 @@ public sealed class DrawingDocument
             return;
         }
 
+        if (device is Transformer)
+        {
+            throw new InvalidOperationException(
+                "A transformer must be registered atomically with AddTransformer.");
+        }
+
         EnsureObjectIdIsAvailable(device.Id, nameof(Device));
 
         if (device.Type == DeviceType.RingCabinet)
@@ -113,6 +121,12 @@ public sealed class DrawingDocument
                 "A cable termination device must use the CableTermination domain type.");
         }
 
+        if (device.Type == DeviceType.Transformer)
+        {
+            throw new InvalidOperationException(
+                "A transformer device must use the Transformer domain type.");
+        }
+
         if (device.ParentId is Guid parentId &&
             !_internalAggregateOwnerIds.Contains(parentId))
         {
@@ -121,6 +135,27 @@ public sealed class DrawingDocument
         }
 
         _devices.Add(device);
+    }
+
+    public void AddTransformer(Transformer transformer, Terminal hvTerminal)
+    {
+        ArgumentNullException.ThrowIfNull(transformer);
+        ArgumentNullException.ThrowIfNull(hvTerminal);
+
+        ValidateTransformerAggregate(transformer, hvTerminal);
+        EnsureObjectIdIsAvailable(transformer.Id, nameof(Transformer));
+        EnsureObjectIdIsAvailable(hvTerminal.Id, nameof(Terminal));
+
+        _devices.Add(transformer);
+        try
+        {
+            AddTerminal(hvTerminal);
+        }
+        catch
+        {
+            _devices.Remove(transformer);
+            throw;
+        }
     }
 
     public void SynchronizeRingCabinetAggregate(RingCabinet ringCabinet)
@@ -253,10 +288,10 @@ public sealed class DrawingDocument
     {
         Device device = _devices.SingleOrDefault(candidate => candidate.Id == deviceId)
             ?? throw new InvalidOperationException($"Device '{deviceId}' does not exist.");
-        if (device is not Pole and not RingCabinet)
+        if (device is not Pole and not RingCabinet and not Transformer)
         {
             throw new InvalidOperationException(
-                "Only Pole and RingCabinet removal is supported in this phase.");
+                "Only Pole, RingCabinet, and Transformer removal is supported in this phase.");
         }
 
         HashSet<Guid> aggregateDeviceIds = [deviceId];
@@ -272,6 +307,23 @@ public sealed class DrawingDocument
                 aggregateDeviceIds.Contains(terminal.OwnerId))
             .Select(terminal => terminal.Id)
             .ToHashSet();
+
+        if (device is Transformer transformer)
+        {
+            Terminal hvTerminal = _terminals.SingleOrDefault(terminal =>
+                    terminal.Id == transformer.HvTerminalId)
+                ?? throw new InvalidOperationException(
+                    $"Transformer '{transformer.Id}' HV terminal is missing.");
+            ValidateTransformerAggregate(transformer, hvTerminal);
+            if (_terminals.Count(terminal => terminal.OwnerType == TopologyOwnerType.Device &&
+                    terminal.OwnerId == transformer.Id) != 1 ||
+                _electricalNodes.Any(node => node.OwnerType == TopologyOwnerType.Device &&
+                    node.OwnerId == transformer.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Transformer '{transformer.Id}' aggregate is incomplete or inconsistent.");
+            }
+        }
 
         if (_connections.Any(connection =>
                 terminalIds.Contains(connection.StartTerminalId) ||
@@ -334,6 +386,13 @@ public sealed class DrawingDocument
 
         EnsureObjectIdIsAvailable(electricalNode.Id, nameof(ElectricalNode));
         EnsureTopologyOwnerExists(electricalNode.OwnerType, electricalNode.OwnerId);
+
+        if (electricalNode.OwnerType == TopologyOwnerType.Device &&
+            _devices.Single(device => device.Id == electricalNode.OwnerId) is Transformer)
+        {
+            throw new InvalidOperationException(
+                "A transformer cannot own an electrical node in WP-EM-06.");
+        }
 
         if (electricalNode.OwnerType == TopologyOwnerType.Device &&
             _devices.Single(device => device.Id == electricalNode.OwnerId) is CableTermination termination &&
@@ -465,6 +524,17 @@ public sealed class DrawingDocument
             {
                 throw new InvalidOperationException(
                     $"Terminal '{terminal.Id}' is not declared by cable termination '{owner.Id}'.");
+            }
+
+            if (owner is Transformer transformer)
+            {
+                if (!transformer.OwnsTerminal(terminal.Id))
+                {
+                    throw new InvalidOperationException(
+                        $"Terminal '{terminal.Id}' is not declared by transformer '{owner.Id}'.");
+                }
+
+                ValidateTransformerAggregate(transformer, terminal);
             }
 
             if (owner is CableTermination termination &&
@@ -1054,8 +1124,7 @@ public sealed class DrawingDocument
         {
             AddConnection(after);
             line.ValidateAgainst(after);
-            ValidateOverheadEndpoint(after.StartTerminalId, line.SupportPoleIds[0]);
-            ValidateOverheadEndpoint(after.EndTerminalId, line.SupportPoleIds[^1]);
+            ValidateOverheadEndpoints(after, line);
         }
         catch
         {
@@ -1251,10 +1320,7 @@ public sealed class DrawingDocument
             }
         }
 
-        ValidateOverheadEndpoint(connection.StartTerminalId, overheadLine.SupportPoleIds[0]);
-        ValidateOverheadEndpoint(
-            connection.EndTerminalId,
-            overheadLine.SupportPoleIds[^1]);
+        ValidateOverheadEndpoints(connection, overheadLine);
 
         _overheadLines.Add(overheadLine);
     }
@@ -1802,6 +1868,32 @@ public sealed class DrawingDocument
             ConnectionType.OverheadLine);
     }
 
+    private static void ValidateTransformerAggregate(
+        Transformer transformer,
+        Terminal hvTerminal)
+    {
+        if (hvTerminal.Id != transformer.HvTerminalId ||
+            hvTerminal.OwnerType != TopologyOwnerType.Device ||
+            hvTerminal.OwnerId != transformer.Id ||
+            !string.Equals(
+                hvTerminal.Role,
+                Transformer.HvTerminalRole,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                hvTerminal.VoltageLevel,
+                Transformer.TenKilovolts,
+                StringComparison.OrdinalIgnoreCase) ||
+            !hvTerminal.IsExternal ||
+            hvTerminal.AllowsMultipleConnections ||
+            hvTerminal.ElectricalNodeId is not null ||
+            !hvTerminal.AllowedConnectionTypes.SetEquals([
+                transformer.AllowedConnectionType]))
+        {
+            throw new InvalidOperationException(
+                $"Transformer '{transformer.Id}' HV terminal aggregate is inconsistent.");
+        }
+    }
+
     /// <summary>
     /// Ensures that the pole's existing center terminals participate in one
     /// explicit junction node. The pole remains a physical support device.
@@ -2102,13 +2194,43 @@ public sealed class DrawingDocument
             string.Equals(first.VoltageLevel, second.VoltageLevel, StringComparison.Ordinal);
     }
 
-    private void ValidateOverheadEndpoint(Guid terminalId, Guid expectedPoleId)
+    private void ValidateOverheadEndpoints(
+        Connection connection,
+        OverheadLine overheadLine)
+    {
+        Guid? startPhysicalPoleId = ValidateOverheadEndpoint(
+            connection.StartTerminalId,
+            overheadLine.SupportPoleIds[0]);
+        Guid? endPhysicalPoleId = ValidateOverheadEndpoint(
+            connection.EndTerminalId,
+            overheadLine.SupportPoleIds[^1]);
+
+        if ((IsPoleMountedTransformerEndpoint(connection.StartTerminalId) ||
+                IsPoleMountedTransformerEndpoint(connection.EndTerminalId)) &&
+            startPhysicalPoleId is null &&
+            endPhysicalPoleId is null)
+        {
+            throw new InvalidOperationException(
+                "An overhead line with a pole-mounted transformer endpoint requires another endpoint at a real support pole.");
+        }
+    }
+
+    private Guid? ValidateOverheadEndpoint(Guid terminalId, Guid expectedPoleId)
     {
         Terminal terminal = GetTerminal(terminalId);
 
+        // Ring-cabinet external terminals are owned by their interval and do
+        // not carry an endpoint PoleId. Their OverheadLine policy is validated
+        // when the terminal and connection are registered.
+        if (terminal.OwnerType == TopologyOwnerType.InternalAggregate)
+        {
+            return null;
+        }
+
         if (terminal.OwnerType != TopologyOwnerType.Device)
         {
-            return;
+            throw new InvalidOperationException(
+                $"Overhead line endpoint '{terminalId}' has an unsupported topology owner.");
         }
 
         Device owner = _devices.Single(device => device.Id == terminal.OwnerId);
@@ -2119,7 +2241,10 @@ public sealed class DrawingDocument
             CableTermination termination => GetAttachedPoleId(termination.Id),
             SwitchDevice switchDevice when switchDevice.InstallationType == SwitchInstallationType.Pole =>
                 GetAttachedPoleId(switchDevice.Id),
-            _ => null
+            Transformer transformer when transformer.TransformerKind is
+                TransformerKind.PublicPoleMounted or TransformerKind.DedicatedPoleMounted => null,
+            _ => throw new InvalidOperationException(
+                $"Device '{owner.Id}' is not a supported overhead-line endpoint.")
         };
 
         if (physicalPoleId is Guid poleId && poleId != expectedPoleId)
@@ -2127,6 +2252,17 @@ public sealed class DrawingDocument
             throw new InvalidOperationException(
                 $"Overhead line endpoint '{terminalId}' is not physically located at support pole '{expectedPoleId}'.");
         }
+
+        return physicalPoleId;
+    }
+
+    private bool IsPoleMountedTransformerEndpoint(Guid terminalId)
+    {
+        Terminal terminal = GetTerminal(terminalId);
+        return terminal.OwnerType == TopologyOwnerType.Device &&
+            _devices.Single(device => device.Id == terminal.OwnerId) is Transformer transformer &&
+            transformer.TransformerKind is TransformerKind.PublicPoleMounted or
+                TransformerKind.DedicatedPoleMounted;
     }
 
     private Guid GetAttachedPoleId(Guid deviceId)

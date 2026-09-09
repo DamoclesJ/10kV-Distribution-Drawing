@@ -1,3 +1,5 @@
+using DistributionDrawing.Domain.Devices;
+
 namespace DistributionDrawing.Rendering.Wpf.Layout;
 
 /// <summary>
@@ -9,12 +11,14 @@ public sealed class RuntimeLayoutDocument
     private readonly Dictionary<Guid, RingCabinetLayout> _ringCabinetLayouts;
     private readonly Dictionary<Guid, CableRouteGuide> _cableRouteGuides;
     private readonly Dictionary<Guid, GroundingPointLayout> _groundingPointLayouts;
+    private readonly Dictionary<Guid, TransformerLayout> _transformerLayouts;
 
     public RuntimeLayoutDocument(
         DrawingLayout drawingLayout,
         IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
         IReadOnlyDictionary<Guid, CableRouteGuide>? cableRouteGuides = null,
-        IReadOnlyDictionary<Guid, GroundingPointLayout>? groundingPointLayouts = null)
+        IReadOnlyDictionary<Guid, GroundingPointLayout>? groundingPointLayouts = null,
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null)
     {
         ArgumentNullException.ThrowIfNull(drawingLayout);
         ArgumentNullException.ThrowIfNull(ringCabinetLayouts);
@@ -23,6 +27,9 @@ public sealed class RuntimeLayoutDocument
         _ringCabinetLayouts = ringCabinetLayouts.ToDictionary(pair => pair.Key, pair => pair.Value);
         _cableRouteGuides = cableRouteGuides?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? [];
         _groundingPointLayouts = groundingPointLayouts?.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value) ?? [];
+        _transformerLayouts = transformerLayouts?.ToDictionary(
             pair => pair.Key,
             pair => pair.Value) ?? [];
     }
@@ -36,6 +43,9 @@ public sealed class RuntimeLayoutDocument
 
     public IReadOnlyDictionary<Guid, GroundingPointLayout> GroundingPointLayouts =>
         _groundingPointLayouts;
+
+    public IReadOnlyDictionary<Guid, TransformerLayout> TransformerLayouts =>
+        _transformerLayouts;
 
     public void SetCableRouteGuide(CableRouteGuide guide)
     {
@@ -54,6 +64,28 @@ public sealed class RuntimeLayoutDocument
 
     public bool RemoveGroundingPointLayout(Guid groundingPointId) =>
         _groundingPointLayouts.Remove(groundingPointId);
+
+    public void AddTransformer(TransformerLayout layout, TransformerKind transformerKind)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        layout.ValidateFor(transformerKind);
+        if (!_transformerLayouts.TryAdd(layout.TransformerId, layout))
+        {
+            throw new InvalidOperationException(
+                $"A layout for transformer '{layout.TransformerId}' already exists.");
+        }
+    }
+
+    public TransformerLayout RemoveTransformer(Guid transformerId)
+    {
+        if (!_transformerLayouts.Remove(transformerId, out TransformerLayout? layout))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for transformer '{transformerId}'.");
+        }
+
+        return layout;
+    }
 
     public void AddRingCabinet(RingCabinetLayout layout)
     {

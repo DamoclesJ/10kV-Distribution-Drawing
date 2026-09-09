@@ -6,5 +6,6 @@ public enum DeviceType
     Switch,
     Pole,
     CableTermination,
-    PT
+    PT,
+    Transformer
 }
