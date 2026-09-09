@@ -249,6 +249,376 @@ public sealed class WpEm05GroundingLayoutTests
     }
 
     [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void RingCabinetCableTerminal_AboveCenterAvoidsInternalLead(int lateralMillimeters)
+    {
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingPoint point) =
+            CreateRingCabinetGroundingScenario();
+        TerminalAnchorIndex terminals = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts);
+        Assert.True(new GroundingPresentationAnchorResolver().TryResolve(
+            point,
+            document,
+            runtime.DrawingLayout,
+            terminals,
+            out GroundingPresentationAnchor anchor));
+        Assert.NotNull(anchor.RingCabinetInternalLeadBounds);
+        Assert.Equal(
+            DrawingMetrics.Default.General.StandardStrokeThickness,
+            anchor.RingCabinetInternalLeadBounds.Value.WidthMillimeters);
+
+        GroundingPointLayoutResolver resolver = new();
+        GroundingPointResolvedLayout automatic = resolver.Resolve(point, anchor, null);
+        GroundingPointResolvedLayout resolved = resolver.Resolve(
+            point,
+            anchor,
+            new GroundingPointLayout(
+                point.GroundingPointId,
+                new DocumentPoint(
+                    anchor.Position.XMillimeters + lateralMillimeters -
+                    automatic.DefaultSymbolTop.XMillimeters,
+                    anchor.Position.YMillimeters - 180 -
+                    automatic.DefaultSymbolTop.YMillimeters)));
+
+        Assert.True(resolved.LeaderSegments[0].IsHorizontal);
+        Assert.True(resolved.LeaderSegments[0].End.XMillimeters > anchor.Position.XMillimeters);
+        Assert.Equal(resolved.SymbolTop, resolved.LeaderSegments[^1].End);
+        Assert.DoesNotContain(resolved.LeaderSegments, segment => segment.Length == 0);
+        AssertNoReverseOverlap(resolved.LeaderSegments);
+        AssertNoOverlapWithInternalLead(
+            resolved.LeaderSegments,
+            anchor.RingCabinetInternalLeadBounds!.Value);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void RingCabinetCableTerminal_JustAboveCenterAvoidsInternalLead(
+        int lateralMillimeters)
+    {
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingPoint point) =
+            CreateRingCabinetGroundingScenario();
+        TerminalAnchorIndex terminals = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts);
+        Assert.True(new GroundingPresentationAnchorResolver().TryResolve(
+            point,
+            document,
+            runtime.DrawingLayout,
+            terminals,
+            out GroundingPresentationAnchor anchor));
+        DocumentRect lead = anchor.RingCabinetInternalLeadBounds!.Value;
+        GroundingPointLayoutResolver resolver = new();
+        GroundingPointResolvedLayout automatic = resolver.Resolve(point, anchor, null);
+        double symbolY = lead.YMillimeters - 1;
+        GroundingPointResolvedLayout resolved = resolver.Resolve(
+            point,
+            anchor,
+            new GroundingPointLayout(
+                point.GroundingPointId,
+                new DocumentPoint(
+                    anchor.Position.XMillimeters + lateralMillimeters -
+                    automatic.DefaultSymbolTop.XMillimeters,
+                    symbolY - automatic.DefaultSymbolTop.YMillimeters)));
+
+        Assert.True(resolved.LeaderSegments[0].IsHorizontal);
+        Assert.True(resolved.LeaderSegments[^1].IsVertical);
+        Assert.True(resolved.LeaderSegments[^1].End.YMillimeters >
+                    resolved.LeaderSegments[^1].Start.YMillimeters);
+        Assert.Equal(resolved.SymbolTop, resolved.LeaderSegments[^1].End);
+        Assert.DoesNotContain(resolved.LeaderSegments, segment => segment.Length == 0);
+        AssertNoReverseOverlap(resolved.LeaderSegments);
+        AssertNoOverlapWithInternalLead(resolved.LeaderSegments, lead);
+    }
+
+    [Fact]
+    public void RingCabinetCableTerminal_SymbolInsideLeadUsesHorizontalFallback()
+    {
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingPoint point) =
+            CreateRingCabinetGroundingScenario();
+        TerminalAnchorIndex terminals = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts);
+        Assert.True(new GroundingPresentationAnchorResolver().TryResolve(
+            point,
+            document,
+            runtime.DrawingLayout,
+            terminals,
+            out GroundingPresentationAnchor anchor));
+        DocumentRect lead = anchor.RingCabinetInternalLeadBounds!.Value;
+        GroundingPointLayoutResolver resolver = new();
+        GroundingPointResolvedLayout automatic = resolver.Resolve(point, anchor, null);
+        double symbolY = lead.YMillimeters + lead.HeightMillimeters / 2;
+        GroundingPointResolvedLayout resolved = resolver.Resolve(
+            point,
+            anchor,
+            new GroundingPointLayout(
+                point.GroundingPointId,
+                new DocumentPoint(
+                    anchor.Position.XMillimeters -
+                    automatic.DefaultSymbolTop.XMillimeters,
+                    symbolY - automatic.DefaultSymbolTop.YMillimeters)));
+
+        Assert.True(IsPointStrictlyInsideRect(resolved.SymbolTop, lead));
+        Assert.True(resolved.LeaderSegments[0].IsHorizontal);
+        Assert.True(resolved.LeaderSegments[^1].IsHorizontal);
+        Assert.Equal(resolved.SymbolTop, resolved.LeaderSegments[^1].End);
+        Assert.All(
+            resolved.LeaderSegments,
+            segment => Assert.True(segment.IsHorizontal || segment.IsVertical));
+        Assert.DoesNotContain(resolved.LeaderSegments, segment => segment.Length == 0);
+        AssertNoReverseOverlap(resolved.LeaderSegments);
+        Assert.Contains(
+            resolved.LeaderSegments,
+            segment => SegmentHasPositiveInteriorIntersection(segment, lead));
+    }
+
+    [Fact]
+    public void RingCabinetInternalLeadGeometryHelpersDetectPositiveInteriorIntersection()
+    {
+        var lead = new DocumentRect(10, 10, 4, 20);
+        Assert.True(IsPointStrictlyInsideRect(new DocumentPoint(12, 20), lead));
+        Assert.True(SegmentHasPositiveInteriorIntersection(
+            new OrthogonalRouteSegment(
+                new DocumentPoint(0, 20),
+                new DocumentPoint(12, 20),
+                0),
+            lead));
+        Assert.True(SegmentHasPositiveInteriorIntersection(
+            new OrthogonalRouteSegment(
+                new DocumentPoint(12, 0),
+                new DocumentPoint(12, 20),
+                0),
+            lead));
+        Assert.False(IsPointStrictlyInsideRect(new DocumentPoint(10, 20), lead));
+        Assert.False(SegmentHasPositiveInteriorIntersection(
+            new OrthogonalRouteSegment(
+                new DocumentPoint(10, 0),
+                new DocumentPoint(10, 10),
+                0),
+            lead));
+    }
+
+    [Fact]
+    public void GroundingPointDrag_ClampsRingCabinetHorizontalObstacleEntry()
+    {
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingPoint point) =
+            CreateRingCabinetGroundingScenario();
+        DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
+        SelectionReference reference = new(
+            SelectionTargetKind.GroundingPoint,
+            point.GroundingPointId);
+        SelectionHitTestEntry hit = scene.HitTestIndex.FindAll(reference)
+            .First(entry => entry.CanStartDrag && entry.GroundingAnchor is not null);
+        GroundingPresentationAnchor anchor = hit.GroundingAnchor!.Value;
+        DocumentRect lead = anchor.RingCabinetInternalLeadBounds!.Value;
+        GroundingPointResolvedLayout automatic =
+            new GroundingPointLayoutResolver().Resolve(point, anchor, null);
+        double symbolY = lead.YMillimeters + lead.HeightMillimeters / 2;
+        double requestedX = lead.XMillimeters + lead.WidthMillimeters / 2;
+        Assert.True(IsPointStrictlyInsideRect(
+            new DocumentPoint(requestedX, symbolY),
+            lead));
+        var controller = new GroundingPointDragController();
+
+        Assert.True(controller.TryBeginDrag(
+            hit,
+            new DocumentPoint(0, 0),
+            document,
+            runtime));
+        Assert.True(controller.UpdatePreview(new DocumentPoint(
+            requestedX - automatic.DefaultSymbolTop.XMillimeters,
+            symbolY - automatic.DefaultSymbolTop.YMillimeters)));
+
+        DocumentPoint normalized = runtime
+            .GroundingPointLayouts[point.GroundingPointId]
+            .SymbolOffset;
+        double normalizedX = automatic.DefaultSymbolTop.XMillimeters +
+            normalized.XMillimeters;
+        Assert.False(IsPointStrictlyInsideRect(
+            new DocumentPoint(normalizedX, symbolY),
+            lead));
+        Assert.True(
+            normalizedX <= lead.XMillimeters - 2 ||
+            normalizedX >= lead.XMillimeters + lead.WidthMillimeters + 2);
+        Assert.Equal(
+            symbolY - automatic.DefaultSymbolTop.YMillimeters,
+            normalized.YMillimeters);
+    }
+
+    [Fact]
+    public void GroundingPointDrag_DoesNotChangeRingCabinetLayout()
+    {
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingPoint point) =
+            CreateRingCabinetGroundingScenario();
+        RingCabinetLayout before = runtime.RingCabinetLayouts.Values.Single();
+        DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
+        SelectionReference reference = new(
+            SelectionTargetKind.GroundingPoint,
+            point.GroundingPointId);
+        SelectionHitTestEntry hit = scene.HitTestIndex.FindAll(reference)
+            .First(entry => entry.CanStartDrag && entry.GroundingAnchor is not null);
+        var controller = new GroundingPointDragController();
+
+        Assert.True(controller.TryBeginDrag(
+            hit,
+            new DocumentPoint(0, 0),
+            document,
+            runtime));
+        Assert.True(controller.UpdatePreview(new DocumentPoint(12, -160)));
+        Assert.Same(before, runtime.RingCabinetLayouts.Values.Single());
+        Assert.Equal(before.Position, runtime.RingCabinetLayouts.Values.Single().Position);
+        Assert.True(controller.UpdatePreview(new DocumentPoint(12, -210)));
+        Assert.Same(before, runtime.RingCabinetLayouts.Values.Single());
+        Assert.Equal(before.IntervalLayouts.Keys, runtime.RingCabinetLayouts.Values.Single().IntervalLayouts.Keys);
+    }
+
+    [Fact]
+    public void RealSceneRingCabinetDrag_ClampsCenterAndPreservesVerticalIntent()
+    {
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingPoint point) =
+            CreateRingCabinetGroundingScenario();
+        DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
+        SelectionReference reference = new(
+            SelectionTargetKind.GroundingPoint,
+            point.GroundingPointId);
+        SelectionHitTestEntry hit = scene.HitTestIndex.FindAll(reference)
+            .First(entry => entry.CanStartDrag && entry.GroundingAnchor is not null);
+        GroundingPresentationAnchor anchor = hit.GroundingAnchor!.Value;
+        Assert.Equal(
+            GroundingPresentationPolicy.RingCabinetCableTerminal,
+            anchor.Policy);
+        Assert.NotNull(anchor.RingCabinetInternalLeadBounds);
+
+        GroundingPointResolvedLayout automatic =
+            new GroundingPointLayoutResolver().Resolve(point, anchor, null);
+        DocumentRect lead = anchor.RingCabinetInternalLeadBounds!.Value;
+        double intendedX = lead.XMillimeters + lead.WidthMillimeters / 2;
+        double intendedY = lead.YMillimeters + lead.HeightMillimeters / 2;
+        double intendedOffsetY = intendedY - automatic.DefaultSymbolTop.YMillimeters;
+        var controller = new GroundingPointDragController();
+
+        Assert.True(controller.TryBeginDrag(
+            hit,
+            new DocumentPoint(0, 0),
+            document,
+            runtime));
+        Assert.True(controller.UpdatePreview(new DocumentPoint(
+            intendedX - automatic.DefaultSymbolTop.XMillimeters,
+            intendedOffsetY)));
+
+        GroundingPointLayout normalized =
+            runtime.GroundingPointLayouts[point.GroundingPointId];
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            anchor,
+            normalized);
+
+        Assert.Equal(intendedY, resolved.SymbolTop.YMillimeters);
+        Assert.False(IsPointStrictlyInsideRect(resolved.SymbolTop, lead));
+        AssertNoOverlapWithInternalLead(resolved.LeaderSegments, lead);
+        Assert.DoesNotContain(resolved.LeaderSegments, segment => segment.Length == 0);
+    }
+
+    [Fact]
+    public void RingCabinetDrag_CommitUndoRedoPreservesNormalizedLayoutAndCabinetValues()
+    {
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingPoint point) =
+            CreateRingCabinetGroundingScenario();
+        RingCabinetLayout cabinetBefore = runtime.RingCabinetLayouts.Values.Single();
+        DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
+        SelectionReference reference = new(
+            SelectionTargetKind.GroundingPoint,
+            point.GroundingPointId);
+        SelectionHitTestEntry hit = scene.HitTestIndex.FindAll(reference)
+            .First(entry => entry.CanStartDrag && entry.GroundingAnchor is not null);
+        GroundingPresentationAnchor anchor = hit.GroundingAnchor!.Value;
+        GroundingPointResolvedLayout automatic =
+            new GroundingPointLayoutResolver().Resolve(point, anchor, null);
+        DocumentRect lead = anchor.RingCabinetInternalLeadBounds!.Value;
+        var before = new GroundingPointLayout(
+            point.GroundingPointId,
+            new DocumentPoint(-20, 30));
+        runtime.SetGroundingPointLayout(before);
+        var controller = new GroundingPointDragController();
+
+        Assert.True(controller.TryBeginDrag(
+            hit,
+            new DocumentPoint(0, 0),
+            document,
+            runtime));
+        double intendedX = lead.XMillimeters + lead.WidthMillimeters / 2;
+        double intendedY = lead.YMillimeters + lead.HeightMillimeters / 2;
+        Assert.True(controller.UpdatePreview(new DocumentPoint(
+            intendedX - automatic.DefaultSymbolTop.XMillimeters - before.SymbolOffset.XMillimeters,
+            intendedY - automatic.DefaultSymbolTop.YMillimeters - before.SymbolOffset.YMillimeters)));
+        GroundingPointLayout normalizedAfter =
+            runtime.GroundingPointLayouts[point.GroundingPointId];
+        ICommand command = Assert.IsAssignableFrom<ICommand>(controller.Commit());
+
+        Assert.Equal(cabinetBefore.Position, runtime.RingCabinetLayouts.Values.Single().Position);
+        Assert.Equal(cabinetBefore.IntervalLayouts.Keys, runtime.RingCabinetLayouts.Values.Single().IntervalLayouts.Keys);
+        command.Undo();
+        Assert.Equal(before, runtime.GroundingPointLayouts[point.GroundingPointId]);
+        Assert.Equal(cabinetBefore.Position, runtime.RingCabinetLayouts.Values.Single().Position);
+        command.Redo();
+        Assert.Equal(normalizedAfter, runtime.GroundingPointLayouts[point.GroundingPointId]);
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            anchor,
+            normalizedAfter);
+        Assert.False(IsPointStrictlyInsideRect(resolved.SymbolTop, lead));
+        AssertNoOverlapWithInternalLead(resolved.LeaderSegments, lead);
+    }
+
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(0)]
+    [InlineData(0.1)]
+    public void RingCabinetDrag_CenterForbiddenBoundaryUsesDeterministicRightSide(
+        double centerDelta)
+    {
+        (DrawingDocument document, RuntimeLayoutDocument runtime, GroundingPoint point) =
+            CreateRingCabinetGroundingScenario();
+        DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
+        SelectionReference reference = new(
+            SelectionTargetKind.GroundingPoint,
+            point.GroundingPointId);
+        SelectionHitTestEntry hit = scene.HitTestIndex.FindAll(reference)
+            .First(entry => entry.CanStartDrag && entry.GroundingAnchor is not null);
+        GroundingPresentationAnchor anchor = hit.GroundingAnchor!.Value;
+        GroundingPointResolvedLayout automatic =
+            new GroundingPointLayoutResolver().Resolve(point, anchor, null);
+        DocumentRect lead = anchor.RingCabinetInternalLeadBounds!.Value;
+        double intendedX = lead.XMillimeters + lead.WidthMillimeters / 2 + centerDelta;
+        double intendedY = lead.YMillimeters + lead.HeightMillimeters / 2;
+        var controller = new GroundingPointDragController();
+
+        Assert.True(controller.TryBeginDrag(
+            hit,
+            new DocumentPoint(0, 0),
+            document,
+            runtime));
+        Assert.True(controller.UpdatePreview(new DocumentPoint(
+            intendedX - automatic.DefaultSymbolTop.XMillimeters,
+            intendedY - automatic.DefaultSymbolTop.YMillimeters)));
+
+        GroundingPointLayout layout = runtime.GroundingPointLayouts[point.GroundingPointId];
+        double symbolX = automatic.DefaultSymbolTop.XMillimeters + layout.SymbolOffset.XMillimeters;
+        Assert.True(symbolX >= lead.XMillimeters + lead.WidthMillimeters + 2);
+        Assert.Equal(
+            intendedY - automatic.DefaultSymbolTop.YMillimeters,
+            layout.SymbolOffset.YMillimeters);
+    }
+
+    [Theory]
     [InlineData(TerminalAnchorDirection.Left, 20, 7)]
     [InlineData(TerminalAnchorDirection.Right, 20, 7)]
     [InlineData(TerminalAnchorDirection.Up, 7, -20)]
@@ -784,6 +1154,94 @@ public sealed class WpEm05GroundingLayoutTests
             end.Pole.Id,
             GroundingAccessLineSide.LargerNumberSide);
         return (document, runtime, gap);
+    }
+
+    private static (
+        DrawingDocument Document,
+        RuntimeLayoutDocument Runtime,
+        GroundingPoint Point) CreateRingCabinetGroundingScenario()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "Ring grounding routing");
+        var runtime = new RuntimeLayoutDocument(
+            new DrawingLayout(),
+            new Dictionary<Guid, RingCabinetLayout>());
+        AddRingCabinetCommand add = new DeviceCommandFactory().CreateAddRingCabinet(
+            document,
+            runtime,
+            new RingCabinetCreationConfiguration(
+                "测试柜",
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
+            new DocumentPoint(200, 20));
+        add.Execute();
+        Guid terminalId = add.Cabinet.Intervals[0].CableTerminalId!.Value;
+        GroundingPoint point = document.CreateGroundingPoint(
+            Guid.NewGuid(),
+            terminalId,
+            "环网柜电缆侧",
+            "S01");
+        return (document, runtime, point);
+    }
+
+    private static void AssertNoOverlapWithInternalLead(
+        IReadOnlyList<OrthogonalRouteSegment> segments,
+        DocumentRect internalLead)
+    {
+        foreach (OrthogonalRouteSegment segment in segments)
+        {
+            Assert.False(
+                SegmentHasPositiveInteriorIntersection(segment, internalLead),
+                $"Grounding segment {segment.Start} → {segment.End} overlaps RingCabinet internal lead.");
+        }
+    }
+
+    private static bool IsPointStrictlyInsideRect(
+        DocumentPoint point,
+        DocumentRect rect) =>
+        point.XMillimeters > rect.XMillimeters &&
+        point.XMillimeters < rect.XMillimeters + rect.WidthMillimeters &&
+        point.YMillimeters > rect.YMillimeters &&
+        point.YMillimeters < rect.YMillimeters + rect.HeightMillimeters;
+
+    private static bool SegmentHasPositiveInteriorIntersection(
+        OrthogonalRouteSegment segment,
+        DocumentRect rect)
+    {
+        double segmentLeft = Math.Min(
+            segment.Start.XMillimeters,
+            segment.End.XMillimeters);
+        double segmentRight = Math.Max(
+            segment.Start.XMillimeters,
+            segment.End.XMillimeters);
+        double segmentTop = Math.Min(
+            segment.Start.YMillimeters,
+            segment.End.YMillimeters);
+        double segmentBottom = Math.Max(
+            segment.Start.YMillimeters,
+            segment.End.YMillimeters);
+        double rectLeft = rect.XMillimeters;
+        double rectRight = rect.XMillimeters + rect.WidthMillimeters;
+        double rectTop = rect.YMillimeters;
+        double rectBottom = rect.YMillimeters + rect.HeightMillimeters;
+
+        if (segment.IsVertical &&
+            segment.Start.XMillimeters > rectLeft &&
+            segment.Start.XMillimeters < rectRight)
+        {
+            return Math.Min(segmentBottom, rectBottom) -
+                Math.Max(segmentTop, rectTop) > 0;
+        }
+
+        if (segment.IsHorizontal &&
+            segment.Start.YMillimeters > rectTop &&
+            segment.Start.YMillimeters < rectBottom)
+        {
+            return Math.Min(segmentRight, rectRight) -
+                Math.Max(segmentLeft, rectLeft) > 0;
+        }
+
+        return false;
     }
 
     private static (DrawingDocument Document, GroundingPoint Point) CreateGroundingDocument()

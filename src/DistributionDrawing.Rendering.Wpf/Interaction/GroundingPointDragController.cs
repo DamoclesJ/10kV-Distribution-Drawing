@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Professional;
@@ -33,13 +34,18 @@ public sealed class GroundingPointDragController
             return false;
         }
 
-        _ = document.GetGroundingPoint(hit.Target.ObjectId);
+        GroundingPoint groundingPoint = document.GetGroundingPoint(hit.Target.ObjectId);
         layout.GroundingPointLayouts.TryGetValue(
             hit.Target.ObjectId,
             out GroundingPointLayout? before);
         DocumentPoint startOffset = before?.SymbolOffset ?? new DocumentPoint(0, 0);
         GroundingPointOffsetConstraint? constraint = hit.GroundingAnchor is GroundingPresentationAnchor anchor
-            ? new GroundingPointOffsetConstraint(anchor)
+            ? new GroundingPointOffsetConstraint(
+                anchor,
+                new GroundingPointLayoutResolver().Resolve(
+                    groundingPoint,
+                    anchor,
+                    null).DefaultSymbolTop)
             : null;
         _drag = new DragState(
             document,

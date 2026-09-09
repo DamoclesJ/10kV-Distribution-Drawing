@@ -249,8 +249,13 @@ public sealed class GroundingPointLayoutResolver
     {
         var points = new List<DocumentPoint>();
         AddPoint(points, anchor.Position);
-        double side = Math.Sign(symbolTop.XMillimeters - anchor.Position.XMillimeters);
-        if (side == 0) side = 1;
+        double deltaX = symbolTop.XMillimeters - anchor.Position.XMillimeters;
+        double centerTolerance = Math.Max(
+            _metrics.General.StandardStrokeThickness,
+            _metrics.Routing.ObstacleClearance / 2);
+        double side = Math.Abs(deltaX) <= centerTolerance
+            ? ResolveRingCabinetCenterSide(anchor)
+            : Math.Sign(deltaX);
 
         if (symbolTop.YMillimeters >= anchor.Position.YMillimeters)
         {
@@ -264,17 +269,127 @@ public sealed class GroundingPointLayoutResolver
             Math.Abs(symbolTop.XMillimeters - anchor.Position.XMillimeters) +
             _metrics.Grounding.BarSpacing);
         double corridorX = anchor.Position.XMillimeters + side * corridor;
+        corridorX = MoveOutsideRingCabinetInternalLead(
+            corridorX,
+            side,
+            anchor.RingCabinetInternalLeadBounds);
         if (Math.Sign(symbolTop.XMillimeters - corridorX) == side)
         {
             corridorX = symbolTop.XMillimeters - side * _metrics.Grounding.BarSpacing;
+            corridorX = MoveOutsideRingCabinetInternalLead(
+                corridorX,
+                side,
+                anchor.RingCabinetInternalLeadBounds);
         }
         double upperY = symbolTop.YMillimeters - _metrics.Grounding.BarSpacing;
+        if (ShouldUseRingCabinetHorizontalFallback(
+                anchor,
+                symbolTop,
+                upperY))
+        {
+            AddPoint(points, new DocumentPoint(
+                corridorX,
+                anchor.Position.YMillimeters));
+            AddPoint(points, new DocumentPoint(corridorX, symbolTop.YMillimeters));
+            AddPoint(points, symbolTop);
+            return Segments(points);
+        }
+
+        if (NeedsRingCabinetSafeEntry(
+                anchor,
+                symbolTop,
+                corridorX,
+                upperY))
+        {
+            upperY = anchor.RingCabinetInternalLeadBounds!.Value.YMillimeters -
+                GetRingCabinetLeadClearance();
+        }
         AddPoint(points, new DocumentPoint(corridorX, anchor.Position.YMillimeters));
         AddPoint(points, new DocumentPoint(corridorX, upperY));
         AddPoint(points, new DocumentPoint(symbolTop.XMillimeters, upperY));
         AddPoint(points, symbolTop);
         return Segments(points);
     }
+
+    private bool ShouldUseRingCabinetHorizontalFallback(
+        GroundingPresentationAnchor anchor,
+        DocumentPoint symbolTop,
+        double upperY)
+    {
+        if (anchor.RingCabinetInternalLeadBounds is not DocumentRect lead)
+        {
+            return false;
+        }
+
+        bool symbolInsideLead = symbolTop.XMillimeters > lead.XMillimeters &&
+            symbolTop.XMillimeters < lead.XMillimeters + lead.WidthMillimeters;
+        return symbolInsideLead &&
+            PositiveOverlap(
+                upperY,
+                symbolTop.YMillimeters,
+                lead.YMillimeters,
+                lead.YMillimeters + lead.HeightMillimeters) > 0;
+    }
+
+    private bool NeedsRingCabinetSafeEntry(
+        GroundingPresentationAnchor anchor,
+        DocumentPoint symbolTop,
+        double corridorX,
+        double upperY)
+    {
+        if (anchor.RingCabinetInternalLeadBounds is not DocumentRect lead)
+        {
+            return false;
+        }
+
+        bool horizontalTransferCrossesLead =
+            PositiveOverlap(
+                corridorX,
+                symbolTop.XMillimeters,
+                lead.XMillimeters,
+                lead.XMillimeters + lead.WidthMillimeters) > 0;
+        return horizontalTransferCrossesLead &&
+            upperY >= lead.YMillimeters &&
+            upperY <= lead.YMillimeters + lead.HeightMillimeters;
+    }
+
+    private double GetRingCabinetLeadClearance() => Math.Max(
+        _metrics.General.StandardStrokeThickness,
+        _metrics.Routing.ObstacleClearance / 2);
+
+    private static double PositiveOverlap(
+        double firstStart,
+        double firstEnd,
+        double secondStart,
+        double secondEnd) => Math.Max(
+            0,
+            Math.Min(Math.Max(firstStart, firstEnd), Math.Max(secondStart, secondEnd)) -
+            Math.Max(Math.Min(firstStart, firstEnd), Math.Min(secondStart, secondEnd)));
+
+    private double MoveOutsideRingCabinetInternalLead(
+        double candidateX,
+        double side,
+        DocumentRect? internalLeadBounds)
+    {
+        if (internalLeadBounds is not DocumentRect lead)
+        {
+            return candidateX;
+        }
+
+        double clearance = GetRingCabinetLeadClearance();
+        double leadLeft = lead.XMillimeters - clearance;
+        double leadRight = lead.XMillimeters + lead.WidthMillimeters + clearance;
+        if (candidateX < leadLeft || candidateX > leadRight)
+        {
+            return candidateX;
+        }
+
+        return side >= 0 ? leadRight : leadLeft;
+    }
+
+    private static double ResolveRingCabinetCenterSide(
+        GroundingPresentationAnchor anchor) =>
+        anchor.Direction == TerminalAnchorDirection.Left ? -1 : 1;
 
     private IReadOnlyList<OrthogonalRouteSegment> ResolveGapLeader(
         GroundingPresentationAnchor anchor,

@@ -13,7 +13,8 @@ public readonly record struct GroundingPresentationAnchor(
     DocumentPoint Position,
     TerminalAnchorDirection Direction,
     double MinimumStubLength = 0,
-    GroundingPresentationPolicy Policy = GroundingPresentationPolicy.StandardTerminal);
+    GroundingPresentationPolicy Policy = GroundingPresentationPolicy.StandardTerminal,
+    DocumentRect? RingCabinetInternalLeadBounds = null);
 
 public enum GroundingPresentationPolicy
 {
@@ -92,7 +93,8 @@ public sealed class GroundingPresentationAnchorResolver
                     ? TerminalAnchorDirection.Right
                     : terminalAnchor.Direction,
                 terminalAnchor.MinimumStubLength,
-                GroundingPresentationPolicy.RingCabinetCableTerminal);
+                GroundingPresentationPolicy.RingCabinetCableTerminal,
+                terminalAnchor.RingCabinetInternalLeadBounds);
             return true;
         }
 

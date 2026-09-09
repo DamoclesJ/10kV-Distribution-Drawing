@@ -10,7 +10,8 @@ public readonly record struct TerminalAnchor(
     Guid TerminalId,
     DocumentPoint Position,
     TerminalAnchorDirection Direction = TerminalAnchorDirection.Auto,
-    double MinimumStubLength = 0);
+    double MinimumStubLength = 0,
+    DocumentRect? RingCabinetInternalLeadBounds = null);
 
 public enum TerminalAnchorDirection
 {

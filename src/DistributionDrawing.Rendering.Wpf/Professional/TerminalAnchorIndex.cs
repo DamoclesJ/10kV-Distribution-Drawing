@@ -144,13 +144,21 @@ public sealed class TerminalAnchorIndex
                 DocumentPoint terminalPosition = new(
                     terminalX,
                     origin.YMillimeters + intervalLayout.HeightMillimeters);
+                double terminalTop = terminalPosition.YMillimeters -
+                    DrawingMetrics.Default.CableTermination.TriangleHeight;
+                double leadWidth = DrawingMetrics.Default.General.StandardStrokeThickness;
                 Set(
                     anchors,
                     cableTerminalId,
                     terminalPosition,
                     TerminalAnchorDirection.Down,
                     DrawingMetrics.Default.CableTermination
-                        .CableTerminalExitMinimumStubLength);
+                    .CableTerminalExitMinimumStubLength,
+                    new DocumentRect(
+                        terminalX - leadWidth / 2,
+                        origin.YMillimeters,
+                        leadWidth,
+                        terminalTop - origin.YMillimeters));
             }
         }
 
@@ -224,7 +232,8 @@ public sealed class TerminalAnchorIndex
         Guid terminalId,
         DocumentPoint position,
         TerminalAnchorDirection direction,
-        double minimumStubLength = 0)
+        double minimumStubLength = 0,
+        DocumentRect? ringCabinetInternalLeadBounds = null)
     {
         if (terminalId != Guid.Empty)
         {
@@ -232,7 +241,8 @@ public sealed class TerminalAnchorIndex
                 terminalId,
                 position,
                 direction,
-                minimumStubLength);
+                minimumStubLength,
+                ringCabinetInternalLeadBounds);
         }
     }
 }
