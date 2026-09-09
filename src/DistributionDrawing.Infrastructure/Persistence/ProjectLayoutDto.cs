@@ -259,6 +259,9 @@ internal static class ProjectLayoutMapper
             .ToDictionary(pole => pole.Id);
         Dictionary<Guid, PoleAttachment> attachments = domain.PoleAttachments
             .ToDictionary(attachment => attachment.AttachmentId);
+        Dictionary<Guid, Transformer> transformers = domain.Devices
+            .OfType<Transformer>()
+            .ToDictionary(transformer => transformer.Id);
         HashSet<Guid> overheadLineIds = domain.OverheadLines
             .Select(line => line.ConnectionId)
             .ToHashSet();
@@ -269,7 +272,8 @@ internal static class ProjectLayoutMapper
         if (cabinetDtos.Count != cabinets.Count ||
             poleDtos.Count != poles.Count ||
             attachmentDtos.Count != attachments.Count ||
-            overheadLineDtos.Count != overheadLineIds.Count)
+            overheadLineDtos.Count != overheadLineIds.Count ||
+            transformerDtos.Count != transformers.Count)
         {
             throw new InvalidDataException(
                 "Layout coverage does not match the Domain object set.");
@@ -352,6 +356,28 @@ internal static class ProjectLayoutMapper
 
         foreach (ProjectTransformerLayoutDto transformerDto in transformerDtos)
         {
+            if (!transformers.TryGetValue(
+                    transformerDto.TransformerId,
+                    out Transformer? transformer))
+            {
+                throw new InvalidDataException(
+                    $"Transformer layout references missing transformer '{transformerDto.TransformerId}'.");
+            }
+
+            if (!Enum.IsDefined(transformerDto.Orientation))
+            {
+                throw new InvalidDataException(
+                    $"Transformer '{transformerDto.TransformerId}' has an invalid orientation.");
+            }
+
+            if ((transformer.TransformerKind is TransformerKind.PublicPoleMounted or
+                    TransformerKind.DedicatedPoleMounted) &&
+                transformerDto.Orientation != ProjectTransformerOrientation.Vertical)
+            {
+                throw new InvalidDataException(
+                    $"Pole-mounted transformer '{transformerDto.TransformerId}' requires canonical Vertical orientation.");
+            }
+
             ValidatePoint(
                 transformerDto.Position,
                 $"transformer '{transformerDto.TransformerId}' position");

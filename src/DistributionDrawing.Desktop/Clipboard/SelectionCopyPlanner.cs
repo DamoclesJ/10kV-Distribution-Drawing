@@ -19,6 +19,7 @@ internal sealed class SelectionCopyPlanner
         var poleIds = new HashSet<Guid>();
         var attachmentIds = new HashSet<Guid>();
         var cabinetIds = new HashSet<Guid>();
+        var transformerIds = new HashSet<Guid>();
         var requestedConnectionIds = new HashSet<Guid>();
         var requestedCableIds = new HashSet<Guid>();
         var roots = new List<SelectionReference>();
@@ -32,6 +33,7 @@ internal sealed class SelectionCopyPlanner
                     poleIds,
                     attachmentIds,
                     cabinetIds,
+                    transformerIds,
                     requestedConnectionIds,
                     requestedCableIds,
                     roots))
@@ -56,6 +58,9 @@ internal sealed class SelectionCopyPlanner
         RingCabinetSnapshot[] cabinets = cabinetIds.OrderBy(id => id)
             .Select(id => CaptureCabinet(document, session.Layout, id))
             .ToArray();
+        TransformerSnapshot[] transformers = transformerIds.OrderBy(id => id)
+            .Select(id => CaptureTransformer(document, session.Layout, id))
+            .ToArray();
         PoleSwitchAttachmentSnapshot[] switches = attachmentIds.OrderBy(id => id)
             .Select(id => CaptureSwitch(document, session.Layout, id))
             .OfType<PoleSwitchAttachmentSnapshot>()
@@ -78,6 +83,7 @@ internal sealed class SelectionCopyPlanner
             new[] { item.FirstTerminal.Id, item.SecondTerminal.Id }));
         includedTerminalIds.UnionWith(terminations.SelectMany(item =>
             new[] { item.CableSideTerminal.Id, item.OverheadSideTerminal.Id }));
+        includedTerminalIds.UnionWith(transformers.Select(item => item.HvTerminal.Id));
 
         OverheadLineSnapshot[] overheadLines = requestedConnectionIds.OrderBy(id => id)
             .Select(id => CaptureOverheadLine(
@@ -124,7 +130,7 @@ internal sealed class SelectionCopyPlanner
                 ["所选线路存在工作地线，请先删除工作地线后再复制。"]);
         }
 
-        if (poles.Length == 0 && cabinets.Length == 0)
+        if (poles.Length == 0 && cabinets.Length == 0 && transformers.Length == 0)
         {
             return new CopyPlanResult(null, warnings.Count > 0
                 ? warnings
@@ -143,6 +149,7 @@ internal sealed class SelectionCopyPlanner
                 switches,
                 terminations,
                 cabinets,
+                transformers,
                 overheadLines,
                 cableSegments,
                 accessPoints),
@@ -155,6 +162,7 @@ internal sealed class SelectionCopyPlanner
         ISet<Guid> poleIds,
         ISet<Guid> attachmentIds,
         ISet<Guid> cabinetIds,
+        ISet<Guid> transformerIds,
         ISet<Guid> connectionIds,
         ISet<Guid> cableIds,
         ICollection<SelectionReference> roots)
@@ -192,6 +200,10 @@ internal sealed class SelectionCopyPlanner
                         PoleAttachment terminationAttachment = document.PoleAttachments.Single(item =>
                             item.AttachedDeviceId == termination.Id);
                         attachmentIds.Add(terminationAttachment.AttachmentId);
+                        roots.Add(reference);
+                        return true;
+                    case Transformer transformer:
+                        transformerIds.Add(transformer.Id);
                         roots.Add(reference);
                         return true;
                     default:
@@ -299,6 +311,22 @@ internal sealed class SelectionCopyPlanner
         return new RingCabinetSnapshot(
             Clone(cabinet.CaptureRestoreDefinition()),
             Clone(layout.RingCabinetLayouts[cabinetId]));
+    }
+
+    private static TransformerSnapshot CaptureTransformer(
+        DrawingDocument document,
+        RuntimeLayoutDocument layout,
+        Guid transformerId)
+    {
+        Transformer transformer = document.Devices.OfType<Transformer>()
+            .Single(item => item.Id == transformerId);
+        Terminal terminal = document.Terminals.Single(item =>
+            item.Id == transformer.HvTerminalId);
+        return new TransformerSnapshot(
+            transformer.Id,
+            transformer.TransformerKind,
+            CaptureTerminal(terminal),
+            layout.TransformerLayouts[transformer.Id] with { });
     }
 
     private static PoleSwitchAttachmentSnapshot? CaptureSwitch(

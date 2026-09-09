@@ -73,6 +73,28 @@ internal sealed class ClipboardFragmentMaterializer
                 Remap(snapshot.Layout, Map, offset)));
         }
 
+        foreach (TransformerSnapshot snapshot in fragment.Transformers)
+        {
+            Guid transformerId = Map(snapshot.Id);
+            Guid terminalId = Map(snapshot.HvTerminal.Id);
+            var transformer = new Transformer(
+                transformerId,
+                snapshot.TransformerKind,
+                terminalId);
+            var transformerLayout = new TransformerLayout(
+                transformerId,
+                Add(snapshot.Layout.Position, offset),
+                snapshot.Layout.Orientation,
+                snapshot.TransformerKind);
+            commands.Add(new AddTransformerCommand(
+                document,
+                layout,
+                new TransformerCreation(
+                    transformer,
+                    CreateTerminal(snapshot.HvTerminal, Map),
+                    transformerLayout)));
+        }
+
         foreach (PoleSwitchAttachmentSnapshot snapshot in fragment.PoleSwitches)
         {
             Guid deviceId = Map(snapshot.DeviceId);
@@ -225,6 +247,11 @@ internal sealed class ClipboardFragmentMaterializer
         foreach (RingCabinetSnapshot item in fragment.RingCabinets)
         {
             AddRingCabinetIds(item.Definition, ids);
+        }
+        foreach (TransformerSnapshot item in fragment.Transformers)
+        {
+            ids.Add(item.Id);
+            ids.Add(item.HvTerminal.Id);
         }
         foreach (PoleSwitchAttachmentSnapshot item in fragment.PoleSwitches)
         {

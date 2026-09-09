@@ -230,17 +230,23 @@ internal static class ProjectLayoutRuntimeMapper
                     item => item.Id == layout.ConnectionId)
                 ?? throw new InvalidDataException(
                     $"Connection '{layout.ConnectionId}' does not exist for layout snapshot.");
-            if (!anchors.TryGet(connection.StartTerminalId, out TerminalAnchor startAnchor) ||
-                !anchors.TryGet(connection.EndTerminalId, out TerminalAnchor endAnchor))
-            {
-                throw new InvalidDataException(
-                    $"Terminal anchors are missing for connection '{connection.Id}'.");
-            }
+            DocumentPoint start = ResolvePersistedEndpoint(
+                domain,
+                anchors,
+                connection.StartTerminalId,
+                layout.Start,
+                connection.Id);
+            DocumentPoint end = ResolvePersistedEndpoint(
+                domain,
+                anchors,
+                connection.EndTerminalId,
+                layout.End,
+                connection.Id);
 
             return new ProjectOverheadLineLayoutDto(
                 layout.ConnectionId,
-                Point(startAnchor.Position),
-                Point(endAnchor.Position),
+                Point(start),
+                Point(end),
                 Point(layout.ContinuationOffset));
         }).ToArray();
         var cableRouteGuides = runtime.CableRouteGuides.Values
@@ -255,6 +261,13 @@ internal static class ProjectLayoutRuntimeMapper
                 layout.GroundingPointId,
                 Point(layout.SymbolOffset)))
             .ToArray();
+        var transformerLayouts = runtime.TransformerLayouts.Values
+            .OrderBy(layout => layout.TransformerId)
+            .Select(layout => new ProjectTransformerLayoutDto(
+                layout.TransformerId,
+                Point(layout.Position),
+                Encode(layout.Orientation)))
+            .ToArray();
 
         return new ProjectLayoutSnapshot(new ProjectLayoutDto(
             domain.Id,
@@ -264,7 +277,7 @@ internal static class ProjectLayoutRuntimeMapper
             attachments,
             overheadLines,
             cableRouteGuides,
-            [],
+            transformerLayouts,
             [],
             groundingPointLayouts));
     }
@@ -370,11 +383,25 @@ internal static class ProjectLayoutRuntimeMapper
                 dto => new GroundingPointLayout(
                     dto.GroundingPointId,
                     Point(dto.SymbolOffset)));
+        Dictionary<Guid, TransformerLayout> transformerLayouts =
+            snapshot.TransformerLayouts.ToDictionary(
+                dto => dto.TransformerId,
+                dto =>
+                {
+                    Transformer transformer = domain.Devices.OfType<Transformer>()
+                        .Single(item => item.Id == dto.TransformerId);
+                    return new TransformerLayout(
+                        dto.TransformerId,
+                        Point(dto.Position),
+                        Decode(dto.Orientation),
+                        transformer.TransformerKind);
+                });
         return new RuntimeLayoutDocument(
             drawingLayout,
             cabinetLayouts,
             cableRouteGuides,
-            groundingPointLayouts);
+            groundingPointLayouts,
+            transformerLayouts);
     }
 
     private static ProjectPointDto Point(DocumentPoint point)
@@ -382,8 +409,52 @@ internal static class ProjectLayoutRuntimeMapper
         return new ProjectPointDto(point.XMillimeters, point.YMillimeters);
     }
 
+    private static DocumentPoint ResolvePersistedEndpoint(
+        DistributionDrawing.Domain.Documents.DrawingDocument domain,
+        TerminalAnchorIndex anchors,
+        Guid terminalId,
+        DocumentPoint existingLayoutEndpoint,
+        Guid connectionId)
+    {
+        if (anchors.TryGet(terminalId, out TerminalAnchor anchor))
+        {
+            return anchor.Position;
+        }
+
+        Terminal terminal = domain.Terminals.Single(item => item.Id == terminalId);
+        if (terminal.OwnerType == TopologyOwnerType.Device &&
+            domain.Devices.OfType<Transformer>().Any(transformer =>
+                transformer.Id == terminal.OwnerId &&
+                transformer.HvTerminalId == terminal.Id))
+        {
+            // Slice B has no professional Transformer glyph/anchor yet. Preserve the
+            // command-owned millimeter endpoint until Slice C supplies that projection.
+            return existingLayoutEndpoint;
+        }
+
+        throw new InvalidDataException(
+            $"Terminal anchors are missing for connection '{connectionId}'.");
+    }
+
     private static DocumentPoint Point(ProjectPointDto point)
     {
         return new DocumentPoint(point.XMillimeters, point.YMillimeters);
     }
+
+    private static ProjectTransformerOrientation Encode(TransformerOrientation value) =>
+        value switch
+        {
+            TransformerOrientation.Horizontal => ProjectTransformerOrientation.Horizontal,
+            TransformerOrientation.Vertical => ProjectTransformerOrientation.Vertical,
+            _ => throw new ArgumentOutOfRangeException(nameof(value))
+        };
+
+    private static TransformerOrientation Decode(ProjectTransformerOrientation value) =>
+        value switch
+        {
+            ProjectTransformerOrientation.Horizontal => TransformerOrientation.Horizontal,
+            ProjectTransformerOrientation.Vertical => TransformerOrientation.Vertical,
+            _ => throw new InvalidDataException(
+                $"Unsupported transformer orientation '{value}'.")
+        };
 }

@@ -282,6 +282,7 @@ internal static class ProjectDomainMapper
 
         var devices = new List<ProjectDeviceDto>();
         var ringCabinets = new List<ProjectRingCabinetDto>();
+        var transformers = new List<ProjectTransformerDto>();
         HashSet<Guid> ringCabinetIntervalIds = document.Devices
             .OfType<RingCabinet>()
             .SelectMany(cabinet => cabinet.Intervals)
@@ -320,6 +321,12 @@ internal static class ProjectDomainMapper
             {
                 case RingCabinet ringCabinet:
                     ringCabinets.Add(ToDto(ringCabinet));
+                    break;
+                case Transformer transformer:
+                    transformers.Add(new ProjectTransformerDto(
+                        transformer.Id,
+                        Encode(transformer.TransformerKind),
+                        transformer.HvTerminalId));
                     break;
                 case Pole pole:
                     if (pole.ParentId is not null)
@@ -420,7 +427,7 @@ internal static class ProjectDomainMapper
                 .ToArray(),
             document.CableSegments.Select(ToDto).ToArray(),
             document.IntermediateTerminals.Select(ToDto).ToArray(),
-            [],
+            transformers,
             []);
 
         ValidateTopology(document, result);
@@ -442,12 +449,6 @@ internal static class ProjectDomainMapper
         }
 
         var document = new DrawingDocument(dto.DocumentId, dto.Title);
-
-        if ((dto.Transformers ?? []).Count != 0)
-        {
-            throw new InvalidDataException(
-                "Transformer runtime support is not implemented in WP-EM-02.");
-        }
 
         if ((dto.CustomerStations ?? []).Count != 0)
         {
@@ -486,8 +487,57 @@ internal static class ProjectDomainMapper
             document.AddElectricalNode(RestoreElectricalNode(nodeDto));
         }
 
+        HashSet<Guid> transformerTerminalIds = [];
+        foreach (ProjectTransformerDto transformerDto in dto.Transformers ?? [])
+        {
+            if (transformerDto.TransformerId == Guid.Empty ||
+                transformerDto.HvTerminalId == Guid.Empty ||
+                transformerDto.TransformerId == transformerDto.HvTerminalId)
+            {
+                throw new InvalidDataException(
+                    "Transformer and HV terminal IDs must be non-empty and distinct.");
+            }
+
+            if (!Enum.IsDefined(transformerDto.TransformerKind))
+            {
+                throw new InvalidDataException(
+                    $"Transformer '{transformerDto.TransformerId}' has an invalid kind.");
+            }
+
+            ProjectTerminalDto[] matchingTerminals = (dto.Terminals ?? [])
+                .Where(terminal => terminal.TerminalId == transformerDto.HvTerminalId)
+                .ToArray();
+            if (matchingTerminals.Length != 1)
+            {
+                throw new InvalidDataException(
+                    $"Transformer '{transformerDto.TransformerId}' must have exactly one HV terminal DTO.");
+            }
+            ProjectTerminalDto terminalDto = matchingTerminals[0];
+            var transformer = new Transformer(
+                transformerDto.TransformerId,
+                Decode(transformerDto.TransformerKind),
+                transformerDto.HvTerminalId);
+            try
+            {
+                document.AddTransformer(transformer, RestoreTerminal(terminalDto));
+            }
+            catch (Exception exception) when (exception is ArgumentException or
+                                               InvalidOperationException)
+            {
+                throw new InvalidDataException(
+                    $"Transformer '{transformerDto.TransformerId}' aggregate is invalid.",
+                    exception);
+            }
+            transformerTerminalIds.Add(transformerDto.HvTerminalId);
+        }
+
         foreach (ProjectTerminalDto terminalDto in dto.Terminals ?? [])
         {
+            if (transformerTerminalIds.Contains(terminalDto.TerminalId))
+            {
+                continue;
+            }
+
             if (Parse<TopologyOwnerType>(
                     terminalDto.OwnerType,
                     terminalDto.TerminalId,
@@ -738,7 +788,8 @@ internal static class ProjectDomainMapper
 
         DeviceType type = Parse<DeviceType>(dto.DeviceType, dto.DeviceId, "deviceType");
         if (type is DeviceType.RingCabinet or DeviceType.Pole or
-            DeviceType.Switch or DeviceType.CableTermination or DeviceType.PT)
+            DeviceType.Switch or DeviceType.CableTermination or DeviceType.PT or
+            DeviceType.Transformer)
         {
             throw new InvalidDataException(
                 $"Basic device '{dto.DeviceId}' uses a specialized device type '{type}'.");
@@ -926,6 +977,31 @@ internal static class ProjectDomainMapper
         IReadOnlyList<ProjectCableSegmentDto> cableSegmentDtos = dto.CableSegments ?? [];
         IReadOnlyList<ProjectIntermediateTerminalDto> intermediateTerminalDtos =
             dto.IntermediateTerminals ?? [];
+        IReadOnlyList<ProjectTransformerDto> transformerDtos = dto.Transformers ?? [];
+
+        if (transformerDtos.Count != document.Devices.OfType<Transformer>().Count() ||
+            transformerDtos.Select(item => item.TransformerId).Distinct().Count() !=
+                transformerDtos.Count ||
+            transformerDtos.Select(item => item.HvTerminalId).Distinct().Count() !=
+                transformerDtos.Count)
+        {
+            throw new InvalidDataException(
+                "Transformer DTOs contain duplicate or missing aggregates.");
+        }
+
+        foreach (Transformer transformer in document.Devices.OfType<Transformer>())
+        {
+            ProjectTransformerDto transformerDto = transformerDtos.SingleOrDefault(item =>
+                    item.TransformerId == transformer.Id)
+                ?? throw new InvalidDataException(
+                    $"Transformer '{transformer.Id}' is missing from DTO.");
+            if (transformerDto.HvTerminalId != transformer.HvTerminalId ||
+                Decode(transformerDto.TransformerKind) != transformer.TransformerKind)
+            {
+                throw new InvalidDataException(
+                    $"Transformer '{transformer.Id}' is inconsistent with its DTO.");
+            }
+        }
 
         HashSet<Guid> rootNodeIds = nodeDtos.Select(node => node.NodeId).ToHashSet();
         HashSet<Guid> rootTerminalIds = terminalDtos.Select(terminal => terminal.TerminalId).ToHashSet();
@@ -1300,6 +1376,22 @@ internal static class ProjectDomainMapper
         DeviceType.CableTermination => "cable-termination",
         DeviceType.PT => "pt",
         _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+
+    private static ProjectTransformerKind Encode(TransformerKind value) => value switch
+    {
+        TransformerKind.PublicPoleMounted => ProjectTransformerKind.PublicPoleMounted,
+        TransformerKind.DedicatedPoleMounted => ProjectTransformerKind.DedicatedPoleMounted,
+        TransformerKind.PublicIndoor => ProjectTransformerKind.PublicIndoor,
+        _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+
+    private static TransformerKind Decode(ProjectTransformerKind value) => value switch
+    {
+        ProjectTransformerKind.PublicPoleMounted => TransformerKind.PublicPoleMounted,
+        ProjectTransformerKind.DedicatedPoleMounted => TransformerKind.DedicatedPoleMounted,
+        ProjectTransformerKind.PublicIndoor => TransformerKind.PublicIndoor,
+        _ => throw new InvalidDataException($"Unsupported transformer kind '{value}'.")
     };
 
     private static string Encode(PoleType value) => value switch

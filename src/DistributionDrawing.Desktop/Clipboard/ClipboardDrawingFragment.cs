@@ -65,6 +65,12 @@ internal sealed record RingCabinetSnapshot(
     RingCabinetRestoreDefinition Definition,
     RingCabinetLayout Layout);
 
+internal sealed record TransformerSnapshot(
+    Guid Id,
+    TransformerKind TransformerKind,
+    TerminalSnapshot HvTerminal,
+    TransformerLayout Layout);
+
 internal sealed record OverheadLineSnapshot(
     Connection Connection,
     OverheadLine OverheadLine,
@@ -91,6 +97,7 @@ internal sealed class ClipboardDrawingFragment
         IEnumerable<PoleSwitchAttachmentSnapshot> poleSwitches,
         IEnumerable<CableTerminationAttachmentSnapshot> cableTerminations,
         IEnumerable<RingCabinetSnapshot> ringCabinets,
+        IEnumerable<TransformerSnapshot> transformers,
         IEnumerable<OverheadLineSnapshot> overheadLines,
         IEnumerable<CableSegmentSnapshot> cableSegments,
         IEnumerable<GroundingAccessPointSnapshot> groundingAccessPoints)
@@ -101,6 +108,7 @@ internal sealed class ClipboardDrawingFragment
         PoleSwitches = Array.AsReadOnly(poleSwitches.ToArray());
         CableTerminations = Array.AsReadOnly(cableTerminations.ToArray());
         RingCabinets = Array.AsReadOnly(ringCabinets.ToArray());
+        Transformers = Array.AsReadOnly(transformers.ToArray());
         OverheadLines = Array.AsReadOnly(overheadLines.ToArray());
         CableSegments = Array.AsReadOnly(cableSegments.ToArray());
         GroundingAccessPoints = Array.AsReadOnly(groundingAccessPoints.ToArray());
@@ -118,13 +126,15 @@ internal sealed class ClipboardDrawingFragment
 
     public IReadOnlyList<RingCabinetSnapshot> RingCabinets { get; }
 
+    public IReadOnlyList<TransformerSnapshot> Transformers { get; }
+
     public IReadOnlyList<OverheadLineSnapshot> OverheadLines { get; }
 
     public IReadOnlyList<CableSegmentSnapshot> CableSegments { get; }
 
     public IReadOnlyList<GroundingAccessPointSnapshot> GroundingAccessPoints { get; }
 
-    public bool IsEmpty => Poles.Count == 0 && RingCabinets.Count == 0;
+    public bool IsEmpty => Poles.Count == 0 && RingCabinets.Count == 0 && Transformers.Count == 0;
 }
 
 internal sealed record CopyPlanResult(

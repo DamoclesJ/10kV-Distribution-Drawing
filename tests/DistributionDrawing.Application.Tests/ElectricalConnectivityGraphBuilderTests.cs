@@ -10,6 +10,106 @@ namespace DistributionDrawing.Application.Tests;
 public sealed class ElectricalConnectivityGraphBuilderTests
 {
     [Fact]
+    public void TransformerLeaf_IsIncludedWithoutInternalEdge()
+    {
+        (DrawingDocument document, Transformer transformer, Terminal terminal) =
+            CreateTransformer(TransformerKind.PublicIndoor);
+
+        ElectricalConnectivityGraph graph = new ElectricalConnectivityGraphBuilder().Build(document);
+
+        Assert.True(graph.ContainsTerminal(transformer.HvTerminalId));
+        Assert.Empty(graph.Edges);
+        Assert.Empty(document.ElectricalNodes);
+        Assert.Equal(terminal.Id, transformer.HvTerminalId);
+    }
+
+    [Fact]
+    public void CableConnection_ReachesPublicIndoorTransformerLeaf()
+    {
+        (DrawingDocument document, Transformer transformer, Terminal terminal) =
+            CreateTransformer(TransformerKind.PublicIndoor);
+        Guid sourceId = Guid.NewGuid();
+        Guid sourceTerminalId = Guid.NewGuid();
+        var sourceTransformer = new Transformer(
+            sourceId, TransformerKind.PublicIndoor, sourceTerminalId);
+        var source = new Terminal(
+            sourceTerminalId, TopologyOwnerType.Device, sourceId,
+            Transformer.HvTerminalRole, Transformer.TenKilovolts,
+            true, false, null, [ConnectionType.Cable]);
+        document.AddTransformer(sourceTransformer, source);
+        var connection = new Connection(
+            Guid.NewGuid(), ConnectionType.Cable, source.Id, terminal.Id, "cable", "10kV");
+        document.AddConnection(connection);
+
+        ElectricalConnectivityGraph graph = new ElectricalConnectivityGraphBuilder().Build(document);
+
+        ElectricalConnectivityEdge edge = Assert.Single(graph.Edges);
+        Assert.True(edge.Connects(source.Id, transformer.HvTerminalId));
+        Assert.DoesNotContain(graph.Edges,
+            item => item.Type == ElectricalConnectivityEdgeType.PassiveDeviceInternal &&
+                    item.SourceId == transformer.Id);
+    }
+
+    [Fact]
+    public void OverheadConnection_ReachesPoleMountedTransformerLeaf()
+    {
+        (DrawingDocument document, _, Terminal transformerTerminal) =
+            CreateTransformer(TransformerKind.DedicatedPoleMounted);
+        var pole = new Pole(Guid.NewGuid(), "P1");
+        Terminal poleTerminal = pole.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        document.AddDevice(pole);
+        document.AddTerminal(poleTerminal);
+        document.AddConnection(new Connection(
+            Guid.NewGuid(), ConnectionType.OverheadLine,
+            poleTerminal.Id, transformerTerminal.Id, "overhead", "10kV"));
+
+        var query = new ElectricalConnectivityQuery(
+            new ElectricalConnectivityGraphBuilder().Build(document));
+
+        Assert.True(query.IsConnected(poleTerminal.Id, transformerTerminal.Id));
+    }
+
+    [Theory]
+    [InlineData(SwitchState.Open, false)]
+    [InlineData(SwitchState.Closed, true)]
+    public void DropoutFusePath_ReachesPoleMountedTransformerOnlyWhenClosed(
+        SwitchState state,
+        bool expectedConnected)
+    {
+        (DrawingDocument document, _, Terminal transformerTerminal) =
+            CreateTransformer(TransformerKind.PublicPoleMounted);
+        Guid switchId = Guid.NewGuid();
+        Guid firstId = Guid.NewGuid();
+        Guid secondId = Guid.NewGuid();
+        SwitchDevice fuse = SwitchDevice.CreateForPole(
+            switchId, SwitchKind.DropoutFuse, firstId, secondId, state,
+            "跌落式熔断器", "10kV", null);
+        document.AddDevice(fuse);
+        var first = new Terminal(firstId, TopologyOwnerType.Device, switchId,
+            "SwitchLeftTerminal", "10kV", true, false, null,
+            [ConnectionType.OverheadLine]);
+        var second = new Terminal(secondId, TopologyOwnerType.Device, switchId,
+            "SwitchRightTerminal", "10kV", true, false, null,
+            [ConnectionType.OverheadLine]);
+        document.AddTerminal(first);
+        document.AddTerminal(second);
+        var sourcePole = new Pole(Guid.NewGuid(), "P1");
+        Terminal source = sourcePole.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        document.AddDevice(sourcePole);
+        document.AddTerminal(source);
+        document.AddConnection(new Connection(Guid.NewGuid(), ConnectionType.OverheadLine,
+            source.Id, first.Id, "incoming", "10kV"));
+        document.AddConnection(new Connection(Guid.NewGuid(), ConnectionType.OverheadLine,
+            second.Id, transformerTerminal.Id, "short", "10kV"));
+
+        var query = new ElectricalConnectivityQuery(
+            new ElectricalConnectivityGraphBuilder().Build(document));
+
+        Assert.Equal(expectedConnected,
+            query.IsConnected(source.Id, transformerTerminal.Id));
+    }
+
+    [Fact]
     public void Build_AddsElectricalNodeInternalEdge()
     {
         (DrawingDocument document, PoleCreationResult result) = CreateCableTermination();
@@ -23,6 +123,27 @@ public sealed class ElectricalConnectivityGraphBuilderTests
             candidate.Type == ElectricalConnectivityEdgeType.PassiveDeviceInternal);
         Assert.True(edge.Connects(firstTerminalId, secondTerminalId));
         Assert.Equal(3, graph.TerminalIds.Count);
+    }
+
+    private static (DrawingDocument, Transformer, Terminal) CreateTransformer(
+        TransformerKind kind)
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "transformer graph");
+        Guid transformerId = Guid.NewGuid();
+        Guid terminalId = Guid.NewGuid();
+        var transformer = new Transformer(transformerId, kind, terminalId);
+        var terminal = new Terminal(
+            terminalId,
+            TopologyOwnerType.Device,
+            transformerId,
+            Transformer.HvTerminalRole,
+            Transformer.TenKilovolts,
+            true,
+            false,
+            null,
+            [transformer.AllowedConnectionType]);
+        document.AddTransformer(transformer, terminal);
+        return (document, transformer, terminal);
     }
 
     [Fact]

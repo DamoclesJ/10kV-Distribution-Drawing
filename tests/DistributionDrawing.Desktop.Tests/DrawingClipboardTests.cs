@@ -74,6 +74,115 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
+    public void TransformerPaste_RemapsAggregateIdsAndCopiesLayoutWithoutConnections()
+    {
+        ProjectRuntimeSession session = CreateSession("变压器复制");
+        TransformerCreation creation = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(40, 50),
+            TransformerOrientation.Vertical);
+        new AddTransformerCommand(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            creation).Execute();
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            creation.Transformer.Id));
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        Transformer pasted = Assert.Single(
+            session.PersistenceSession.Domain.Devices.OfType<Transformer>(),
+            item => item.Id != creation.Transformer.Id);
+        Terminal pastedTerminal = Assert.Single(session.PersistenceSession.Domain.Terminals,
+            item => item.OwnerId == pasted.Id);
+        TransformerLayout pastedLayout = session.Layout.TransformerLayouts[pasted.Id];
+        Assert.NotEqual(creation.Transformer.Id, pasted.Id);
+        Assert.NotEqual(creation.HvTerminal.Id, pastedTerminal.Id);
+        Assert.Equal(pasted.HvTerminalId, pastedTerminal.Id);
+        Assert.Equal(creation.Transformer.TransformerKind, pasted.TransformerKind);
+        Assert.Equal(creation.HvTerminal.AllowedConnectionTypes,
+            pastedTerminal.AllowedConnectionTypes);
+        Assert.Equal(creation.Layout.Orientation, pastedLayout.Orientation);
+        Assert.Equal(new DocumentPoint(50, 60), pastedLayout.Position);
+        Assert.Empty(session.PersistenceSession.Domain.Connections);
+
+        Guid pastedId = pasted.Id;
+        Guid pastedTerminalId = pastedTerminal.Id;
+        Assert.True(session.CommandStack.Undo());
+        Assert.DoesNotContain(session.PersistenceSession.Domain.Devices,
+            item => item.Id == pastedId);
+        Assert.True(session.CommandStack.Redo());
+        Transformer redone = Assert.Single(
+            session.PersistenceSession.Domain.Devices.OfType<Transformer>(),
+            item => item.Id == pastedId);
+        Assert.Equal(pastedTerminalId, redone.HvTerminalId);
+    }
+
+    [Theory]
+    [InlineData(ConnectionType.Cable, TransformerKind.PublicIndoor)]
+    [InlineData(ConnectionType.OverheadLine, TransformerKind.PublicPoleMounted)]
+    public void CopyingOnlyTransformer_DoesNotIncludeExternalConnection(
+        ConnectionType connectionType,
+        TransformerKind kind)
+    {
+        ProjectRuntimeSession session = CreateSession("变压器外部连接边界");
+        TransformerCreation transformer = new TransformerCreationFactory().Create(
+            kind, new DocumentPoint(40, 50));
+        new AddTransformerCommand(
+            session.PersistenceSession.Domain, session.Layout, transformer).Execute();
+        Terminal otherTerminal;
+        Guid? supportPoleId = null;
+        if (connectionType == ConnectionType.Cable)
+        {
+            TransformerCreation other = new TransformerCreationFactory().Create(
+                TransformerKind.PublicIndoor, new DocumentPoint(100, 50));
+            new AddTransformerCommand(session.PersistenceSession.Domain, session.Layout, other).Execute();
+            otherTerminal = other.HvTerminal;
+        }
+        else
+        {
+            AddPoleCommand pole = AddPole(session, new DocumentPoint(100, 50));
+            otherTerminal = pole.Terminal;
+            supportPoleId = pole.Pole.Id;
+        }
+        var connection = new Connection(
+            Guid.NewGuid(), connectionType,
+            transformer.HvTerminal.Id, otherTerminal.Id, "external", "10kV");
+        if (connectionType == ConnectionType.Cable)
+        {
+            session.PersistenceSession.Domain.AddCableSegment(
+                new CableSegment(
+                    Guid.NewGuid(), "external", "YJV", 60, "10kV",
+                    connection.Id, connection.StartTerminalId, connection.EndTerminalId),
+                connection);
+        }
+        else
+        {
+            new AddOverheadLineCommand(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                connection,
+                new OverheadLine(connection.Id, "JKLYJ", [supportPoleId!.Value]),
+                new OverheadLineLayout(
+                    connection.Id,
+                    transformer.Layout.Position,
+                    new DocumentPoint(100, 50))).Execute();
+        }
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device, transformer.Transformer.Id));
+
+        CopyPlanResult plan = new SelectionCopyPlanner().Create(session);
+
+        ClipboardDrawingFragment fragment = Assert.IsType<ClipboardDrawingFragment>(plan.Fragment);
+        Assert.Single(fragment.Transformers);
+        Assert.Empty(fragment.CableSegments);
+        Assert.Empty(fragment.OverheadLines);
+    }
+
+    [Fact]
     public void PolePaste_RemapsIdsOffsetsAndSelectsNewPole()
     {
         ProjectRuntimeSession session = CreateSession("杆塔复制");
