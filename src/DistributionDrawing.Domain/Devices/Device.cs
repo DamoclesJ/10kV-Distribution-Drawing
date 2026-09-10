@@ -50,7 +50,7 @@ public class Device
 
     public Guid? ParentId { get; }
 
-    public void Rename(string? displayName)
+    public virtual void Rename(string? displayName)
     {
         DisplayName = NormalizeOptionalText(displayName);
     }

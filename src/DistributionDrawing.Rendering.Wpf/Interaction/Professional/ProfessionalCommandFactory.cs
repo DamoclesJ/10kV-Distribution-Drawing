@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -22,7 +23,7 @@ public sealed class ProfessionalCommandFactory
         if (!IsEligibleNewTerminalTarget(document, terminalId))
         {
             throw new InvalidOperationException(
-                "Only a cable-side cable-termination or ring-cabinet cable terminal can receive a new terminal-target grounding point.");
+                "Only an eligible cable-side terminal can receive a new terminal-target grounding point.");
         }
 
         return CreateAddGroundingPoint(
@@ -308,6 +309,12 @@ public sealed class ProfessionalCommandFactory
 
         if (document.Devices.OfType<CableTermination>().Any(device =>
                 device.CableSideTerminalId == terminalId))
+        {
+            return true;
+        }
+
+        if (document.CustomerStations.SelectMany(station => station.IncomingFeeders)
+            .Any(feeder => feeder.CableTerminalId == terminalId))
         {
             return true;
         }

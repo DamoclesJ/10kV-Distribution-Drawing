@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Devices.SwitchAssemblies;
 using DistributionDrawing.Domain.Professional;
@@ -45,6 +46,9 @@ public sealed class DrawingDocument
     public IReadOnlyList<Device> Devices => _devices;
 
     public IReadOnlyList<Transformer> Transformers => _devices.OfType<Transformer>().ToArray();
+
+    public IReadOnlyList<CustomerStation> CustomerStations =>
+        _devices.OfType<CustomerStation>().ToArray();
 
     public IReadOnlyList<Terminal> Terminals => _terminals;
 
@@ -95,6 +99,21 @@ public sealed class DrawingDocument
                 "A transformer must be registered atomically with AddTransformer.");
         }
 
+        if (device is CustomerStation)
+        {
+            throw new InvalidOperationException(
+                "A customer station must be registered atomically with AddCustomerStation.");
+        }
+
+        if (device is SwitchDevice
+            {
+                InstallationType: SwitchInstallationType.CustomerStationIncomingFeeder
+            })
+        {
+            throw new InvalidOperationException(
+                "A customer-station incoming switch must be registered with its aggregate.");
+        }
+
         EnsureObjectIdIsAvailable(device.Id, nameof(Device));
 
         if (device.Type == DeviceType.RingCabinet)
@@ -127,6 +146,12 @@ public sealed class DrawingDocument
                 "A transformer device must use the Transformer domain type.");
         }
 
+        if (device.Type == DeviceType.CustomerStation)
+        {
+            throw new InvalidOperationException(
+                "A customer station device must use the CustomerStation domain type.");
+        }
+
         if (device.ParentId is Guid parentId &&
             !_internalAggregateOwnerIds.Contains(parentId))
         {
@@ -135,6 +160,50 @@ public sealed class DrawingDocument
         }
 
         _devices.Add(device);
+    }
+
+    public void AddCustomerStation(CustomerStation customerStation)
+    {
+        ArgumentNullException.ThrowIfNull(customerStation);
+        customerStation.ValidateStructure();
+
+        IncomingFeeder[] feeders = customerStation.IncomingFeeders.ToArray();
+        Guid[] aggregateIds = [
+            customerStation.Id,
+            .. feeders.SelectMany(feeder => new[]
+            {
+                feeder.IncomingFeederId,
+                feeder.IsolationSwitch.Id,
+                feeder.CableTerminalId,
+                feeder.StationTerminalId,
+                feeder.ElectricalNodeId
+            })
+        ];
+        if (aggregateIds.Distinct().Count() != aggregateIds.Length)
+        {
+            throw new InvalidOperationException(
+                "Customer-station aggregate IDs must be unique.");
+        }
+
+        foreach (Guid aggregateId in aggregateIds)
+        {
+            EnsureObjectIdIsAvailable(aggregateId, "Customer-station aggregate object");
+        }
+
+        _devices.Add(customerStation);
+        _internalAggregateOwnerIds.UnionWith(
+            feeders.Select(feeder => feeder.IncomingFeederId));
+        _devices.AddRange(feeders.Select(feeder => feeder.IsolationSwitch));
+        _electricalNodes.AddRange(feeders.Select(feeder => feeder.ElectricalNode));
+        _terminals.AddRange(feeders.SelectMany(feeder => new[]
+        {
+            feeder.CableTerminal,
+            feeder.StationTerminal
+        }));
+        foreach (IncomingFeeder feeder in feeders)
+        {
+            feeder.ElectricalNode.AttachTerminal(feeder.StationTerminalId);
+        }
     }
 
     public void AddTransformer(Transformer transformer, Terminal hvTerminal)
@@ -288,6 +357,12 @@ public sealed class DrawingDocument
     {
         Device device = _devices.SingleOrDefault(candidate => candidate.Id == deviceId)
             ?? throw new InvalidOperationException($"Device '{deviceId}' does not exist.");
+        if (device is CustomerStation)
+        {
+            throw new InvalidOperationException(
+                "A customer station must be removed atomically with RemoveCustomerStation.");
+        }
+
         if (device is not Pole and not RingCabinet and not Transformer)
         {
             throw new InvalidOperationException(
@@ -380,12 +455,81 @@ public sealed class DrawingDocument
         _devices.Remove(device);
     }
 
+    public CustomerStation RemoveCustomerStation(Guid customerStationId)
+    {
+        CustomerStation customerStation = _devices.OfType<CustomerStation>()
+            .SingleOrDefault(candidate => candidate.Id == customerStationId)
+            ?? throw new InvalidOperationException(
+                $"Customer station '{customerStationId}' does not exist.");
+        customerStation.ValidateStructure();
+
+        IncomingFeeder[] feeders = customerStation.IncomingFeeders.ToArray();
+        HashSet<Guid> switchIds = feeders
+            .Select(feeder => feeder.IsolationSwitch.Id)
+            .ToHashSet();
+        HashSet<Guid> aggregateDeviceIds = [customerStation.Id, .. switchIds];
+        HashSet<Guid> terminalIds = feeders
+            .SelectMany(feeder => new[]
+            {
+                feeder.CableTerminalId,
+                feeder.StationTerminalId
+            })
+            .ToHashSet();
+        HashSet<Guid> nodeIds = feeders
+            .Select(feeder => feeder.ElectricalNodeId)
+            .ToHashSet();
+        HashSet<Guid> feederIds = feeders
+            .Select(feeder => feeder.IncomingFeederId)
+            .ToHashSet();
+
+        ValidateRegisteredCustomerStationAggregate(
+            customerStation,
+            switchIds,
+            terminalIds,
+            nodeIds,
+            feederIds);
+
+        if (_connections.Any(connection =>
+                terminalIds.Contains(connection.StartTerminalId) ||
+                terminalIds.Contains(connection.EndTerminalId)))
+        {
+            throw new InvalidOperationException(
+                $"Customer station '{customerStationId}' is still referenced by a connection.");
+        }
+
+        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)) ||
+            _workScopes.Any(scope =>
+                aggregateDeviceIds.Contains(scope.StartBoundary.DeviceId) ||
+                aggregateDeviceIds.Contains(scope.EndBoundary.DeviceId) ||
+                terminalIds.Contains(scope.StartBoundary.TerminalId) ||
+                terminalIds.Contains(scope.EndBoundary.TerminalId)))
+        {
+            throw new InvalidOperationException(
+                $"Customer station '{customerStationId}' is still referenced by Professional data.");
+        }
+
+        _terminals.RemoveAll(terminal => terminalIds.Contains(terminal.Id));
+        _electricalNodes.RemoveAll(node => nodeIds.Contains(node.Id));
+        _devices.RemoveAll(device => switchIds.Contains(device.Id));
+        _devices.Remove(customerStation);
+        _internalAggregateOwnerIds.ExceptWith(feederIds);
+        return customerStation;
+    }
+
     public void AddElectricalNode(ElectricalNode electricalNode)
     {
         ArgumentNullException.ThrowIfNull(electricalNode);
 
         EnsureObjectIdIsAvailable(electricalNode.Id, nameof(ElectricalNode));
         EnsureTopologyOwnerExists(electricalNode.OwnerType, electricalNode.OwnerId);
+
+        if (electricalNode.OwnerType == TopologyOwnerType.InternalAggregate &&
+            CustomerStations.SelectMany(station => station.IncomingFeeders)
+                .Any(feeder => feeder.IncomingFeederId == electricalNode.OwnerId))
+        {
+            throw new InvalidOperationException(
+                "A customer-station electrical node must be registered with its aggregate.");
+        }
 
         if (electricalNode.OwnerType == TopologyOwnerType.Device &&
             _devices.Single(device => device.Id == electricalNode.OwnerId) is Transformer)
@@ -786,6 +930,17 @@ public sealed class DrawingDocument
             .SingleOrDefault(device =>
                 device.Id == switchDeviceId &&
                 device.InstallationType == SwitchInstallationType.Pole);
+        switchDevice ??= _devices
+            .OfType<SwitchDevice>()
+            .SingleOrDefault(device =>
+                device.Id == switchDeviceId &&
+                device.InstallationType ==
+                    SwitchInstallationType.CustomerStationIncomingFeeder &&
+                device.ParentId is Guid feederId &&
+                CustomerStations.SelectMany(station => station.IncomingFeeders)
+                    .Any(feeder =>
+                        feeder.IncomingFeederId == feederId &&
+                        feeder.IsolationSwitch.Id == device.Id));
         if (switchDevice is null)
         {
             throw new InvalidOperationException(
@@ -814,6 +969,20 @@ public sealed class DrawingDocument
                     ?? throw new InvalidOperationException(
                         $"Cabinet switch '{switchDeviceId}' has no switch assembly.");
                 assembly.ChangeSwitchState(switchDeviceId, targetState);
+                break;
+
+            case SwitchInstallationType.CustomerStationIncomingFeeder:
+                if (switchDevice.ParentId is not Guid feederId ||
+                    !CustomerStations.SelectMany(station => station.IncomingFeeders)
+                        .Any(feeder =>
+                            feeder.IncomingFeederId == feederId &&
+                            feeder.IsolationSwitch.Id == switchDeviceId))
+                {
+                    throw new InvalidOperationException(
+                        $"Customer-station switch '{switchDeviceId}' has an invalid owner.");
+                }
+
+                switchDevice.SetSwitchState(targetState);
                 break;
 
             default:
@@ -1796,6 +1965,39 @@ public sealed class DrawingDocument
         _switchAssemblies.AddRange(internalAssemblies);
         _electricalNodes.AddRange(ringCabinet.ElectricalNodes);
         _terminals.AddRange(ringCabinet.Terminals);
+    }
+
+    private void ValidateRegisteredCustomerStationAggregate(
+        CustomerStation customerStation,
+        IReadOnlySet<Guid> switchIds,
+        IReadOnlySet<Guid> terminalIds,
+        IReadOnlySet<Guid> nodeIds,
+        IReadOnlySet<Guid> feederIds)
+    {
+        bool switchesMatch = _devices.OfType<SwitchDevice>()
+            .Where(device => switchIds.Contains(device.Id))
+            .All(device => customerStation.IncomingFeeders.Any(feeder =>
+                ReferenceEquals(feeder.IsolationSwitch, device))) &&
+            _devices.OfType<SwitchDevice>().Count(device => switchIds.Contains(device.Id)) ==
+                switchIds.Count;
+        bool terminalsMatch = _terminals
+            .Where(terminal => terminalIds.Contains(terminal.Id))
+            .All(terminal => customerStation.IncomingFeeders.Any(feeder =>
+                ReferenceEquals(feeder.CableTerminal, terminal) ||
+                ReferenceEquals(feeder.StationTerminal, terminal))) &&
+            _terminals.Count(terminal => terminalIds.Contains(terminal.Id)) == terminalIds.Count;
+        bool nodesMatch = _electricalNodes
+            .Where(node => nodeIds.Contains(node.Id))
+            .All(node => customerStation.IncomingFeeders.Any(feeder =>
+                ReferenceEquals(feeder.ElectricalNode, node))) &&
+            _electricalNodes.Count(node => nodeIds.Contains(node.Id)) == nodeIds.Count;
+        bool ownerIdsMatch = feederIds.All(_internalAggregateOwnerIds.Contains);
+
+        if (!switchesMatch || !terminalsMatch || !nodesMatch || !ownerIdsMatch)
+        {
+            throw new InvalidOperationException(
+                $"Customer station '{customerStation.Id}' aggregate is incomplete or inconsistent.");
+        }
     }
 
     private void EnsureTopologyOwnerExists(TopologyOwnerType ownerType, Guid ownerId)

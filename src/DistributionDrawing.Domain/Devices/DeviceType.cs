@@ -7,5 +7,6 @@ public enum DeviceType
     Pole,
     CableTermination,
     PT,
-    Transformer
+    Transformer,
+    CustomerStation
 }

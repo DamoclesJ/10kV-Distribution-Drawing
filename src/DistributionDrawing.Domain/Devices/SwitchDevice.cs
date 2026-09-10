@@ -13,7 +13,7 @@ public sealed class SwitchDevice : Device
         SwitchState switchState,
         string displayName,
         string voltageLevel,
-        Guid? parentIntervalId = null,
+        Guid? parentId = null,
         string? dispatchNumber = null)
         : base(
             id,
@@ -21,7 +21,7 @@ public sealed class SwitchDevice : Device
             displayName,
             voltageLevel,
             switchState,
-            parentIntervalId)
+            parentId)
     {
         if (firstTerminalId == Guid.Empty)
         {
@@ -49,18 +49,26 @@ public sealed class SwitchDevice : Device
         }
 
         if (installationType == SwitchInstallationType.CabinetInterval &&
-            (parentIntervalId is null || parentIntervalId == Guid.Empty))
+            (parentId is null || parentId == Guid.Empty))
         {
             throw new ArgumentException(
                 "A cabinet switch requires a valid parent interval ID.",
-                nameof(parentIntervalId));
+                nameof(parentId));
         }
 
-        if (installationType == SwitchInstallationType.Pole && parentIntervalId is not null)
+        if (installationType == SwitchInstallationType.CustomerStationIncomingFeeder &&
+            (parentId is null || parentId == Guid.Empty))
+        {
+            throw new ArgumentException(
+                "A customer-station switch requires a valid incoming feeder ID.",
+                nameof(parentId));
+        }
+
+        if (installationType == SwitchInstallationType.Pole && parentId is not null)
         {
             throw new ArgumentException(
                 "A pole switch cannot have a parent interval ID.",
-                nameof(parentIntervalId));
+                nameof(parentId));
         }
 
         SwitchKind = switchKind;
@@ -74,6 +82,10 @@ public sealed class SwitchDevice : Device
     public SwitchInstallationType InstallationType { get; }
 
     public IReadOnlyList<Guid> TerminalIds => _terminalIds;
+
+    public Guid FirstTerminalId => _terminalIds[0];
+
+    public Guid SecondTerminalId => _terminalIds[1];
 
     public string? DispatchNumber { get; private set; }
 
@@ -104,6 +116,27 @@ public sealed class SwitchDevice : Device
             displayName,
             voltageLevel,
             dispatchNumber: dispatchNumber);
+    }
+
+    public static SwitchDevice CreateForCustomerStationIncomingFeeder(
+        Guid id,
+        Guid incomingFeederId,
+        Guid cableTerminalId,
+        Guid stationTerminalId,
+        SwitchState switchState = global::DistributionDrawing.Domain.Devices.SwitchState.Open,
+        string displayName = "Incoming isolation switch",
+        string voltageLevel = "10kV")
+    {
+        return new SwitchDevice(
+            id,
+            SwitchKind.IsolationSwitch,
+            SwitchInstallationType.CustomerStationIncomingFeeder,
+            cableTerminalId,
+            stationTerminalId,
+            switchState,
+            displayName,
+            voltageLevel,
+            incomingFeederId);
     }
 
     public bool OwnsTerminal(Guid terminalId)

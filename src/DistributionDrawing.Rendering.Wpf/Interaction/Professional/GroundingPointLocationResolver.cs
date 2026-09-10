@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
@@ -28,6 +29,14 @@ public static class GroundingPointLocationResolver
             RingCabinetInterval interval = cabinet.Intervals.Single(item =>
                 item.CableTerminalId == target.TargetId);
             return $"{cabinet.DisplayName ?? "环网柜"}{interval.DisplayName}间隔";
+        }
+
+        IncomingFeeder? feeder = document.CustomerStations
+            .SelectMany(station => station.IncomingFeeders)
+            .SingleOrDefault(item => item.CableTerminalId == target.TargetId);
+        if (feeder is not null)
+        {
+            return $"{feeder.DisplayName}进线";
         }
 
         CableTermination? termination = document.Devices.OfType<CableTermination>()
