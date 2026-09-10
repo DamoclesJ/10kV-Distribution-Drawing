@@ -10,6 +10,7 @@ using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Rendering;
+using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
 
@@ -17,6 +18,51 @@ namespace DistributionDrawing.Rendering.Wpf.Tests;
 
 public sealed class TransformerSliceCTests
 {
+    [Fact]
+    public void PublicPoleMountedGeometry_KeepsTInsideMainCircleAndUsesTangentSeparatedSmallCircles()
+    {
+        TransformerCreation creation = Create(TransformerKind.PublicPoleMounted);
+        TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+            creation.Transformer,
+            creation.Layout,
+            DrawingMetrics.Default.Transformer);
+        TransformerDrawingMetrics metrics = DrawingMetrics.Default.Transformer;
+        DocumentPoint center = creation.Layout.Position;
+
+        Assert.All(geometry.Lines.SelectMany(line => new[] { line.Start, line.End }), point =>
+            Assert.True(Distance(center, point) <= metrics.MainRadius));
+        Assert.Equal(
+            new DocumentPoint(center.XMillimeters, center.YMillimeters + metrics.MainRadius),
+            geometry.HvAnchor);
+
+        DocumentPoint left = CircleCenter(geometry.Circles[1]);
+        DocumentPoint right = CircleCenter(geometry.Circles[2]);
+        Assert.Equal(metrics.MainRadius + metrics.SmallCircleRadius, Distance(center, left), 8);
+        Assert.Equal(metrics.MainRadius + metrics.SmallCircleRadius, Distance(center, right), 8);
+        Assert.True(Distance(left, right) > metrics.SmallCircleRadius * 2);
+        Assert.True(metrics.SmallCircleRadius >= 2.5 * 1.5);
+    }
+
+    [Fact]
+    public void DedicatedPoleMountedGeometry_UsesTangentSeparatedSmallCircles()
+    {
+        TransformerCreation creation = Create(TransformerKind.DedicatedPoleMounted);
+        TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+            creation.Transformer,
+            creation.Layout,
+            DrawingMetrics.Default.Transformer);
+        TransformerDrawingMetrics metrics = DrawingMetrics.Default.Transformer;
+        DocumentPoint left = CircleCenter(geometry.Circles[0]);
+        DocumentPoint right = CircleCenter(geometry.Circles[1]);
+        double triangleBaseY = creation.Layout.Position.YMillimeters + metrics.TriangleBaseY;
+
+        Assert.Equal(triangleBaseY, left.YMillimeters - metrics.SmallCircleRadius, 8);
+        Assert.Equal(triangleBaseY, right.YMillimeters - metrics.SmallCircleRadius, 8);
+        Assert.True(left.XMillimeters < creation.Layout.Position.XMillimeters);
+        Assert.True(right.XMillimeters > creation.Layout.Position.XMillimeters);
+        Assert.True(Distance(left, right) > metrics.SmallCircleRadius * 2);
+    }
+
     [Theory]
     [InlineData(TransformerKind.PublicPoleMounted, 3, 2, 0)]
     [InlineData(TransformerKind.DedicatedPoleMounted, 2, 0, 1)]
@@ -40,7 +86,7 @@ public sealed class TransformerSliceCTests
     }
 
     [Theory]
-    [InlineData(TransformerKind.PublicPoleMounted, TransformerOrientation.Vertical, 100, 117.5, TerminalAnchorDirection.Down)]
+    [InlineData(TransformerKind.PublicPoleMounted, TransformerOrientation.Vertical, 100, 112, TerminalAnchorDirection.Down)]
     [InlineData(TransformerKind.DedicatedPoleMounted, TransformerOrientation.Vertical, 100, 88, TerminalAnchorDirection.Up)]
     [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Horizontal, 86, 100, TerminalAnchorDirection.Left)]
     [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Vertical, 100, 86, TerminalAnchorDirection.Up)]
@@ -100,12 +146,13 @@ public sealed class TransformerSliceCTests
     }
 
     [Theory]
-    [InlineData(TransformerKind.PublicPoleMounted, "柱上公变")]
-    [InlineData(TransformerKind.DedicatedPoleMounted, "柱上专变")]
-    [InlineData(TransformerKind.PublicIndoor, "站内公变")]
+    [InlineData(TransformerKind.PublicPoleMounted, "柱上公变", true)]
+    [InlineData(TransformerKind.DedicatedPoleMounted, "柱上专变", true)]
+    [InlineData(TransformerKind.PublicIndoor, "站内公变", false)]
     public void ResolverAndInspector_ProjectDerivedTransformerFacts(
         TransformerKind kind,
-        string expectedKindText)
+        string expectedKindText,
+        bool orientationIsReadOnly)
     {
         TransformerCreation creation = Create(kind);
         var resolver = new SelectionObjectResolver();
@@ -127,6 +174,10 @@ public sealed class TransformerSliceCTests
         Assert.Equal(expectedKindText, snapshot.ObjectTitle);
         Assert.Contains(snapshot.Sections.SelectMany(section => section.Properties), row =>
             row.DisplayName == "电压等级" && row.DisplayValue == Transformer.TenKilovolts);
+        PropertyRowViewModel orientation = Assert.Single(
+            snapshot.Sections.SelectMany(section => section.Properties),
+            row => row.PropertyKey == "Orientation");
+        Assert.Equal(orientationIsReadOnly, orientation.IsReadOnly);
     }
 
     [Fact]
@@ -153,6 +204,85 @@ public sealed class TransformerSliceCTests
         Assert.NotEqual(horizontalGeometry.HvAnchor, verticalGeometry.HvAnchor);
         Assert.Equal(TransformerKind.PublicIndoor, horizontal.Transformer.TransformerKind);
         Assert.Equal(horizontal.Transformer.Id, vertical.TransformerId);
+    }
+
+    [Fact]
+    public void SetPublicIndoorOrientation_ExecuteUndoRedoUpdatesAnchorAndConnectedCableRoute()
+    {
+        TransformerCreation first = Create(
+            TransformerKind.PublicIndoor,
+            TransformerOrientation.Horizontal);
+        TransformerCreation second = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(160, 100));
+        DrawingDocument document = DocumentWith(first);
+        document.AddTransformer(second.Transformer, second.HvTerminal);
+        RuntimeLayoutDocument runtime = RuntimeWith(first);
+        runtime.AddTransformer(second.Layout, second.Transformer.TransformerKind);
+        Guid connectionId = Guid.NewGuid();
+        var connection = new Connection(
+            connectionId,
+            ConnectionType.Cable,
+            first.HvTerminal.Id,
+            second.HvTerminal.Id,
+            "Transformer cable",
+            Transformer.TenKilovolts);
+        document.AddCableSegment(
+            new CableSegment(
+                Guid.NewGuid(),
+                "Transformer cable",
+                "YJV",
+                60,
+                Transformer.TenKilovolts,
+                connectionId,
+                first.HvTerminal.Id,
+                second.HvTerminal.Id),
+            connection);
+        Guid transformerId = first.Transformer.Id;
+        Guid terminalId = first.Transformer.HvTerminalId;
+        TransformerKind kind = first.Transformer.TransformerKind;
+        var stack = new CommandStack();
+        var command = new SetTransformerOrientationCommand(
+            runtime,
+            first.Transformer,
+            TransformerOrientation.Vertical);
+
+        stack.ExecuteCommand(command);
+        DrawingScene verticalScene = new DrawingSceneBuilder().Build(document, runtime);
+        TerminalAnchor verticalAnchor = Anchor(document, runtime, terminalId);
+        Assert.Equal(TransformerOrientation.Vertical, runtime.TransformerLayouts[transformerId].Orientation);
+        Assert.Equal(verticalAnchor.Position, Assert.Single(verticalScene.Routes).Points[0]);
+        Assert.Equal(new DocumentPoint(100, 86), verticalAnchor.Position);
+
+        Assert.True(stack.Undo());
+        DrawingScene horizontalScene = new DrawingSceneBuilder().Build(document, runtime);
+        TerminalAnchor horizontalAnchor = Anchor(document, runtime, terminalId);
+        Assert.Equal(TransformerOrientation.Horizontal, runtime.TransformerLayouts[transformerId].Orientation);
+        Assert.Equal(horizontalAnchor.Position, Assert.Single(horizontalScene.Routes).Points[0]);
+        Assert.Equal(new DocumentPoint(86, 100), horizontalAnchor.Position);
+
+        Assert.True(stack.Redo());
+        Assert.Equal(TransformerOrientation.Vertical, runtime.TransformerLayouts[transformerId].Orientation);
+        Assert.Equal(transformerId, first.Transformer.Id);
+        Assert.Equal(terminalId, first.Transformer.HvTerminalId);
+        Assert.Equal(kind, first.Transformer.TransformerKind);
+    }
+
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted)]
+    [InlineData(TransformerKind.DedicatedPoleMounted)]
+    public void SetTransformerOrientation_RejectsPoleMountedKinds(TransformerKind kind)
+    {
+        TransformerCreation creation = Create(kind);
+        RuntimeLayoutDocument runtime = RuntimeWith(creation);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new SetTransformerOrientationCommand(
+                runtime,
+                creation.Transformer,
+                TransformerOrientation.Horizontal));
+        Assert.Equal(TransformerOrientation.Vertical,
+            runtime.TransformerLayouts[creation.Transformer.Id].Orientation);
     }
 
     [Fact]
@@ -199,9 +329,15 @@ public sealed class TransformerSliceCTests
             document.CableSegments,
             runtime.TransformerLayouts);
         Assert.True(anchors.TryGet(transformer.Creation.HvTerminal.Id, out TerminalAnchor anchor));
+        Assert.True(anchors.TryGet(fuse.Creation.SecondTerminal.Id, out TerminalAnchor fuseAnchor));
 
         Assert.Equal(pole.Pole.Id, Assert.Single(line.OverheadLine.SupportPoleIds));
-        Assert.Contains(anchor.Position, Assert.Single(scene.Routes).Points);
+        OrthogonalRoute route = Assert.Single(scene.Routes);
+        Assert.Equal(fuseAnchor.Position, route.Points[0]);
+        Assert.Equal(anchor.Position, route.Points[^1]);
+        Assert.DoesNotContain(
+            PoleProfessionalGeometry.GetPoleCenter(pole.Layout),
+            route.Points.Skip(1).Take(route.Points.Count - 2));
         Assert.DoesNotContain(document.PoleAttachments, attachment =>
             attachment.AttachedDeviceId == transformer.Creation.Transformer.Id);
         Assert.Contains(document.Devices, device =>
@@ -245,4 +381,28 @@ public sealed class TransformerSliceCTests
         {
             [creation.Transformer.Id] = creation.Layout
         });
+
+    private static TerminalAnchor Anchor(
+        DrawingDocument document,
+        RuntimeLayoutDocument runtime,
+        Guid terminalId)
+    {
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts,
+            document.Connections,
+            document.CableSegments,
+            runtime.TransformerLayouts);
+        Assert.True(anchors.TryGet(terminalId, out TerminalAnchor anchor));
+        return anchor;
+    }
+
+    private static DocumentPoint CircleCenter(DocumentRect circle) => new(
+        circle.XMillimeters + circle.WidthMillimeters / 2,
+        circle.YMillimeters + circle.HeightMillimeters / 2);
+
+    private static double Distance(DocumentPoint first, DocumentPoint second) => Math.Sqrt(
+        Math.Pow(first.XMillimeters - second.XMillimeters, 2) +
+        Math.Pow(first.YMillimeters - second.YMillimeters, 2));
 }

@@ -9,6 +9,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
@@ -261,7 +262,7 @@ public partial class MainWindow : Window
 
         CancelDeviceDrag();
         CancelProfessionalPicking();
-        _drawingTools.BeginTransformer(dialog.SelectedKind, dialog.SelectedOrientation);
+        _drawingTools.BeginTransformer(dialog.SelectedKind);
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateTransformer);
         UpdateCanvasStatus();
     }
@@ -745,6 +746,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
+        UpdateTransformerOrientationEditor();
         UpdatePoleInstalledDevicesEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
@@ -2459,6 +2461,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
+        UpdateTransformerOrientationEditor();
         UpdatePoleInstalledDevicesEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
@@ -2475,6 +2478,7 @@ public partial class MainWindow : Window
         _intervalPreview.Cancel();
         RingCabinetEditorPanel.Visibility = Visibility.Collapsed;
         PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
+        TransformerOrientationEditorPanel.Visibility = Visibility.Collapsed;
         PoleInstalledDevicesPanel.Visibility = Visibility.Collapsed;
         IntervalEditorPanel.Visibility = Visibility.Collapsed;
         AttachmentOffsetEditorPanel.Visibility = Visibility.Collapsed;
@@ -2873,6 +2877,50 @@ public partial class MainWindow : Window
 
         PoleNumberEditorPanel.Visibility = Visibility.Visible;
         PoleNumberInput.Text = pole.PoleNumber;
+    }
+
+    private void UpdateTransformerOrientationEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.Transformer is not { TransformerKind: TransformerKind.PublicIndoor } ||
+            selection.TransformerLayout is not { } layout)
+        {
+            TransformerOrientationEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        TransformerOrientationEditorPanel.Visibility = Visibility.Visible;
+        TransformerOrientationInput.SelectedIndex =
+            layout.Orientation == TransformerOrientation.Horizontal ? 0 : 1;
+    }
+
+    private void OnApplyTransformerOrientation(object sender, RoutedEventArgs e)
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.Transformer is not { TransformerKind: TransformerKind.PublicIndoor } transformer ||
+            _workspace.CurrentSession is not { } session ||
+            TransformerOrientationInput.SelectedIndex is not (0 or 1))
+        {
+            ShowCommandError("方向修改失败", "请先选择一个有效的站内公变方向。");
+            return;
+        }
+
+        TransformerOrientation orientation = TransformerOrientationInput.SelectedIndex == 0
+            ? TransformerOrientation.Horizontal
+            : TransformerOrientation.Vertical;
+        try
+        {
+            var command = new SetTransformerOrientationCommand(
+                session.Layout,
+                transformer,
+                orientation);
+            session.CommandStack.ExecuteCommand(command, session.RebuildScene);
+            RefreshDrawingScene();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ShowCommandError("方向修改失败", exception.Message);
+        }
     }
 
     private void UpdatePoleInstalledDevicesEditor()

@@ -87,6 +87,19 @@ public sealed class RuntimeLayoutDocument
         return layout;
     }
 
+    public void ReplaceTransformer(TransformerLayout layout, TransformerKind transformerKind)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        layout.ValidateFor(transformerKind);
+        if (!_transformerLayouts.ContainsKey(layout.TransformerId))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for transformer '{layout.TransformerId}'.");
+        }
+
+        _transformerLayouts[layout.TransformerId] = layout;
+    }
+
     public void AddRingCabinet(RingCabinetLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);

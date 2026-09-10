@@ -18,9 +18,8 @@ public sealed record DrawingMetrics(
 {
     public TransformerDrawingMetrics Transformer { get; init; } = new(
         MainRadius: 12,
-        SmallCircleRadius: 2.5,
-        SmallCircleOffsetX: 5,
-        SmallCircleOffsetY: 15,
+        SmallCircleRadius: 4,
+        SmallCircleOffsetX: 6,
         TeeHalfWidth: 6,
         TeeTopY: -3,
         TriangleHalfWidth: 11,
@@ -112,7 +111,6 @@ public sealed record TransformerDrawingMetrics(
     double MainRadius,
     double SmallCircleRadius,
     double SmallCircleOffsetX,
-    double SmallCircleOffsetY,
     double TeeHalfWidth,
     double TeeTopY,
     double TriangleHalfWidth,

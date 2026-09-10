@@ -60,6 +60,43 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void InspectorOrientationCommand_SaveReopenPersistsPublicIndoorVerticalLayout()
+    {
+        var service = new ProjectService();
+        ProjectRuntimeSession runtime = ProjectRuntimeSession.CreateEmpty(
+            service.CreateProject(_path, "transformer orientation"));
+        TransformerCreation creation = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(40, 50));
+        new AddTransformerCommand(
+            runtime.PersistenceSession.Domain,
+            runtime.Layout,
+            creation).Execute();
+        runtime.CommandStack.ExecuteCommand(
+            new SetTransformerOrientationCommand(
+                runtime.Layout,
+                creation.Transformer,
+                TransformerOrientation.Vertical),
+            runtime.RebuildScene);
+
+        ProjectSession saved = service.SaveProject(ProjectLayoutRuntimeMapper.ToSnapshot(
+            runtime.PersistenceSession.Domain,
+            runtime.Layout));
+        ProjectRuntimeSession reopened = ProjectRuntimeSession.Load(
+            new ProjectService(),
+            saved.FilePath);
+
+        Transformer restored = Assert.Single(reopened.PersistenceSession.Domain.Transformers);
+        Assert.Equal(creation.Transformer.Id, restored.Id);
+        Assert.Equal(creation.HvTerminal.Id, restored.HvTerminalId);
+        Assert.Equal(TransformerKind.PublicIndoor, restored.TransformerKind);
+        Assert.Equal(
+            TransformerOrientation.Vertical,
+            reopened.Layout.TransformerLayouts[restored.Id].Orientation);
+        Assert.Equal(ProjectFileFormat.Version7, reopened.PersistenceSession.Manifest.FormatVersion);
+    }
+
+    [Fact]
     public void SaveReopen_PreservesCableEndpointAndGraphConnectivity()
     {
         var service = new ProjectService();

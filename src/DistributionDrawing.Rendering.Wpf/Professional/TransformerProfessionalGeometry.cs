@@ -43,13 +43,17 @@ public sealed record TransformerProfessionalGeometry(
         TransformerDrawingMetrics metrics)
     {
         DocumentRect main = Circle(center, metrics.MainRadius);
-        DocumentRect left = Circle(Offset(center, -metrics.SmallCircleOffsetX, metrics.SmallCircleOffsetY), metrics.SmallCircleRadius);
-        DocumentRect right = Circle(Offset(center, metrics.SmallCircleOffsetX, metrics.SmallCircleOffsetY), metrics.SmallCircleRadius);
+        double smallCircleY = Math.Sqrt(
+            Math.Pow(metrics.MainRadius + metrics.SmallCircleRadius, 2) -
+            Math.Pow(metrics.SmallCircleOffsetX, 2));
+        DocumentRect left = Circle(
+            Offset(center, -metrics.SmallCircleOffsetX, smallCircleY),
+            metrics.SmallCircleRadius);
+        DocumentRect right = Circle(
+            Offset(center, metrics.SmallCircleOffsetX, smallCircleY),
+            metrics.SmallCircleRadius);
         DocumentPoint teeCenter = Offset(center, 0, metrics.TeeTopY);
-        DocumentPoint anchor = Offset(
-            center,
-            0,
-            metrics.SmallCircleOffsetY + metrics.SmallCircleRadius);
+        DocumentPoint anchor = Offset(center, 0, metrics.MainRadius);
         TransformerLineSegment[] lines =
         [
             new(Offset(teeCenter, -metrics.TeeHalfWidth, 0), Offset(teeCenter, metrics.TeeHalfWidth, 0)),
@@ -65,8 +69,13 @@ public sealed record TransformerProfessionalGeometry(
         DocumentPoint apex = Offset(center, 0, metrics.TriangleApexY);
         DocumentPoint leftBase = Offset(center, -metrics.TriangleHalfWidth, metrics.TriangleBaseY);
         DocumentPoint rightBase = Offset(center, metrics.TriangleHalfWidth, metrics.TriangleBaseY);
-        DocumentRect left = Circle(Offset(center, -metrics.SmallCircleOffsetX, metrics.SmallCircleOffsetY), metrics.SmallCircleRadius);
-        DocumentRect right = Circle(Offset(center, metrics.SmallCircleOffsetX, metrics.SmallCircleOffsetY), metrics.SmallCircleRadius);
+        double smallCircleY = metrics.TriangleBaseY + metrics.SmallCircleRadius;
+        DocumentRect left = Circle(
+            Offset(center, -metrics.SmallCircleOffsetX, smallCircleY),
+            metrics.SmallCircleRadius);
+        DocumentRect right = Circle(
+            Offset(center, metrics.SmallCircleOffsetX, smallCircleY),
+            metrics.SmallCircleRadius);
         DocumentRect triangleBounds = FromPoints([apex, leftBase, rightBase]);
         return new([left, right], [], [apex, leftBase, rightBase], Union([triangleBounds, left, right]), apex, TerminalAnchorDirection.Up);
     }

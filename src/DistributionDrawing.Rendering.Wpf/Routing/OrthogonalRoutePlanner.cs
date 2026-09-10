@@ -46,10 +46,15 @@ public sealed class OrthogonalRoutePlanner
         RoutingObstacle[] routeObstacles = obstacles
             .Where(obstacle => !requiredSourceIds.Contains(obstacle.SourceId))
             .ToArray();
-        bool substituteStart = allWaypoints.Length >= 2 &&
+        bool substituteStart = allWaypoints.Length > 0 &&
             allWaypoints[0].AllowStartEndpointSubstitution;
-        bool substituteEnd = allWaypoints.Length >= 2 &&
+        bool substituteEnd = allWaypoints.Length > 0 &&
             allWaypoints[^1].AllowEndEndpointSubstitution;
+        if (allWaypoints.Length == 1 && substituteStart && substituteEnd)
+        {
+            substituteStart = false;
+            substituteEnd = false;
+        }
         double startTransferredStub = substituteStart
             ? SuccessorMinimumStub(allWaypoints[0])
             : 0;

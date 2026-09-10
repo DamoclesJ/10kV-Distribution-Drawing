@@ -343,8 +343,32 @@ public sealed class PropertyProjector
                     "专业属性",
                     DomainRow("TransformerKind", "业务类型", kindText),
                     DomainRow("VoltageLevel", "电压等级", Transformer.TenKilovolts)),
-                LayoutSection(selection.TransformerLayout)
+                TransformerLayoutSection(transformer, selection.TransformerLayout)
             ]);
+    }
+
+    private static PropertySectionViewModel TransformerLayoutSection(
+        Transformer transformer,
+        TransformerLayout? layout)
+    {
+        if (layout is null)
+        {
+            return new PropertySectionViewModel("布局", []);
+        }
+
+        PropertyRowViewModel orientation = LayoutRow(
+            "Orientation",
+            "方向",
+            layout.Orientation == TransformerOrientation.Horizontal ? "水平" : "垂直");
+        if (transformer.TransformerKind == TransformerKind.PublicIndoor)
+        {
+            orientation = orientation with { IsReadOnly = false };
+        }
+
+        return Section(
+            "布局",
+            LayoutRow("Position", "位置", FormatPoint(layout.Position)),
+            orientation);
     }
 
     private static PropertyInspectorSnapshot ProjectOverheadLine(ResolvedSelection selection)
@@ -479,12 +503,6 @@ public sealed class PropertyProjector
                 LayoutRow("Start", "起点", FormatPoint(line.Start)),
                 LayoutRow("End", "终点", FormatPoint(line.End)),
                 LayoutRow("IsContinued", "延续图形", line.IsContinued)),
-            TransformerLayout transformer => Section(
-                "布局",
-                LayoutRow("Position", "位置", FormatPoint(transformer.Position)),
-                LayoutRow("Orientation", "方向", transformer.Orientation == TransformerOrientation.Horizontal
-                    ? "水平"
-                    : "垂直")),
             _ => new PropertySectionViewModel("布局", [])
         };
     }

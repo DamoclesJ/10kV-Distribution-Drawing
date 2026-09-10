@@ -559,6 +559,20 @@
             <Button Content="应用杆号"
                     Click="OnApplyPoleNumber" />
           </StackPanel>
+          <StackPanel x:Name="TransformerOrientationEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="站内公变方向" />
+            <ComboBox x:Name="TransformerOrientationInput"
+                      Margin="0,4,0,4">
+              <ComboBoxItem Content="水平" />
+              <ComboBoxItem Content="垂直" />
+            </ComboBox>
+            <Button Content="应用方向"
+                    Click="OnApplyTransformerOrientation" />
+          </StackPanel>
           <StackPanel x:Name="PoleInstalledDevicesPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"

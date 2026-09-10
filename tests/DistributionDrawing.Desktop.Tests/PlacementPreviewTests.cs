@@ -108,15 +108,14 @@ public sealed class PlacementPreviewTests : IDisposable
     [InlineData(TransformerKind.PublicPoleMounted, TransformerOrientation.Vertical)]
     [InlineData(TransformerKind.DedicatedPoleMounted, TransformerOrientation.Vertical)]
     [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Horizontal)]
-    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Vertical)]
-    public void TransformerPlacementUsesTypedCreationAndSelectsNewDevice(
+    public void TransformerPlacementUsesKindDefaultWithoutOrientationInput(
         TransformerKind kind,
-        TransformerOrientation orientation)
+        TransformerOrientation expectedOrientation)
     {
         ProjectRuntimeSession session = CreateSession();
         var controller = new PlacementController(() => session);
 
-        controller.BeginTransformer(kind, orientation);
+        controller.BeginTransformer(kind);
         controller.UpdatePointer(new DocumentPoint(23, 37), snapEnabled: true);
 
         Assert.NotEmpty(controller.CreatePreviewElements());
@@ -126,7 +125,7 @@ public sealed class PlacementPreviewTests : IDisposable
         Transformer transformer = Assert.Single(session.PersistenceSession.Domain.Transformers);
         Assert.Equal(kind, transformer.TransformerKind);
         Assert.Equal(new DocumentPoint(20, 40), session.Layout.TransformerLayouts[transformer.Id].Position);
-        Assert.Equal(orientation, session.Layout.TransformerLayouts[transformer.Id].Orientation);
+        Assert.Equal(expectedOrientation, session.Layout.TransformerLayouts[transformer.Id].Orientation);
         Assert.Equal(new SelectionReference(SelectionTargetKind.Device, transformer.Id), session.SelectionManager.Selected);
         Assert.Equal(PlacementMode.Idle, controller.Mode);
     }
