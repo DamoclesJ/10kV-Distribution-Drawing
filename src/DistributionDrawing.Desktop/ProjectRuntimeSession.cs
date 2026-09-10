@@ -157,6 +157,7 @@ public sealed class ProjectRuntimeSession
             RingCabinetLayout = cabinetLayout,
             RingCabinetLayouts = layout.RingCabinetLayouts,
             TransformerLayouts = layout.TransformerLayouts,
+            CustomerStationLayouts = layout.CustomerStationLayouts,
             DrawingLayout = layout.DrawingLayout,
             Poles = session.Domain.Devices.OfType<Pole>().ToArray(),
             Devices = session.Domain.Devices,
@@ -225,7 +226,8 @@ internal static class ProjectLayoutRuntimeMapper
             runtime.RingCabinetLayouts,
             domain.Connections,
             domain.CableSegments,
-            runtime.TransformerLayouts);
+            runtime.TransformerLayouts,
+            runtime.CustomerStationLayouts);
         var overheadLines = runtime.DrawingLayout.OverheadLines.Values.Select(layout =>
         {
             Connection connection = domain.Connections.SingleOrDefault(

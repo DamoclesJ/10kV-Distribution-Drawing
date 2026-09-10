@@ -15,6 +15,7 @@ using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -949,13 +950,27 @@ public sealed class DrawingClipboardTests : IDisposable
         CustomerStation redone = session.PersistenceSession.Domain.CustomerStations.Single(
             station => station.Id == pastedStationId);
         Assert.Equal(pastedStableIds, AggregateIds(redone).OrderBy(id => id).ToArray());
+        session.RebuildScene();
+        Assert.NotNull(session.Scene.HitTestIndex.Find(new SelectionReference(
+            SelectionTargetKind.Device,
+            pastedStationId)));
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            session.PersistenceSession.Domain,
+            session.Layout.DrawingLayout,
+            session.Layout.RingCabinetLayouts,
+            session.PersistenceSession.Domain.Connections,
+            session.PersistenceSession.Domain.CableSegments,
+            session.Layout.TransformerLayouts,
+            session.Layout.CustomerStationLayouts);
+        Assert.All(redone.IncomingFeeders, feeder =>
+            Assert.True(anchors.TryGet(feeder.CableTerminalId, out _)));
     }
 
     [Fact]
     public void CustomerStationPasteCommand_InvalidLayoutLeavesNoPartialAggregate()
     {
         ProjectRuntimeSession session = CreateSession("用户站粘贴原子性");
-        CustomerStation station = new CustomerStationCreationFactory().Create(
+        CustomerStation station = new DistributionDrawing.Application.Devices.CustomerStations.CustomerStationCreationFactory().Create(
             StationKind.BoxStation,
             ["主供"]);
         var invalidLayout = new CustomerStationLayout(
@@ -1113,7 +1128,7 @@ public sealed class DrawingClipboardTests : IDisposable
         DocumentPoint position,
         IReadOnlyList<bool> visibility)
     {
-        CustomerStation station = new CustomerStationCreationFactory().Create(
+        CustomerStation station = new DistributionDrawing.Application.Devices.CustomerStations.CustomerStationCreationFactory().Create(
             stationKind,
             names);
         session.PersistenceSession.Domain.AddCustomerStation(station);

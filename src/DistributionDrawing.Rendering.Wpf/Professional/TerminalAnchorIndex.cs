@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
@@ -35,7 +36,8 @@ public sealed class TerminalAnchorIndex
         IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
         IEnumerable<Connection>? connections = null,
         IEnumerable<CableSegment>? cableSegments = null,
-        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null)
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null,
+        IReadOnlyDictionary<Guid, CustomerStationLayout>? customerStationLayouts = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(drawingLayout);
@@ -182,6 +184,33 @@ public sealed class TerminalAnchorIndex
                 transformer.HvTerminalId,
                 geometry.HvAnchor,
                 geometry.HvDirection);
+        }
+
+        foreach (CustomerStation station in customerStationLayouts is null
+                     ? []
+                     : document.CustomerStations)
+        {
+            if (!customerStationLayouts!.TryGetValue(
+                    station.Id,
+                    out CustomerStationLayout? stationLayout))
+            {
+                throw new InvalidOperationException(
+                    $"No layout exists for customer station '{station.Id}'.");
+            }
+
+            CustomerStationProfessionalGeometry geometry =
+                CustomerStationProfessionalGeometry.Create(
+                    station,
+                    stationLayout,
+                    DrawingMetrics.Default.CustomerStation);
+            foreach (TerminalAnchor anchor in geometry.CableTerminalAnchors.Values)
+            {
+                Set(
+                    anchors,
+                    anchor.TerminalId,
+                    anchor.Position,
+                    anchor.Direction);
+            }
         }
 
         if (connections is not null && cableSegments is not null)

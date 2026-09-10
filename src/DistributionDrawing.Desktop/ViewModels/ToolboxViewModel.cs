@@ -8,6 +8,7 @@ public enum DesktopToolMode
     CreateRingCabinet,
     CreatePole,
     CreateTransformer,
+    CreateCustomerStation,
     CreateOverheadLine,
     CreateCable,
     AddCableTermination,
@@ -46,6 +47,7 @@ public sealed class ToolboxViewModel : INotifyPropertyChanged
     public bool IsPoleActive => SelectedMode == DesktopToolMode.CreatePole;
     public bool IsRingCabinetActive => SelectedMode == DesktopToolMode.CreateRingCabinet;
     public bool IsTransformerActive => SelectedMode == DesktopToolMode.CreateTransformer;
+    public bool IsCustomerStationActive => SelectedMode == DesktopToolMode.CreateCustomerStation;
     public bool IsOverheadLineActive => SelectedMode == DesktopToolMode.CreateOverheadLine;
     public bool IsCableActive => SelectedMode == DesktopToolMode.CreateCable;
     public bool IsCableTerminationActive => SelectedMode == DesktopToolMode.AddCableTermination;

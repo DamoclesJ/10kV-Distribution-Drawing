@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -24,6 +25,10 @@ public sealed class PlacementController
     private TransformerOrientation? _pendingTransformerOrientation;
     private Transformer? _previewTransformer;
     private TransformerLayout? _previewTransformerLayout;
+    private StationKind? _pendingCustomerStationKind;
+    private IReadOnlyList<string>? _pendingCustomerStationFeederNames;
+    private CustomerStation? _previewCustomerStation;
+    private CustomerStationLayout? _previewCustomerStationLayout;
     private DocumentPoint? _previewPosition;
     private const double PlacementGridSpacing = 10;
 
@@ -101,11 +106,35 @@ public sealed class PlacementController
         }
     }
 
+    public void BeginCustomerStation(
+        StationKind stationKind,
+        IReadOnlyList<string> feederDisplayNames)
+    {
+        ArgumentNullException.ThrowIfNull(feederDisplayNames);
+        _pendingRingCabinetConfiguration = null;
+        bool clearedVisiblePreview = ClearPreview();
+        ProjectRuntimeSession session = RequireSession();
+        AddCustomerStationWithLayoutCommand preview = _commandFactory.CreateAddCustomerStation(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            stationKind,
+            feederDisplayNames,
+            new DocumentPoint(0, 0));
+        _pendingCustomerStationKind = stationKind;
+        _pendingCustomerStationFeederNames = feederDisplayNames.ToArray();
+        _previewCustomerStation = preview.Creation.CustomerStation;
+        _previewCustomerStationLayout = preview.Creation.Layout;
+        Mode = PlacementMode.PlacingCustomerStation;
+        if (clearedVisiblePreview) SceneChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public void Cancel()
     {
         _pendingRingCabinetConfiguration = null;
         _pendingTransformerKind = null;
         _pendingTransformerOrientation = null;
+        _pendingCustomerStationKind = null;
+        _pendingCustomerStationFeederNames = null;
         Mode = PlacementMode.Idle;
         if (ClearPreview())
         {
@@ -159,16 +188,37 @@ public sealed class PlacementController
                     SelectionTargetKind.Device,
                     transformer.Creation.Transformer.Id);
                 break;
+            case PlacementMode.PlacingCustomerStation:
+                StationKind stationKind = _pendingCustomerStationKind
+                    ?? throw new InvalidOperationException(
+                        "Customer station placement has no creation configuration.");
+                IReadOnlyList<string> feederNames = _pendingCustomerStationFeederNames
+                    ?? throw new InvalidOperationException(
+                        "Customer station placement has no feeder names.");
+                AddCustomerStationWithLayoutCommand station = _commandFactory.CreateAddCustomerStation(
+                    session.PersistenceSession.Domain,
+                    session.Layout,
+                    stationKind,
+                    feederNames,
+                    position);
+                command = station;
+                selection = new SelectionReference(
+                    SelectionTargetKind.Device,
+                    station.Creation.CustomerStation.Id);
+                break;
             default:
                 return false;
         }
 
         session.CommandStack.ExecuteCommand(command);
-        if (Mode is PlacementMode.PlacingRingCabinet or PlacementMode.PlacingTransformer)
+        if (Mode is PlacementMode.PlacingRingCabinet or PlacementMode.PlacingTransformer or
+            PlacementMode.PlacingCustomerStation)
         {
             _pendingRingCabinetConfiguration = null;
             _pendingTransformerKind = null;
             _pendingTransformerOrientation = null;
+            _pendingCustomerStationKind = null;
+            _pendingCustomerStationFeederNames = null;
             Mode = PlacementMode.Idle;
         }
         _previewPosition = null;
@@ -235,6 +285,14 @@ public sealed class PlacementController
                         position,
                         _previewTransformerLayout.Orientation,
                         _previewTransformer.TransformerKind)),
+            PlacementMode.PlacingCustomerStation when _previewCustomerStation is not null &&
+                _previewCustomerStationLayout is not null =>
+                new CustomerStationRenderer().Render(
+                    _previewCustomerStation,
+                    new CustomerStationLayout(
+                        _previewCustomerStation.Id,
+                        position,
+                        _previewCustomerStationLayout.IncomingFeeders.Values)),
             _ => []
         };
         return elements
@@ -265,6 +323,8 @@ public sealed class PlacementController
         _previewCabinetLayout = null;
         _previewTransformer = null;
         _previewTransformerLayout = null;
+        _previewCustomerStation = null;
+        _previewCustomerStationLayout = null;
         return changed;
     }
 

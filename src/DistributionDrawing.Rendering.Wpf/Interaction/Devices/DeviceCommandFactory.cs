@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -17,6 +18,7 @@ public sealed class DeviceCommandFactory
         _cableTerminationAttachmentCreationFactory;
     private readonly PoleSwitchAttachmentCreationFactory _poleSwitchAttachmentCreationFactory;
     private readonly TransformerCreationFactory _transformerCreationFactory;
+    private readonly CustomerStationCreationFactory _customerStationCreationFactory;
 
     public DeviceCommandFactory(
         RingCabinetCreationFactory? ringCabinetCreationFactory = null,
@@ -31,6 +33,7 @@ public sealed class DeviceCommandFactory
             new CableTerminationAttachmentCreationFactory();
         _poleSwitchAttachmentCreationFactory = new PoleSwitchAttachmentCreationFactory();
         _transformerCreationFactory = new TransformerCreationFactory();
+        _customerStationCreationFactory = new CustomerStationCreationFactory();
     }
 
     public AddPoleCommand CreateAddPole(
@@ -84,6 +87,22 @@ public sealed class DeviceCommandFactory
             position,
             orientation);
         return new AddTransformerCommand(document, runtimeLayout, creation);
+    }
+
+    public AddCustomerStationWithLayoutCommand CreateAddCustomerStation(
+        DrawingDocument document,
+        RuntimeLayoutDocument runtimeLayout,
+        StationKind stationKind,
+        IReadOnlyList<string> feederDisplayNames,
+        DocumentPoint position)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(runtimeLayout);
+        CustomerStationCreation creation = _customerStationCreationFactory.Create(
+            stationKind,
+            feederDisplayNames,
+            position);
+        return new AddCustomerStationWithLayoutCommand(document, runtimeLayout, creation);
     }
 
     public AddRingCabinetCommand CreateAddRingCabinet(
@@ -208,7 +227,8 @@ public sealed class DeviceCommandFactory
             runtimeLayout.RingCabinetLayouts,
             document.Connections,
             document.CableSegments,
-            runtimeLayout.TransformerLayouts);
+            runtimeLayout.TransformerLayouts,
+            runtimeLayout.CustomerStationLayouts);
         var connectionPositions = attachedConnections.Select(connection =>
         {
             Guid poleTerminalId = poleTerminalIds.Contains(connection.StartTerminalId)
@@ -520,8 +540,12 @@ public sealed class DeviceCommandFactory
                 document,
                 runtimeLayout,
                 transformer.Id),
+            CustomerStation station => new RemoveCustomerStationWithLayoutCommand(
+                document,
+                runtimeLayout,
+                station.Id),
             _ => throw new InvalidOperationException(
-                "Only Pole, RingCabinet and Transformer deletion is supported in this phase.")
+                "Only aggregate-aware device deletion is supported in this phase.")
         };
     }
 

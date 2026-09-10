@@ -62,7 +62,8 @@ public sealed class CableReconnectController
             session.Layout.RingCabinetLayouts,
             document.Connections,
             document.CableSegments,
-            session.Layout.TransformerLayouts);
+            session.Layout.TransformerLayouts,
+            session.Layout.CustomerStationLayouts);
         TerminalAnchor picked = PickAnchor(
             document,
             cable,

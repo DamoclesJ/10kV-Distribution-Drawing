@@ -22,6 +22,9 @@ public sealed class PropertyInspectionSource
     public IReadOnlyDictionary<Guid, TransformerLayout> TransformerLayouts { get; init; } =
         new Dictionary<Guid, TransformerLayout>();
 
+    public IReadOnlyDictionary<Guid, CustomerStationLayout> CustomerStationLayouts { get; init; } =
+        new Dictionary<Guid, CustomerStationLayout>();
+
     public DrawingLayout? DrawingLayout { get; init; }
 
     public IReadOnlyList<Pole> Poles { get; init; } = [];

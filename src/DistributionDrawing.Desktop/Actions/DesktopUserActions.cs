@@ -40,6 +40,7 @@ public sealed class DesktopUserActionHandlers
     public required Action CreatePole { get; init; }
     public required Action CreateRingCabinet { get; init; }
     public Action? CreateTransformer { get; init; }
+    public Action? CreateCustomerStation { get; init; }
     public required Action CreateOverheadLine { get; init; }
     public required Action CreateCable { get; init; }
     public required Action AddCableTermination { get; init; }
@@ -133,6 +134,11 @@ public sealed class DesktopUserActions
             handlers.CreateTransformer ?? (() => { }),
             messages,
             CanStartDrawing);
+        CreateCustomerStation = Create(
+            "无法添加用户站",
+            handlers.CreateCustomerStation ?? (() => { }),
+            messages,
+            CanStartDrawing);
         CreateOverheadLine = Create(
             "无法绘制架空线",
             handlers.CreateOverheadLine,
@@ -194,7 +200,8 @@ public sealed class DesktopUserActions
         [
             New, Open, Save, SaveAs, CloseDocument, ExportPng, Exit,
             Undo, Redo, Copy, Paste, PasteAtCursor, SelectAll, Delete, CancelCurrentOperation,
-            Select, CreatePole, CreateRingCabinet, CreateTransformer, CreateOverheadLine, CreateCable,
+            Select, CreatePole, CreateRingCabinet, CreateTransformer, CreateCustomerStation,
+            CreateOverheadLine, CreateCable,
             AddCableTermination, AddPoleSwitch, AddGroundingPoint, AddWorkScope,
             ZoomIn, ZoomOut, FitDrawing, ToggleGrid, TypographySettings,
             RotateLeft, RotateRight, SwitchOperation,
@@ -221,6 +228,7 @@ public sealed class DesktopUserActions
     public DesktopAction CreatePole { get; }
     public DesktopAction CreateRingCabinet { get; }
     public DesktopAction CreateTransformer { get; }
+    public DesktopAction CreateCustomerStation { get; }
     public DesktopAction CreateOverheadLine { get; }
     public DesktopAction CreateCable { get; }
     public DesktopAction AddCableTermination { get; }

@@ -3,9 +3,13 @@ using DistributionDrawing.Application.Devices.CustomerStations;
 using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.CustomerStations;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Professional;
+using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -42,6 +46,9 @@ public sealed class CustomerStationPersistenceRuntimeTests : IDisposable
                         false)
                 ]),
             station);
+        new ProfessionalCommandFactory().CreateAddGroundingPoint(
+            runtime.PersistenceSession.Domain,
+            station.IncomingFeeders[1].CableTerminalId).Execute();
 
         ProjectSession saved = service.SaveProject(ProjectLayoutRuntimeMapper.ToSnapshot(
             runtime.PersistenceSession.Domain,
@@ -83,6 +90,35 @@ public sealed class CustomerStationPersistenceRuntimeTests : IDisposable
             restored.IncomingFeeders[1].CableTerminalId));
         Assert.Equal(ProjectFileFormat.Version7,
             reopened.PersistenceSession.Manifest.FormatVersion);
+        Assert.NotNull(reopened.Scene.HitTestIndex.Find(new SelectionReference(
+            SelectionTargetKind.Device,
+            restored.Id)));
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            reopened.PersistenceSession.Domain,
+            reopened.Layout.DrawingLayout,
+            reopened.Layout.RingCabinetLayouts,
+            reopened.PersistenceSession.Domain.Connections,
+            reopened.PersistenceSession.Domain.CableSegments,
+            reopened.Layout.TransformerLayouts,
+            reopened.Layout.CustomerStationLayouts);
+        Assert.True(anchors.TryGet(restored.IncomingFeeders[0].CableTerminalId, out _));
+        Assert.True(anchors.TryGet(restored.IncomingFeeders[1].CableTerminalId, out _));
+        Assert.NotNull(reopened.Scene.HitTestIndex.Find(new SelectionReference(
+            SelectionTargetKind.Device,
+            restored.IncomingFeeders[0].IsolationSwitch.Id)));
+        Assert.Null(reopened.Scene.HitTestIndex.Find(new SelectionReference(
+            SelectionTargetKind.Device,
+            restored.IncomingFeeders[1].IsolationSwitch.Id)));
+        GroundingPoint restoredGrounding = Assert.Single(
+            reopened.PersistenceSession.Domain.GroundingPoints);
+        Assert.Equal(restored.IncomingFeeders[1].CableTerminalId,
+            restoredGrounding.Target.TargetId);
+        TerminalAnchor hiddenAnchor = anchors.Anchors.Single(anchor =>
+            anchor.TerminalId == restored.IncomingFeeders[1].CableTerminalId);
+        SelectionHitTestEntry groundingHit = reopened.Scene.HitTestIndex.Entries.First(entry =>
+            entry.Target.Kind == SelectionTargetKind.GroundingPoint &&
+            entry.GroundingAnchor is not null);
+        Assert.Equal(hiddenAnchor.Position, groundingHit.GroundingAnchor!.Value.Position);
     }
 
     public void Dispose()

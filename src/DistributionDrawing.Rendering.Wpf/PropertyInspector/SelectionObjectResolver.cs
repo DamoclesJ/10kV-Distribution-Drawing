@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -52,6 +53,7 @@ public sealed class SelectionObjectResolver
             SwitchDevice = resolved.SwitchDevice,
             Pole = resolved.Pole,
             Transformer = resolved.Transformer,
+            CustomerStation = resolved.CustomerStation,
             PoleAttachment = resolved.PoleAttachment,
             AttachedDevice = resolved.AttachedDevice,
             CableTermination = resolved.CableTermination,
@@ -66,6 +68,7 @@ public sealed class SelectionObjectResolver
             RingCabinetIntervalLayout = resolved.RingCabinetIntervalLayout,
             PoleLayout = resolved.PoleLayout,
             TransformerLayout = resolved.TransformerLayout,
+            CustomerStationLayout = resolved.CustomerStationLayout,
             AttachmentLayout = resolved.AttachmentLayout,
             OverheadLineLayout = resolved.OverheadLineLayout,
             HitTestEntry = _source.HitTestIndex?.Find(reference)
@@ -124,6 +127,25 @@ public sealed class SelectionObjectResolver
 
     private ResolvedSelection? ResolveDevice(SelectionReference reference)
     {
+        CustomerStation? customerStation = _source.Devices.OfType<CustomerStation>()
+            .SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
+        if (customerStation is not null)
+        {
+            if (!_source.CustomerStationLayouts.TryGetValue(
+                    customerStation.Id,
+                    out CustomerStationLayout? customerStationLayout))
+            {
+                return null;
+            }
+
+            return new ResolvedSelection
+            {
+                Reference = reference,
+                CustomerStation = customerStation,
+                CustomerStationLayout = customerStationLayout
+            };
+        }
+
         Transformer? transformer = _source.Devices.OfType<Transformer>()
             .SingleOrDefault(candidate => candidate.Id == reference.ObjectId);
         if (transformer is not null)
@@ -188,6 +210,34 @@ public sealed class SelectionObjectResolver
                 AttachedDevice = poleSwitch,
                 PoleLayout = poleLayout,
                 AttachmentLayout = attachmentLayout
+            };
+        }
+
+        CustomerStation? switchStation = _source.Devices.OfType<CustomerStation>()
+            .SingleOrDefault(station => station.IncomingFeeders.Any(feeder =>
+                feeder.IsolationSwitch.Id == reference.ObjectId));
+        if (switchStation is not null)
+        {
+            IncomingFeeder feeder = switchStation.IncomingFeeders.Single(item =>
+                item.IsolationSwitch.Id == reference.ObjectId);
+            if (reference.ParentId is Guid feederId && feederId != feeder.IncomingFeederId)
+            {
+                return null;
+            }
+
+            if (!_source.CustomerStationLayouts.TryGetValue(
+                    switchStation.Id,
+                    out CustomerStationLayout? stationLayout))
+            {
+                return null;
+            }
+
+            return new ResolvedSelection
+            {
+                Reference = reference,
+                CustomerStation = switchStation,
+                CustomerStationLayout = stationLayout,
+                SwitchDevice = feeder.IsolationSwitch
             };
         }
 

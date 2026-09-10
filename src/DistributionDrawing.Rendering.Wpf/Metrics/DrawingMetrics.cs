@@ -29,6 +29,19 @@ public sealed record DrawingMetrics(
         IndoorCoilCenterSpacing: 12,
         HitPadding: 2);
 
+    public CustomerStationDrawingMetrics CustomerStation { get; init; } = new(
+        UnitWidth: 36,
+        UnitHeight: 30,
+        UnitSpacing: 8,
+        RoofHeight: 8,
+        TriangleHalfWidth: 8,
+        TriangleHalfHeight: 7,
+        SwitchLength: 16,
+        SwitchOpenRise: 6,
+        ContactRadius: 1.5,
+        LabelOffset: 7,
+        HitPadding: 2);
+
     public GroundingDrawingMetrics Grounding { get; init; } = new(
         LeaderLength: 18, StemLength: 12, BarSpacing: 3,
         TopBarWidth: 12, MiddleBarWidth: 8, BottomBarWidth: 4,
@@ -118,6 +131,19 @@ public sealed record TransformerDrawingMetrics(
     double TriangleBaseY,
     double IndoorCoilRadius,
     double IndoorCoilCenterSpacing,
+    double HitPadding);
+
+public sealed record CustomerStationDrawingMetrics(
+    double UnitWidth,
+    double UnitHeight,
+    double UnitSpacing,
+    double RoofHeight,
+    double TriangleHalfWidth,
+    double TriangleHalfHeight,
+    double SwitchLength,
+    double SwitchOpenRise,
+    double ContactRadius,
+    double LabelOffset,
     double HitPadding);
 
 public sealed record GroundingDrawingMetrics(

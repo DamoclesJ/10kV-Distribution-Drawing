@@ -1,6 +1,7 @@
 using System.Globalization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
@@ -34,6 +35,15 @@ public sealed class PropertyCommandFactory
         EditPropertyCommand.RingCabinetDisplayNameProperty;
     public const string RingCabinetLineNamePropertyKey =
         EditPropertyCommand.RingCabinetLineNameProperty;
+    private const string CustomerStationFeederPrefix = "CustomerStation.Feeder.";
+    private const string CustomerStationDisplayNameSuffix = ".DisplayName";
+    private const string CustomerStationVisibilitySuffix = ".ShowIncomingSwitch";
+
+    public static string CustomerStationFeederDisplayNamePropertyKey(Guid incomingFeederId) =>
+        $"{CustomerStationFeederPrefix}{incomingFeederId}{CustomerStationDisplayNameSuffix}";
+
+    public static string CustomerStationFeederVisibilityPropertyKey(Guid incomingFeederId) =>
+        $"{CustomerStationFeederPrefix}{incomingFeederId}{CustomerStationVisibilitySuffix}";
 
     public bool TryCreateIntervalTypeChange(
         ResolvedSelection selection,
@@ -148,12 +158,72 @@ public sealed class PropertyCommandFactory
         string propertyKey,
         string input,
         out ICommand? command,
-        out PropertyEditError? error)
+        out PropertyEditError? error,
+        RuntimeLayoutDocument? runtimeLayout = null)
     {
         ArgumentNullException.ThrowIfNull(selection);
 
         command = null;
         error = null;
+
+        if (selection.CustomerStation is not null &&
+            selection.Reference.Kind == SelectionTargetKind.Device)
+        {
+            if (TryParseCustomerStationPropertyKey(
+                    propertyKey,
+                    CustomerStationDisplayNameSuffix,
+                    out Guid nameFeederId))
+            {
+                if (string.IsNullOrWhiteSpace(input))
+                {
+                    error = new PropertyEditError("InputInvalid", "进线名称不能为空。");
+                    return false;
+                }
+
+                IncomingFeeder feeder = selection.CustomerStation.IncomingFeeders
+                    .SingleOrDefault(item => item.IncomingFeederId == nameFeederId)
+                    ?? throw new InvalidOperationException("所选进线不存在。");
+                if (feeder.DisplayName == input.Trim())
+                {
+                    error = new PropertyEditError("NoChange", "进线名称没有变化。");
+                    return false;
+                }
+
+                command = new RenameIncomingFeederCommandAdapter(
+                    selection.CustomerStation,
+                    nameFeederId,
+                    input);
+                return true;
+            }
+
+            if (TryParseCustomerStationPropertyKey(
+                    propertyKey,
+                    CustomerStationVisibilitySuffix,
+                    out Guid visibilityFeederId))
+            {
+                if (runtimeLayout is null)
+                {
+                    error = new PropertyEditError("LayoutUnavailable", "用户站运行时布局不可用。");
+                    return false;
+                }
+
+                if (!TryParseBoolean(input, out bool isVisible))
+                {
+                    error = new PropertyEditError("InputInvalid", "请输入“是”或“否”。");
+                    return false;
+                }
+
+                command = new SetCustomerStationIncomingSwitchVisibilityCommand(
+                    runtimeLayout,
+                    selection.CustomerStation,
+                    visibilityFeederId,
+                    isVisible);
+                return true;
+            }
+
+            error = new PropertyEditError("PropertyReadOnly", $"Property '{propertyKey}' is not editable.");
+            return false;
+        }
 
         if (selection.RingCabinet is not null &&
             selection.RingCabinetInterval is null &&
@@ -298,6 +368,31 @@ public sealed class PropertyCommandFactory
             selection.Pole.PoleNumber,
             after);
         return true;
+    }
+
+    private static bool TryParseCustomerStationPropertyKey(
+        string propertyKey,
+        string suffix,
+        out Guid incomingFeederId)
+    {
+        incomingFeederId = Guid.Empty;
+        if (!propertyKey.StartsWith(CustomerStationFeederPrefix, StringComparison.Ordinal) ||
+            !propertyKey.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string id = propertyKey[CustomerStationFeederPrefix.Length..
+            ^suffix.Length];
+        return Guid.TryParse(id, out incomingFeederId) && incomingFeederId != Guid.Empty;
+    }
+
+    private static bool TryParseBoolean(string input, out bool value)
+    {
+        if (bool.TryParse(input, out value)) return true;
+        if (input.Trim() is "是" or "显示") { value = true; return true; }
+        if (input.Trim() is "否" or "隐藏") { value = false; return true; }
+        return false;
     }
 
     private static bool TryCreateCableProperty(

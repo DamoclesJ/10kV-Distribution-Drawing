@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Domain.Professional;
@@ -42,6 +43,7 @@ public sealed class SelectionDeletePlanner
         HashSet<Guid> groundingPointIds = [];
         HashSet<Guid> groundingAccessPointIds = [];
         HashSet<Guid> transformerIds = [];
+        HashSet<Guid> customerStationIds = [];
 
         foreach (SelectionReference reference in selection.SelectedReferences)
         {
@@ -54,6 +56,11 @@ public sealed class SelectionDeletePlanner
                     break;
                 case SelectionTargetKind.Device:
                     Device? device = document.Devices.SingleOrDefault(item => item.Id == reference.ObjectId);
+                    if (device is SwitchDevice { InstallationType: SwitchInstallationType.CustomerStationIncomingFeeder })
+                    {
+                        throw new InvalidOperationException(
+                            "用户站进线隔离开关属于用户站聚合，不能单独删除。");
+                    }
                     if (device is SwitchDevice or CableTermination)
                     {
                         if (device is SwitchDevice { ParentId: Guid intervalId } &&
@@ -74,6 +81,10 @@ public sealed class SelectionDeletePlanner
                         if (device is Transformer transformer)
                         {
                             transformerIds.Add(transformer.Id);
+                        }
+                        else if (device is CustomerStation customerStation)
+                        {
+                            customerStationIds.Add(customerStation.Id);
                         }
                         else
                         {
@@ -168,6 +179,14 @@ public sealed class SelectionDeletePlanner
         foreach (Guid transformerId in transformerIds.OrderBy(id => id))
         {
             commands.Add(new RemoveTransformerCommand(document, layout, transformerId));
+        }
+
+        foreach (Guid customerStationId in customerStationIds.OrderBy(id => id))
+        {
+            commands.Add(new RemoveCustomerStationWithLayoutCommand(
+                document,
+                layout,
+                customerStationId));
         }
 
         foreach (Guid poleId in poleIds.OrderBy(id => id))

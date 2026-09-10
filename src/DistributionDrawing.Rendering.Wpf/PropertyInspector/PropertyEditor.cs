@@ -47,7 +47,8 @@ public sealed class PropertyEditor
                 propertyKey,
                 input,
                 out ICommand? command,
-                out PropertyEditError? error))
+                out PropertyEditError? error,
+                _runtimeLayout))
         {
             PropertyEditError failure = error ??
                 new PropertyEditError("PropertyInvalid", "The property edit was rejected.");

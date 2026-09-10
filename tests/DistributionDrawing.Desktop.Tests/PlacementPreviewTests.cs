@@ -4,6 +4,7 @@ using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -12,6 +13,7 @@ using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -151,6 +153,121 @@ public sealed class PlacementPreviewTests : IDisposable
         Assert.Same(creation.Transformer, Assert.Single(session.PersistenceSession.Domain.Transformers));
         Assert.Same(creation.HvTerminal, Assert.Single(session.PersistenceSession.Domain.Terminals));
         Assert.Same(creation.Layout, session.Layout.TransformerLayouts[creation.Transformer.Id]);
+    }
+
+    [Theory]
+    [InlineData(StationKind.BoxStation, 1)]
+    [InlineData(StationKind.IndoorStation, 1)]
+    [InlineData(StationKind.IndoorStation, 2)]
+    public void CustomerStationPlacementCommitsAtSnappedPointAndAutoSelects(
+        StationKind kind,
+        int feederCount)
+    {
+        ProjectRuntimeSession session = CreateSession();
+        var controller = new PlacementController(() => session);
+        string[] names = feederCount == 1 ? ["主供"] : ["主供", "备供"];
+
+        controller.BeginCustomerStation(kind, names);
+        controller.UpdatePointer(new DocumentPoint(23, 37), snapEnabled: true);
+
+        Assert.NotEmpty(controller.CreatePreviewElements());
+        Assert.Empty(session.PersistenceSession.Domain.CustomerStations);
+        Assert.True(controller.Place(new DocumentPoint(23, 37), snapEnabled: true));
+        CustomerStation station = Assert.Single(session.PersistenceSession.Domain.CustomerStations);
+        Assert.Equal(feederCount, station.IncomingFeeders.Count);
+        Assert.Equal(new DocumentPoint(20, 40), session.Layout.CustomerStationLayouts[station.Id].Position);
+        Assert.All(station.IncomingFeeders, feeder =>
+        {
+            Assert.Equal(SwitchState.Open, feeder.IsolationSwitch.SwitchState);
+            Assert.True(session.Layout.CustomerStationLayouts[station.Id]
+                .IncomingFeeders[feeder.IncomingFeederId].ShowIncomingSwitch);
+        });
+        Assert.Equal(new SelectionReference(SelectionTargetKind.Device, station.Id),
+            session.SelectionManager.Selected);
+        Assert.Equal(PlacementMode.Idle, controller.Mode);
+    }
+
+    [Fact]
+    public void UnifiedDeleteRemovesCustomerStationAndRejectsOwnedSwitchSelection()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        AddCustomerStationWithLayoutCommand add = new DeviceCommandFactory().CreateAddCustomerStation(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            StationKind.IndoorStation,
+            ["主供", "备供"],
+            new DocumentPoint(30, 40));
+        add.Execute();
+        CustomerStation station = add.Creation.CustomerStation;
+        var planner = new SelectionDeletePlanner();
+
+        Assert.Throws<InvalidOperationException>(() => planner.Create(
+            session,
+            SelectionSet.Create([new SelectionReference(
+                SelectionTargetKind.Device,
+                station.IncomingFeeders[0].IsolationSwitch.Id,
+                station.IncomingFeeders[0].IncomingFeederId)])));
+        ICommand remove = planner.Create(session, SelectionSet.Create([
+            new SelectionReference(SelectionTargetKind.Device, station.Id)]));
+        remove.Execute();
+        Assert.Empty(session.PersistenceSession.Domain.CustomerStations);
+        Assert.Empty(session.Layout.CustomerStationLayouts);
+        remove.Undo();
+        Assert.Same(station, Assert.Single(session.PersistenceSession.Domain.CustomerStations));
+        Assert.Same(add.Creation.Layout, session.Layout.CustomerStationLayouts[station.Id]);
+        remove.Redo();
+        Assert.Empty(session.PersistenceSession.Domain.CustomerStations);
+    }
+
+    [Fact]
+    public void GroundingPickerUsesCurrentCustomerStationCableTerminalAnchor()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        AddCustomerStationWithLayoutCommand add = new DeviceCommandFactory().CreateAddCustomerStation(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            StationKind.IndoorStation,
+            ["主供"],
+            new DocumentPoint(100, 100));
+        add.Execute();
+        session.RebuildScene();
+        IncomingFeeder feeder = Assert.Single(add.Creation.CustomerStation.IncomingFeeders);
+        TerminalAnchor shown = Anchor(session, feeder.CableTerminalId);
+        var picker = new GroundingTargetPicker();
+
+        GroundingTargetCandidate shownCandidate = Assert.IsType<GroundingTargetCandidate>(
+            picker.Resolve(session.PersistenceSession.Domain, session.Layout, session.Scene,
+                shown.Position, 0.1));
+        Assert.Equal(feeder.CableTerminalId, shownCandidate.Target.TargetId);
+
+        new SetCustomerStationIncomingSwitchVisibilityCommand(
+            session.Layout,
+            add.Creation.CustomerStation,
+            feeder.IncomingFeederId,
+            false).Execute();
+        session.RebuildScene();
+        TerminalAnchor hidden = Anchor(session, feeder.CableTerminalId);
+        GroundingTargetCandidate hiddenCandidate = Assert.IsType<GroundingTargetCandidate>(
+            picker.Resolve(session.PersistenceSession.Domain, session.Layout, session.Scene,
+                hidden.Position, 0.1));
+        Assert.Equal(feeder.CableTerminalId, hiddenCandidate.Target.TargetId);
+        Assert.NotEqual(shown.Position, hidden.Position);
+        Assert.Null(picker.Resolve(session.PersistenceSession.Domain, session.Layout, session.Scene,
+            add.Creation.Layout.Position, 0.1));
+    }
+
+    private static TerminalAnchor Anchor(ProjectRuntimeSession session, Guid terminalId)
+    {
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            session.PersistenceSession.Domain,
+            session.Layout.DrawingLayout,
+            session.Layout.RingCabinetLayouts,
+            session.PersistenceSession.Domain.Connections,
+            session.PersistenceSession.Domain.CableSegments,
+            session.Layout.TransformerLayouts,
+            session.Layout.CustomerStationLayouts);
+        Assert.True(anchors.TryGet(terminalId, out TerminalAnchor anchor));
+        return anchor;
     }
 
     private ProjectRuntimeSession CreateSession()

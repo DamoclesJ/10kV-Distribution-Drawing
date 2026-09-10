@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Globalization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
@@ -32,6 +33,7 @@ using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.RingCabinetCreation;
 using DistributionDrawing.Desktop.RingCabinetEditing;
 using DistributionDrawing.Desktop.TransformerCreationUi;
+using DistributionDrawing.Desktop.CustomerStationCreationUi;
 using DistributionDrawing.Desktop.Viewport;
 using DistributionDrawing.Desktop.Services;
 using DistributionDrawing.Desktop.ViewModels;
@@ -179,6 +181,7 @@ public partial class MainWindow : Window
                 CreatePole = () => OnBeginPlacePole(this, new RoutedEventArgs()),
                 CreateRingCabinet = () => OnBeginPlaceRingCabinet(this, new RoutedEventArgs()),
                 CreateTransformer = () => OnBeginPlaceTransformer(this, new RoutedEventArgs()),
+                CreateCustomerStation = () => OnBeginPlaceCustomerStation(this, new RoutedEventArgs()),
                 CreateOverheadLine = () => OnBeginOverheadLine(this, new RoutedEventArgs()),
                 CreateCable = () => OnBeginCable(this, new RoutedEventArgs()),
                 AddCableTermination = () => OnAddCableTermination(this, new RoutedEventArgs()),
@@ -264,6 +267,18 @@ public partial class MainWindow : Window
         CancelProfessionalPicking();
         _drawingTools.BeginTransformer(dialog.SelectedKind);
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateTransformer);
+        UpdateCanvasStatus();
+    }
+
+    private void OnBeginPlaceCustomerStation(object sender, RoutedEventArgs e)
+    {
+        var dialog = new CustomerStationCreationDialog { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        CancelDeviceDrag();
+        CancelProfessionalPicking();
+        _drawingTools.BeginCustomerStation(dialog.SelectedKind, dialog.FeederDisplayNames);
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateCustomerStation);
         UpdateCanvasStatus();
     }
 
@@ -747,6 +762,7 @@ public partial class MainWindow : Window
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
         UpdateTransformerOrientationEditor();
+        UpdateCustomerStationEditor();
         UpdatePoleInstalledDevicesEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
@@ -1202,6 +1218,8 @@ public partial class MainWindow : Window
                     "杆塔：单击图面连续放置，Esc 或右键退出",
                 DesktopToolMode.CreateTransformer =>
                     "变压器：单击图面放置，Esc 或右键退出",
+                DesktopToolMode.CreateCustomerStation =>
+                    "用户站：单击图面放置，Esc 或右键退出",
                 _ when _currentScene?.Diagnostics.Count > 0 =>
                     $"专业显示错误：{_currentScene.Diagnostics[0].Message}",
                 _ => "选择对象"
@@ -1227,6 +1245,7 @@ public partial class MainWindow : Window
             PlacementMode.PlacingPole => DesktopToolMode.CreatePole,
             PlacementMode.PlacingRingCabinet => DesktopToolMode.CreateRingCabinet,
             PlacementMode.PlacingTransformer => DesktopToolMode.CreateTransformer,
+            PlacementMode.PlacingCustomerStation => DesktopToolMode.CreateCustomerStation,
             _ when _overheadLineConnection.IsActive => DesktopToolMode.CreateOverheadLine,
             _ when _cableConnection.IsActive => DesktopToolMode.CreateCable,
             _ when _poleSwitchAttachment.IsSelectingControlledConnection =>
@@ -2462,6 +2481,7 @@ public partial class MainWindow : Window
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
         UpdateTransformerOrientationEditor();
+        UpdateCustomerStationEditor();
         UpdatePoleInstalledDevicesEditor();
         UpdateIntervalEditor();
         UpdateAttachmentOffsetEditor();
@@ -2479,6 +2499,7 @@ public partial class MainWindow : Window
         RingCabinetEditorPanel.Visibility = Visibility.Collapsed;
         PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
         TransformerOrientationEditorPanel.Visibility = Visibility.Collapsed;
+        CustomerStationEditorPanel.Visibility = Visibility.Collapsed;
         PoleInstalledDevicesPanel.Visibility = Visibility.Collapsed;
         IntervalEditorPanel.Visibility = Visibility.Collapsed;
         AttachmentOffsetEditorPanel.Visibility = Visibility.Collapsed;
@@ -2892,6 +2913,102 @@ public partial class MainWindow : Window
         TransformerOrientationEditorPanel.Visibility = Visibility.Visible;
         TransformerOrientationInput.SelectedIndex =
             layout.Orientation == TransformerOrientation.Horizontal ? 0 : 1;
+    }
+
+    private void UpdateCustomerStationEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.CustomerStation is not { } station ||
+            selection.CustomerStationLayout is not { } layout)
+        {
+            CustomerStationEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        CustomerStationEditorPanel.Visibility = Visibility.Visible;
+        var feeders = station.IncomingFeeders.OrderBy(feeder => feeder.Sequence).ToArray();
+        CustomerStationFeeder1NameInput.Text = feeders[0].DisplayName;
+        CustomerStationFeeder1VisibilityInput.SelectedIndex =
+            layout.IncomingFeeders[feeders[0].IncomingFeederId].ShowIncomingSwitch ? 0 : 1;
+        bool indoor = station.StationKind == StationKind.IndoorStation;
+        CustomerStationFeeder1VisibilityPanel.Visibility = indoor
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        CustomerStationFeeder2EditorPanel.Visibility = feeders.Length == 2
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (feeders.Length == 2)
+        {
+            CustomerStationFeeder2NameInput.Text = feeders[1].DisplayName;
+            CustomerStationFeeder2VisibilityInput.SelectedIndex =
+                layout.IncomingFeeders[feeders[1].IncomingFeederId].ShowIncomingSwitch ? 0 : 1;
+        }
+    }
+
+    private void OnApplyCustomerStationFeeder1Name(object sender, RoutedEventArgs e) =>
+        ApplyCustomerStationFeederName(1, CustomerStationFeeder1NameInput.Text);
+
+    private void OnApplyCustomerStationFeeder2Name(object sender, RoutedEventArgs e) =>
+        ApplyCustomerStationFeederName(2, CustomerStationFeeder2NameInput.Text);
+
+    private void OnApplyCustomerStationFeeder1Visibility(object sender, RoutedEventArgs e) =>
+        ApplyCustomerStationFeederVisibility(
+            1,
+            CustomerStationFeeder1VisibilityInput.SelectedIndex == 0);
+
+    private void OnApplyCustomerStationFeeder2Visibility(object sender, RoutedEventArgs e) =>
+        ApplyCustomerStationFeederVisibility(
+            2,
+            CustomerStationFeeder2VisibilityInput.SelectedIndex == 0);
+
+    private void ApplyCustomerStationFeederName(int sequence, string displayName)
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.CustomerStation is not { } station ||
+            _selectionManager.Selected is not { } target)
+        {
+            ShowCommandError("进线名称修改失败", "请先选择用户站。");
+            return;
+        }
+
+        IncomingFeeder feeder = station.IncomingFeeders.Single(item => item.Sequence == sequence);
+        PropertyEditResult result = _propertyEditor.TryEdit(
+            target,
+            PropertyCommandFactory.CustomerStationFeederDisplayNamePropertyKey(
+                feeder.IncomingFeederId),
+            displayName);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError("进线名称修改失败", result.ErrorMessage ?? "属性修改失败。");
+            return;
+        }
+
+        RefreshDrawingScene();
+    }
+
+    private void ApplyCustomerStationFeederVisibility(int sequence, bool showIncomingSwitch)
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.CustomerStation is not { StationKind: StationKind.IndoorStation } station ||
+            _selectionManager.Selected is not { } target)
+        {
+            ShowCommandError("开关显示修改失败", "仅室内用户站支持修改开关显示状态。");
+            return;
+        }
+
+        IncomingFeeder feeder = station.IncomingFeeders.Single(item => item.Sequence == sequence);
+        PropertyEditResult result = _propertyEditor.TryEdit(
+            target,
+            PropertyCommandFactory.CustomerStationFeederVisibilityPropertyKey(
+                feeder.IncomingFeederId),
+            showIncomingSwitch ? "显示" : "隐藏");
+        if (!result.IsSuccess)
+        {
+            ShowCommandError("开关显示修改失败", result.ErrorMessage ?? "属性修改失败。");
+            return;
+        }
+
+        RefreshDrawingScene();
     }
 
     private void OnApplyTransformerOrientation(object sender, RoutedEventArgs e)
@@ -3380,7 +3497,8 @@ public partial class MainWindow : Window
                 new RuntimeLayoutDocument(
                     layout,
                     source.RingCabinetLayouts,
-                    transformerLayouts: source.TransformerLayouts))
+                    transformerLayouts: source.TransformerLayouts,
+                    customerStationLayouts: source.CustomerStationLayouts))
             : _sceneBuilder.Build(
                 layout,
                 source.Poles,
@@ -3395,6 +3513,7 @@ public partial class MainWindow : Window
             DrawingLayout = layout,
             RingCabinetLayouts = source.RingCabinetLayouts,
             TransformerLayouts = source.TransformerLayouts,
+            CustomerStationLayouts = source.CustomerStationLayouts,
             Poles = source.Poles,
             Devices = source.Devices,
             PoleAttachments = source.PoleAttachments,
@@ -3428,7 +3547,8 @@ public partial class MainWindow : Window
             _activeSource.RingCabinetLayouts,
             document.Connections,
             document.CableSegments,
-            _activeSource.TransformerLayouts);
+            _activeSource.TransformerLayouts,
+            _activeSource.CustomerStationLayouts);
         return anchors.Anchors
             .Where(anchor => WorkScopeBoundaryTerminalEligibility.IsEligible(
                 document,

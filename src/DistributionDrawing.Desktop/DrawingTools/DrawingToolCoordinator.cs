@@ -5,6 +5,7 @@ using DistributionDrawing.Desktop.PoleSwitchCreation;
 using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -84,6 +85,17 @@ public sealed class DrawingToolCoordinator
         _cableReconnect.Cancel();
         _poleSwitchAttachment.Cancel();
         _placement.BeginTransformer(transformerKind, orientation);
+    }
+
+    public void BeginCustomerStation(
+        StationKind stationKind,
+        IReadOnlyList<string> feederDisplayNames)
+    {
+        _overheadLine.Cancel();
+        _cableConnection.Cancel();
+        _cableReconnect.Cancel();
+        _poleSwitchAttachment.Cancel();
+        _placement.BeginCustomerStation(stationKind, feederDisplayNames);
     }
 
     public void BeginOverheadLine()

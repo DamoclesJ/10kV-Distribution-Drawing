@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
@@ -23,6 +24,8 @@ public sealed class ResolvedSelection
     public Pole? Pole { get; init; }
 
     public Transformer? Transformer { get; init; }
+
+    public CustomerStation? CustomerStation { get; init; }
 
     public PoleAttachment? PoleAttachment { get; init; }
 
@@ -51,6 +54,8 @@ public sealed class ResolvedSelection
     public PoleLayout? PoleLayout { get; init; }
 
     public TransformerLayout? TransformerLayout { get; init; }
+
+    public CustomerStationLayout? CustomerStationLayout { get; init; }
 
     public AttachmentLayout? AttachmentLayout { get; init; }
 

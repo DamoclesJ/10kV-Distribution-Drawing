@@ -41,7 +41,8 @@ public sealed class ProfessionalSceneBuilder
         IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
         IReadOnlyDictionary<Guid, GroundingPointLayout> groundingPointLayouts,
         IEnumerable<OrthogonalRoute> routes,
-        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null)
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null,
+        IReadOnlyDictionary<Guid, CustomerStationLayout>? customerStationLayouts = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(drawingLayout);
@@ -56,7 +57,8 @@ public sealed class ProfessionalSceneBuilder
             document,
             drawingLayout,
             ringCabinetLayouts,
-            transformerLayouts: transformerLayouts);
+            transformerLayouts: transformerLayouts,
+            customerStationLayouts: customerStationLayouts);
         var elements = new List<SceneElement>();
         var hitTestEntries = new List<SelectionHitTestEntry>();
         var diagnostics = new List<SceneBuildDiagnostic>();

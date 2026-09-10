@@ -1,6 +1,7 @@
 using System.Globalization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
@@ -55,6 +56,11 @@ public sealed class PropertyProjector
         if (selection.SwitchDevice is not null)
         {
             return ProjectSwitch(selection);
+        }
+
+        if (selection.CustomerStation is not null)
+        {
+            return ProjectCustomerStation(selection);
         }
 
         if (selection.Pole is not null)
@@ -345,6 +351,60 @@ public sealed class PropertyProjector
                     DomainRow("VoltageLevel", "电压等级", Transformer.TenKilovolts)),
                 TransformerLayoutSection(transformer, selection.TransformerLayout)
             ]);
+    }
+
+    private static PropertyInspectorSnapshot ProjectCustomerStation(ResolvedSelection selection)
+    {
+        CustomerStation station = selection.CustomerStation!;
+        CustomerStationLayout? layout = selection.CustomerStationLayout;
+        string kindText = station.StationKind == StationKind.BoxStation
+            ? "箱式用户站"
+            : "室内用户站";
+        var sections = new List<PropertySectionViewModel>
+        {
+            Section(
+                "专业属性",
+                DomainRow("CustomerStation.StationKind", "用户站类型", kindText),
+                DomainRow("CustomerStation.FeederCount", "进线数量", station.IncomingFeeders.Count))
+        };
+        foreach (IncomingFeeder feeder in station.IncomingFeeders.OrderBy(item => item.Sequence))
+        {
+            var rows = new List<PropertyRowViewModel>
+            {
+                DomainRow("CustomerStation.Feeder.Sequence", "顺序", feeder.Sequence),
+                EditableDomainRow(
+                    PropertyCommandFactory.CustomerStationFeederDisplayNamePropertyKey(
+                        feeder.IncomingFeederId),
+                    "名称",
+                    feeder.DisplayName),
+                DomainRow(
+                    "CustomerStation.Feeder.SwitchState",
+                    "进线隔离开关状态",
+                    feeder.IsolationSwitch.SwitchState == SwitchState.Open ? "分" : "合")
+            };
+            if (layout is not null)
+            {
+                bool isEditable = station.StationKind == StationKind.IndoorStation;
+                rows.Add(new PropertyRowViewModel(
+                    PropertyCommandFactory.CustomerStationFeederVisibilityPropertyKey(
+                        feeder.IncomingFeederId),
+                    "显示进线隔离开关",
+                    layout.IncomingFeeders[feeder.IncomingFeederId].ShowIncomingSwitch ? "是" : "否",
+                    PropertyValueSource.Layout,
+                    !isEditable));
+            }
+
+            sections.Add(new PropertySectionViewModel($"进线 {feeder.Sequence}", rows));
+        }
+
+        if (layout is not null)
+        {
+            sections.Add(Section(
+                "布局",
+                LayoutRow("CustomerStation.Position", "位置", FormatPoint(layout.Position))));
+        }
+
+        return Snapshot(selection, "用户站", kindText, sections);
     }
 
     private static PropertySectionViewModel TransformerLayoutSection(

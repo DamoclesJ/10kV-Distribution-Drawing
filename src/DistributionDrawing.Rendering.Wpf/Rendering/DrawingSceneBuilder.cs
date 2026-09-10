@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
@@ -30,6 +31,7 @@ public sealed class DrawingSceneBuilder
     private readonly LineJumpDecorator _lineJumpDecorator;
     private readonly DrawingMetrics _metrics;
     private readonly TransformerRenderer _transformerRenderer;
+    private readonly CustomerStationRenderer _customerStationRenderer;
 
     public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
     {
@@ -45,6 +47,7 @@ public sealed class DrawingSceneBuilder
         _crossingDetector = new RouteCrossingDetector(_metrics);
         _lineJumpDecorator = new LineJumpDecorator(_metrics);
         _transformerRenderer = new TransformerRenderer(_metrics);
+        _customerStationRenderer = new CustomerStationRenderer(_metrics);
     }
 
     public DrawingScene Build(
@@ -127,7 +130,8 @@ public sealed class DrawingSceneBuilder
             layout.RingCabinetLayouts,
             document.Connections,
             document.CableSegments,
-            layout.TransformerLayouts);
+            layout.TransformerLayouts,
+            layout.CustomerStationLayouts);
         DrawingScene baseScene = BuildCore(
             layout.DrawingLayout,
             document.Devices.OfType<Pole>(),
@@ -182,13 +186,63 @@ public sealed class DrawingSceneBuilder
                 20));
         }
 
+        foreach (CustomerStation station in document.CustomerStations)
+        {
+            if (!layout.CustomerStationLayouts.TryGetValue(
+                    station.Id,
+                    out CustomerStationLayout? stationLayout))
+            {
+                throw new InvalidOperationException(
+                    $"No layout exists for customer station '{station.Id}'.");
+            }
+
+            CustomerStationProfessionalGeometry geometry =
+                CustomerStationProfessionalGeometry.Create(
+                    station,
+                    stationLayout,
+                    _metrics.CustomerStation);
+            elements.AddRange(_customerStationRenderer.Render(station, stationLayout));
+            SelectionReference stationReference = new(
+                SelectionTargetKind.Device,
+                station.Id);
+            foreach (CustomerStationUnitGeometry unit in geometry.Units)
+            {
+                hitTestEntries.Add(new SelectionHitTestEntry(
+                    stationReference,
+                    Expand(unit.Body, _metrics.CustomerStation.HitPadding),
+                    20,
+                    CanStartDrag: false));
+            }
+            if (geometry.Roof.Count > 0)
+            {
+                hitTestEntries.Add(new SelectionHitTestEntry(
+                    stationReference,
+                    Expand(SceneGeometryBounds.FromPoints(geometry.Roof),
+                        _metrics.CustomerStation.HitPadding),
+                    20,
+                    CanStartDrag: false));
+            }
+            foreach (CustomerStationSwitchGeometry switchGeometry in geometry.Switches)
+            {
+                hitTestEntries.Add(new SelectionHitTestEntry(
+                    new SelectionReference(
+                        SelectionTargetKind.Device,
+                        switchGeometry.SwitchDeviceId,
+                        switchGeometry.IncomingFeederId),
+                    switchGeometry.Bounds,
+                    40,
+                    CanStartDrag: false));
+            }
+        }
+
         ProfessionalSceneResult professionalScene = _professionalSceneBuilder.Build(
             document,
             layout.DrawingLayout,
             layout.RingCabinetLayouts,
             layout.GroundingPointLayouts,
             baseScene.Routes,
-            layout.TransformerLayouts);
+            layout.TransformerLayouts,
+            layout.CustomerStationLayouts);
         elements.AddRange(professionalScene.Elements);
         hitTestEntries.AddRange(professionalScene.HitTestEntries);
 
@@ -198,6 +252,12 @@ public sealed class DrawingSceneBuilder
             professionalScene.Diagnostics,
             baseScene.Routes);
     }
+
+    private static DocumentRect Expand(DocumentRect bounds, double padding) => new(
+        bounds.XMillimeters - padding,
+        bounds.YMillimeters - padding,
+        bounds.WidthMillimeters + padding * 2,
+        bounds.HeightMillimeters + padding * 2);
 
     public DrawingScene Build(
         DrawingLayout layout,

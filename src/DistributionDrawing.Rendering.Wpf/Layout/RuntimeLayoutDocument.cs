@@ -133,6 +133,19 @@ public sealed class RuntimeLayoutDocument
         return layout;
     }
 
+    public void ReplaceCustomerStation(CustomerStationLayout layout, CustomerStation station)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        layout.ValidateFor(station);
+        if (!_customerStationLayouts.ContainsKey(layout.CustomerStationId))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for customer station '{layout.CustomerStationId}'.");
+        }
+
+        _customerStationLayouts[layout.CustomerStationId] = layout;
+    }
+
     public void AddRingCabinet(RingCabinetLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
