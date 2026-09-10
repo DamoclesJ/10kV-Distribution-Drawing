@@ -266,6 +266,18 @@ internal static class ProjectLayoutRuntimeMapper
                 Point(layout.Position),
                 Encode(layout.Orientation)))
             .ToArray();
+        var customerStationLayouts = runtime.CustomerStationLayouts.Values
+            .OrderBy(layout => layout.CustomerStationId)
+            .Select(layout => new ProjectCustomerStationLayoutDto(
+                layout.CustomerStationId,
+                Point(layout.Position),
+                layout.IncomingFeeders.Values
+                    .OrderBy(feeder => feeder.IncomingFeederId)
+                    .Select(feeder => new ProjectCustomerStationIncomingFeederLayoutDto(
+                        feeder.IncomingFeederId,
+                        feeder.ShowIncomingSwitch))
+                    .ToArray()))
+            .ToArray();
 
         return new ProjectLayoutSnapshot(new ProjectLayoutDto(
             domain.Id,
@@ -276,7 +288,7 @@ internal static class ProjectLayoutRuntimeMapper
             overheadLines,
             cableRouteGuides,
             transformerLayouts,
-            [],
+            customerStationLayouts,
             groundingPointLayouts));
     }
 
@@ -394,12 +406,31 @@ internal static class ProjectLayoutRuntimeMapper
                         Decode(dto.Orientation),
                         transformer.TransformerKind);
                 });
+        Dictionary<Guid, CustomerStationLayout> customerStationLayouts =
+            snapshot.CustomerStationLayouts.ToDictionary(
+                dto => dto.CustomerStationId,
+                dto =>
+                {
+                    var layout = new CustomerStationLayout(
+                        dto.CustomerStationId,
+                        Point(dto.Position),
+                        dto.IncomingFeeders.Select(feeder =>
+                            new CustomerStationIncomingFeederLayout(
+                                feeder.IncomingFeederId,
+                                feeder.ShowIncomingSwitch)));
+                    DistributionDrawing.Domain.Devices.CustomerStations.CustomerStation station =
+                        domain.CustomerStations.Single(item =>
+                            item.Id == dto.CustomerStationId);
+                    layout.ValidateFor(station);
+                    return layout;
+                });
         return new RuntimeLayoutDocument(
             drawingLayout,
             cabinetLayouts,
             cableRouteGuides,
             groundingPointLayouts,
-            transformerLayouts);
+            transformerLayouts,
+            customerStationLayouts);
     }
 
     private static ProjectPointDto Point(DocumentPoint point)

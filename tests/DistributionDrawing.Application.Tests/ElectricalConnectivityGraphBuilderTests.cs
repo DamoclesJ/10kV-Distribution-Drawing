@@ -1,6 +1,8 @@
 using DistributionDrawing.Application.Devices;
+using DistributionDrawing.Application.Devices.CustomerStations;
 using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using Xunit;
@@ -9,6 +11,63 @@ namespace DistributionDrawing.Application.Tests;
 
 public sealed class ElectricalConnectivityGraphBuilderTests
 {
+    [Theory]
+    [InlineData(SwitchState.Open, false)]
+    [InlineData(SwitchState.Closed, true)]
+    public void CustomerStationIncomingFeeder_UsesExistingClosedSwitchTraversal(
+        SwitchState state,
+        bool expectedConnected)
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "customer station graph");
+        CustomerStation station = new CustomerStationCreationFactory().Create(
+            StationKind.BoxStation,
+            ["主供"]);
+        document.AddCustomerStation(station);
+        IncomingFeeder feeder = Assert.Single(station.IncomingFeeders);
+        document.ChangeSwitchState(feeder.IsolationSwitch.Id, state);
+
+        ElectricalConnectivityGraph graph = new ElectricalConnectivityGraphBuilder()
+            .Build(document);
+        var query = new ElectricalConnectivityQuery(graph);
+
+        Assert.Equal(expectedConnected,
+            query.IsConnected(feeder.CableTerminalId, feeder.StationTerminalId));
+        Assert.Equal(
+            expectedConnected ? 1 : 0,
+            graph.Edges.Count(edge =>
+                edge.Type == ElectricalConnectivityEdgeType.ClosedSwitch &&
+                edge.SourceId == feeder.IsolationSwitch.Id));
+        Assert.Contains(feeder.StationTerminalId, feeder.ElectricalNode.TerminalIds);
+    }
+
+    [Fact]
+    public void IndoorStationDualFeeders_RemainDisconnectedWhenBothSwitchesAreClosed()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "dual customer station graph");
+        CustomerStation station = new CustomerStationCreationFactory().Create(
+            StationKind.IndoorStation,
+            ["主供", "备供"]);
+        document.AddCustomerStation(station);
+        IncomingFeeder first = station.IncomingFeeders[0];
+        IncomingFeeder second = station.IncomingFeeders[1];
+        document.ChangeSwitchState(first.IsolationSwitch.Id, SwitchState.Closed);
+        document.ChangeSwitchState(second.IsolationSwitch.Id, SwitchState.Closed);
+
+        var query = new ElectricalConnectivityQuery(
+            new ElectricalConnectivityGraphBuilder().Build(document));
+
+        Assert.True(query.IsConnected(first.CableTerminalId, first.StationTerminalId));
+        Assert.True(query.IsConnected(second.CableTerminalId, second.StationTerminalId));
+        Assert.False(query.IsConnected(first.CableTerminalId, second.CableTerminalId));
+        Assert.False(query.IsConnected(first.StationTerminalId, second.StationTerminalId));
+
+        document.ChangeSwitchState(first.IsolationSwitch.Id, SwitchState.Open);
+        var changed = new ElectricalConnectivityQuery(
+            new ElectricalConnectivityGraphBuilder().Build(document));
+        Assert.False(changed.IsConnected(first.CableTerminalId, first.StationTerminalId));
+        Assert.True(changed.IsConnected(second.CableTerminalId, second.StationTerminalId));
+    }
+
     [Fact]
     public void TransformerLeaf_IsIncludedWithoutInternalEdge()
     {

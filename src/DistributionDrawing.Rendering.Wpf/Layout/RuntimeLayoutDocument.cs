@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 
 namespace DistributionDrawing.Rendering.Wpf.Layout;
 
@@ -12,13 +13,15 @@ public sealed class RuntimeLayoutDocument
     private readonly Dictionary<Guid, CableRouteGuide> _cableRouteGuides;
     private readonly Dictionary<Guid, GroundingPointLayout> _groundingPointLayouts;
     private readonly Dictionary<Guid, TransformerLayout> _transformerLayouts;
+    private readonly Dictionary<Guid, CustomerStationLayout> _customerStationLayouts;
 
     public RuntimeLayoutDocument(
         DrawingLayout drawingLayout,
         IReadOnlyDictionary<Guid, RingCabinetLayout> ringCabinetLayouts,
         IReadOnlyDictionary<Guid, CableRouteGuide>? cableRouteGuides = null,
         IReadOnlyDictionary<Guid, GroundingPointLayout>? groundingPointLayouts = null,
-        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null)
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null,
+        IReadOnlyDictionary<Guid, CustomerStationLayout>? customerStationLayouts = null)
     {
         ArgumentNullException.ThrowIfNull(drawingLayout);
         ArgumentNullException.ThrowIfNull(ringCabinetLayouts);
@@ -30,6 +33,9 @@ public sealed class RuntimeLayoutDocument
             pair => pair.Key,
             pair => pair.Value) ?? [];
         _transformerLayouts = transformerLayouts?.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value) ?? [];
+        _customerStationLayouts = customerStationLayouts?.ToDictionary(
             pair => pair.Key,
             pair => pair.Value) ?? [];
     }
@@ -46,6 +52,9 @@ public sealed class RuntimeLayoutDocument
 
     public IReadOnlyDictionary<Guid, TransformerLayout> TransformerLayouts =>
         _transformerLayouts;
+
+    public IReadOnlyDictionary<Guid, CustomerStationLayout> CustomerStationLayouts =>
+        _customerStationLayouts;
 
     public void SetCableRouteGuide(CableRouteGuide guide)
     {
@@ -98,6 +107,30 @@ public sealed class RuntimeLayoutDocument
         }
 
         _transformerLayouts[layout.TransformerId] = layout;
+    }
+
+    public void AddCustomerStation(CustomerStationLayout layout, CustomerStation station)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        layout.ValidateFor(station);
+        if (!_customerStationLayouts.TryAdd(layout.CustomerStationId, layout))
+        {
+            throw new InvalidOperationException(
+                $"A layout for customer station '{layout.CustomerStationId}' already exists.");
+        }
+    }
+
+    public CustomerStationLayout RemoveCustomerStation(Guid customerStationId)
+    {
+        if (!_customerStationLayouts.Remove(
+                customerStationId,
+                out CustomerStationLayout? layout))
+        {
+            throw new InvalidOperationException(
+                $"No layout exists for customer station '{customerStationId}'.");
+        }
+
+        return layout;
     }
 
     public void AddRingCabinet(RingCabinetLayout layout)

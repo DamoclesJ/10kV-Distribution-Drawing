@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Domain.Professional;
@@ -93,6 +94,57 @@ internal sealed class ClipboardFragmentMaterializer
                     transformer,
                     CreateTerminal(snapshot.HvTerminal, Map),
                     transformerLayout)));
+        }
+
+        foreach (CustomerStationSnapshot snapshot in fragment.CustomerStations)
+        {
+            IncomingFeeder[] feeders = snapshot.IncomingFeeders
+                .Select(feederSnapshot =>
+                {
+                    SwitchDevice isolationSwitch =
+                        SwitchDevice.CreateForCustomerStationIncomingFeeder(
+                            Map(feederSnapshot.IsolationSwitchId),
+                            Map(feederSnapshot.IncomingFeederId),
+                            Map(feederSnapshot.CableTerminalId),
+                            Map(feederSnapshot.StationTerminalId),
+                            feederSnapshot.SwitchState,
+                            feederSnapshot.SwitchDisplayName,
+                            feederSnapshot.SwitchVoltageLevel);
+                    isolationSwitch.SetDispatchNumber(feederSnapshot.DispatchNumber);
+                    return new IncomingFeeder(
+                        Map(feederSnapshot.IncomingFeederId),
+                        feederSnapshot.Sequence,
+                        feederSnapshot.DisplayName,
+                        Map(feederSnapshot.CableTerminalId),
+                        Map(feederSnapshot.StationTerminalId),
+                        Map(feederSnapshot.ElectricalNodeId),
+                        isolationSwitch,
+                        CreateTerminal(feederSnapshot.CableTerminal, Map),
+                        CreateTerminal(feederSnapshot.StationTerminal, Map),
+                        new ElectricalNode(
+                            Map(feederSnapshot.ElectricalNode.Id),
+                            feederSnapshot.ElectricalNode.Type,
+                            feederSnapshot.ElectricalNode.OwnerType,
+                            Map(feederSnapshot.ElectricalNode.OwnerId),
+                            feederSnapshot.ElectricalNode.ElectricalState));
+                })
+                .ToArray();
+            var station = new CustomerStation(
+                Map(snapshot.CustomerStationId),
+                snapshot.StationKind,
+                feeders);
+            var stationLayout = new CustomerStationLayout(
+                station.Id,
+                Add(snapshot.Layout.Position, offset),
+                snapshot.Layout.IncomingFeeders.Values.Select(feeder =>
+                    new CustomerStationIncomingFeederLayout(
+                        Map(feeder.IncomingFeederId),
+                        feeder.ShowIncomingSwitch)));
+            commands.Add(new AddCopiedCustomerStationCommand(
+                document,
+                layout,
+                station,
+                stationLayout));
         }
 
         foreach (PoleSwitchAttachmentSnapshot snapshot in fragment.PoleSwitches)
@@ -252,6 +304,21 @@ internal sealed class ClipboardFragmentMaterializer
         {
             ids.Add(item.Id);
             ids.Add(item.HvTerminal.Id);
+        }
+        foreach (CustomerStationSnapshot item in fragment.CustomerStations)
+        {
+            ids.Add(item.CustomerStationId);
+            foreach (IncomingFeederSnapshot feeder in item.IncomingFeeders)
+            {
+                ids.UnionWith(new[]
+                {
+                    feeder.IncomingFeederId,
+                    feeder.IsolationSwitchId,
+                    feeder.CableTerminalId,
+                    feeder.StationTerminalId,
+                    feeder.ElectricalNodeId
+                });
+            }
         }
         foreach (PoleSwitchAttachmentSnapshot item in fragment.PoleSwitches)
         {

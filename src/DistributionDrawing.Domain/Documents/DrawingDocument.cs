@@ -647,6 +647,14 @@ public sealed class DrawingDocument
         EnsureObjectIdIsAvailable(terminal.Id, nameof(Terminal));
         EnsureTopologyOwnerExists(terminal.OwnerType, terminal.OwnerId);
 
+        if (terminal.OwnerType == TopologyOwnerType.InternalAggregate &&
+            CustomerStations.SelectMany(station => station.IncomingFeeders).Any(feeder =>
+                feeder.IncomingFeederId == terminal.OwnerId))
+        {
+            throw new InvalidOperationException(
+                $"Customer-station incoming-feeder terminal '{terminal.Id}' must be registered with its aggregate.");
+        }
+
         if (terminal.OwnerType == TopologyOwnerType.Device)
         {
             Device owner = _devices.Single(device => device.Id == terminal.OwnerId);
@@ -724,6 +732,15 @@ public sealed class DrawingDocument
             electricalNode = _electricalNodes.FirstOrDefault(node => node.Id == electricalNodeId)
                 ?? throw new InvalidOperationException(
                     $"Electrical node '{electricalNodeId}' does not exist.");
+
+            if (electricalNode.Type == ElectricalNodeType.Circuit &&
+                electricalNode.OwnerType == TopologyOwnerType.InternalAggregate &&
+                CustomerStations.SelectMany(station => station.IncomingFeeders).Any(feeder =>
+                    feeder.IncomingFeederId == electricalNode.OwnerId))
+            {
+                throw new InvalidOperationException(
+                    $"Customer-station incoming-feeder node '{electricalNode.Id}' cannot accept generic terminals.");
+            }
 
             if (terminal.OwnerType == TopologyOwnerType.Device &&
                 _devices.Single(device => device.Id == terminal.OwnerId) is Pole pole &&

@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -91,6 +92,49 @@ internal sealed class AddCopiedCableSegmentCommand : ICommand
     {
         _layout.RemoveCableRouteGuide(_segment.Id);
         _document.RemoveCableSegment(_segment.Id);
+    }
+
+    public void Redo() => Execute();
+}
+
+internal sealed class AddCopiedCustomerStationCommand : ICommand
+{
+    private readonly DrawingDocument _document;
+    private readonly RuntimeLayoutDocument _layout;
+    private readonly CustomerStation _station;
+    private readonly CustomerStationLayout _stationLayout;
+
+    public AddCopiedCustomerStationCommand(
+        DrawingDocument document,
+        RuntimeLayoutDocument layout,
+        CustomerStation station,
+        CustomerStationLayout stationLayout)
+    {
+        _document = document;
+        _layout = layout;
+        _station = station;
+        _stationLayout = stationLayout;
+    }
+
+    public void Execute()
+    {
+        _stationLayout.ValidateFor(_station);
+        _document.AddCustomerStation(_station);
+        try
+        {
+            _layout.AddCustomerStation(_stationLayout, _station);
+        }
+        catch
+        {
+            _document.RemoveCustomerStation(_station.Id);
+            throw;
+        }
+    }
+
+    public void Undo()
+    {
+        _layout.RemoveCustomerStation(_station.Id);
+        _document.RemoveCustomerStation(_station.Id);
     }
 
     public void Redo() => Execute();

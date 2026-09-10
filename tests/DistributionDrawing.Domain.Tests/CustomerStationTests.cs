@@ -274,6 +274,59 @@ public sealed class CustomerStationTests
     }
 
     [Fact]
+    public void AddTerminal_RejectsCustomerStationIncomingFeederOwnerWithoutMutation()
+    {
+        DrawingDocument document = TestFixtures.CreateDocument();
+        CustomerStation station = CreateStation(StationKind.BoxStation, 1);
+        document.AddCustomerStation(station);
+        IncomingFeeder feeder = Assert.Single(station.IncomingFeeders);
+        int terminalCount = document.Terminals.Count;
+        var extra = new Terminal(
+            Guid.NewGuid(),
+            TopologyOwnerType.InternalAggregate,
+            feeder.IncomingFeederId,
+            "额外内部端子",
+            IncomingFeeder.TenKilovolts,
+            false,
+            false);
+
+        Assert.Throws<InvalidOperationException>(() => document.AddTerminal(extra));
+
+        Assert.Equal(terminalCount, document.Terminals.Count);
+        Assert.DoesNotContain(extra, document.Terminals);
+        Assert.True(feeder.ElectricalNode.TerminalIds.ToHashSet()
+            .SetEquals([feeder.StationTerminalId]));
+    }
+
+    [Fact]
+    public void AddTerminal_RejectsReferenceToCustomerStationCircuitNodeWithoutMutation()
+    {
+        DrawingDocument document = TestFixtures.CreateDocument();
+        CustomerStation station = CreateStation(StationKind.BoxStation, 1);
+        document.AddCustomerStation(station);
+        IncomingFeeder feeder = Assert.Single(station.IncomingFeeders);
+        var otherOwner = new Device(Guid.NewGuid(), DeviceType.PT);
+        document.AddDevice(otherOwner);
+        int terminalCount = document.Terminals.Count;
+        var extra = new Terminal(
+            Guid.NewGuid(),
+            TopologyOwnerType.Device,
+            otherOwner.Id,
+            "额外节点端子",
+            IncomingFeeder.TenKilovolts,
+            false,
+            false,
+            feeder.ElectricalNodeId);
+
+        Assert.Throws<InvalidOperationException>(() => document.AddTerminal(extra));
+
+        Assert.Equal(terminalCount, document.Terminals.Count);
+        Assert.DoesNotContain(extra, document.Terminals);
+        Assert.True(feeder.ElectricalNode.TerminalIds.ToHashSet()
+            .SetEquals([feeder.StationTerminalId]));
+    }
+
+    [Fact]
     public void RemoveCustomerStation_RemovesEveryInternalFact()
     {
         DrawingDocument document = TestFixtures.CreateDocument();

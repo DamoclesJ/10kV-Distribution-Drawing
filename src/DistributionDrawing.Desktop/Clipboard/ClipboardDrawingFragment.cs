@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Domain.Professional;
@@ -71,6 +72,28 @@ internal sealed record TransformerSnapshot(
     TerminalSnapshot HvTerminal,
     TransformerLayout Layout);
 
+internal sealed record IncomingFeederSnapshot(
+    Guid IncomingFeederId,
+    int Sequence,
+    string DisplayName,
+    Guid CableTerminalId,
+    Guid StationTerminalId,
+    Guid ElectricalNodeId,
+    Guid IsolationSwitchId,
+    SwitchState SwitchState,
+    string SwitchDisplayName,
+    string SwitchVoltageLevel,
+    string? DispatchNumber,
+    TerminalSnapshot CableTerminal,
+    TerminalSnapshot StationTerminal,
+    ElectricalNodeSnapshot ElectricalNode);
+
+internal sealed record CustomerStationSnapshot(
+    Guid CustomerStationId,
+    StationKind StationKind,
+    IReadOnlyList<IncomingFeederSnapshot> IncomingFeeders,
+    CustomerStationLayout Layout);
+
 internal sealed record OverheadLineSnapshot(
     Connection Connection,
     OverheadLine OverheadLine,
@@ -98,6 +121,7 @@ internal sealed class ClipboardDrawingFragment
         IEnumerable<CableTerminationAttachmentSnapshot> cableTerminations,
         IEnumerable<RingCabinetSnapshot> ringCabinets,
         IEnumerable<TransformerSnapshot> transformers,
+        IEnumerable<CustomerStationSnapshot> customerStations,
         IEnumerable<OverheadLineSnapshot> overheadLines,
         IEnumerable<CableSegmentSnapshot> cableSegments,
         IEnumerable<GroundingAccessPointSnapshot> groundingAccessPoints)
@@ -109,6 +133,7 @@ internal sealed class ClipboardDrawingFragment
         CableTerminations = Array.AsReadOnly(cableTerminations.ToArray());
         RingCabinets = Array.AsReadOnly(ringCabinets.ToArray());
         Transformers = Array.AsReadOnly(transformers.ToArray());
+        CustomerStations = Array.AsReadOnly(customerStations.ToArray());
         OverheadLines = Array.AsReadOnly(overheadLines.ToArray());
         CableSegments = Array.AsReadOnly(cableSegments.ToArray());
         GroundingAccessPoints = Array.AsReadOnly(groundingAccessPoints.ToArray());
@@ -128,13 +153,16 @@ internal sealed class ClipboardDrawingFragment
 
     public IReadOnlyList<TransformerSnapshot> Transformers { get; }
 
+    public IReadOnlyList<CustomerStationSnapshot> CustomerStations { get; }
+
     public IReadOnlyList<OverheadLineSnapshot> OverheadLines { get; }
 
     public IReadOnlyList<CableSegmentSnapshot> CableSegments { get; }
 
     public IReadOnlyList<GroundingAccessPointSnapshot> GroundingAccessPoints { get; }
 
-    public bool IsEmpty => Poles.Count == 0 && RingCabinets.Count == 0 && Transformers.Count == 0;
+    public bool IsEmpty => Poles.Count == 0 && RingCabinets.Count == 0 &&
+        Transformers.Count == 0 && CustomerStations.Count == 0;
 }
 
 internal sealed record CopyPlanResult(

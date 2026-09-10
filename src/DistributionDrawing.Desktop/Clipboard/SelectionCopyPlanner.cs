@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
@@ -20,6 +21,7 @@ internal sealed class SelectionCopyPlanner
         var attachmentIds = new HashSet<Guid>();
         var cabinetIds = new HashSet<Guid>();
         var transformerIds = new HashSet<Guid>();
+        var customerStationIds = new HashSet<Guid>();
         var requestedConnectionIds = new HashSet<Guid>();
         var requestedCableIds = new HashSet<Guid>();
         var roots = new List<SelectionReference>();
@@ -34,6 +36,7 @@ internal sealed class SelectionCopyPlanner
                     attachmentIds,
                     cabinetIds,
                     transformerIds,
+                    customerStationIds,
                     requestedConnectionIds,
                     requestedCableIds,
                     roots))
@@ -61,6 +64,9 @@ internal sealed class SelectionCopyPlanner
         TransformerSnapshot[] transformers = transformerIds.OrderBy(id => id)
             .Select(id => CaptureTransformer(document, session.Layout, id))
             .ToArray();
+        CustomerStationSnapshot[] customerStations = customerStationIds.OrderBy(id => id)
+            .Select(id => CaptureCustomerStation(document, session.Layout, id))
+            .ToArray();
         PoleSwitchAttachmentSnapshot[] switches = attachmentIds.OrderBy(id => id)
             .Select(id => CaptureSwitch(document, session.Layout, id))
             .OfType<PoleSwitchAttachmentSnapshot>()
@@ -84,6 +90,9 @@ internal sealed class SelectionCopyPlanner
         includedTerminalIds.UnionWith(terminations.SelectMany(item =>
             new[] { item.CableSideTerminal.Id, item.OverheadSideTerminal.Id }));
         includedTerminalIds.UnionWith(transformers.Select(item => item.HvTerminal.Id));
+        includedTerminalIds.UnionWith(customerStations
+            .SelectMany(item => item.IncomingFeeders)
+            .SelectMany(item => new[] { item.CableTerminalId, item.StationTerminalId }));
 
         OverheadLineSnapshot[] overheadLines = requestedConnectionIds.OrderBy(id => id)
             .Select(id => CaptureOverheadLine(
@@ -130,7 +139,8 @@ internal sealed class SelectionCopyPlanner
                 ["所选线路存在工作地线，请先删除工作地线后再复制。"]);
         }
 
-        if (poles.Length == 0 && cabinets.Length == 0 && transformers.Length == 0)
+        if (poles.Length == 0 && cabinets.Length == 0 && transformers.Length == 0 &&
+            customerStations.Length == 0)
         {
             return new CopyPlanResult(null, warnings.Count > 0
                 ? warnings
@@ -150,6 +160,7 @@ internal sealed class SelectionCopyPlanner
                 terminations,
                 cabinets,
                 transformers,
+                customerStations,
                 overheadLines,
                 cableSegments,
                 accessPoints),
@@ -163,6 +174,7 @@ internal sealed class SelectionCopyPlanner
         ISet<Guid> attachmentIds,
         ISet<Guid> cabinetIds,
         ISet<Guid> transformerIds,
+        ISet<Guid> customerStationIds,
         ISet<Guid> connectionIds,
         ISet<Guid> cableIds,
         ICollection<SelectionReference> roots)
@@ -185,7 +197,9 @@ internal sealed class SelectionCopyPlanner
                         roots.Add(reference);
                         return true;
                     case SwitchDevice cabinetSwitch
-                        when cabinetSwitch.ParentId is Guid intervalId:
+                        when cabinetSwitch.InstallationType ==
+                            SwitchInstallationType.CabinetInterval &&
+                            cabinetSwitch.ParentId is Guid intervalId:
                         RingCabinet parentCabinet = document.Devices.OfType<RingCabinet>().Single(item =>
                             item.Intervals.Any(interval => interval.IntervalId == intervalId));
                         cabinetIds.Add(parentCabinet.Id);
@@ -205,6 +219,23 @@ internal sealed class SelectionCopyPlanner
                     case Transformer transformer:
                         transformerIds.Add(transformer.Id);
                         roots.Add(reference);
+                        return true;
+                    case CustomerStation customerStation:
+                        customerStationIds.Add(customerStation.Id);
+                        roots.Add(reference);
+                        return true;
+                    case SwitchDevice customerStationSwitch
+                        when customerStationSwitch.InstallationType ==
+                            SwitchInstallationType.CustomerStationIncomingFeeder &&
+                            customerStationSwitch.ParentId is Guid incomingFeederId:
+                        CustomerStation parentStation = document.CustomerStations.Single(station =>
+                            station.IncomingFeeders.Any(feeder =>
+                                feeder.IncomingFeederId == incomingFeederId));
+                        customerStationIds.Add(parentStation.Id);
+                        roots.Add(reference);
+                        roots.Add(new SelectionReference(
+                            SelectionTargetKind.Device,
+                            parentStation.Id));
                         return true;
                     default:
                         return false;
@@ -327,6 +358,40 @@ internal sealed class SelectionCopyPlanner
             transformer.TransformerKind,
             CaptureTerminal(terminal),
             layout.TransformerLayouts[transformer.Id] with { });
+    }
+
+    private static CustomerStationSnapshot CaptureCustomerStation(
+        DrawingDocument document,
+        RuntimeLayoutDocument layout,
+        Guid customerStationId)
+    {
+        CustomerStation station = document.CustomerStations.Single(item =>
+            item.Id == customerStationId);
+        IncomingFeederSnapshot[] feeders = station.IncomingFeeders
+            .Select(feeder => new IncomingFeederSnapshot(
+                feeder.IncomingFeederId,
+                feeder.Sequence,
+                feeder.DisplayName,
+                feeder.CableTerminalId,
+                feeder.StationTerminalId,
+                feeder.ElectricalNodeId,
+                feeder.IsolationSwitch.Id,
+                feeder.IsolationSwitch.SwitchState ?? throw new InvalidOperationException(
+                    $"Incoming switch '{feeder.IsolationSwitch.Id}' has no switch state."),
+                feeder.IsolationSwitch.DisplayName ?? throw new InvalidOperationException(
+                    $"Incoming switch '{feeder.IsolationSwitch.Id}' has no display name."),
+                feeder.IsolationSwitch.VoltageLevel ?? throw new InvalidOperationException(
+                    $"Incoming switch '{feeder.IsolationSwitch.Id}' has no voltage level."),
+                feeder.IsolationSwitch.DispatchNumber,
+                CaptureTerminal(feeder.CableTerminal),
+                CaptureTerminal(feeder.StationTerminal),
+                CaptureNode(feeder.ElectricalNode)))
+            .ToArray();
+        return new CustomerStationSnapshot(
+            station.Id,
+            station.StationKind,
+            Array.AsReadOnly(feeders),
+            Clone(layout.CustomerStationLayouts[station.Id]));
     }
 
     private static PoleSwitchAttachmentSnapshot? CaptureSwitch(
@@ -541,6 +606,14 @@ internal sealed class SelectionCopyPlanner
                 item.LabelOffset)),
             interval.PTSymbolPosition)),
         value.LabelOffset);
+
+    private static CustomerStationLayout Clone(CustomerStationLayout value) => new(
+        value.CustomerStationId,
+        value.Position,
+        value.IncomingFeeders.Values.Select(feeder =>
+            new CustomerStationIncomingFeederLayout(
+                feeder.IncomingFeederId,
+                feeder.ShowIncomingSwitch)));
 
     private static IReadOnlyList<SelectionReference> Distinct(
         IEnumerable<SelectionReference> values) => Array.AsReadOnly(values

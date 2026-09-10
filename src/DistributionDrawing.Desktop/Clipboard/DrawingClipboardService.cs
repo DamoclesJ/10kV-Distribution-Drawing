@@ -126,6 +126,11 @@ public sealed class DrawingClipboardService
             item.Layout.Position.YMillimeters,
             item.Layout.Position.XMillimeters,
             item.Layout.Position.YMillimeters)));
+        bounds.AddRange(fragment.CustomerStations.Select(item => (
+            item.Layout.Position.XMillimeters,
+            item.Layout.Position.YMillimeters,
+            item.Layout.Position.XMillimeters,
+            item.Layout.Position.YMillimeters)));
         if (bounds.Count == 0)
         {
             throw new InvalidOperationException("剪贴板中没有可定位的绘图对象。");

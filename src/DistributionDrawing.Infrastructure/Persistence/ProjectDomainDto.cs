@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
@@ -162,11 +163,12 @@ public sealed record ProjectCustomerStationDto
                 nameof(incomingFeeders));
         }
 
-        if (feeders.Select(feeder => feeder.IncomingFeederId).Distinct().Count() !=
-            feeders.Length)
+        int[] expectedSequences = Enumerable.Range(1, feeders.Length).ToArray();
+        if (!feeders.Select(feeder => feeder.Sequence).OrderBy(value => value)
+                .SequenceEqual(expectedSequences))
         {
             throw new ArgumentException(
-                "Customer station incoming feeder IDs must be unique.",
+                "Customer station incoming feeder sequences must be unique, continuous, and start at one.",
                 nameof(incomingFeeders));
         }
 
@@ -182,21 +184,54 @@ public sealed record ProjectCustomerStationDto
                     nameof(incomingFeeders));
             }
 
+            if (string.IsNullOrWhiteSpace(feeder.DisplayName))
+            {
+                throw new ArgumentException(
+                    "Customer station incoming feeder display names are required.",
+                    nameof(incomingFeeders));
+            }
+
             if (feeder.IsolationSwitch is null ||
+                feeder.IsolationSwitch.DeviceId == Guid.Empty ||
                 !string.Equals(
                     feeder.IsolationSwitch.SwitchKind,
                     "isolation-switch",
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    feeder.IsolationSwitch.InstallationType,
+                    "customer-station-incoming-feeder",
                     StringComparison.Ordinal) ||
                 feeder.IsolationSwitch.Owner is not
                 {
                     OwnerKind: ProjectSwitchOwnerKind.CustomerStationIncomingFeeder,
                     OwnerId: var ownerId
-                } || ownerId != feeder.IncomingFeederId)
+                } || ownerId != feeder.IncomingFeederId ||
+                feeder.IsolationSwitch.FirstTerminalId != feeder.CableTerminalId ||
+                feeder.IsolationSwitch.SecondTerminalId != feeder.StationTerminalId)
             {
                 throw new ArgumentException(
-                    "Customer station isolation switch requires its typed incoming-feeder owner.",
+                    "Customer station isolation switch identity or typed owner is invalid.",
                     nameof(incomingFeeders));
             }
+        }
+
+        Guid[] aggregateIds =
+        [
+            customerStationId,
+            .. feeders.SelectMany(feeder => new[]
+            {
+                feeder.IncomingFeederId,
+                feeder.IsolationSwitch.DeviceId,
+                feeder.CableTerminalId,
+                feeder.StationTerminalId,
+                feeder.ElectricalNodeId
+            })
+        ];
+        if (aggregateIds.Distinct().Count() != aggregateIds.Length)
+        {
+            throw new ArgumentException(
+                "Customer station aggregate IDs must be unique.",
+                nameof(incomingFeeders));
         }
 
         CustomerStationId = customerStationId;
@@ -204,15 +239,20 @@ public sealed record ProjectCustomerStationDto
         IncomingFeeders = Array.AsReadOnly(feeders);
     }
 
-    public Guid CustomerStationId { get; }
+    [JsonRequired]
+    public Guid CustomerStationId { get; init; }
 
-    public ProjectStationKind StationKind { get; }
+    [JsonRequired]
+    public ProjectStationKind StationKind { get; init; }
 
-    public IReadOnlyList<ProjectCustomerStationIncomingFeederDto> IncomingFeeders { get; }
+    [JsonRequired]
+    public IReadOnlyList<ProjectCustomerStationIncomingFeederDto> IncomingFeeders { get; init; }
 }
 
 public sealed record ProjectCustomerStationIncomingFeederDto(
     [property: JsonRequired] Guid IncomingFeederId,
+    [property: JsonRequired] int Sequence,
+    [property: JsonRequired] string DisplayName,
     [property: JsonRequired] Guid CableTerminalId,
     [property: JsonRequired] Guid StationTerminalId,
     [property: JsonRequired] Guid ElectricalNodeId,
@@ -283,6 +323,7 @@ internal static class ProjectDomainMapper
         var devices = new List<ProjectDeviceDto>();
         var ringCabinets = new List<ProjectRingCabinetDto>();
         var transformers = new List<ProjectTransformerDto>();
+        var customerStations = new List<ProjectCustomerStationDto>();
         HashSet<Guid> ringCabinetIntervalIds = document.Devices
             .OfType<RingCabinet>()
             .SelectMany(cabinet => cabinet.Intervals)
@@ -314,6 +355,10 @@ internal static class ProjectDomainMapper
             .SelectMany(cabinet => cabinet.Intervals)
             .SelectMany(interval => interval.SwitchDevices)
             .Select(device => device.Id));
+        HashSet<Guid> customerStationSwitchIds = document.CustomerStations
+            .SelectMany(station => station.IncomingFeeders)
+            .Select(feeder => feeder.IsolationSwitch.Id)
+            .ToHashSet();
 
         foreach (Device device in document.Devices)
         {
@@ -327,6 +372,9 @@ internal static class ProjectDomainMapper
                         transformer.Id,
                         Encode(transformer.TransformerKind),
                         transformer.HvTerminalId));
+                    break;
+                case CustomerStation customerStation:
+                    customerStations.Add(ToDto(customerStation));
                     break;
                 case Pole pole:
                     if (pole.ParentId is not null)
@@ -364,10 +412,11 @@ internal static class ProjectDomainMapper
                             termination.InternalNodeId)));
                     break;
                 case SwitchDevice:
-                    if (ringCabinetSwitchIds.Contains(device.Id))
+                    if (ringCabinetSwitchIds.Contains(device.Id) ||
+                        customerStationSwitchIds.Contains(device.Id))
                     {
-                        // Cabinet switches are persisted exactly once inside
-                        // their owning interval DTO.
+                        // Aggregate-owned switches are persisted exactly once
+                        // inside their typed owner DTO.
                         break;
                     }
                     if (device is not SwitchDevice poleSwitch ||
@@ -422,13 +471,14 @@ internal static class ProjectDomainMapper
             document.PoleAttachments.Select(ToDto).ToArray(),
             document.Devices
                 .OfType<SwitchDevice>()
-                .Where(device => !ringCabinetSwitchIds.Contains(device.Id))
+                .Where(device => !ringCabinetSwitchIds.Contains(device.Id) &&
+                    !customerStationSwitchIds.Contains(device.Id))
                 .Select(device => ToDto(device))
                 .ToArray(),
             document.CableSegments.Select(ToDto).ToArray(),
             document.IntermediateTerminals.Select(ToDto).ToArray(),
             transformers,
-            []);
+            customerStations);
 
         ValidateTopology(document, result);
         return result;
@@ -449,12 +499,6 @@ internal static class ProjectDomainMapper
         }
 
         var document = new DrawingDocument(dto.DocumentId, dto.Title);
-
-        if ((dto.CustomerStations ?? []).Count != 0)
-        {
-            throw new InvalidDataException(
-                "CustomerStation runtime support is not implemented in WP-EM-02.");
-        }
 
         foreach (ProjectDeviceDto deviceDto in dto.Devices ??
                  throw new InvalidDataException("Domain devices are required."))
@@ -482,8 +526,44 @@ internal static class ProjectDomainMapper
             document.AddDevice(RestoreRingCabinet(cabinetDto));
         }
 
+        var customerStationNodeIds = new HashSet<Guid>();
+        var customerStationTerminalIds = new HashSet<Guid>();
+        foreach (ProjectCustomerStationDto stationDto in dto.CustomerStations ??
+                 throw new InvalidDataException("Customer stations are required."))
+        {
+            CustomerStation station = RestoreCustomerStation(
+                stationDto,
+                dto.ElectricalNodes ?? [],
+                dto.Terminals ?? []);
+            try
+            {
+                document.AddCustomerStation(station);
+            }
+            catch (Exception exception) when (exception is ArgumentException or
+                                               InvalidOperationException)
+            {
+                throw new InvalidDataException(
+                    $"Customer station '{stationDto.CustomerStationId}' aggregate is invalid.",
+                    exception);
+            }
+
+            customerStationNodeIds.UnionWith(
+                station.IncomingFeeders.Select(feeder => feeder.ElectricalNodeId));
+            customerStationTerminalIds.UnionWith(
+                station.IncomingFeeders.SelectMany(feeder => new[]
+                {
+                    feeder.CableTerminalId,
+                    feeder.StationTerminalId
+                }));
+        }
+
         foreach (ProjectElectricalNodeDto nodeDto in dto.ElectricalNodes ?? [])
         {
+            if (customerStationNodeIds.Contains(nodeDto.NodeId))
+            {
+                continue;
+            }
+
             document.AddElectricalNode(RestoreElectricalNode(nodeDto));
         }
 
@@ -533,7 +613,8 @@ internal static class ProjectDomainMapper
 
         foreach (ProjectTerminalDto terminalDto in dto.Terminals ?? [])
         {
-            if (transformerTerminalIds.Contains(terminalDto.TerminalId))
+            if (transformerTerminalIds.Contains(terminalDto.TerminalId) ||
+                customerStationTerminalIds.Contains(terminalDto.TerminalId))
             {
                 continue;
             }
@@ -617,6 +698,27 @@ internal static class ProjectDomainMapper
             cabinet.ElectricalNodes.Select(ToDto).ToArray(),
             cabinet.Terminals.Select(ToDto).ToArray(),
             cabinet.LineName);
+    }
+
+    private static ProjectCustomerStationDto ToDto(CustomerStation station)
+    {
+        return new ProjectCustomerStationDto(
+            station.Id,
+            Encode(station.StationKind),
+            station.IncomingFeeders.Select(feeder =>
+                new ProjectCustomerStationIncomingFeederDto(
+                    feeder.IncomingFeederId,
+                    feeder.Sequence,
+                    feeder.DisplayName,
+                    feeder.CableTerminalId,
+                    feeder.StationTerminalId,
+                    feeder.ElectricalNodeId,
+                    ToDto(
+                        feeder.IsolationSwitch,
+                        new ProjectSwitchOwnerReferenceDto(
+                            ProjectSwitchOwnerKind.CustomerStationIncomingFeeder,
+                            feeder.IncomingFeederId))))
+                .ToArray());
     }
 
     private static ProjectConnectionDto ToDto(Connection connection)
@@ -978,6 +1080,8 @@ internal static class ProjectDomainMapper
         IReadOnlyList<ProjectIntermediateTerminalDto> intermediateTerminalDtos =
             dto.IntermediateTerminals ?? [];
         IReadOnlyList<ProjectTransformerDto> transformerDtos = dto.Transformers ?? [];
+        IReadOnlyList<ProjectCustomerStationDto> customerStationDtos =
+            dto.CustomerStations ?? [];
 
         if (transformerDtos.Count != document.Devices.OfType<Transformer>().Count() ||
             transformerDtos.Select(item => item.TransformerId).Distinct().Count() !=
@@ -1002,6 +1106,8 @@ internal static class ProjectDomainMapper
                     $"Transformer '{transformer.Id}' is inconsistent with its DTO.");
             }
         }
+
+        ValidateCustomerStations(document, customerStationDtos, nodeDtos, terminalDtos);
 
         HashSet<Guid> rootNodeIds = nodeDtos.Select(node => node.NodeId).ToHashSet();
         HashSet<Guid> rootTerminalIds = terminalDtos.Select(terminal => terminal.TerminalId).ToHashSet();
@@ -1222,6 +1328,129 @@ internal static class ProjectDomainMapper
         }
     }
 
+    private static void ValidateCustomerStations(
+        DrawingDocument document,
+        IReadOnlyList<ProjectCustomerStationDto> stationDtos,
+        IReadOnlyList<ProjectElectricalNodeDto> nodeDtos,
+        IReadOnlyList<ProjectTerminalDto> terminalDtos)
+    {
+        CustomerStation[] stations = document.CustomerStations.ToArray();
+        if (stationDtos.Count != stations.Length ||
+            stationDtos.Select(station => station.CustomerStationId).Distinct().Count() !=
+                stationDtos.Count)
+        {
+            throw new InvalidDataException(
+                "Customer station DTOs contain duplicate or missing aggregates.");
+        }
+
+        var referencedChildIds = new HashSet<Guid>();
+        foreach (CustomerStation station in stations)
+        {
+            ProjectCustomerStationDto stationDto = stationDtos.SingleOrDefault(candidate =>
+                    candidate.CustomerStationId == station.Id)
+                ?? throw new InvalidDataException(
+                    $"Customer station '{station.Id}' is missing from DTO.");
+            if (Decode(stationDto.StationKind) != station.StationKind ||
+                stationDto.IncomingFeeders.Count != station.IncomingFeeders.Count)
+            {
+                throw new InvalidDataException(
+                    $"Customer station '{station.Id}' is inconsistent with its DTO.");
+            }
+
+            foreach (IncomingFeeder feeder in station.IncomingFeeders)
+            {
+                ProjectCustomerStationIncomingFeederDto feederDto =
+                    stationDto.IncomingFeeders.SingleOrDefault(candidate =>
+                        candidate.IncomingFeederId == feeder.IncomingFeederId)
+                    ?? throw new InvalidDataException(
+                        $"Incoming feeder '{feeder.IncomingFeederId}' is missing from DTO.");
+                ProjectSwitchDeviceDto switchDto = feederDto.IsolationSwitch;
+                if (feederDto.Sequence != feeder.Sequence ||
+                    feederDto.DisplayName.Trim() != feeder.DisplayName ||
+                    feederDto.CableTerminalId != feeder.CableTerminalId ||
+                    feederDto.StationTerminalId != feeder.StationTerminalId ||
+                    feederDto.ElectricalNodeId != feeder.ElectricalNodeId ||
+                    switchDto.DeviceId != feeder.IsolationSwitch.Id ||
+                    switchDto.SwitchKind != Encode(feeder.IsolationSwitch.SwitchKind) ||
+                    switchDto.InstallationType != Encode(feeder.IsolationSwitch.InstallationType) ||
+                    switchDto.FirstTerminalId != feeder.CableTerminalId ||
+                    switchDto.SecondTerminalId != feeder.StationTerminalId ||
+                    switchDto.SwitchState != Encode(feeder.IsolationSwitch.SwitchState ??
+                        throw new InvalidDataException(
+                            $"Incoming switch '{feeder.IsolationSwitch.Id}' has no state.")) ||
+                    switchDto.DisplayName != feeder.IsolationSwitch.DisplayName ||
+                    switchDto.VoltageLevel != feeder.IsolationSwitch.VoltageLevel ||
+                    switchDto.DispatchNumber != feeder.IsolationSwitch.DispatchNumber ||
+                    switchDto.Owner is not
+                    {
+                        OwnerKind: ProjectSwitchOwnerKind.CustomerStationIncomingFeeder,
+                        OwnerId: var ownerId
+                    } || ownerId != feeder.IncomingFeederId)
+                {
+                    throw new InvalidDataException(
+                        $"Incoming feeder '{feeder.IncomingFeederId}' is inconsistent with its DTO.");
+                }
+
+                Guid[] childIds =
+                [
+                    feeder.IncomingFeederId,
+                    feeder.IsolationSwitch.Id,
+                    feeder.CableTerminalId,
+                    feeder.StationTerminalId,
+                    feeder.ElectricalNodeId
+                ];
+                if (childIds.Any(id => !referencedChildIds.Add(id)))
+                {
+                    throw new InvalidDataException(
+                        "Customer station DTOs share an aggregate child identity.");
+                }
+
+                ProjectTerminalDto cableTerminalDto = RequireSingle(
+                    terminalDtos,
+                    terminal => terminal.TerminalId == feeder.CableTerminalId,
+                    $"Incoming feeder '{feeder.IncomingFeederId}' cable terminal");
+                ProjectTerminalDto stationTerminalDto = RequireSingle(
+                    terminalDtos,
+                    terminal => terminal.TerminalId == feeder.StationTerminalId,
+                    $"Incoming feeder '{feeder.IncomingFeederId}' station terminal");
+                ProjectElectricalNodeDto nodeDto = RequireSingle(
+                    nodeDtos,
+                    node => node.NodeId == feeder.ElectricalNodeId,
+                    $"Incoming feeder '{feeder.IncomingFeederId}' electrical node");
+                if (!Matches(cableTerminalDto, feeder.CableTerminal) ||
+                    !Matches(stationTerminalDto, feeder.StationTerminal) ||
+                    !Matches(nodeDto, feeder.ElectricalNode) ||
+                    !feeder.ElectricalNode.TerminalIds.ToHashSet()
+                        .SetEquals([feeder.StationTerminalId]))
+                {
+                    throw new InvalidDataException(
+                        $"Incoming feeder '{feeder.IncomingFeederId}' topology DTO is inconsistent.");
+                }
+            }
+        }
+    }
+
+    private static bool Matches(ProjectTerminalDto dto, Terminal terminal)
+    {
+        return dto.OwnerType == Encode(terminal.OwnerType) &&
+            dto.OwnerId == terminal.OwnerId &&
+            dto.Role == terminal.Role &&
+            dto.VoltageLevel == terminal.VoltageLevel &&
+            dto.IsExternal == terminal.IsExternal &&
+            dto.AllowsMultipleConnections == terminal.AllowsMultipleConnections &&
+            dto.ElectricalNodeId == terminal.ElectricalNodeId &&
+            (dto.AllowedConnectionTypes ?? []).ToHashSet(StringComparer.Ordinal)
+                .SetEquals(terminal.AllowedConnectionTypes.Select(Encode));
+    }
+
+    private static bool Matches(ProjectElectricalNodeDto dto, ElectricalNode node)
+    {
+        return dto.NodeType == Encode(node.Type) &&
+            dto.OwnerType == Encode(node.OwnerType) &&
+            dto.OwnerId == node.OwnerId &&
+            dto.ElectricalState == EncodeNullable(node.ElectricalState);
+    }
+
     private static RingCabinet RestoreRingCabinet(ProjectRingCabinetDto dto)
     {
         var intervals = (dto.Intervals ?? throw new InvalidDataException(
@@ -1239,6 +1468,119 @@ internal static class ProjectDomainMapper
 
         ValidateRestoredAggregate(cabinet, dto);
         return cabinet;
+    }
+
+    private static CustomerStation RestoreCustomerStation(
+        ProjectCustomerStationDto dto,
+        IReadOnlyList<ProjectElectricalNodeDto> nodeDtos,
+        IReadOnlyList<ProjectTerminalDto> terminalDtos)
+    {
+        IncomingFeeder[] feeders = (dto.IncomingFeeders ?? throw new InvalidDataException(
+                $"Customer station '{dto.CustomerStationId}' is missing incoming feeders."))
+            .Select(feederDto => RestoreIncomingFeeder(feederDto, nodeDtos, terminalDtos))
+            .ToArray();
+
+        try
+        {
+            return new CustomerStation(
+                dto.CustomerStationId,
+                Decode(dto.StationKind),
+                feeders);
+        }
+        catch (Exception exception) when (exception is ArgumentException or
+                                           InvalidOperationException)
+        {
+            throw new InvalidDataException(
+                $"Customer station '{dto.CustomerStationId}' structure is invalid.",
+                exception);
+        }
+    }
+
+    private static IncomingFeeder RestoreIncomingFeeder(
+        ProjectCustomerStationIncomingFeederDto dto,
+        IReadOnlyList<ProjectElectricalNodeDto> nodeDtos,
+        IReadOnlyList<ProjectTerminalDto> terminalDtos)
+    {
+        ProjectSwitchDeviceDto switchDto = dto.IsolationSwitch
+            ?? throw new InvalidDataException(
+                $"Incoming feeder '{dto.IncomingFeederId}' is missing its isolation switch.");
+        if (switchDto.Owner is not
+            {
+                OwnerKind: ProjectSwitchOwnerKind.CustomerStationIncomingFeeder,
+                OwnerId: var ownerId
+            } || ownerId != dto.IncomingFeederId ||
+            !string.Equals(
+                switchDto.InstallationType,
+                "customer-station-incoming-feeder",
+                StringComparison.Ordinal) ||
+            !string.Equals(switchDto.SwitchKind, "isolation-switch", StringComparison.Ordinal) ||
+            switchDto.FirstTerminalId != dto.CableTerminalId ||
+            switchDto.SecondTerminalId != dto.StationTerminalId)
+        {
+            throw new InvalidDataException(
+                $"Incoming feeder '{dto.IncomingFeederId}' isolation switch is invalid.");
+        }
+
+        ProjectTerminalDto cableTerminalDto = RequireSingle(
+            terminalDtos,
+            terminal => terminal.TerminalId == dto.CableTerminalId,
+            $"Incoming feeder '{dto.IncomingFeederId}' cable terminal");
+        ProjectTerminalDto stationTerminalDto = RequireSingle(
+            terminalDtos,
+            terminal => terminal.TerminalId == dto.StationTerminalId,
+            $"Incoming feeder '{dto.IncomingFeederId}' station terminal");
+        ProjectElectricalNodeDto nodeDto = RequireSingle(
+            nodeDtos,
+            node => node.NodeId == dto.ElectricalNodeId,
+            $"Incoming feeder '{dto.IncomingFeederId}' electrical node");
+
+        SwitchDevice isolationSwitch =
+            SwitchDevice.CreateForCustomerStationIncomingFeeder(
+                switchDto.DeviceId,
+                dto.IncomingFeederId,
+                switchDto.FirstTerminalId,
+                switchDto.SecondTerminalId,
+                Parse<SwitchState>(switchDto.SwitchState, switchDto.DeviceId, "switchState"),
+                switchDto.DisplayName ?? string.Empty,
+                switchDto.VoltageLevel);
+        isolationSwitch.SetDispatchNumber(switchDto.DispatchNumber);
+
+        try
+        {
+            return new IncomingFeeder(
+                dto.IncomingFeederId,
+                dto.Sequence,
+                dto.DisplayName,
+                dto.CableTerminalId,
+                dto.StationTerminalId,
+                dto.ElectricalNodeId,
+                isolationSwitch,
+                RestoreTerminal(cableTerminalDto),
+                RestoreTerminal(stationTerminalDto),
+                RestoreElectricalNode(nodeDto));
+        }
+        catch (Exception exception) when (exception is ArgumentException or
+                                           InvalidOperationException)
+        {
+            throw new InvalidDataException(
+                $"Incoming feeder '{dto.IncomingFeederId}' topology is invalid.",
+                exception);
+        }
+    }
+
+    private static T RequireSingle<T>(
+        IEnumerable<T> values,
+        Func<T, bool> predicate,
+        string objectName)
+    {
+        T[] matches = values.Where(predicate).ToArray();
+        if (matches.Length != 1)
+        {
+            throw new InvalidDataException(
+                $"{objectName} must have exactly one typed topology DTO.");
+        }
+
+        return matches[0];
     }
 
     private static RingCabinetIntervalRestoreDefinition RestoreRingCabinetInterval(
@@ -1394,6 +1736,20 @@ internal static class ProjectDomainMapper
         _ => throw new InvalidDataException($"Unsupported transformer kind '{value}'.")
     };
 
+    private static ProjectStationKind Encode(StationKind value) => value switch
+    {
+        StationKind.BoxStation => ProjectStationKind.BoxStation,
+        StationKind.IndoorStation => ProjectStationKind.IndoorStation,
+        _ => throw new ArgumentOutOfRangeException(nameof(value))
+    };
+
+    private static StationKind Decode(ProjectStationKind value) => value switch
+    {
+        ProjectStationKind.BoxStation => StationKind.BoxStation,
+        ProjectStationKind.IndoorStation => StationKind.IndoorStation,
+        _ => throw new InvalidDataException($"Unsupported customer station kind '{value}'.")
+    };
+
     private static string Encode(PoleType value) => value switch
     {
         PoleType.Cement => "cement",
@@ -1414,6 +1770,8 @@ internal static class ProjectDomainMapper
     {
         SwitchInstallationType.CabinetInterval => "cabinet-interval",
         SwitchInstallationType.Pole => "pole",
+        SwitchInstallationType.CustomerStationIncomingFeeder =>
+            "customer-station-incoming-feeder",
         _ => throw new ArgumentOutOfRangeException(nameof(value))
     };
 

@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using System.Text.Json.Serialization;
@@ -104,7 +105,13 @@ public sealed record ProjectTransformerLayoutDto(
 
 public sealed record ProjectCustomerStationLayoutDto(
     [property: JsonRequired] Guid CustomerStationId,
-    [property: JsonRequired] ProjectPointDto Position);
+    [property: JsonRequired] ProjectPointDto Position,
+    [property: JsonRequired]
+    IReadOnlyList<ProjectCustomerStationIncomingFeederLayoutDto> IncomingFeeders);
+
+public sealed record ProjectCustomerStationIncomingFeederLayoutDto(
+    [property: JsonRequired] Guid IncomingFeederId,
+    [property: JsonRequired] bool ShowIncomingSwitch);
 
 public sealed record ProjectGroundingPointLayoutDto(
     [property: JsonRequired] Guid GroundingPointId,
@@ -262,6 +269,8 @@ internal static class ProjectLayoutMapper
         Dictionary<Guid, Transformer> transformers = domain.Devices
             .OfType<Transformer>()
             .ToDictionary(transformer => transformer.Id);
+        Dictionary<Guid, CustomerStation> customerStations = domain.CustomerStations
+            .ToDictionary(station => station.Id);
         HashSet<Guid> overheadLineIds = domain.OverheadLines
             .Select(line => line.ConnectionId)
             .ToHashSet();
@@ -273,7 +282,8 @@ internal static class ProjectLayoutMapper
             poleDtos.Count != poles.Count ||
             attachmentDtos.Count != attachments.Count ||
             overheadLineDtos.Count != overheadLineIds.Count ||
-            transformerDtos.Count != transformers.Count)
+            transformerDtos.Count != transformers.Count ||
+            customerStationDtos.Count != customerStations.Count)
         {
             throw new InvalidDataException(
                 "Layout coverage does not match the Domain object set.");
@@ -385,9 +395,39 @@ internal static class ProjectLayoutMapper
 
         foreach (ProjectCustomerStationLayoutDto stationDto in customerStationDtos)
         {
+            if (!customerStations.TryGetValue(
+                    stationDto.CustomerStationId,
+                    out CustomerStation? station))
+            {
+                throw new InvalidDataException(
+                    $"Customer station layout references missing station '{stationDto.CustomerStationId}'.");
+            }
+
             ValidatePoint(
                 stationDto.Position,
                 $"customer station '{stationDto.CustomerStationId}' position");
+            IReadOnlyList<ProjectCustomerStationIncomingFeederLayoutDto> feederDtos =
+                stationDto.IncomingFeeders ?? throw new InvalidDataException(
+                    $"Customer station '{stationDto.CustomerStationId}' is missing feeder layouts.");
+            EnsureUnique(
+                feederDtos.Select(feeder => feeder.IncomingFeederId),
+                $"customer station '{stationDto.CustomerStationId}' feeder layout");
+            HashSet<Guid> feederIds = station.IncomingFeeders
+                .Select(feeder => feeder.IncomingFeederId)
+                .ToHashSet();
+            if (!feederDtos.Select(feeder => feeder.IncomingFeederId).ToHashSet()
+                    .SetEquals(feederIds))
+            {
+                throw new InvalidDataException(
+                    $"Customer station '{stationDto.CustomerStationId}' layout coverage does not match its incoming feeders.");
+            }
+
+            if (station.StationKind == StationKind.BoxStation &&
+                feederDtos.Any(feeder => !feeder.ShowIncomingSwitch))
+            {
+                throw new InvalidDataException(
+                    $"Box station '{stationDto.CustomerStationId}' requires its incoming switch to be visible.");
+            }
         }
 
         HashSet<Guid> groundingPointIds = domain.GroundingPoints

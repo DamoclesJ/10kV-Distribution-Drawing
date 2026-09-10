@@ -38,6 +38,8 @@ public sealed class ProjectV7ContractTests : IDisposable
         Guid transformerTerminalId = Guid.NewGuid();
         Guid stationId = Guid.NewGuid();
         Guid feederId = Guid.NewGuid();
+        Guid feederCableTerminalId = Guid.NewGuid();
+        Guid feederStationTerminalId = Guid.NewGuid();
         Guid groundingAccessPointId = Guid.NewGuid();
         Guid terminalGroundingPointId = Guid.NewGuid();
         Guid gapGroundingPointId = Guid.NewGuid();
@@ -58,8 +60,8 @@ public sealed class ProjectV7ContractTests : IDisposable
             Guid.NewGuid(),
             "isolation-switch",
             "customer-station-incoming-feeder",
-            Guid.NewGuid(),
-            Guid.NewGuid(),
+            feederCableTerminalId,
+            feederStationTerminalId,
             "closed",
             "进线隔离开关",
             "10kV",
@@ -106,8 +108,10 @@ public sealed class ProjectV7ContractTests : IDisposable
                     ProjectStationKind.IndoorStation,
                     [new ProjectCustomerStationIncomingFeederDto(
                         feederId,
-                        Guid.NewGuid(),
-                        Guid.NewGuid(),
+                        1,
+                        "主供",
+                        feederCableTerminalId,
+                        feederStationTerminalId,
                         Guid.NewGuid(),
                         feederSwitch)])
             ]
@@ -155,7 +159,10 @@ public sealed class ProjectV7ContractTests : IDisposable
                 ProjectTransformerOrientation.Vertical)],
             [new ProjectCustomerStationLayoutDto(
                 stationId,
-                new ProjectPointDto(300, 400))],
+                new ProjectPointDto(300, 400),
+                [new ProjectCustomerStationIncomingFeederLayoutDto(
+                    feederId,
+                    true)])],
             [new ProjectGroundingPointLayoutDto(
                 gapGroundingPointId,
                 new ProjectPointDto(12.5, -8.25))]);
@@ -274,7 +281,7 @@ public sealed class ProjectV7ContractTests : IDisposable
     public void CustomerStationContract_AllowsTwoFeedersOnlyForIndoorStation()
     {
         ProjectCustomerStationIncomingFeederDto[] feeders =
-            [CreateFeeder(), CreateFeeder()];
+            [CreateFeeder(1), CreateFeeder(2)];
 
         var indoor = new ProjectCustomerStationDto(
             Guid.NewGuid(),
@@ -306,20 +313,24 @@ public sealed class ProjectV7ContractTests : IDisposable
         return path;
     }
 
-    private static ProjectCustomerStationIncomingFeederDto CreateFeeder()
+    private static ProjectCustomerStationIncomingFeederDto CreateFeeder(int sequence = 1)
     {
         Guid feederId = Guid.NewGuid();
+        Guid cableTerminalId = Guid.NewGuid();
+        Guid stationTerminalId = Guid.NewGuid();
         return new ProjectCustomerStationIncomingFeederDto(
             feederId,
-            Guid.NewGuid(),
-            Guid.NewGuid(),
+            sequence,
+            $"进线 {sequence}",
+            cableTerminalId,
+            stationTerminalId,
             Guid.NewGuid(),
             new ProjectSwitchDeviceDto(
                 Guid.NewGuid(),
                 "isolation-switch",
                 "customer-station-incoming-feeder",
-                Guid.NewGuid(),
-                Guid.NewGuid(),
+                cableTerminalId,
+                stationTerminalId,
                 "open",
                 "进线隔离开关",
                 "10kV",

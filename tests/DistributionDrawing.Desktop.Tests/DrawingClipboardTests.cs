@@ -1,8 +1,10 @@
 using System.IO;
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
+using DistributionDrawing.Application.Devices.CustomerStations;
 using DistributionDrawing.Desktop.Clipboard;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
@@ -864,6 +866,235 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.True(clipboard.Copy(session).IsSuccess);
     }
 
+    [Fact]
+    public void CustomerStationPaste_RemapsCompleteAggregateAndPreservesLayoutAndState()
+    {
+        ProjectRuntimeSession session = CreateSession("用户站复制");
+        CustomerStation source = AddCustomerStation(
+            session,
+            StationKind.IndoorStation,
+            ["主供", "备供"],
+            new DocumentPoint(40, 50),
+            [true, false]);
+        session.PersistenceSession.Domain.ChangeSwitchState(
+            source.IncomingFeeders[0].IsolationSwitch.Id,
+            SwitchState.Closed);
+        source.IncomingFeeders[0].IsolationSwitch.SetDispatchNumber("QS1");
+        source.IncomingFeeders[1].ElectricalNode.SetElectricalState(
+            ElectricalState.Energized);
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            source.Id));
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        CustomerStation pasted = Assert.Single(
+            session.PersistenceSession.Domain.CustomerStations,
+            station => station.Id != source.Id);
+        CustomerStationLayout pastedLayout = session.Layout.CustomerStationLayouts[pasted.Id];
+        Assert.Equal(source.StationKind, pasted.StationKind);
+        Assert.Equal(new DocumentPoint(50, 60), pastedLayout.Position);
+        Assert.Equal(
+            source.IncomingFeeders.Select(feeder => new
+            {
+                feeder.Sequence,
+                feeder.DisplayName,
+                State = feeder.IsolationSwitch.SwitchState
+            }),
+            pasted.IncomingFeeders.Select(feeder => new
+            {
+                feeder.Sequence,
+                feeder.DisplayName,
+                State = feeder.IsolationSwitch.SwitchState
+            }));
+        Assert.Equal([true, false], pasted.IncomingFeeders
+            .Select(feeder => pastedLayout.IncomingFeeders[feeder.IncomingFeederId]
+                .ShowIncomingSwitch)
+            .ToArray());
+        Assert.Equal("QS1", pasted.IncomingFeeders[0].IsolationSwitch.DispatchNumber);
+        Assert.Equal(
+            ElectricalState.Energized,
+            pasted.IncomingFeeders[1].ElectricalNode.ElectricalState);
+        Assert.All(pasted.IncomingFeeders, feeder =>
+        {
+            Assert.Equal(feeder.IncomingFeederId, feeder.IsolationSwitch.ParentId);
+            Assert.Equal(
+                SwitchInstallationType.CustomerStationIncomingFeeder,
+                feeder.IsolationSwitch.InstallationType);
+            Assert.True(feeder.CableTerminal.IsExternal);
+            Assert.False(feeder.CableTerminal.AllowsMultipleConnections);
+            Assert.Equal([ConnectionType.Cable], feeder.CableTerminal.AllowedConnectionTypes);
+            Assert.False(feeder.StationTerminal.IsExternal);
+            Assert.Empty(feeder.StationTerminal.AllowedConnectionTypes);
+            Assert.Equal(ElectricalNodeType.Circuit, feeder.ElectricalNode.Type);
+            Assert.Equal(feeder.IncomingFeederId, feeder.ElectricalNode.OwnerId);
+        });
+
+        HashSet<Guid> sourceIds = AggregateIds(source);
+        HashSet<Guid> pastedIds = AggregateIds(pasted);
+        Assert.False(sourceIds.Overlaps(pastedIds));
+        Assert.Equal(sourceIds.Count, pastedIds.Count);
+        Assert.Empty(session.PersistenceSession.Domain.Connections);
+
+        Guid pastedStationId = pasted.Id;
+        Guid[] pastedStableIds = pastedIds.OrderBy(id => id).ToArray();
+        Assert.True(session.CommandStack.Undo());
+        Assert.DoesNotContain(session.PersistenceSession.Domain.CustomerStations,
+            station => station.Id == pastedStationId);
+        Assert.DoesNotContain(session.Layout.CustomerStationLayouts,
+            pair => pair.Key == pastedStationId);
+        Assert.True(session.CommandStack.Redo());
+        CustomerStation redone = session.PersistenceSession.Domain.CustomerStations.Single(
+            station => station.Id == pastedStationId);
+        Assert.Equal(pastedStableIds, AggregateIds(redone).OrderBy(id => id).ToArray());
+    }
+
+    [Fact]
+    public void CustomerStationPasteCommand_InvalidLayoutLeavesNoPartialAggregate()
+    {
+        ProjectRuntimeSession session = CreateSession("用户站粘贴原子性");
+        CustomerStation station = new CustomerStationCreationFactory().Create(
+            StationKind.BoxStation,
+            ["主供"]);
+        var invalidLayout = new CustomerStationLayout(
+            station.Id,
+            new DocumentPoint(10, 20),
+            []);
+        var command = new AddCopiedCustomerStationCommand(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            station,
+            invalidLayout);
+
+        Assert.Throws<InvalidOperationException>(() => command.Execute());
+
+        Assert.Empty(session.PersistenceSession.Domain.CustomerStations);
+        Assert.Empty(session.PersistenceSession.Domain.Devices);
+        Assert.Empty(session.PersistenceSession.Domain.Terminals);
+        Assert.Empty(session.PersistenceSession.Domain.ElectricalNodes);
+        Assert.Empty(session.Layout.CustomerStationLayouts);
+    }
+
+    [Fact]
+    public void CustomerStationAndSelectedCable_PasteRemapsCableEndpoint()
+    {
+        ProjectRuntimeSession session = CreateSession("用户站电缆复制");
+        CustomerStation station = AddCustomerStation(
+            session,
+            StationKind.BoxStation,
+            ["主供"],
+            new DocumentPoint(20, 30),
+            [true]);
+        TransformerCreation transformer = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(100, 30));
+        new AddTransformerCommand(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            transformer).Execute();
+        Guid connectionId = Guid.NewGuid();
+        var connection = new Connection(
+            connectionId,
+            ConnectionType.Cable,
+            station.IncomingFeeders[0].CableTerminalId,
+            transformer.HvTerminal.Id,
+            "用户站电缆",
+            "10kV");
+        var cable = new CableSegment(
+            Guid.NewGuid(),
+            "用户站电缆",
+            "YJV",
+            80,
+            "10kV",
+            connectionId,
+            connection.StartTerminalId,
+            connection.EndTerminalId);
+        session.PersistenceSession.Domain.AddCableSegment(cable, connection);
+        session.SelectionManager.Replace([
+            new SelectionReference(SelectionTargetKind.Device, station.Id),
+            new SelectionReference(SelectionTargetKind.Device, transformer.Transformer.Id),
+            new SelectionReference(SelectionTargetKind.CableSegment, cable.Id)
+        ]);
+        CopyPlanResult plan = new SelectionCopyPlanner().Create(session);
+        Assert.True(plan.IsSuccess);
+        MaterializedPaste paste = new ClipboardFragmentMaterializer().Materialize(
+            plan.Fragment!,
+            session,
+            new DocumentPoint(10, 10));
+
+        paste.Command.Execute();
+
+        CustomerStation pastedStation = Assert.Single(
+            session.PersistenceSession.Domain.CustomerStations,
+            item => item.Id != station.Id);
+        Transformer pastedTransformer = Assert.Single(
+            session.PersistenceSession.Domain.Transformers,
+            item => item.Id != transformer.Transformer.Id);
+        CableSegment pastedCable = Assert.Single(
+            session.PersistenceSession.Domain.CableSegments,
+            item => item.Id != cable.Id);
+        Connection pastedConnection = session.PersistenceSession.Domain.Connections.Single(
+            item => item.Id == pastedCable.ConnectionId);
+        Assert.Equal(
+            pastedStation.IncomingFeeders[0].CableTerminalId,
+            pastedConnection.StartTerminalId);
+        Assert.Equal(pastedTransformer.HvTerminalId, pastedConnection.EndTerminalId);
+    }
+
+    [Fact]
+    public void CopyingCustomerStation_DoesNotCascadeExternalCableAndGroundingBlocksCopy()
+    {
+        ProjectRuntimeSession session = CreateSession("用户站外部引用边界");
+        CustomerStation station = AddCustomerStation(
+            session,
+            StationKind.BoxStation,
+            ["主供"],
+            new DocumentPoint(20, 30),
+            [true]);
+        TransformerCreation transformer = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(100, 30));
+        new AddTransformerCommand(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            transformer).Execute();
+        Guid connectionId = Guid.NewGuid();
+        var connection = new Connection(
+            connectionId,
+            ConnectionType.Cable,
+            station.IncomingFeeders[0].CableTerminalId,
+            transformer.HvTerminal.Id,
+            "外部电缆",
+            "10kV");
+        session.PersistenceSession.Domain.AddCableSegment(
+            new CableSegment(
+                Guid.NewGuid(), "外部电缆", "YJV", 80, "10kV",
+                connectionId, connection.StartTerminalId, connection.EndTerminalId),
+            connection);
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            station.Id));
+        CopyPlanResult plan = new SelectionCopyPlanner().Create(session);
+        ClipboardDrawingFragment fragment = Assert.IsType<ClipboardDrawingFragment>(plan.Fragment);
+        Assert.Single(fragment.CustomerStations);
+        Assert.Empty(fragment.CableSegments);
+        var clipboard = new DrawingClipboardService();
+
+        GroundingPoint grounding = session.PersistenceSession.Domain.CreateGroundingPoint(
+            Guid.NewGuid(),
+            GroundingTarget.ForTerminal(station.IncomingFeeders[0].CableTerminalId),
+            "用户站电缆侧",
+            "S01");
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            station.Id));
+        Assert.False(clipboard.Copy(session).IsSuccess);
+        session.PersistenceSession.Domain.RemoveGroundingPoint(grounding.GroundingPointId);
+        Assert.True(clipboard.Copy(session).IsSuccess);
+    }
+
     private ProjectRuntimeSession CreateSession(string title)
     {
         string path = Path.Combine(
@@ -873,6 +1104,45 @@ public sealed class DrawingClipboardTests : IDisposable
         var service = new ProjectService();
         ProjectSession persistence = service.CreateProject(path, title);
         return ProjectRuntimeSession.CreateEmpty(persistence, new DrawingSceneBuilder());
+    }
+
+    private static CustomerStation AddCustomerStation(
+        ProjectRuntimeSession session,
+        StationKind stationKind,
+        IReadOnlyList<string> names,
+        DocumentPoint position,
+        IReadOnlyList<bool> visibility)
+    {
+        CustomerStation station = new CustomerStationCreationFactory().Create(
+            stationKind,
+            names);
+        session.PersistenceSession.Domain.AddCustomerStation(station);
+        session.Layout.AddCustomerStation(
+            new CustomerStationLayout(
+                station.Id,
+                position,
+                station.IncomingFeeders.Select((feeder, index) =>
+                    new CustomerStationIncomingFeederLayout(
+                        feeder.IncomingFeederId,
+                        visibility[index]))),
+            station);
+        return station;
+    }
+
+    private static HashSet<Guid> AggregateIds(CustomerStation station)
+    {
+        return new HashSet<Guid>(
+        [
+            station.Id,
+            .. station.IncomingFeeders.SelectMany(feeder => new[]
+            {
+                feeder.IncomingFeederId,
+                feeder.IsolationSwitch.Id,
+                feeder.CableTerminalId,
+                feeder.StationTerminalId,
+                feeder.ElectricalNodeId
+            })
+        ]);
     }
 
     private static AddPoleCommand AddPole(ProjectRuntimeSession session, DocumentPoint position)
