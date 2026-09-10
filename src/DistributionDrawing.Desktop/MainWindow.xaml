@@ -161,7 +161,7 @@
           </ToggleButton>
           <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="变压器"
                         IsChecked="{Binding Toolbox.IsTransformerActive, Mode=OneWay}" Command="{Binding CreateTransformerCommand}">
-            <TextBlock VerticalAlignment="Center" Text="变压器" />
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.Transformer}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="变压器" /></StackPanel>
           </ToggleButton>
           <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="架空线"
                         IsChecked="{Binding Toolbox.IsOverheadLineActive, Mode=OneWay}" Command="{Binding CreateOverheadLineCommand}">
@@ -273,7 +273,12 @@
             <ToggleButton Style="{StaticResource ToolboxItemStyle}"
                           IsChecked="{Binding Toolbox.IsTransformerActive, Mode=OneWay}"
                           Command="{Binding CreateTransformerCommand}">
-              <TextBlock VerticalAlignment="Center" Text="变压器" />
+              <StackPanel Orientation="Horizontal">
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.Transformer}"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
+                <TextBlock VerticalAlignment="Center" Text="变压器" />
+              </StackPanel>
             </ToggleButton>
             <TextBlock Style="{StaticResource ToolboxSectionStyle}" Text="连接" />
             <ToggleButton Style="{StaticResource ToolboxItemStyle}"

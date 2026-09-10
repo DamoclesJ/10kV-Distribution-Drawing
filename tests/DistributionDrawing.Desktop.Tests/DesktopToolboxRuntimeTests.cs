@@ -30,12 +30,14 @@ public sealed class DesktopToolboxRuntimeTests
         Assert.Same(actions.Copy, viewModel.CopyCommand);
         Assert.Same(actions.Delete, viewModel.DeleteCommand);
         Assert.Same(actions.FitDrawing, viewModel.FitDrawingCommand);
+        Assert.Same(actions.CreateTransformer, viewModel.CreateTransformerCommand);
     }
 
     [Theory]
     [InlineData(DesktopToolMode.Select)]
     [InlineData(DesktopToolMode.CreatePole)]
     [InlineData(DesktopToolMode.CreateRingCabinet)]
+    [InlineData(DesktopToolMode.CreateTransformer)]
     [InlineData(DesktopToolMode.CreateOverheadLine)]
     [InlineData(DesktopToolMode.CreateCable)]
     [InlineData(DesktopToolMode.AddCableTermination)]
@@ -53,6 +55,7 @@ public sealed class DesktopToolboxRuntimeTests
             toolbox.IsSelectActive,
             toolbox.IsPoleActive,
             toolbox.IsRingCabinetActive,
+            toolbox.IsTransformerActive,
             toolbox.IsOverheadLineActive,
             toolbox.IsCableActive,
             toolbox.IsCableTerminationActive,
