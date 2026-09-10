@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Requirements Frozen / Implementation Not Started / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -174,16 +174,131 @@ WP-EM-06 不实现 `CustomerStation`，也不引入 generic route hysteresis、g
 - `BoxStation`：箱式用户站；当前固定一个 `IncomingFeeder`。
 - `IndoorStation`：室内用户站；允许一个或两个 `IncomingFeeder`。
 
-`CustomerStation` 不允许零 feeder。双电源表示一个 `CustomerStation` 拥有两个 `IncomingFeeder`，不是两个独立 `CustomerStation`。
+`CustomerStation` 不允许零 feeder。双电源表示一个 `IndoorStation` 拥有两个独立 `IncomingFeeder`，不是两个独立 `CustomerStation`。当前只允许 Cable 进线，不支持 OverheadLine 进线。
 
-当前只允许 Cable 进线，不支持 OverheadLine 进线。每个 `IncomingFeeder`：
+#### 3.3.1 Aggregate identity 与 naming
 
-- 拥有独立 Stable ID、Terminal、Node、SwitchState 和 GroundingPoint possibility；
-- 包含真实 `IsolationSwitch`，其 `SwitchKind` 固定为 `IsolationSwitch`，使用正常 `SwitchState.Open` / `SwitchState.Closed`；
-- 在电缆侧允许 `GroundingPoint`；
-- 为未来独立 Energization result 保留身份边界，但本阶段不实现 Energization Analysis。
+WP-EM-07 冻结的最小 aggregate identity 为：
 
-当前不建立两个 feeder 之间的内部电气连接，也不建模用户站内部母线、母联或站内网络。
+```text
+CustomerStation : Device
+├── Device.Id                     // CustomerStationId
+├── StationKind                   // BoxStation | IndoorStation
+└── IncomingFeeders               // 1；或 IndoorStation 为 2
+    └── IncomingFeeder
+        ├── IncomingFeederId
+        ├── Sequence              // 1..Count；固定且连续
+        ├── DisplayName           // required formal business name
+        ├── CableTerminalId
+        ├── StationTerminalId
+        ├── ElectricalNodeId
+        └── IsolationSwitch
+            ├── SwitchDevice.Id
+            ├── SwitchKind = IsolationSwitch
+            ├── SwitchState = Open | Closed
+            ├── first Terminal = CableTerminalId
+            ├── second Terminal = StationTerminalId
+            └── owner = CustomerStationIncomingFeeder(IncomingFeederId)
+```
+
+feeder 名称 typed field 采用 `DisplayName`。理由是它与当前 `Device.DisplayName`、`RingCabinetInterval.DisplayName` 的 Domain naming convention 一致，并表示正式、可持久化的业务名称，不是临时 Canvas text。`FeederName` 在 `IncomingFeeder` 类型内语义重复，`Name` 则偏离最接近的 aggregate-child convention。
+
+每路 `DisplayName` 必须 non-empty、trim 后保存，并在 Command、Undo / Redo、Clipboard remap 和 Persistence round-trip 中保留。双 feeder 可以使用不同名称；本 WP 不额外冻结名称唯一性规则。`CustomerStation` 不增加重复的 `StationName`、`StationNumber` 或 editable `Device.DisplayName` 来保存同一业务信息。若继承 `Device.DisplayName` 是实现所必需的基类槽位，CustomerStation runtime 必须保持其为空或仅使用不持久化的 derived UI text，不得形成第二个业务名称事实。
+
+`Sequence` 是 aggregate 的结构顺序事实，不是自由布局坐标。单 feeder 为 `1`；双 feeder 必须为连续且唯一的 `1`、`2`，分别派生为 feeder A / feeder B，并在 professional presentation 中固定左 / 右顺序。不得依赖偶然的 collection serialization order 代替该合同。
+
+#### 3.3.2 Incoming isolation switch 与最小 topology
+
+每个 `IncomingFeeder` 包含一个真实 `SwitchDevice`，不是 rendering decoration。该 switch 的 `SwitchKind` 固定为 `IsolationSwitch`，拥有独立 stable `SwitchDevice.Id`、独立 `SwitchState` 和两个 distinct Terminal。它是 CustomerStation aggregate 内部设备；可以像 RingCabinet 内部 switch 一样注册进 `DrawingDocument.Devices` 供通用 topology 与 switch workflow 使用，但不得被解释为可脱离 feeder 独立创建、删除或持久化的 top-level business object。
+
+WP-EM-07 复用现有 `ElectricalConnectivityGraphBuilder` 的成熟 conduction pattern：同一 `ElectricalNode` 上的 Terminal 由 `ElectricalNodeInternal` edge 连接；`SwitchDevice` 仅在 `SwitchState.Closed` 时产生两个 switch Terminal 之间的 `ClosedSwitch` edge，`Open` 时不产生该 edge。不得为 CustomerStation 创建第二套 switch traversal 规则。
+
+每路 feeder 的最小正确 topology 为：
+
+```text
+Cable
+  → CableTerminalId
+    // SwitchDevice first Terminal; External; Cable only
+  → IsolationSwitch
+    // Closed: ClosedSwitch edge; Open: no cross-switch edge
+  → StationTerminalId
+    // SwitchDevice second Terminal; Internal
+  → ElectricalNodeId
+    // Circuit node owned by IncomingFeeder; station-side boundary only
+```
+
+具体合同：
+
+- `CableTerminalId` 与 `StationTerminalId` 必须 non-empty、distinct，并分别等于 `IsolationSwitch.FirstTerminalId` 与 `IsolationSwitch.SecondTerminalId`；
+- `CableTerminalId` 对应 Terminal 为唯一 External endpoint，`AllowedConnectionTypes = [Cable]`，`AllowsMultipleConnections = false`，并且是该 feeder 唯一合法的 Cable 与新建 Terminal-target `GroundingPoint` 目标；
+- `StationTerminalId` 对应 Terminal 为 Internal，不允许外部 Connection，并绑定 `ElectricalNodeId`；
+- `ElectricalNodeId` 对应 `ElectricalNodeType.Circuit`，typed owner 为该 `IncomingFeeder` internal aggregate；它只表示 station-side electrical boundary，不表示 station internal bus、transformer 或 LV topology；
+- 一个 feeder 在业务上拥有两个 Terminal；其直接 topology owner 仍为内嵌 `SwitchDevice`，feeder 通过稳定 ID 明确引用这两个端点；
+- 双 feeder 的 switch、两个 Terminal 与 `ElectricalNode` 必须全部使用不同 Stable ID；两个 `ElectricalNode` 之间不得建立 edge，也不得共享 Terminal，因此两路在本 WP 保持不连接。
+
+现有 runtime 仍将 `SwitchDevice.ParentId` 与 `RingCabinetInterval`、`SwitchInstallationType` 与 `CabinetInterval | Pole` 绑定，`DrawingDocument.ChangeSwitchState` 也只处理这两类。这与 V7 DTO 已预留的 `ProjectSwitchOwnerKind.CustomerStationIncomingFeeder` 尚未闭合。WP-EM-07 应完成有限 typed owner runtime contract（`RingCabinetInterval` / `CustomerStationIncomingFeeder` / none）并使 CustomerStation switch 进入现有 `ChangeSwitchStateCommand` 与 graph builder；不得扩展为任意 ownership graph。
+
+#### 3.3.3 Professional glyph contract
+
+`BoxStation` 使用独立 professional glyph：矩形主体框、框内一个三角形、顶部一个“人字形”屋顶，以及左侧固定集成的 incoming isolation switch。屋顶仅用于区别 `BoxStation` 与 `IndoorStation`。框内三角形仅是 professional presentation，不得创建 `Transformer` Device、Transformer Terminal、`ElectricalNode` 或 LV topology。`BoxStation` 固定一个 feeder；incoming switch 永远显示并按真实 `SwitchState.Open` / `SwitchState.Closed` 绘制。
+
+`IndoorStation` 的 station unit 使用矩形主体框和框内一个三角形，没有“人字形”屋顶。单电源显示一个 station unit 和一个 feeder；双电源显示两个 station unit 左右并列，仍属于同一个 `IndoorStation`，并分别对应 `Sequence = 1` / `2` 的 feeder A / feeder B。框内三角形同样只属于 presentation。两路 feeder 的 identity、名称、switch state、Cable connection、GroundingPoint 与 switch visibility 均独立，但不创建两路之间的内部母线或其它 electrical edge。
+
+IndoorStation incoming presentation 的 canonical placement 正式冻结如下：
+
+- single feeder：`Sequence = 1`，station unit 使用左侧进线，incoming switch 固定在 unit 左侧；visible `CableTerminalId` presentation anchor 位于 switch 外侧 / cable-side point，hidden anchor 位于同一 unit 左侧 body-edge cable-entry point；
+- dual feeder 的 `Sequence = 1`：对应左侧 station unit，incoming switch 固定在整个 CustomerStation 的左侧外缘，cable-side presentation anchor 朝左；
+- dual feeder 的 `Sequence = 2`：对应右侧 station unit，incoming switch 固定在整个 CustomerStation 的右侧外缘，cable-side presentation anchor 朝右。
+
+以上 side / direction 全部由 `StationKind + IncomingFeeder.Count + Sequence` 派生。WP-EM-07 不单独持久化 `Left`、`Right`、`Direction` 或 `Orientation`，也不增加 arbitrary orientation。
+
+#### 3.3.4 Typed layout、visibility 与 anchor
+
+`ShowIncomingSwitch` 是每路 IndoorStation feeder 的 Layout / Presentation fact，不是 Domain electrical fact。建议 runtime typed layout 与 V7 DTO 使用：
+
+```text
+CustomerStationLayout
+├── CustomerStationId
+├── Position
+└── IncomingFeeders
+    └── CustomerStationIncomingFeederLayout
+        ├── IncomingFeederId
+        └── ShowIncomingSwitch
+```
+
+station unit 尺寸、BoxStation 屋顶、三角形、one / two feeder 排布、switch 尺寸与 feeder A / B 左右位置均由 `StationKind + Sequence + DrawingMetrics` 派生，不保存自由 feeder coordinates。WP-EM-07 不增加 arbitrary `Orientation`、rotation、mirror 或 generic Device drag；CustomerStation drag / route stabilization 继续属于 WP-EM-08。
+
+`IndoorStation` 创建时每路 `ShowIncomingSwitch` default 为 `true`，之后允许分别修改。`false` 只隐藏该 switch 的 professional geometry，不删除 feeder、Terminal、`ElectricalNode` 或 `SwitchDevice`，不改变 `SwitchState`、Connection 或 topology。
+
+V7 对 `BoxStation` 采用统一、non-null、strict typed representation：其唯一 feeder 也必须有一个 `CustomerStationIncomingFeederLayout` record，并持久化 `ShowIncomingSwitch = true`。`BoxStation + persisted false` 为非法 layout，DTO / runtime validation 必须拒绝，不得静默归一化。该方案保持 one typed shape、完整 feeder layout coverage 和无 nullable ambiguity；UI 不向 BoxStation 用户暴露 visibility 编辑入口，其 effective `ShowIncomingSwitch` 恒为 `true`。
+
+`TerminalAnchorIndex` 保持“同一个 electrical Terminal ID → 当前 layout 下的 transient presentation anchor”合同，因此可自然支持 hidden-switch anchor 切换：
+
+- visible：`CableTerminalId` 映射到 incoming switch 外侧 / cable-side formal anchor；
+- hidden：同一个 `CableTerminalId` 映射到对应 station unit body edge 的 canonical cable-entry point；
+- visibility 切换不得替换或 remap `CableTerminalId`、Cable、`SwitchDevice.Id` 或 `GroundingTarget`；
+- Cable routing、picking、GroundingTarget affordance 与 `GroundingPresentationAnchorResolver` 必须读取同一个更新后的 `TerminalAnchorIndex`，从而使 Cable 和 GroundingPoint presentation 一致移动，而 electrical target identity 不变。
+
+#### 3.3.5 Grounding 与 Energization boundary
+
+每路 feeder 的 `CableTerminalId` 是真实 cable-side Terminal，也是新建 `GroundingPoint` 的合法 `GroundingTarget.Terminal`。`ProfessionalCommandFactory.IsEligibleNewTerminalTarget`、`GroundingTargetPicker`、default location text 和 professional anchor resolver 必须按 CustomerStation aggregate identity 扩展，不得把 station body 或任意 glyph geometry 隐式当作接地目标。switch hidden 后仍保留同一个 Terminal target，只改变 presentation anchor。Grounding 与 `SwitchState` 是两个独立 electrical facts，任一方不得自动修改另一方。
+
+WP-EM-07 不增加 `SupplyState`、`Energized`、`DeEnergized`、`HasPower`、`IsEnergized` 或等价 persisted field，也不实现 energized / de-energized 自动着色。“某一路有电、另一路没电”未来由统一 Electrical Model / topology 的 Energization Analysis 推导。本 WP 只建立 feeder identity、Terminal、`ElectricalNode`、switch state 与 topology relationship。
+
+#### 3.3.6 Creation UX 与明确 exclusions
+
+最小创建对话框输入为：
+
+- `StationKind`：用户箱变 / 用户室内站；
+- `IndoorStation` 才显示 feeder count：单电源 / 双电源；
+- 每路输入 required `DisplayName`；
+- `BoxStation` 固定一条 feeder，incoming switch 固定显示；
+- `IndoorStation` 各 feeder 的 `ShowIncomingSwitch` 初始值为 `true`；
+- 不允许创建零 feeder。
+
+创建对话框不要求用户输入 CustomerStation 级名称 / 编号、Orientation、SupplyState、初始 `SwitchState` 或内部设备。每路 incoming `IsolationSwitch` 的正式创建初始值冻结为 `SwitchState.Open`。该规则遵循当前全部 production switch creation workflow：`RingCabinetTemplateDomainBuilder` 对 LoadSwitch、IntegratedFeeder 和 PT interval 的全部成员 switch 显式传入 `Open`；`SwitchDevice.CreateForPole` 的 Domain factory default 为 `Open`，`PoleSwitchAttachmentCreationFactory` 与 `PoleCreationFactory` 均沿用该默认值，包含 pole-mounted `IsolationSwitch` 与 `DropoutFuse`；相应 Desktop 创建 UI 只选择 template / `SwitchKind`，不选择初始 state。Demo / restore / clipboard 中保留既有状态不属于新建默认规则。
+
+明确不进入 WP-EM-07：CustomerStation internal bus、bus coupler、transformer internal modeling、LV network、OverheadLine incoming、Energization Analysis、SupplyState persistence、automatic energized / de-energized color、generic Device drag、generic route stabilization、Transformer multi-presentation-port、Annotation / Work-ticket Presentation Layer 与 V8。Transformer deferred scope 继续属于 WP-EM-08，不得借本 WP 修改。
 
 ### 3.4 GroundingAccessPoint 与架空接地合同
 
@@ -363,7 +478,7 @@ SwitchOwnerReference?
 
 `PublicIndoor` 的 Horizontal / Vertical orientation 属于 `TransformerLayout`，不是 Transformer Domain 业务类型。
 
-CustomerStation 内部 feeder 排布由 `StationKind + IncomingFeeder.Count + DrawingMetrics` 派生，默认不保存每个 feeder 的自由坐标。
+CustomerStation 内部 feeder 排布及 incoming side / direction 由 `StationKind + IncomingFeeder.Count + IncomingFeeder.Sequence + DrawingMetrics` 派生，不保存每个 feeder 的自由坐标，也不持久化 `Left`、`Right`、`Direction` 或 `Orientation`。`CustomerStationLayout` 除 station `Position` 外，必须按 `IncomingFeederId` 为每路 feeder 保存一个 typed layout record；IndoorStation 的 `ShowIncomingSwitch` 可独立编辑，BoxStation 唯一 record 的 `ShowIncomingSwitch` 必须为 `true`，persisted `false` 必须拒绝。该值只决定 professional geometry 与 transient Terminal anchor。WP-EM-02 仅预留 `CustomerStationId + Position`，WP-EM-07 在同一 V7 typed schema 内补齐 feeder layout collection，不升级 V8。
 
 按当前 `ProjectLayoutDto`、`ProjectPointDto` 和毫米逻辑坐标风格，V7 冻结以下最小 Grounding layout 合同：
 
@@ -531,7 +646,18 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-07 — CustomerStation Vertical Slice
 
-完成 `BoxStation`、`IndoorStation`、one/two `IncomingFeeder`、feeder-owned `IsolationSwitch`、cable-only connection、independent feeder topology、GroundingPoint integration、aggregate create/delete、professional rendering、selection、inspector、clipboard、Undo / Redo 和 V7 integration。
+**状态：Requirements Frozen / Implementation Not Started**
+
+正式需求合同以 3.3 节为准。完成 `BoxStation`、`IndoorStation`、one/two `IncomingFeeder`、required feeder `DisplayName`、feeder-owned `IsolationSwitch`、cable-only connection、independent feeder topology、GroundingPoint integration、per-feeder IndoorStation `ShowIncomingSwitch`、hidden-switch formal anchor switching、aggregate create/delete、professional rendering、selection、inspector、clipboard、Undo / Redo 和 V7 integration。
+
+建议实施切片：
+
+1. Slice A — Domain Aggregate + Commands + Connection / Grounding Legality：完成 CustomerStation / IncomingFeeder aggregate、typed switch owner runtime、两端 switch topology、atomic registration / removal、state / name commands、dependency guards，以及 Cable / Grounding eligibility；不进入 WPF glyph。
+2. Slice B — V7 Persistence + Clipboard + Topology Graph：在 V7 typed reservation 内补齐 feeder `Sequence` / `DisplayName` 与 per-feeder layout DTO，完成 mapper / validation / round-trip、Clipboard 全 aggregate ID remap 和 graph traversal regression；不升级 V8。
+3. Slice C — Professional Glyph + Formal Anchors + Scene + Selection + Inspector + Creation Workflow：完成 BoxStation / IndoorStation single / dual glyph、switch state geometry、per-feeder visibility、同一 Terminal ID 的 visible / hidden anchor、Cable / Grounding presentation、hit-test、selection、inspector、创建和统一删除工作流。
+4. Slice D — Windows Professional Acceptance + targeted fixes：基于 committed / pushed Slice A～C baseline 完成 Windows build、automated regression、single / dual feeder professional visual acceptance、independent switch operation、visibility / anchor、Cable / Grounding、Save / Reopen 与 Clipboard 场景；只做 targeted fixes，不吸收 WP-EM-08。
+
+WP-EM-07 requirements 已冻结：新建 feeder 的初始 `SwitchState = Open`；IndoorStation single feeder 固定左侧进线；dual feeder 固定 feeder A / `Sequence = 1` 位于左侧外缘、feeder B / `Sequence = 2` 位于右侧外缘；BoxStation 唯一 feeder 的 persisted `ShowIncomingSwitch` 必须为 `true`。本状态不表示 implementation started，Slice A 仍须在最终 diff review 后由独立实施轮次开始。
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
