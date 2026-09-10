@@ -310,7 +310,7 @@ public sealed class CustomerStationSliceCTests
     public void CreationFactory_RejectsIllegalFeederCount(StationKind kind, int count)
     {
         string[] names = Enumerable.Range(1, count).Select(index => $"进线 {index}").ToArray();
-        Assert.Throws<ArgumentException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             new CustomerStationCreationFactory().Create(
                 kind,
                 names,
