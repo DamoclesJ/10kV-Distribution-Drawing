@@ -13,7 +13,10 @@
   <StreamGeometry x:Key="Icon.Select">M5,3 L18,14 L12,15 L9,21 Z</StreamGeometry>
   <StreamGeometry x:Key="Icon.Pole">M12,5 A7,7 0 1 1 11.99,5 M12,2 L12,5 M12,19 L12,22 M2,12 L5,12 M19,12 L22,12</StreamGeometry>
   <StreamGeometry x:Key="Icon.RingCabinet">M3,5 L21,5 L21,19 L3,19 Z M6,9 L18,9 M8,9 L8,19 M12,9 L12,19 M16,9 L16,19</StreamGeometry>
-  <StreamGeometry x:Key="Icon.Transformer">M9,7 A5,5 0 1 1 8.99,7 M15,7 A5,5 0 1 1 14.99,7</StreamGeometry>
+  <GeometryGroup x:Key="Icon.Transformer">
+    <EllipseGeometry Center="9,12" RadiusX="5" RadiusY="5" />
+    <EllipseGeometry Center="15,12" RadiusX="5" RadiusY="5" />
+  </GeometryGroup>
   <StreamGeometry x:Key="Icon.OverheadLine">M4,12 A2,2 0 1 1 3.99,12 M6,12 L18,12 M20,12 A2,2 0 1 1 19.99,12</StreamGeometry>
   <StreamGeometry x:Key="Icon.Cable">M4,7 L8,7 L8,12 L16,12 L16,17 L20,17 M4,5 L4,9 M20,15 L20,19</StreamGeometry>
   <StreamGeometry x:Key="Icon.CableTermination">M12,4 L12,9 M7,9 L17,9 L12,18 Z M8,21 L16,21</StreamGeometry>
