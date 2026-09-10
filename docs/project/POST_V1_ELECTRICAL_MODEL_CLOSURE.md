@@ -1,8 +1,8 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed
 >
-> 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0，也不表示任何下述功能已经实现。
+> 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
 ## 1. 阶段定位
 
@@ -510,9 +510,24 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-06 — Transformer Vertical Slice
 
-**状态：Requirements Frozen / Next Work Package（implementation 尚未开始）**
+**状态：Closed / Completed**
 
-正式需求合同以 3.2 节为准。实施范围包括 three Transformer kinds、各自独立的 professional glyph、单一 10kV HV terminal、create/delete、Cable / OverheadLine endpoint validation、`PublicIndoor` orientation、typed layout、selection、inspector、clipboard、Undo / Redo、V7 integration、topology graph compatibility，以及完整 `OverheadLine → DropoutFuse → short OverheadLine → Transformer` 场景。不得借该 Vertical Slice 引入 3.2 节排除的 CustomerStation、低压侧、额外 electrical facts 或通用 interaction infrastructure。
+正式需求合同以 3.2 节为准。WP-EM-06 已完成 implementation、review、Windows automated validation 和 Windows professional GUI acceptance。实施范围包括 three Transformer kinds、各自独立的 professional glyph、单一 10kV HV terminal、create/delete、Cable / OverheadLine endpoint validation、`PublicIndoor` orientation、typed layout、selection、inspector、clipboard、Undo / Redo、V7 integration、topology graph compatibility，以及完整 `OverheadLine → DropoutFuse → short OverheadLine → Transformer` 场景。不得借该 Vertical Slice 引入 3.2 节排除的 CustomerStation、低压侧、额外 electrical facts 或通用 interaction infrastructure。
+
+#### WP-EM-06 Closure Evidence
+
+- 三种正式 `TransformerKind` 均已完成独立 professional glyph：`PublicPoleMounted`（柱上公变）、`DedicatedPoleMounted`（柱上专变）和 `PublicIndoor`（站内公变）。
+- `CustomerStation.BoxStation` 不是 `TransformerKind`；用户箱变属于 WP-EM-07，未进入 WP-EM-06 `Transformer` aggregate。
+- `Transformer` remains a top-level `Device`，仅有一个 `10kV HvTerminalId`；不创建 Transformer `ElectricalNode`、LV Terminal、second Terminal 或 internal winding topology。Stable identity 已覆盖 Commands、Undo / Redo、Clipboard 和 V7 persistence。
+- `PublicPoleMounted` 与 `DedicatedPoleMounted` 只允许 `OverheadLine`，`PublicIndoor` 只允许 `Cable`。`DropoutFuse` 继续是独立 `SwitchDevice`；正式链路为 `OverheadLine → DropoutFuse → short OverheadLine → Transformer`。Windows professional acceptance 确认 short `OverheadLine` 从 `DropoutFuse` terminal 正确引出，不再先回到 support pole center；真实 `SupportPoleIds` 语义保持，未创建 fake `Pole` 或 `PoleAttachment`。
+- 最终 professional presentation：`PublicPoleMounted` 为大空心圆、圆内完整 T 形结构与两个放大的相切小圆，canonical HV anchor 为主圆底部点；`DedicatedPoleMounted` 为三角形与两个分离的相切小圆，canonical HV anchor 为 triangle apex；`PublicIndoor` 为相交双圆，支持 Horizontal / Vertical，Horizontal 为默认，HV anchor 分别为左侧中心 / 顶部中心。Canvas 不增加固定业务 label。
+- `PublicIndoor` orientation 仅属于 Layout fact；创建 dialog 不要求选择 orientation，创建后由 Inspector 通过 `SetTransformerOrientationCommand` 编辑 Horizontal / Vertical，并支持 Execute、Undo、Redo、scene rebuild、formal anchor update、connected Cable route update 和 V7 persistence。Pole-mounted orientation 不提供用户编辑。
+- creation、selection、Inspector、unified delete、dependency protection、clipboard、Undo / Redo、Save / Reopen 均已集成。左侧 `ToolPalette` 的 Transformer entry 使用共享双圆 `Icon.Transformer`，Windows 实机确认正常。
+- Transformer formal HV anchor 不得作为新建 `GroundingPoint` target，也不得作为新建 `WorkScope` boundary picker target。`WorkScopeBoundaryTerminalEligibility` 已闭合 Slice C P1，同时不影响正常 Cable / OverheadLine anchor usage。
+- `FormatVersion` remains V7；typed Transformer persistence、typed TransformerLayout persistence、Save / Reopen、Clipboard remap 和 generic topology graph integration 已完成，不升级 V8。
+- Windows automated validation = PASS；Windows professional GUI acceptance = PASS。验收覆盖 three Transformer glyphs、`PublicIndoor` Horizontal / Vertical、Inspector orientation editing、`DropoutFuse → short OHL → Transformer`、Transformer toolbox icon、connection behavior 和 save / reopen behavior。已知稳定基础测试计数为 Domain 133/133、Infrastructure 100/100、Application 115/115。
+- 主要 WP-EM-06 baselines：Requirements Freeze `55b5aa4437c1d02519855212b040d023cfa3dd51`；Slice A `435c807dcf3b01bafe75958c2276612d2de91b95`；Slice B `b6623e8a77637eedbf07eb7f0e3cb3d83bcb6a15`；Slice C `eeedc5a5df49b586109d0a2f3fc8036c364f290a`；Windows acceptance Fix-1 `68a53ee152858c1bb6149a52e202979acff95f6f`；Toolbox icon integration `6ec10fc2f2ef939222120cfba25a3084a5c47860`；Toolbox icon Windows rendering fix `ff6cae6e78ea75401e202a50627fa3fead5ddd2d`。
+- Deferred to WP-EM-08：Transformer drag 与 generic Device drag、route following、last-valid-position 统一治理；Transformer multi-presentation-port 仍不改变单一 `HvTerminalId`，当前 canonical anchor 为 `PublicPoleMounted` 主圆底部点和 `DedicatedPoleMounted` triangle apex。未来可评估一个 electrical `HvTerminalId` 对应多个 presentation connection candidates（`PublicPoleMounted` 按来线方向选择圆周 port，`DedicatedPoleMounted` 至少 triangle three vertices）；triangle edge dynamic attachment 仅 future evaluation，尚未冻结。上述 deferred items 不是当前 defect 或 blocker，且不得产生 second Terminal。
 
 ### WP-EM-07 — CustomerStation Vertical Slice
 
@@ -557,7 +572,7 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 - WP-EM-02 V7 Format & Migration Foundation 已完成代码 Review、自动验证和 Windows 最终验证；
 - WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice 已完成并 Closed，包含 Windows 最终验证；
 - WP-EM-04 requirements refinement、implementation、review、Windows runtime validation 和 GUI acceptance 已完成，WP-EM-04 Closed；
-- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint` vertical slice 已完成，Transformer、CustomerStation 尚未实现；
+- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint` vertical slice 与 Transformer vertical slice 已完成，CustomerStation 尚未实现；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
-- WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred，WP-EM-06 成为 Next Work Package；
+- WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS，WP-EM-07 为 Next Work Package；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
