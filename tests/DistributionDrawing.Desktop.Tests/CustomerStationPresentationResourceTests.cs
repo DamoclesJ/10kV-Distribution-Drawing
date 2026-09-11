@@ -51,10 +51,21 @@ public sealed class CustomerStationPresentationResourceTests
 
             Assert.NotEqual(ringCabinet.ToString(), customerStation.ToString());
             Assert.Equal(2, flattened.Figures.Count);
-            Assert.Equal(new Point(2, 8), flattened.Figures[0].StartPoint);
-            Assert.Equal(new Point(22, 8),
-                flattened.Figures[0].Segments.OfType<LineSegment>().Last().Point);
-            Assert.True(flattened.Figures[1].IsClosed);
+            PathFigure roof = flattened.Figures[0];
+            PathFigure body = flattened.Figures[1];
+            Rect roofBounds = new PathGeometry([roof]).Bounds;
+            Rect bodyBounds = new PathGeometry([body]).Bounds;
+
+            Assert.Equal(new Point(2, 8), roof.StartPoint);
+            Assert.False(roof.IsClosed);
+            Assert.True(body.IsClosed);
+            Assert.Equal(2, roofBounds.Left);
+            Assert.Equal(22, roofBounds.Right);
+            Assert.Equal(2, roofBounds.Top);
+            Assert.Equal(4, bodyBounds.Left);
+            Assert.Equal(20, bodyBounds.Right);
+            Assert.True(roofBounds.Left < bodyBounds.Left);
+            Assert.True(roofBounds.Right > bodyBounds.Right);
         });
     }
 
