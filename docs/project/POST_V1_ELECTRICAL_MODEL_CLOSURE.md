@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Next / Not Started / WP-EM-07B Planned / Not Started / WP-EM-08 Planned / WP-EM-09 Planned / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / Post-EM-07 Sequencing Amendment Completed / Awaiting ChatGPT Review
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -364,6 +364,8 @@ ProjectGroundingAccessPointDto
 
 允许新建接地的 Terminal 类型必须由相应 Vertical Slice 按真实设备语义明确，不得把所有 Terminal 自动视为合法创建目标。当前确认的电缆侧目标包括 `CableTermination.CableSideTerminalId`，以及后续模型中的 `RingCabinet` cable-side terminal 和 `CustomerStation` incoming cable-side terminal。
 
+WP-EM-07A 将在不改写 WP-EM-06 历史 Closure Evidence 的前提下，正式开放三种 Transformer 的现有 `HvTerminalId` 作为新建 `GroundingTarget.Terminal`，并补齐 pole-mounted switch / `IsolationSwitch` / `DropoutFuse` 两侧相邻真实 `OverheadLine` conductor 的 GAP candidate 能力。架空侧语义继续为 `Overhead conductor → GroundingAccessPoint → GroundingPoint`；不得新增 `TransformerGroundingTarget` 或 `SwitchGroundingTarget`，也不得将 SwitchDevice Terminal 作为未来架空工作地线的主要 target。
+
 对于 `CableTermination`，必须区分两侧：
 
 ```text
@@ -408,6 +410,98 @@ WP-EM-04 必须提供可用的 `GroundingAccessPoint` 创建、删除、选择�
 
 正式 V6 / legacy Terminal-target 文件继续允许加载；若旧记录的 Number 为空，不为兼容而猜号、自动重编号或建立复杂 grandfather 双模型。required / unique 约束应用于 WP-EM-04 新创建及新修改状态；旧空 Number 可保持只读兼容并在用户明确编辑后进入新约束。
 
+### 3.8 WP-EM-07A Transformer & Pole-Device Grounding Amendment
+
+**状态：Next / Not Started**
+
+WP-EM-07A 是 Post-EM-07 / Pre-EM-08 的独立 amendment Work Package，不重新打开 WP-EM-06 或 WP-EM-07。它解决两个相互关联的 grounding contract 缺口。
+
+#### 3.8.1 Pole-device adjacent OHL grounding
+
+Pole-mounted switch / `IsolationSwitch` / `DropoutFuse` 两侧相邻的真实 `OverheadLine` conductor 都必须具备合法的 `GroundingAccessPoint` 接地能力。正式语义继续为：
+
+```text
+Overhead conductor
+→ GroundingAccessPoint
+→ GroundingPoint
+```
+
+该能力必须复用现有 `GroundingAccessPoint` 与 `GroundingTarget.GroundingAccessPoint`。不得新增 `SwitchGroundingTarget`，也不得将 SwitchDevice Terminal 作为未来架空工作地线的主要 target。
+
+WP-EM-07A 实现前必须先执行独立 Repo Audit，确认 pole-mounted switch / `DropoutFuse` 朝 Transformer 一侧的 short `OverheadLine` 当前未正确进入 GAP candidate picker 的原因。本 Amendment 只冻结业务要求，不预判代码根因。
+
+#### 3.8.2 Transformer HV grounding
+
+`PublicPoleMounted`、`DedicatedPoleMounted`、`PublicIndoor` 三种 Transformer 的现有唯一 `HvTerminalId` 全部必须成为合法的新建 `GroundingTarget.Terminal` 目标。Grounding identity 必须绑定 `Transformer.HvTerminalId`，不得绑定 persisted presentation coordinate；不得新增 second grounding identity、`TransformerGroundingTarget`、`SwitchGroundingTarget`、fake Terminal 或 fake `ElectricalNode`。
+
+这是对 3.4 节 conductor-side GAP 通用规则的明确、窄范围 special Terminal grounding exception，只表达 Transformer 本体正式 HV terminal 处的接地，不将任何相邻 `OverheadLine` conductor 或其它设备 Terminal 泛化为 Terminal grounding target。对 pole-mounted Transformer 必须按用户实际选择的位置区分：在相邻 `OverheadLine` conductor 上接地时，必须使用 `GroundingAccessPoint`；在 Transformer 本体正式 HV terminal 处接地时，才可以使用 `Transformer.HvTerminalId` 作为 `GroundingTarget.Terminal`。
+
+在 `DropoutFuse → short OverheadLine → Transformer` 场景中，short `OverheadLine` 两端合法的 conductor-side GAP eligibility 仍必须由 WP-EM-07A Repo Audit、实现与 closure 独立确认；Transformer terminal grounding 不得替代该 eligibility。`Transformer.HvTerminalId` 只表达 Transformer HV terminal grounding；`SwitchDevice`、`IsolationSwitch` 或 `DropoutFuse` Terminal 不因本 Amendment 自动成为新的 overhead Terminal `GroundingTarget`。
+
+Transformer grounding presentation 必须从正式 HV presentation anchor 派生。允许使用小距离 `DrawingMetrics` / presentation offset，但该 offset 不属于 Domain、不新增 persisted electrical fact，也不形成第二 anchor identity。推荐 professional presentation 为：
+
+- incoming conductor horizontal：grounding lead 默认向下；
+- incoming conductor vertical：grounding lead 默认横向，并优先远离 Transformer body。
+
+如果 WP-EM-08 或未来 Work Package 调整 Transformer presentation port / anchor，`GroundingPoint` 必须继续通过同一个 `HvTerminalId` 解析新的 transient professional anchor。presentation port 改变不得替换 `HvTerminalId`、替换 `GroundingPoint` target 或重建 `GroundingPoint` identity。Transformer multi-presentation-port 的具体设计继续属于 WP-EM-08 / future evaluation；本 amendment 只冻结 `Grounding identity = stable HvTerminalId`。
+
+#### 3.8.3 最小 Scope 与 exclusions
+
+WP-EM-07A 的最小能力范围仅包括：pole-mounted switch / `IsolationSwitch` / `DropoutFuse` 两侧相邻真实 OHL 的 GAP eligibility、三种 Transformer 的 `HvTerminalId` grounding eligibility、稳定 grounding identity，以及从正式 HV anchor 派生并能随 future presentation anchor 变化自然跟随的 professional grounding presentation。
+
+明确不进入 WP-EM-07A：
+
+- `LvTerminalId`、0.4kV topology、LV grounding、LV network；
+- cross-voltage Transformer model、second Transformer Terminal、Transformer internal winding topology；
+- second grounding identity、`SwitchGroundingTarget`、`TransformerGroundingTarget`、fake Terminal、fake `ElectricalNode`；
+- generic drag stabilization、route-family hysteresis、last-valid-position、continuous-drag feedback、generic routing engine；
+- Transformer naming / station number、capacity、model / typeplate information；
+- WorkScope boundary expansion、Energization、Annotation；
+- Transformer multi-presentation-port 的具体设计。
+
+### 3.9 WP-EM-07B Transformer Naming Amendment
+
+**状态：Planned / Not Started**
+
+WP-EM-07B 是 Post-EM-07 / Pre-EM-08 的独立 amendment Work Package，不重新打开 WP-EM-06 或 WP-EM-07。业务所称“站号”正式解释为该 Transformer 的设备名称 / 设备编号，不得建立 `StationNumber`、`TransformerNumber`、`DeviceNumber` 等第二套重复业务事实。三种 Transformer 只维护一个正式 naming fact。
+
+#### 3.9.1 Naming semantic
+
+`PublicPoleMounted`、`DedicatedPoleMounted`、`PublicIndoor` 全部具备正式设备名称，并遵守以下冻结规则：
+
+- 新建时必须填写，trim 后不得为空；
+- 同一 `DrawingDocument` 内不要求唯一；
+- Canvas 始终显示；
+- Inspector 允许修改；
+- 修改不改变 `Transformer.Id`、`HvTerminalId`、`GroundingTarget` 或 topology。
+
+后续 Repo Audit 必须优先确认并复用现有 `Device.DisplayName` 作为唯一正式 naming fact，不得在本治理合同中提前增加第二套字段。如果 audit 发现 `Device.DisplayName` 无法合法承担 Transformer persisted naming fact，必须停止并返回 Requirements / Architecture Review，不得自行增加重复字段。
+
+#### 3.9.2 最小 Scope
+
+WP-EM-07B 的未来实现最小范围包括：
+
+- all three Transformer kinds；
+- required creation input 与 trim / non-empty validation；
+- Inspector editing、CommandStack、Undo / Redo；
+- Clipboard、V7 persistence、Save / Reopen；
+- Canvas always-visible label、unified typography settings；
+- 从各 Transformer professional glyph geometry 派生的 professional label placement；
+- relevant selection / rendering regression。
+
+Canvas label 不保存 arbitrary label coordinates、user free text position 或 label visibility toggle；名称始终显示。
+
+#### 3.9.3 Explicit exclusions
+
+明确不进入 WP-EM-07B：
+
+- second station-number field 或 uniqueness requirement；
+- capacity、model、manufacturer、voltage label、LV information；
+- asset metadata framework、generic property bag；
+- Annotation text object、Energization；
+- arbitrary label drag、generic typography framework rewrite；
+- CustomerStation naming redesign。
+
 ## 4. FormatVersion 7 与迁移合同
 
 本阶段统一引入 `FormatVersion 7`。Optional CableTerminal、Transformer、CustomerStation 和 GroundingAccessPoint 不分别升级格式；V7 是整个阶段统一的 Persistence baseline。
@@ -423,6 +517,10 @@ V7 至少容纳：
 - `TransformerLayout`；
 - `CustomerStationLayout`；
 - typed `GroundingPointLayout`。
+
+本次 Post-EM-07 Sequencing Amendment 保持 `FormatVersion = V7`，不授权 V8。WP-EM-07A 预计复用现有 `GroundingTarget.Terminal`、`GroundingAccessPoint` 与 `Transformer.HvTerminalId`，不得因此新增 persistence format version。
+
+WP-EM-07B 的正式目标同样是 V7，但其实现前 Repo Audit 必须确认现有 V7 Transformer persistence 如何安全承载唯一正式 naming fact，并定义已有 V7 Transformer 文件缺失该值时的兼容策略。如果 required naming fact 无法在 V7 内通过明确、无歧义且不猜测业务事实的兼容合同表达，必须停止并重新进入 Governance Review。不得为坚持 V7 而猜测名称、在 Save-time 自动伪造名称或静默产生不真实业务数据。
 
 ### 4.1 V6 → V7 无损迁移
 
@@ -526,7 +624,7 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 
 ### WP-EM-01 — Grounding Presentation Anchor Separation
 
-**状态：Completed**
+**状态：Closed**
 
 目标：
 
@@ -538,7 +636,7 @@ Annotation 和 Energization 保留为 Post-V1 Candidate，但不属于 Post-V1 E
 
 ### WP-EM-02 — V7 Format & Migration Foundation
 
-**状态：Completed**
+**状态：Closed**
 
 这是基础设施 WP，不一次性实现四个完整功能。范围只包括：
 
@@ -666,9 +764,23 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 - 验证结果：Domain tests PASS；Application tests PASS；Infrastructure tests PASS；Rendering.Wpf Windows tests PASS；Desktop Windows tests PASS；Windows professional visual acceptance PASS。
 - Closure 前最终实现基线：`ff1f76d6c88161e815ba295008ecfcf4f88e2c0c`。
 
+### WP-EM-07A — Transformer & Pole-Device Grounding Amendment
+
+**状态：Next / Not Started**
+
+正式 requirement contract 以 3.8 节为准。该 WP 在实现前必须完成独立 Repo Audit；不得预判 pole-device adjacent OHL GAP candidate 缺口的代码根因。实现必须复用 `GroundingAccessPoint`、`GroundingTarget.GroundingAccessPoint`、`GroundingTarget.Terminal` 与稳定 `Transformer.HvTerminalId`，并保持 FormatVersion V7。
+
+### WP-EM-07B — Transformer Naming Amendment
+
+**状态：Planned / Not Started**
+
+正式 requirement contract 以 3.9 节为准。该 WP 只建立一个 Transformer naming fact；实现前必须审计 `Device.DisplayName` 与 V7 compatibility。若无法形成明确、无歧义且不猜测业务事实的 V7 compatibility contract，必须停止并返回 Governance Review。
+
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
-候选范围包括：
+**状态：Planned**
+
+WP-EM-08 只能在 WP-EM-07A 与 WP-EM-07B Closed 后开始，其 interaction-only 范围包括：
 
 - pole/device drag route continuity 与 legal route-family hysteresis；
 - last-valid-position 与 illegal geometry handling；
@@ -677,16 +789,21 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 - stabilized drag/routing 下的 grounding presentation regression；
 - Pole / Switch / Transformer / CustomerStation drag behavior。
 
-最终详细 Scope 可在 WP-EM-05～WP-EM-07 实施过程中继续收集真实 interaction case 后冻结，但 WP-EM-08 已正式进入阶段计划。该 WP 不包含 waypoint editor、manual route editor、generic diagram routing engine rewrite、Annotation、Energization、new Electrical Device 或 arbitrary layout framework。
+该 WP 应基于已经稳定的 Grounding eligibility、Transformer grounding target 与 Transformer naming / presentation 事实进行 interaction stabilization，不得吸收 WP-EM-07A 或 WP-EM-07B 的业务模型内容。该 WP 不包含 waypoint editor、manual route editor、generic diagram routing engine rewrite、Annotation、Energization、new Electrical Device 或 arbitrary layout framework。
 
 ### WP-EM-09 — Electrical Model Closure Integration
+
+**状态：Planned**
 
 只进行：
 
 - V6 / V7 regression matrix；
-- save/open、copy/paste、Undo/Redo；
+- persistence 与 save/open；
+- clipboard 与 Undo / Redo；
 - dependency deletion；
 - topology、grounding、Transformer 与 CustomerStation regression；
+- WP-EM-07A grounding amendment regression；
+- WP-EM-07B Transformer naming amendment regression；
 - WP-EM-08 interaction stabilization regression；
 - V6 → V7 upgrade；
 - Windows runtime validation 与 professional visual acceptance；
@@ -707,5 +824,6 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 - WP-EM-04 requirements refinement、implementation、review、Windows runtime validation 和 GUI acceptance 已完成，WP-EM-04 Closed；
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
-- WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；WP-EM-08 为 Next Work Package；
-- 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
+- WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 为 Next / Not Started，WP-EM-07B 为 Planned / Not Started，WP-EM-08 与 WP-EM-09 为 Planned；
+- 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
