@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Next / Not Started / WP-EM-07B Planned / Not Started / WP-EM-08 Planned / WP-EM-09 Planned / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / Post-EM-07 Sequencing Amendment Completed / Awaiting ChatGPT Review
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Requirements Frozen / Implementation Not Started / Awaiting ChatGPT Governance Review / WP-EM-07B Planned / Not Started / WP-EM-08 Planned / WP-EM-09 Planned / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -314,16 +314,24 @@ GroundingPoint
 
 该规则适用于普通支撑杆，以及存在柱上 `SwitchDevice`、隔离刀闸、跌落式熔断器、`CableTermination` 或其它柱上设备的杆塔；不得因现场存在设备 `Terminal`，就将该 Terminal 作为新建架空工作地线的主要目标。
 
-`GroundingAccessPoint` 至少稳定引用：
+`GroundingAccessPoint` 的稳定 Domain identity 为：
 
-- associated `OverheadLine` / `Connection`；按当前模型以其 stable `ConnectionId` 表达；
-- `PoleId`；
-- `AdjacentPoleId`，表示该 GAP 实际位于 `PoleId` 朝哪个直接相邻支撑杆方向的 local conductor half-edge；
-- `LineSide`，值仅为 `SmallerNumberSide` / `LargerNumberSide`。
+```text
+GroundingAccessPoint
+├── GroundingAccessPointId
+├── ConnectionId
+├── PoleId
+├── AdjacentEndpoint
+│   ├── Kind: Pole | Terminal
+│   └── TargetId
+└── LineSide: SmallerNumberSide | LargerNumberSide
+```
 
-`AdjacentPoleId` 必须是 `PoleId` 在对应 `OverheadLine.SupportPoleIds` 有序列表中的直接 predecessor 或 successor。物理位置身份与专业侧别严格分离：`AdjacentPoleId` 固化实际 conductor half-edge，`LineSide` 固化用户确认的“小号侧 / 大号侧”业务标签。同一 `ConnectionId + PoleId + AdjacentPoleId` 最多一个 `GroundingAccessPoint`；中间支撑杆可以在两个不同相邻杆方向各有一个 GAP。`Left`、`Right`、`Up`、`Down` 只属于创建交互，不得持久化为业务事实。
+`AdjacentEndpoint.Kind = Pole` 保留 WP-EM-04 的全部既有语义：`TargetId` 是 `PoleId` 在对应 `OverheadLine.SupportPoleIds` 有序列表中的直接 predecessor 或 successor。`AdjacentEndpoint.Kind = Terminal` 是 WP-EM-07A 新增的窄范围 endpoint half-edge identity：`TargetId` 必须是同一 `OverheadLine.Connection` 的实际 endpoint Terminal，并且当前只允许该 endpoint 为 pole-mounted Transformer 的正式 `Transformer.HvTerminalId`。不得由任意 External Terminal、`SwitchDevice` Terminal 或 `CableTermination.OverheadSideTerminalId` 推断 Terminal endpoint eligibility。
 
-创建时可比较 `PoleId` 与 `AdjacentPoleId` 的明确简单杆号主整数，为 `LineSide` 提供保守推荐；无法可靠解析时必须由用户明确选择，不得猜测。用户覆盖推荐不改变 `AdjacentPoleId`。PoleNumber rename 不自动修改、移动、删除或重建已有 GAP。
+物理位置身份与专业侧别严格分离：typed `AdjacentEndpoint` 固化实际 conductor half-edge，`LineSide` 固化用户确认的“小号侧 / 大号侧”业务标签。同一 `(ConnectionId, PoleId, AdjacentEndpoint.Kind, AdjacentEndpoint.TargetId)` 最多一个 `GroundingAccessPoint`；中间支撑杆可以在两个不同相邻杆方向各有一个 GAP。`Left`、`Right`、`Up`、`Down` 只属于创建交互，不得持久化为业务事实。
+
+创建 `AdjacentEndpoint.Kind = Pole` 的 GAP 时，可比较 `PoleId` 与 `AdjacentEndpoint.TargetId` 对应 Pole 的明确简单杆号主整数，为 `LineSide` 提供保守推荐；无法可靠解析时必须由用户明确选择，不得猜测。`AdjacentEndpoint.Kind = Terminal` 不存在相邻杆号可供比较，`LineSide` 必须由用户明确选择。用户选择或覆盖 `LineSide` 不改变 typed `AdjacentEndpoint`。PoleNumber rename 不自动修改、移动、删除或重建已有 GAP。
 
 `GroundingAccessPoint` 不创建新的 `ElectricalNode`，不分割 `OverheadLine` / `Connection`，不改变 conduction，不成为 Switch 或 Terminal。它与临时 `GroundingPoint` 生命周期独立，可在没有 `GroundingPoint` 时存在；删除 `GroundingPoint` 不得自动删除 `GroundingAccessPoint`。
 
@@ -350,9 +358,18 @@ ProjectGroundingAccessPointDto
 ├── GroundingAccessPointId
 ├── ConnectionId
 ├── PoleId
-├── AdjacentPoleId
+├── AdjacentPoleId: Guid?                         // legacy V7 Pole form only
+├── AdjacentEndpoint: ProjectGroundingAdjacentEndpointDto?
+│   ├── Kind: ProjectGroundingAdjacentEndpointKind
+│   │   ├── Pole
+│   │   └── Terminal
+│   └── TargetId
 └── LineSide: SmallerNumberSide | LargerNumberSide
 ```
+
+V7 使用 backward-compatible additive representation。既有 JSON property `adjacentPoleId` 保留为 required-but-nullable legacy slot；新增 optional typed `adjacentEndpoint` object。读取时 `AdjacentPoleId` 与 `AdjacentEndpoint` 必须恰好一个有效：旧 V7 `(ConnectionId, PoleId, AdjacentPoleId)` 无歧义归一化为 `AdjacentEndpoint.Kind = Pole`、`AdjacentEndpoint.TargetId = AdjacentPoleId`，其治理层语义记法等价于 `AdjacentEndpoint.ForPole(AdjacentPoleId)`；`AdjacentPoleId` 的既有 Pole 语义不改变。旧数据不得推断 Terminal endpoint；原 `GroundingAccessPointId` 以及关联 `GroundingPoint` 的 identity、`Location`、`Number`、`Note` 均保持不变。新 typed record 写入 `AdjacentEndpoint`，legacy field 写入 null。两者同时有效、同时缺失、empty ID 或 invalid enum 均必须由 strict validation 拒绝。新保存的数据不得把 `Transformer.Id`、`HvTerminalId` 或当前 `PoleId` 塞进 legacy `AdjacentPoleId`。
+
+旧 V7 restore 必须保持原 `GroundingAccessPointId`，并保持关联 `GroundingPoint` 的 `Location`、`Number`、`Note` 和 typed target identity；不得从旧记录自动生成 Terminal-endpoint GAP，不得重新解释旧 `AdjacentPoleId`。新 V7 mapper 应统一输出 typed `AdjacentEndpoint`，从而使新 Terminal-endpoint GAP 能够 Save / Reopen；同一记录不得同时保存 legacy 与 typed 两个有效 endpoint source。
 
 `ProjectGroundingPointDto` 以单一 `GroundingTarget` 取代 V6 的 `TerminalId`。V7 顶层 schema 必须为 `GroundingAccessPoint` 保留 typed collection；不得用自由字典、两个 nullable target ID 或 rendering direction 代替这些字段。
 
@@ -379,9 +396,9 @@ WP-EM-01 已实现的 `Pole + Switch` legacy Terminal-target presentation anchor
 
 ### 3.6 Grounding professional presentation 与交互
 
-`GroundingAccessPoint` 的默认专业位置由 `ConnectionId + PoleId + AdjacentPoleId` 对应的 local conductor half-edge 派生，`LineSide` 不再承担物理 half-edge 恢复。WP-EM-04 获得有限授权，使有序 `OverheadLine.SupportPoleIds` 参与架空线路 presentation：例如 `[P10, P11, P12]` 必须表现为线路经过 `P10 → P11 → P12`，从而在中间杆形成稳定 incoming / outgoing conductor geometry。该修正只属于 Presentation / Routing，不得拆分 Connection、新增 ElectricalNode 或 Terminal、改变 electrical connectivity，亦不得引入通用 waypoint editor。
+`GroundingAccessPoint` 的默认专业位置由 `ConnectionId + PoleId + AdjacentEndpoint` 对应的 local conductor half-edge 派生，`LineSide` 不承担物理 half-edge 恢复。`AdjacentEndpoint.Kind = Pole` 继续使用有序 `OverheadLine.SupportPoleIds`：例如 `[P10, P11, P12]` 必须表现为线路经过 `P10 → P11 → P12`，从而在中间杆形成稳定 incoming / outgoing conductor geometry。`AdjacentEndpoint.Kind = Terminal` 则从同一 Connection 的正式 endpoint 与 final route 派生朝 endpoint 的 half-edge direction。该修正只属于 Presentation / Routing，不得拆分 Connection、新增 ElectricalNode 或 Terminal、改变 electrical connectivity，亦不得引入通用 waypoint editor。
 
-WP-EM-04 basic GAP marker 为对应架空导线上的实心小圆点，直径约为 conductor stroke width 的 2.5 倍，并使用 Rendering typed metric。从 Pole 沿 `AdjacentPoleId` 对应 half-edge 方向使用固定 visual clearance 放置；不保存 screen coordinates、offset 或 clearance，不支持拖动。存在柱上设备时仍以该真实 half-edge 为定位基础。高级 `GroundingAccessClearance`、leader 与可调布局继续留给 WP-EM-05。
+WP-EM-04 basic GAP marker 为对应架空导线上的实心小圆点，直径约为 conductor stroke width 的 2.5 倍，并使用 Rendering typed metric。从 Pole 沿 typed `AdjacentEndpoint` 对应 half-edge 方向使用固定 visual clearance 放置；不保存 screen coordinates、offset 或 clearance，不支持拖动。存在柱上设备时仍以该真实 half-edge 为定位基础。高级 `GroundingAccessClearance`、leader 与可调布局继续留给 WP-EM-05。
 
 WP-EM-04 已完成标准矢量 grounding symbol：一根竖向主 stem，下端三条以 stem 为中心、由上到下逐渐变短的水平横线。不得继续使用含义不明确的小方框或 bitmap。符号尺度与 Pole 保持合理专业比例，并由 Rendering metric 控制；用户调整 leader 时符号本身大小固定，不保存 symbol scale。WP-EM-05 只 refinement 其 layout、routing 与 interaction，不重新实现该 symbol。
 
@@ -412,9 +429,9 @@ WP-EM-04 必须提供可用的 `GroundingAccessPoint` 创建、删除、选择�
 
 ### 3.8 WP-EM-07A Transformer & Pole-Device Grounding Amendment
 
-**状态：Next / Not Started**
+**状态：Requirements Frozen / Implementation Not Started / Awaiting ChatGPT Governance Review**
 
-WP-EM-07A 是 Post-EM-07 / Pre-EM-08 的独立 amendment Work Package，不重新打开 WP-EM-06 或 WP-EM-07。它解决两个相互关联的 grounding contract 缺口。
+WP-EM-07A 是 Post-EM-07 / Pre-EM-08 的独立 amendment Work Package，不重新打开 WP-EM-06 或 WP-EM-07。它解决两个相互关联的 grounding contract 缺口。Requirements Freeze 通过 Governance Review 后，本 WP 在同一 Codex thread 中作为一次 Complete Vertical Slice implementation 执行，不再拆分为独立 Slice A-E。
 
 #### 3.8.1 Pole-device adjacent OHL grounding
 
@@ -428,20 +445,37 @@ Overhead conductor
 
 该能力必须复用现有 `GroundingAccessPoint` 与 `GroundingTarget.GroundingAccessPoint`。不得新增 `SwitchGroundingTarget`，也不得将 SwitchDevice Terminal 作为未来架空工作地线的主要 target。
 
-WP-EM-07A 实现前必须先执行独立 Repo Audit，确认 pole-mounted switch / `DropoutFuse` 朝 Transformer 一侧的 short `OverheadLine` 当前未正确进入 GAP candidate picker 的原因。本 Amendment 只冻结业务要求，不预判代码根因。
+WP-EM-07A 独立 Repo Audit 已确认 pole-mounted switch / `DropoutFuse` 朝 Transformer 一侧的 short `OverheadLine` 未进入 GAP candidate picker 的根因；以下合同据此冻结，不再将问题预判为单一 UI、Rendering 或 Connection defect。
+
+Repo Audit 已确认该 short `OverheadLine` 的 `SupportPoleIds = [PoleId]`，因此旧 `(ConnectionId, PoleId, AdjacentPoleId)` invariant 无法表达朝 Transformer endpoint 的 conductor half-edge。WP-EM-07A 冻结使用 3.4 节定义的 typed `AdjacentEndpoint`：
+
+- 普通杆间 half-edge：`Kind = Pole`，`TargetId = direct adjacent PoleId`；
+- non-Pole endpoint half-edge：`Kind = Terminal`，`TargetId = same Connection 的实际 endpoint TerminalId`；
+- 当前 Terminal endpoint eligibility 只允许正式 `Transformer.HvTerminalId`，不得泛化为任意 Terminal。
+
+`Kind = Pole` validation 必须确认 `ConnectionId` 对应 `OverheadLine`、`PoleId` 与不同的 `TargetId` 均为真实 Pole、两者均属于 `SupportPoleIds`，且 `TargetId` 是 `PoleId` 的直接 predecessor 或 successor。既有行为不得改变。
+
+`Kind = Terminal` validation 必须确认：`ConnectionId` 对应 `OverheadLine`；`PoleId` 是该 line 的真实 support pole；当前 07A 场景必须是 `SupportPoleIds.Count == 1` 且唯一值为 `PoleId`；`TargetId` 是真实 Terminal，并且是同一 `Connection` 的实际 endpoint；该 Connection 的另一 endpoint 必须通过现有 Pole / `PoleAttachment` physical-owner resolution 落在所选 `PoleId`，从而证明 terminal endpoint half-edge 在 topology 上与该 Pole 直接相邻；Terminal owner 是 `Transformer`，`TargetId == Transformer.HvTerminalId`，且 `TransformerKind` 属于 `PublicPoleMounted | DedicatedPoleMounted | PublicIndoor`。由于既有 connection policy 只允许 pole-mounted Transformer 成为 `OverheadLine` endpoint，`PublicIndoor` 不会由合法 OHL 场景实际到达，但仍属于 Transformer HV grounding whitelist。不得使用 generic External Terminal inference；route geometry 只用于 presentation direction，不得替代上述 Domain identity validation。
+
+typed uniqueness invariant 为 `(ConnectionId, PoleId, AdjacentEndpoint.Kind, AdjacentEndpoint.TargetId)`。禁止将 `Transformer.Id`、`HvTerminalId` 或当前 `PoleId` 塞入 `AdjacentPoleId`，也禁止 untyped Guid dual meaning、route segment index、screen/glyph coordinate、transient presentation anchor、fake Pole、fake `PoleAttachment` 或 fake Terminal。
 
 #### 3.8.2 Transformer HV grounding
 
 `PublicPoleMounted`、`DedicatedPoleMounted`、`PublicIndoor` 三种 Transformer 的现有唯一 `HvTerminalId` 全部必须成为合法的新建 `GroundingTarget.Terminal` 目标。Grounding identity 必须绑定 `Transformer.HvTerminalId`，不得绑定 persisted presentation coordinate；不得新增 second grounding identity、`TransformerGroundingTarget`、`SwitchGroundingTarget`、fake Terminal 或 fake `ElectricalNode`。
 
+Transformer Terminal-target `GroundingPoint` 的默认 `Location` 冻结为“变压器高压侧”。
+
 这是对 3.4 节 conductor-side GAP 通用规则的明确、窄范围 special Terminal grounding exception，只表达 Transformer 本体正式 HV terminal 处的接地，不将任何相邻 `OverheadLine` conductor 或其它设备 Terminal 泛化为 Terminal grounding target。对 pole-mounted Transformer 必须按用户实际选择的位置区分：在相邻 `OverheadLine` conductor 上接地时，必须使用 `GroundingAccessPoint`；在 Transformer 本体正式 HV terminal 处接地时，才可以使用 `Transformer.HvTerminalId` 作为 `GroundingTarget.Terminal`。
 
 在 `DropoutFuse → short OverheadLine → Transformer` 场景中，short `OverheadLine` 两端合法的 conductor-side GAP eligibility 仍必须由 WP-EM-07A Repo Audit、实现与 closure 独立确认；Transformer terminal grounding 不得替代该 eligibility。`Transformer.HvTerminalId` 只表达 Transformer HV terminal grounding；`SwitchDevice`、`IsolationSwitch` 或 `DropoutFuse` Terminal 不因本 Amendment 自动成为新的 overhead Terminal `GroundingTarget`。
 
-Transformer grounding presentation 必须从正式 HV presentation anchor 派生。允许使用小距离 `DrawingMetrics` / presentation offset，但该 offset 不属于 Domain、不新增 persisted electrical fact，也不形成第二 anchor identity。推荐 professional presentation 为：
+Transformer grounding presentation 必须从正式 HV presentation anchor 派生。允许使用小距离 `DrawingMetrics` / presentation offset，但该 offset 不属于 Domain、不新增 persisted electrical fact，也不形成第二 anchor identity。以下规则是必须通过的 professional presentation acceptance requirement：
 
-- incoming conductor horizontal：grounding lead 默认向下；
-- incoming conductor vertical：grounding lead 默认横向，并优先远离 Transformer body。
+- `HvTerminalId` 存在唯一 connected route 且 incoming conductor horizontal：grounding leader 默认纵向向下；
+- `HvTerminalId` 存在唯一 connected route 且 incoming conductor vertical：grounding leader 默认横向引出，并优先远离 Transformer body；
+- Transformer 无连接：使用 formal `HvDirection` 并结合 Transformer body bounds 派生 outward default leader。
+
+leader offset、body avoidance 和 presentation anchor adjustment 全部为 transient / `DrawingMetrics` derived，不得持久化。`GroundingPointLayout.SymbolOffset` 继续作用于上述派生后的默认 presentation。
 
 如果 WP-EM-08 或未来 Work Package 调整 Transformer presentation port / anchor，`GroundingPoint` 必须继续通过同一个 `HvTerminalId` 解析新的 transient professional anchor。presentation port 改变不得替换 `HvTerminalId`、替换 `GroundingPoint` target 或重建 `GroundingPoint` identity。Transformer multi-presentation-port 的具体设计继续属于 WP-EM-08 / future evaluation；本 amendment 只冻结 `Grounding identity = stable HvTerminalId`。
 
@@ -454,10 +488,21 @@ WP-EM-07A 的最小能力范围仅包括：pole-mounted switch / `IsolationSwitc
 - `LvTerminalId`、0.4kV topology、LV grounding、LV network；
 - cross-voltage Transformer model、second Transformer Terminal、Transformer internal winding topology；
 - second grounding identity、`SwitchGroundingTarget`、`TransformerGroundingTarget`、fake Terminal、fake `ElectricalNode`；
-- generic drag stabilization、route-family hysteresis、last-valid-position、continuous-drag feedback、generic routing engine；
+- Transformer drag、generic Device drag、generic routing stabilization、route-family hysteresis、last-valid-position、continuous-drag feedback、generic routing engine；
 - Transformer naming / station number、capacity、model / typeplate information；
 - WorkScope boundary expansion、Energization、Annotation；
-- Transformer multi-presentation-port 的具体设计。
+- Transformer multi-presentation-port 的具体设计、triangle-edge dynamic attachment；
+- WP-EM-07B 与 WP-EM-08 implementation。
+
+#### 3.8.4 Lifecycle 与 compatibility freeze
+
+- occupied Transformer `HvTerminalId` grounding 必须阻止 Transformer 删除；
+- occupied GAP 必须继续阻止 dependent `OverheadLine` 删除；free GAP 沿用现有 line-delete policy；
+- 删除 `GroundingPoint` 不得删除 Transformer，也不得隐式删除 GAP；
+- Undo / Redo、Save / Reopen 必须保持 stable typed target identity；
+- Clipboard 沿用现有 Professional dependency policy，不在 WP-EM-07A 重写总策略；
+- Overhead conductor GAP 与 Transformer body/HV Terminal grounding 是两个可同时存在、不得互相替代的 identity；
+- Transformer 不因本 WP 成为新建 `WorkScope` boundary。
 
 ### 3.9 WP-EM-07B Transformer Naming Amendment
 
@@ -518,7 +563,7 @@ V7 至少容纳：
 - `CustomerStationLayout`；
 - typed `GroundingPointLayout`。
 
-本次 Post-EM-07 Sequencing Amendment 保持 `FormatVersion = V7`，不授权 V8。WP-EM-07A 预计复用现有 `GroundingTarget.Terminal`、`GroundingAccessPoint` 与 `Transformer.HvTerminalId`，不得因此新增 persistence format version。
+本次 Post-EM-07 Sequencing Amendment 保持 `FormatVersion = V7`，不授权 V8。WP-EM-07A 复用现有 `GroundingTarget.Terminal`、`GroundingAccessPoint` 与 `Transformer.HvTerminalId`，并为 GAP adjacent endpoint 使用 3.5 节冻结的 backward-compatible additive V7 representation。当前 serializer 允许 additive fields；旧 V7 `AdjacentPoleId` 可在 mapper / restore 中无歧义归一化为 typed Pole endpoint；新 Terminal-endpoint GAP 可保存并 reopen。该兼容路径不增加 V7 migration step，不重新解释旧 `AdjacentPoleId`，不自动从旧数据生成 Terminal endpoint GAP，也不升级 V8。
 
 WP-EM-07B 的正式目标同样是 V7，但其实现前 Repo Audit 必须确认现有 V7 Transformer persistence 如何安全承载唯一正式 naming fact，并定义已有 V7 Transformer 文件缺失该值时的兼容策略。如果 required naming fact 无法在 V7 内通过明确、无歧义且不猜测业务事实的兼容合同表达，必须停止并重新进入 Governance Review。不得为坚持 V7 而猜测名称、在 Save-time 自动伪造名称或静默产生不真实业务数据。
 
@@ -766,9 +811,9 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-07A — Transformer & Pole-Device Grounding Amendment
 
-**状态：Next / Not Started**
+**状态：Requirements Frozen / Implementation Not Started / Awaiting ChatGPT Governance Review**
 
-正式 requirement contract 以 3.8 节为准。该 WP 在实现前必须完成独立 Repo Audit；不得预判 pole-device adjacent OHL GAP candidate 缺口的代码根因。实现必须复用 `GroundingAccessPoint`、`GroundingTarget.GroundingAccessPoint`、`GroundingTarget.Terminal` 与稳定 `Transformer.HvTerminalId`，并保持 FormatVersion V7。
+正式 requirement contract 以 3.8 节为准。独立 Repo Audit 与 Requirements Freeze 已完成：pole-device adjacent OHL 使用 typed `AdjacentEndpoint`，旧 V7 GAP 无歧义映射为 Pole endpoint，Transformer grounding 绑定稳定 `HvTerminalId`，FormatVersion 保持 V7。Governance Review 通过后在当前 Codex thread 中执行一次 Complete Vertical Slice implementation；不得进入 WP-EM-07B 或 WP-EM-08。
 
 ### WP-EM-07B — Transformer Naming Amendment
 
@@ -825,5 +870,5 @@ WP-EM-08 只能在 WP-EM-07A 与 WP-EM-07B Closed 后开始，其 interaction-on
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 为 Next / Not Started，WP-EM-07B 为 Planned / Not Started，WP-EM-08 与 WP-EM-09 为 Planned；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A Requirements Freeze 已完成并等待 ChatGPT Governance Review，implementation 尚未开始；WP-EM-07B 为 Planned / Not Started，WP-EM-08 与 WP-EM-09 为 Planned；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
