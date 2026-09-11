@@ -375,7 +375,7 @@ public sealed class PropertyProjector
                 EditableDomainRow(
                     PropertyCommandFactory.CustomerStationFeederDisplayNamePropertyKey(
                         feeder.IncomingFeederId),
-                    "名称",
+                    $"用户站号{feeder.Sequence}",
                     feeder.DisplayName),
                 DomainRow(
                     "CustomerStation.Feeder.SwitchState",

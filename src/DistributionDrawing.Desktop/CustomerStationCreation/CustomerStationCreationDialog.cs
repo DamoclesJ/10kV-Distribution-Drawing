@@ -55,9 +55,9 @@ public sealed class CustomerStationCreationDialog : Window
         panel.Children.Add(_kind);
         panel.Children.Add(Label("电源数量"));
         panel.Children.Add(_feederCount);
-        panel.Children.Add(Label("进线 1 名称"));
+        panel.Children.Add(Label("用户站号1"));
         panel.Children.Add(_nameA);
-        _nameBPanel.Children.Add(Label("进线 2 名称"));
+        _nameBPanel.Children.Add(Label("用户站号2"));
         _nameBPanel.Children.Add(_nameB);
         panel.Children.Add(_nameBPanel);
         panel.Children.Add(new Border { Height = 18 });
@@ -94,7 +94,7 @@ public sealed class CustomerStationCreationDialog : Window
             : [_nameA.Text];
         if (names.Any(string.IsNullOrWhiteSpace))
         {
-            MessageBox.Show(this, "每路进线名称均不能为空。", "输入无效",
+            MessageBox.Show(this, "每路用户站号均不能为空。", "输入无效",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }

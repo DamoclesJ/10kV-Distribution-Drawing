@@ -19,8 +19,10 @@ public sealed record CustomerStationSwitchGeometry(
     Guid SwitchDeviceId,
     Guid CableTerminalId,
     SwitchState SwitchState,
+    DocumentPoint CableLeadOuterEnd,
     DocumentPoint CableContact,
     DocumentPoint StationContact,
+    DocumentPoint StationEntry,
     DocumentPoint BladeEnd,
     TerminalAnchorDirection CableDirection,
     DocumentRect Bounds);
@@ -92,15 +94,23 @@ public sealed record CustomerStationProfessionalGeometry(
             DocumentPoint cableAnchor = bodyEntry;
             if (feederLayout.ShowIncomingSwitch)
             {
+                double outward = facesLeft ? -1 : 1;
+                DocumentPoint stationContact = new(
+                    bodyEntry.XMillimeters + outward * metrics.IncomingSwitchLeadLength,
+                    bodyEntry.YMillimeters);
+                DocumentPoint cableContact = new(
+                    stationContact.XMillimeters + outward * metrics.SwitchLength,
+                    bodyEntry.YMillimeters);
                 cableAnchor = new DocumentPoint(
-                    bodyEntry.XMillimeters + (facesLeft ? -metrics.SwitchLength : metrics.SwitchLength),
+                    cableContact.XMillimeters + outward * metrics.IncomingSwitchLeadLength,
                     bodyEntry.YMillimeters);
                 DocumentPoint bladeEnd = feeder.IsolationSwitch.SwitchState == SwitchState.Closed
-                    ? bodyEntry
+                    ? stationContact
                     : new DocumentPoint(
-                        bodyEntry.XMillimeters,
+                        stationContact.XMillimeters,
                         bodyEntry.YMillimeters - metrics.SwitchOpenRise);
                 double minX = Math.Min(cableAnchor.XMillimeters, bodyEntry.XMillimeters);
+                double maxX = Math.Max(cableAnchor.XMillimeters, bodyEntry.XMillimeters);
                 switches.Add(new CustomerStationSwitchGeometry(
                     feeder.IncomingFeederId,
                     feeder.IsolationSwitch.Id,
@@ -108,13 +118,15 @@ public sealed record CustomerStationProfessionalGeometry(
                     feeder.IsolationSwitch.SwitchState ?? throw new InvalidOperationException(
                         $"Incoming switch '{feeder.IsolationSwitch.Id}' has no state."),
                     cableAnchor,
+                    cableContact,
+                    stationContact,
                     bodyEntry,
                     bladeEnd,
                     direction,
                     new DocumentRect(
                         minX - metrics.HitPadding,
                         bodyEntry.YMillimeters - metrics.SwitchOpenRise - metrics.HitPadding,
-                        metrics.SwitchLength + metrics.HitPadding * 2,
+                        maxX - minX + metrics.HitPadding * 2,
                         metrics.SwitchOpenRise + metrics.HitPadding * 2)));
             }
 
@@ -126,18 +138,22 @@ public sealed record CustomerStationProfessionalGeometry(
         IReadOnlyList<DocumentPoint> roof = station.StationKind == StationKind.BoxStation
             ?
             [
-                new DocumentPoint(left, top),
+                new DocumentPoint(left - metrics.RoofOverhang, top),
                 new DocumentPoint(layout.Position.XMillimeters, top - metrics.RoofHeight),
-                new DocumentPoint(left + bodyWidth, top)
+                new DocumentPoint(left + bodyWidth + metrics.RoofOverhang, top)
             ]
             : [];
         double boundsTop = roof.Count > 0 ? top - metrics.RoofHeight : top;
-        double switchLeft = switches.Count == 0
-            ? left
-            : Math.Min(left, switches.Min(item => item.CableContact.XMillimeters));
-        double switchRight = switches.Count == 0
+        double roofLeft = roof.Count == 0 ? left : roof.Min(item => item.XMillimeters);
+        double roofRight = roof.Count == 0
             ? left + bodyWidth
-            : Math.Max(left + bodyWidth, switches.Max(item => item.CableContact.XMillimeters));
+            : roof.Max(item => item.XMillimeters);
+        double switchLeft = switches.Count == 0
+            ? roofLeft
+            : Math.Min(roofLeft, switches.Min(item => item.CableLeadOuterEnd.XMillimeters));
+        double switchRight = switches.Count == 0
+            ? roofRight
+            : Math.Max(roofRight, switches.Max(item => item.CableLeadOuterEnd.XMillimeters));
         return new CustomerStationProfessionalGeometry(
             units,
             switches,

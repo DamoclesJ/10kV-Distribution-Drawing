@@ -41,7 +41,7 @@ public sealed class CustomerStationRenderer
                 unit.LabelOrigin,
                 unit.DisplayName,
                 Colors.Black,
-                _metrics.General.StandardFontSize,
+                _metrics.Typography.CustomerStationNumberFontSize,
                 SceneTextHorizontalAlignment.Center));
         }
 
@@ -57,11 +57,21 @@ public sealed class CustomerStationRenderer
         foreach (CustomerStationSwitchGeometry switchGeometry in geometry.Switches)
         {
             double radius = _metrics.CustomerStation.ContactRadius;
+            elements.Add(new SceneLine(
+                switchGeometry.CableLeadOuterEnd,
+                switchGeometry.CableContact,
+                Colors.Black,
+                _metrics.General.StandardStrokeThickness));
             elements.Add(Contact(switchGeometry.CableContact, radius));
             elements.Add(Contact(switchGeometry.StationContact, radius));
             elements.Add(new SceneLine(
                 switchGeometry.CableContact,
                 switchGeometry.BladeEnd,
+                Colors.Black,
+                _metrics.General.StandardStrokeThickness));
+            elements.Add(new SceneLine(
+                switchGeometry.StationContact,
+                switchGeometry.StationEntry,
                 Colors.Black,
                 _metrics.General.StandardStrokeThickness));
         }

@@ -32,11 +32,13 @@ public sealed record DrawingMetrics(
     public CustomerStationDrawingMetrics CustomerStation { get; init; } = new(
         UnitWidth: 36,
         UnitHeight: 30,
-        UnitSpacing: 8,
+        UnitSpacing: 0,
         RoofHeight: 8,
+        RoofOverhang: 3,
         TriangleHalfWidth: 8,
         TriangleHalfHeight: 7,
         SwitchLength: 16,
+        IncomingSwitchLeadLength: 1,
         SwitchOpenRise: 6,
         ContactRadius: 1.5,
         LabelOffset: 7,
@@ -60,7 +62,8 @@ public sealed record DrawingMetrics(
             IntervalNumberFontSize: 10.5,
             SwitchNumberFontSize: 7,
             PoleNumberFontSize: 8,
-            PTLabelFontSize: 7),
+            PTLabelFontSize: 7,
+            CustomerStationNumberFontSize: 7),
         new RingCabinetDrawingMetrics(
             CabinetPadding: 10,
             StandardIntervalWidth: 60,
@@ -138,9 +141,11 @@ public sealed record CustomerStationDrawingMetrics(
     double UnitHeight,
     double UnitSpacing,
     double RoofHeight,
+    double RoofOverhang,
     double TriangleHalfWidth,
     double TriangleHalfHeight,
     double SwitchLength,
+    double IncomingSwitchLeadLength,
     double SwitchOpenRise,
     double ContactRadius,
     double LabelOffset,
@@ -172,7 +177,8 @@ public sealed class DrawingTypographyMetrics
         double SwitchNumberFontSize,
         double PoleNumberFontSize,
         double PTLabelFontSize,
-        double GroundingPointNumberFontSize = 7)
+        double GroundingPointNumberFontSize = 7,
+        double CustomerStationNumberFontSize = 7)
     {
         Update(
             CabinetNameFontSize,
@@ -181,7 +187,8 @@ public sealed class DrawingTypographyMetrics
             SwitchNumberFontSize,
             PoleNumberFontSize,
             PTLabelFontSize,
-            GroundingPointNumberFontSize);
+            GroundingPointNumberFontSize,
+            CustomerStationNumberFontSize);
     }
 
     public double CabinetNameFontSize { get; private set; }
@@ -191,6 +198,7 @@ public sealed class DrawingTypographyMetrics
     public double PoleNumberFontSize { get; private set; }
     public double PTLabelFontSize { get; private set; }
     public double GroundingPointNumberFontSize { get; private set; }
+    public double CustomerStationNumberFontSize { get; private set; }
 
     public void Update(
         double cabinetNameFontSize,
@@ -199,7 +207,8 @@ public sealed class DrawingTypographyMetrics
         double switchNumberFontSize,
         double poleNumberFontSize,
         double ptLabelFontSize,
-        double? groundingPointNumberFontSize = null)
+        double? groundingPointNumberFontSize = null,
+        double? customerStationNumberFontSize = null)
     {
         double[] values =
         [
@@ -209,7 +218,8 @@ public sealed class DrawingTypographyMetrics
             switchNumberFontSize,
             poleNumberFontSize,
             ptLabelFontSize,
-            groundingPointNumberFontSize ?? GroundingPointNumberFontSize
+            groundingPointNumberFontSize ?? GroundingPointNumberFontSize,
+            customerStationNumberFontSize ?? CustomerStationNumberFontSize
         ];
         if (values.Any(value => !double.IsFinite(value) || value <= 0))
         {
@@ -225,6 +235,7 @@ public sealed class DrawingTypographyMetrics
         PoleNumberFontSize = poleNumberFontSize;
         PTLabelFontSize = ptLabelFontSize;
         GroundingPointNumberFontSize = groundingPointNumberFontSize ?? GroundingPointNumberFontSize;
+        CustomerStationNumberFontSize = customerStationNumberFontSize ?? CustomerStationNumberFontSize;
     }
 }
 

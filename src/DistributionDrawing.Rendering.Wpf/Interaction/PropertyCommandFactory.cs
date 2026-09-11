@@ -176,7 +176,7 @@ public sealed class PropertyCommandFactory
             {
                 if (string.IsNullOrWhiteSpace(input))
                 {
-                    error = new PropertyEditError("InputInvalid", "进线名称不能为空。");
+                    error = new PropertyEditError("InputInvalid", "用户站号不能为空。");
                     return false;
                 }
 
@@ -185,7 +185,7 @@ public sealed class PropertyCommandFactory
                     ?? throw new InvalidOperationException("所选进线不存在。");
                 if (feeder.DisplayName == input.Trim())
                 {
-                    error = new PropertyEditError("NoChange", "进线名称没有变化。");
+                    error = new PropertyEditError("NoChange", "用户站号没有变化。");
                     return false;
                 }
 

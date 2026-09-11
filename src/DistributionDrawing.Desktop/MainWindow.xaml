@@ -166,7 +166,7 @@
           </ToggleButton>
           <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="用户站"
                         IsChecked="{Binding Toolbox.IsCustomerStationActive, Mode=OneWay}" Command="{Binding CreateCustomerStationCommand}">
-            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.RingCabinet}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="用户站" /></StackPanel>
+            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.CustomerStation}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="用户站" /></StackPanel>
           </ToggleButton>
           <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="架空线"
                         IsChecked="{Binding Toolbox.IsOverheadLineActive, Mode=OneWay}" Command="{Binding CreateOverheadLineCommand}">
@@ -269,7 +269,7 @@
                           IsChecked="{Binding Toolbox.IsRingCabinetActive, Mode=OneWay}"
                           Command="{Binding CreateRingCabinetCommand}">
               <StackPanel Orientation="Horizontal">
-                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.RingCabinet}"
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.CustomerStation}"
                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                       StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
                 <TextBlock VerticalAlignment="Center" Text="环网柜" />
@@ -597,9 +597,9 @@
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
-            <TextBlock Style="{StaticResource InspectorLabelStyle}" Text="进线 1 名称" />
+            <TextBlock Style="{StaticResource InspectorLabelStyle}" Text="用户站号1" />
             <TextBox x:Name="CustomerStationFeeder1NameInput" Margin="0,4,0,4" />
-            <Button Content="应用进线 1 名称" Click="OnApplyCustomerStationFeeder1Name" />
+            <Button Content="应用用户站号1" Click="OnApplyCustomerStationFeeder1Name" />
             <StackPanel x:Name="CustomerStationFeeder1VisibilityPanel">
               <TextBlock Margin="0,8,0,0" Style="{StaticResource InspectorLabelStyle}" Text="进线 1 开关显示" />
               <ComboBox x:Name="CustomerStationFeeder1VisibilityInput" Margin="0,4,0,4">
@@ -609,9 +609,9 @@
               <Button Content="应用进线 1 显示状态" Click="OnApplyCustomerStationFeeder1Visibility" />
             </StackPanel>
             <StackPanel x:Name="CustomerStationFeeder2EditorPanel">
-              <TextBlock Margin="0,8,0,0" Style="{StaticResource InspectorLabelStyle}" Text="进线 2 名称" />
+              <TextBlock Margin="0,8,0,0" Style="{StaticResource InspectorLabelStyle}" Text="用户站号2" />
               <TextBox x:Name="CustomerStationFeeder2NameInput" Margin="0,4,0,4" />
-              <Button Content="应用进线 2 名称" Click="OnApplyCustomerStationFeeder2Name" />
+              <Button Content="应用用户站号2" Click="OnApplyCustomerStationFeeder2Name" />
               <TextBlock Margin="0,8,0,0" Style="{StaticResource InspectorLabelStyle}" Text="进线 2 开关显示" />
               <ComboBox x:Name="CustomerStationFeeder2VisibilityInput" Margin="0,4,0,4">
                 <ComboBoxItem Content="显示" />

@@ -2967,7 +2967,7 @@ public partial class MainWindow : Window
         if (selection?.CustomerStation is not { } station ||
             _selectionManager.Selected is not { } target)
         {
-            ShowCommandError("进线名称修改失败", "请先选择用户站。");
+            ShowCommandError("用户站号修改失败", "请先选择用户站。");
             return;
         }
 
@@ -2979,7 +2979,7 @@ public partial class MainWindow : Window
             displayName);
         if (!result.IsSuccess)
         {
-            ShowCommandError("进线名称修改失败", result.ErrorMessage ?? "属性修改失败。");
+            ShowCommandError("用户站号修改失败", result.ErrorMessage ?? "属性修改失败。");
             return;
         }
 

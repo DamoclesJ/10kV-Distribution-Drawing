@@ -33,6 +33,14 @@ public sealed class CustomerStationSliceCTests
         Assert.Single(geometry.Switches);
         Assert.Contains(elements.OfType<SceneText>(), text => text.Text == "用户主供");
         Assert.Equal(2, elements.OfType<ScenePolyline>().Count());
+        DocumentRect body = Assert.Single(geometry.Units).Body;
+        Assert.True(geometry.Roof[0].XMillimeters < body.XMillimeters);
+        Assert.True(geometry.Roof[2].XMillimeters > body.XMillimeters + body.WidthMillimeters);
+        Assert.Equal(
+            body.XMillimeters - geometry.Roof[0].XMillimeters,
+            geometry.Roof[2].XMillimeters - (body.XMillimeters + body.WidthMillimeters),
+            precision: 6);
+        Assert.True(geometry.Roof[1].YMillimeters < geometry.Roof[0].YMillimeters);
     }
 
     [Fact]
@@ -55,6 +63,9 @@ public sealed class CustomerStationSliceCTests
         Assert.Empty(Geometry(creation.CustomerStation, runtime.CustomerStationLayouts[creation.CustomerStation.Id]).Switches);
         Assert.Equal(feeder.CableTerminalId, shown.TerminalId);
         Assert.Equal(feeder.CableTerminalId, hidden.TerminalId);
+        Assert.Equal(Assert.Single(Geometry(creation).Switches).CableLeadOuterEnd, shown.Position);
+        Assert.Equal(Assert.Single(Geometry(creation).Units).Body.XMillimeters,
+            hidden.Position.XMillimeters);
         Assert.NotEqual(shown.Position, hidden.Position);
         Assert.Equal(TerminalAnchorDirection.Left, hidden.Direction);
         Assert.True(stack.Undo());
@@ -80,13 +91,84 @@ public sealed class CustomerStationSliceCTests
             runtime.CustomerStationLayouts[creation.CustomerStation.Id]);
 
         Assert.Equal(2, geometry.Units.Count);
-        Assert.True(geometry.Units.Single(item => item.Sequence == 1).Body.XMillimeters <
-                    geometry.Units.Single(item => item.Sequence == 2).Body.XMillimeters);
+        CustomerStationUnitGeometry leftUnit = geometry.Units.Single(item => item.Sequence == 1);
+        CustomerStationUnitGeometry rightUnit = geometry.Units.Single(item => item.Sequence == 2);
+        Assert.True(leftUnit.Body.XMillimeters < rightUnit.Body.XMillimeters);
+        Assert.Equal(
+            leftUnit.Body.XMillimeters + leftUnit.Body.WidthMillimeters,
+            rightUnit.Body.XMillimeters,
+            precision: 6);
+        Assert.NotEqual(leftUnit.IncomingFeederId, rightUnit.IncomingFeederId);
         Assert.Equal(first.IncomingFeederId, Assert.Single(geometry.Switches).IncomingFeederId);
         Assert.Equal(TerminalAnchorDirection.Left,
             geometry.CableTerminalAnchors[first.CableTerminalId].Direction);
         Assert.Equal(TerminalAnchorDirection.Right,
             geometry.CableTerminalAnchors[second.CableTerminalId].Direction);
+    }
+
+    [Fact]
+    public void VisibleSwitches_UseTypedShortLeadsAndMirroredOuterAnchors()
+    {
+        CustomerStationCreation creation = Create(StationKind.IndoorStation, ["主供", "备供"]);
+        CustomerStationProfessionalGeometry geometry = Geometry(creation);
+        CustomerStationSwitchGeometry left = geometry.Switches.Single(item =>
+            item.IncomingFeederId == creation.CustomerStation.IncomingFeeders
+                .Single(feeder => feeder.Sequence == 1).IncomingFeederId);
+        CustomerStationSwitchGeometry right = geometry.Switches.Single(item =>
+            item.IncomingFeederId == creation.CustomerStation.IncomingFeeders
+                .Single(feeder => feeder.Sequence == 2).IncomingFeederId);
+        double leadLength = DrawingMetrics.Default.CustomerStation.IncomingSwitchLeadLength;
+
+        Assert.Equal(leadLength,
+            left.CableContact.XMillimeters - left.CableLeadOuterEnd.XMillimeters, 6);
+        Assert.Equal(leadLength,
+            left.StationEntry.XMillimeters - left.StationContact.XMillimeters, 6);
+        Assert.Equal(leadLength,
+            right.CableLeadOuterEnd.XMillimeters - right.CableContact.XMillimeters, 6);
+        Assert.Equal(leadLength,
+            right.StationContact.XMillimeters - right.StationEntry.XMillimeters, 6);
+        Assert.Equal(left.CableLeadOuterEnd,
+            geometry.CableTerminalAnchors[left.CableTerminalId].Position);
+        Assert.Equal(right.CableLeadOuterEnd,
+            geometry.CableTerminalAnchors[right.CableTerminalId].Position);
+        Assert.Equal(TerminalAnchorDirection.Left, left.CableDirection);
+        Assert.Equal(TerminalAnchorDirection.Right, right.CableDirection);
+        Assert.NotEqual(left.CableTerminalId, right.CableTerminalId);
+
+        IReadOnlyList<SceneLine> lines = new CustomerStationRenderer().Render(
+                creation.CustomerStation,
+                creation.Layout)
+            .OfType<SceneLine>()
+            .ToArray();
+        Assert.Contains(lines, line =>
+            line.Start == left.CableLeadOuterEnd && line.End == left.CableContact);
+        Assert.Contains(lines, line =>
+            line.Start == left.StationContact && line.End == left.StationEntry);
+        Assert.Contains(lines, line =>
+            line.Start == right.CableLeadOuterEnd && line.End == right.CableContact);
+        Assert.Contains(lines, line =>
+            line.Start == right.StationContact && line.End == right.StationEntry);
+    }
+
+    [Fact]
+    public void UserStationNumberLabel_TracksUnifiedTypographySettings()
+    {
+        CustomerStationCreation creation = Create(StationKind.BoxStation, ["丰华路1号用户站"]);
+        var typography = new DrawingTypographyMetrics(16, 8, 10.5, 7, 8, 7,
+            CustomerStationNumberFontSize: 6);
+        DrawingMetrics metrics = DrawingMetrics.Default with { Typography = typography };
+        var renderer = new CustomerStationRenderer(metrics);
+
+        SceneText first = Assert.Single(renderer.Render(creation.CustomerStation, creation.Layout)
+            .OfType<SceneText>());
+        typography.Update(16, 8, 10.5, 7, 8, 7,
+            customerStationNumberFontSize: 9);
+        SceneText second = Assert.Single(renderer.Render(creation.CustomerStation, creation.Layout)
+            .OfType<SceneText>());
+
+        Assert.Equal("丰华路1号用户站", first.Text);
+        Assert.Equal(6, first.FontSizeMillimeters);
+        Assert.Equal(9, second.FontSizeMillimeters);
     }
 
     [Fact]
@@ -153,11 +235,12 @@ public sealed class CustomerStationSliceCTests
         TerminalAnchor shown = Anchor(document, runtime, first.CableTerminalId);
         DrawingScene shownScene = new DrawingSceneBuilder().Build(document, runtime);
 
-        new SetCustomerStationIncomingSwitchVisibilityCommand(
+        var visibilityStack = new CommandStack();
+        visibilityStack.ExecuteCommand(new SetCustomerStationIncomingSwitchVisibilityCommand(
             runtime,
             firstCreation.CustomerStation,
             first.IncomingFeederId,
-            false).Execute();
+            false));
         TerminalAnchor hidden = Anchor(document, runtime, first.CableTerminalId);
         DrawingScene hiddenScene = new DrawingSceneBuilder().Build(document, runtime);
         Assert.Equal(shown.Position, Assert.Single(shownScene.Routes).Points[0]);
@@ -173,6 +256,14 @@ public sealed class CustomerStationSliceCTests
         Assert.Equal(cableId, Assert.Single(document.CableSegments).Id);
         Assert.Equal(cableTerminalId, first.CableTerminalId);
         Assert.Equal(groundingId, Assert.Single(document.GroundingPoints).GroundingPointId);
+        Assert.Equal(groundingTarget, Assert.Single(document.GroundingPoints).Target);
+        Assert.True(visibilityStack.Undo());
+        Assert.Equal(shown, Anchor(document, runtime, first.CableTerminalId));
+        Assert.Equal(cableTerminalId, first.CableTerminalId);
+        Assert.Equal(groundingTarget, Assert.Single(document.GroundingPoints).Target);
+        Assert.True(visibilityStack.Redo());
+        Assert.Equal(hidden, Anchor(document, runtime, first.CableTerminalId));
+        Assert.Equal(cableTerminalId, first.CableTerminalId);
         Assert.Equal(groundingTarget, Assert.Single(document.GroundingPoints).Target);
         var resolver = new GroundingPresentationAnchorResolver();
         Assert.True(resolver.TryResolve(
@@ -201,6 +292,9 @@ public sealed class CustomerStationSliceCTests
         Assert.NotNull(shown.HitTestIndex.Find(new SelectionReference(
             SelectionTargetKind.Device,
             creation.CustomerStation.Id)));
+        SelectionHitTestEntry leadHit = Assert.IsType<SelectionHitTestEntry>(
+            shown.HitTestIndex.HitTestEntry(switchGeometry.CableLeadOuterEnd));
+        Assert.Equal(feeder.IsolationSwitch.Id, leadHit.Target.ObjectId);
         new SetCustomerStationIncomingSwitchVisibilityCommand(
             runtime,
             creation.CustomerStation,
@@ -233,6 +327,12 @@ public sealed class CustomerStationSliceCTests
             row.PropertyKey == "CustomerStation.StationKind" && row.IsReadOnly);
         Assert.Contains(snapshot.Sections.SelectMany(section => section.Properties), row =>
             row.PropertyKey == "CustomerStation.FeederCount" && row.DisplayValue == "2");
+        Assert.Contains(snapshot.Sections.SelectMany(section => section.Properties), row =>
+            row.DisplayName == "用户站号1" && row.DisplayValue == "主供");
+        Assert.Contains(snapshot.Sections.SelectMany(section => section.Properties), row =>
+            row.DisplayName == "用户站号2" && row.DisplayValue == "备供");
+        Assert.DoesNotContain(snapshot.Sections.SelectMany(section => section.Properties), row =>
+            row.DisplayName is "进线 1 名称" or "进线 2 名称");
         Assert.True(editor.TryEdit(
             reference,
             PropertyCommandFactory.CustomerStationFeederDisplayNamePropertyKey(first.IncomingFeederId),
