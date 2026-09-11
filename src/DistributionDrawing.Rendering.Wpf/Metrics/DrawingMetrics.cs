@@ -34,13 +34,12 @@ public sealed record DrawingMetrics(
         UnitHeight: 30,
         UnitSpacing: 0,
         RoofHeight: 8,
-        RoofOverhang: 3,
+        RoofOverhang: 5,
         TriangleHalfWidth: 8,
         TriangleHalfHeight: 7,
         SwitchLength: 16,
-        IncomingSwitchLeadLength: 1,
+        IncomingSwitchLeadLength: 2,
         SwitchOpenRise: 6,
-        ContactRadius: 1.5,
         LabelOffset: 7,
         HitPadding: 2);
 
@@ -147,7 +146,6 @@ public sealed record CustomerStationDrawingMetrics(
     double SwitchLength,
     double IncomingSwitchLeadLength,
     double SwitchOpenRise,
-    double ContactRadius,
     double LabelOffset,
     double HitPadding);
 

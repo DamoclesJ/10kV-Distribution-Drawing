@@ -1,6 +1,8 @@
+using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Media;
+using System.Xml.Linq;
 using DistributionDrawing.Desktop.CustomerStationCreationUi;
 using Xunit;
 
@@ -69,6 +71,36 @@ public sealed class CustomerStationPresentationResourceTests
         });
     }
 
+    [Fact]
+    public void MainWindowToolPalettes_BindRingCabinetAndCustomerStationIconsCorrectly()
+    {
+        string mainWindowPath = FindRepositoryFile(
+            "src",
+            "DistributionDrawing.Desktop",
+            "MainWindow.xaml");
+        XDocument xaml = XDocument.Load(mainWindowPath);
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        var bindings = xaml.Descendants(presentation + "ToggleButton")
+            .Select(toggle => new
+            {
+                Label = toggle.Descendants(presentation + "TextBlock")
+                    .Select(text => (string?)text.Attribute("Text"))
+                    .FirstOrDefault(text => text is not null),
+                Icon = toggle.Descendants(presentation + "Path")
+                    .Select(path => (string?)path.Attribute("Data"))
+                    .FirstOrDefault(data => data is not null)
+            })
+            .Where(item => item.Label is "环网柜" or "用户站")
+            .ToArray();
+
+        Assert.Equal(2, bindings.Count(item => item.Label == "环网柜"));
+        Assert.Equal(2, bindings.Count(item => item.Label == "用户站"));
+        Assert.All(bindings.Where(item => item.Label == "环网柜"), item =>
+            Assert.Equal("{StaticResource Icon.RingCabinet}", item.Icon));
+        Assert.All(bindings.Where(item => item.Label == "用户站"), item =>
+            Assert.Equal("{StaticResource Icon.CustomerStation}", item.Icon));
+    }
+
     private static void RunOnSta(Action action)
     {
         Exception? exception = null;
@@ -110,5 +142,23 @@ public sealed class CustomerStationPresentationResourceTests
                 }
             }
         }
+    }
+
+    private static string FindRepositoryFile(params string[] relativePath)
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            string candidate = Path.Combine([directory.FullName, .. relativePath]);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException(
+            $"Could not locate repository file '{Path.Combine(relativePath)}'.");
     }
 }

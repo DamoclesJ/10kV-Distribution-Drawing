@@ -36,6 +36,10 @@ public sealed class CustomerStationSliceCTests
         DocumentRect body = Assert.Single(geometry.Units).Body;
         Assert.True(geometry.Roof[0].XMillimeters < body.XMillimeters);
         Assert.True(geometry.Roof[2].XMillimeters > body.XMillimeters + body.WidthMillimeters);
+        Assert.Equal(5, body.XMillimeters - geometry.Roof[0].XMillimeters, precision: 6);
+        Assert.Equal(5,
+            geometry.Roof[2].XMillimeters - (body.XMillimeters + body.WidthMillimeters),
+            precision: 6);
         Assert.Equal(
             body.XMillimeters - geometry.Roof[0].XMillimeters,
             geometry.Roof[2].XMillimeters - (body.XMillimeters + body.WidthMillimeters),
@@ -119,6 +123,7 @@ public sealed class CustomerStationSliceCTests
                 .Single(feeder => feeder.Sequence == 2).IncomingFeederId);
         double leadLength = DrawingMetrics.Default.CustomerStation.IncomingSwitchLeadLength;
 
+        Assert.Equal(2, leadLength);
         Assert.Equal(leadLength,
             left.CableContact.XMillimeters - left.CableLeadOuterEnd.XMillimeters, 6);
         Assert.Equal(leadLength,
@@ -148,6 +153,10 @@ public sealed class CustomerStationSliceCTests
             line.Start == right.CableLeadOuterEnd && line.End == right.CableContact);
         Assert.Contains(lines, line =>
             line.Start == right.StationContact && line.End == right.StationEntry);
+        Assert.Empty(new CustomerStationRenderer().Render(
+                creation.CustomerStation,
+                creation.Layout)
+            .OfType<SceneEllipse>());
     }
 
     [Fact]

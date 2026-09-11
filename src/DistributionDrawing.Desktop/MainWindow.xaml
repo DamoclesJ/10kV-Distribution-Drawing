@@ -269,7 +269,7 @@
                           IsChecked="{Binding Toolbox.IsRingCabinetActive, Mode=OneWay}"
                           Command="{Binding CreateRingCabinetCommand}">
               <StackPanel Orientation="Horizontal">
-                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.CustomerStation}"
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.RingCabinet}"
                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                       StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
                 <TextBlock VerticalAlignment="Center" Text="环网柜" />
@@ -289,7 +289,7 @@
                           IsChecked="{Binding Toolbox.IsCustomerStationActive, Mode=OneWay}"
                           Command="{Binding CreateCustomerStationCommand}">
               <StackPanel Orientation="Horizontal">
-                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.RingCabinet}"
+                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.CustomerStation}"
                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                       StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
                 <TextBlock VerticalAlignment="Center" Text="用户站" />

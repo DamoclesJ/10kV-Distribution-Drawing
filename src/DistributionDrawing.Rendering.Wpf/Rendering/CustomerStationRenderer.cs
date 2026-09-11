@@ -56,14 +56,11 @@ public sealed class CustomerStationRenderer
 
         foreach (CustomerStationSwitchGeometry switchGeometry in geometry.Switches)
         {
-            double radius = _metrics.CustomerStation.ContactRadius;
             elements.Add(new SceneLine(
                 switchGeometry.CableLeadOuterEnd,
                 switchGeometry.CableContact,
                 Colors.Black,
                 _metrics.General.StandardStrokeThickness));
-            elements.Add(Contact(switchGeometry.CableContact, radius));
-            elements.Add(Contact(switchGeometry.StationContact, radius));
             elements.Add(new SceneLine(
                 switchGeometry.CableContact,
                 switchGeometry.BladeEnd,
@@ -78,14 +75,4 @@ public sealed class CustomerStationRenderer
 
         return elements;
     }
-
-    private SceneEllipse Contact(DocumentPoint center, double radius) => new(
-        new DocumentRect(
-            center.XMillimeters - radius,
-            center.YMillimeters - radius,
-            radius * 2,
-            radius * 2),
-        Colors.Black,
-        _metrics.General.StandardStrokeThickness,
-        Colors.White);
 }
