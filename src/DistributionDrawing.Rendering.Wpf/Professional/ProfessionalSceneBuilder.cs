@@ -105,6 +105,7 @@ public sealed class ProfessionalSceneBuilder
                     drawingLayout,
                     anchors,
                     routeByConnectionId,
+                    customerStationLayouts,
                     out GroundingPresentationAnchor anchor))
             {
                 diagnostics.Add(new SceneBuildDiagnostic(

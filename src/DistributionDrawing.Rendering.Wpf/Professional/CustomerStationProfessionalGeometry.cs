@@ -135,12 +135,16 @@ public sealed record CustomerStationProfessionalGeometry(
                 new TerminalAnchor(feeder.CableTerminalId, cableAnchor, direction));
         }
 
+        double roofSlope = metrics.RoofHeight / (bodyWidth / 2);
+        double eaveDrop = metrics.RoofOverhang * roofSlope;
         IReadOnlyList<DocumentPoint> roof = station.StationKind == StationKind.BoxStation
             ?
             [
-                new DocumentPoint(left - metrics.RoofOverhang, top),
+                new DocumentPoint(left - metrics.RoofOverhang, top + eaveDrop),
                 new DocumentPoint(layout.Position.XMillimeters, top - metrics.RoofHeight),
-                new DocumentPoint(left + bodyWidth + metrics.RoofOverhang, top)
+                new DocumentPoint(
+                    left + bodyWidth + metrics.RoofOverhang,
+                    top + eaveDrop)
             ]
             : [];
         double boundsTop = roof.Count > 0 ? top - metrics.RoofHeight : top;

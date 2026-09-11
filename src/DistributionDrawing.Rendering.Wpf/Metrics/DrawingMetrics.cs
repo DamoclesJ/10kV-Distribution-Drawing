@@ -33,7 +33,7 @@ public sealed record DrawingMetrics(
         UnitWidth: 36,
         UnitHeight: 30,
         UnitSpacing: 0,
-        RoofHeight: 8,
+        RoofHeight: 15,
         RoofOverhang: 5,
         TriangleHalfWidth: 8,
         TriangleHalfHeight: 7,

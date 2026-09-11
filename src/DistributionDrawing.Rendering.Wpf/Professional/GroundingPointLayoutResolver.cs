@@ -134,6 +134,13 @@ public sealed class GroundingPointLayoutResolver
             };
         }
 
+        if (anchor.Policy == GroundingPresentationPolicy.CustomerStationShownIncomingSwitch)
+        {
+            return new DocumentPoint(
+                anchor.Position.XMillimeters,
+                anchor.Position.YMillimeters + leader);
+        }
+
         return anchor.Direction switch
         {
             TerminalAnchorDirection.Left => new DocumentPoint(
@@ -170,7 +177,8 @@ public sealed class GroundingPointLayoutResolver
 
         bool allowDirectVertical = policy is
             GroundingPresentationPolicy.GroundingAccessPoint or
-            GroundingPresentationPolicy.PoleCableTermination;
+            GroundingPresentationPolicy.PoleCableTermination or
+            GroundingPresentationPolicy.CustomerStationShownIncomingSwitch;
         if (allowDirectVertical && anchor.Position == symbolTop)
         {
             return [];

@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
@@ -21,6 +22,7 @@ public enum GroundingPresentationPolicy
     GroundingAccessPoint,
     PoleCableTermination,
     RingCabinetCableTerminal,
+    CustomerStationShownIncomingSwitch,
     StandardTerminal
 }
 
@@ -38,6 +40,7 @@ public sealed class GroundingPresentationAnchorResolver
         DrawingLayout drawingLayout,
         TerminalAnchorIndex terminalAnchors,
         IReadOnlyDictionary<Guid, OrthogonalRoute> routes,
+        IReadOnlyDictionary<Guid, CustomerStationLayout>? customerStationLayouts,
         out GroundingPresentationAnchor presentationAnchor)
     {
         ArgumentNullException.ThrowIfNull(groundingPoint);
@@ -69,6 +72,28 @@ public sealed class GroundingPresentationAnchorResolver
         {
             presentationAnchor = default;
             return false;
+        }
+
+        CustomerStation? customerStation = document.CustomerStations.SingleOrDefault(station =>
+            station.IncomingFeeders.Any(feeder => feeder.CableTerminalId == terminalId));
+        IncomingFeeder? customerStationFeeder = customerStation?.IncomingFeeders.Single(feeder =>
+            feeder.CableTerminalId == terminalId);
+        if (customerStation is not null &&
+            customerStationFeeder is not null &&
+            customerStationLayouts is not null &&
+            customerStationLayouts.TryGetValue(
+                customerStation.Id,
+                out CustomerStationLayout? customerStationLayout) &&
+            customerStationLayout.IncomingFeeders.TryGetValue(
+                customerStationFeeder.IncomingFeederId,
+                out CustomerStationIncomingFeederLayout? feederLayout) &&
+            feederLayout.ShowIncomingSwitch)
+        {
+            presentationAnchor = new GroundingPresentationAnchor(
+                terminalAnchor.Position,
+                TerminalAnchorDirection.Down,
+                Policy: GroundingPresentationPolicy.CustomerStationShownIncomingSwitch);
+            return true;
         }
 
         if (document.Devices.OfType<CableTermination>().Any(device =>
@@ -156,12 +181,28 @@ public sealed class GroundingPresentationAnchorResolver
         DrawingDocument document,
         DrawingLayout drawingLayout,
         TerminalAnchorIndex terminalAnchors,
+        IReadOnlyDictionary<Guid, OrthogonalRoute> routes,
+        out GroundingPresentationAnchor presentationAnchor) => TryResolve(
+            groundingPoint,
+            document,
+            drawingLayout,
+            terminalAnchors,
+            routes,
+            null,
+            out presentationAnchor);
+
+    public bool TryResolve(
+        GroundingPoint groundingPoint,
+        DrawingDocument document,
+        DrawingLayout drawingLayout,
+        TerminalAnchorIndex terminalAnchors,
         out GroundingPresentationAnchor presentationAnchor) => TryResolve(
             groundingPoint,
             document,
             drawingLayout,
             terminalAnchors,
             new Dictionary<Guid, OrthogonalRoute>(),
+            null,
             out presentationAnchor);
 
     private static TerminalAnchorDirection ResolveOutwardDirection(

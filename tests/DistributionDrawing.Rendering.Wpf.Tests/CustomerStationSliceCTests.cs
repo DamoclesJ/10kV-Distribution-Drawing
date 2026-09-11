@@ -44,7 +44,40 @@ public sealed class CustomerStationSliceCTests
             body.XMillimeters - geometry.Roof[0].XMillimeters,
             geometry.Roof[2].XMillimeters - (body.XMillimeters + body.WidthMillimeters),
             precision: 6);
-        Assert.True(geometry.Roof[1].YMillimeters < geometry.Roof[0].YMillimeters);
+        Assert.Equal(15,
+            body.YMillimeters - geometry.Roof[1].YMillimeters,
+            precision: 6);
+        Assert.Equal(body.XMillimeters + body.WidthMillimeters / 2,
+            geometry.Roof[1].XMillimeters,
+            precision: 6);
+        double roofAngleDegrees = Math.Atan2(
+            body.YMillimeters - geometry.Roof[1].YMillimeters,
+            geometry.Roof[1].XMillimeters - body.XMillimeters) *
+            180 / Math.PI;
+        Assert.InRange(roofAngleDegrees, 30, 40);
+        double leftEaveDrop = geometry.Roof[0].YMillimeters - body.YMillimeters;
+        double rightEaveDrop = geometry.Roof[2].YMillimeters - body.YMillimeters;
+        Assert.Equal(5 * (15d / (body.WidthMillimeters / 2)), leftEaveDrop, precision: 6);
+        Assert.Equal(leftEaveDrop, rightEaveDrop, precision: 6);
+        Assert.True(geometry.Roof[0].YMillimeters > body.YMillimeters);
+        Assert.True(geometry.Roof[2].YMillimeters > body.YMillimeters);
+        var topLeft = new DocumentPoint(body.XMillimeters, body.YMillimeters);
+        var topRight = new DocumentPoint(
+            body.XMillimeters + body.WidthMillimeters,
+            body.YMillimeters);
+        double leftCrossProduct =
+            (topLeft.XMillimeters - geometry.Roof[0].XMillimeters) *
+            (geometry.Roof[1].YMillimeters - geometry.Roof[0].YMillimeters) -
+            (topLeft.YMillimeters - geometry.Roof[0].YMillimeters) *
+            (geometry.Roof[1].XMillimeters - geometry.Roof[0].XMillimeters);
+        double rightCrossProduct =
+            (topRight.XMillimeters - geometry.Roof[1].XMillimeters) *
+            (geometry.Roof[2].YMillimeters - geometry.Roof[1].YMillimeters) -
+            (topRight.YMillimeters - geometry.Roof[1].YMillimeters) *
+            (geometry.Roof[2].XMillimeters - geometry.Roof[1].XMillimeters);
+        Assert.Equal(0, leftCrossProduct, precision: 6);
+        Assert.Equal(0, rightCrossProduct, precision: 6);
+        Assert.Empty(Geometry(Create(StationKind.IndoorStation, ["室内站"])).Roof);
     }
 
     [Fact]
@@ -282,6 +315,47 @@ public sealed class CustomerStationSliceCTests
             Anchors(document, runtime),
             out GroundingPresentationAnchor resolved));
         Assert.Equal(hidden.Position, resolved.Position);
+    }
+
+    [Fact]
+    public void ShownIncomingSwitchGroundingLeaderStartsDirectlyVertical()
+    {
+        CustomerStationCreation creation = Create(StationKind.BoxStation, ["用户主供"]);
+        DrawingDocument document = DocumentWith(creation);
+        RuntimeLayoutDocument runtime = RuntimeWith(creation);
+        IncomingFeeder feeder = Assert.Single(creation.CustomerStation.IncomingFeeders);
+        GroundingPoint groundingPoint = document.CreateGroundingPoint(
+            Guid.NewGuid(),
+            feeder.CableTerminalId,
+            "用户站进线接地",
+            "G01");
+        TerminalAnchor formalAnchor = Anchor(document, runtime, feeder.CableTerminalId);
+        var resolver = new GroundingPresentationAnchorResolver();
+
+        Assert.True(resolver.TryResolve(
+            groundingPoint,
+            document,
+            runtime.DrawingLayout,
+            Anchors(document, runtime),
+            new Dictionary<Guid, OrthogonalRoute>(),
+            runtime.CustomerStationLayouts,
+            out GroundingPresentationAnchor presentationAnchor));
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            groundingPoint,
+            presentationAnchor,
+            null);
+
+        Assert.Equal(GroundingPresentationPolicy.CustomerStationShownIncomingSwitch,
+            presentationAnchor.Policy);
+        Assert.Equal(formalAnchor.Position, presentationAnchor.Position);
+        OrthogonalRouteSegment leader = Assert.Single(resolved.LeaderSegments);
+        Assert.Equal(presentationAnchor.Position, leader.Start);
+        Assert.Equal(presentationAnchor.Position.XMillimeters,
+            leader.End.XMillimeters,
+            precision: 6);
+        Assert.True(leader.End.YMillimeters > leader.Start.YMillimeters);
+        Assert.Equal(feeder.CableTerminalId, groundingPoint.Target.TargetId);
+        Assert.Equal(GroundingTargetKind.Terminal, groundingPoint.Target.Kind);
     }
 
     [Fact]
