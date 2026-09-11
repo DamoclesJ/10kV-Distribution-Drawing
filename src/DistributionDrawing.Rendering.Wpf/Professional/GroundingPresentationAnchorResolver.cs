@@ -3,7 +3,9 @@ using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
@@ -23,6 +25,7 @@ public enum GroundingPresentationPolicy
     PoleCableTermination,
     RingCabinetCableTerminal,
     CustomerStationShownIncomingSwitch,
+    TransformerTerminal,
     StandardTerminal
 }
 
@@ -40,6 +43,7 @@ public sealed class GroundingPresentationAnchorResolver
         DrawingLayout drawingLayout,
         TerminalAnchorIndex terminalAnchors,
         IReadOnlyDictionary<Guid, OrthogonalRoute> routes,
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts,
         IReadOnlyDictionary<Guid, CustomerStationLayout>? customerStationLayouts,
         out GroundingPresentationAnchor presentationAnchor)
     {
@@ -72,6 +76,65 @@ public sealed class GroundingPresentationAnchorResolver
         {
             presentationAnchor = default;
             return false;
+        }
+
+        Transformer? transformer = document.Transformers.SingleOrDefault(candidate =>
+            candidate.HvTerminalId == terminalId);
+        if (transformer is not null)
+        {
+            if (transformerLayouts is null ||
+                !transformerLayouts.TryGetValue(transformer.Id, out TransformerLayout? layout))
+            {
+                presentationAnchor = default;
+                return false;
+            }
+
+            TransformerProfessionalGeometry transformerGeometry = TransformerProfessionalGeometry.Create(
+                transformer,
+                layout,
+                DrawingMetrics.Default.Transformer);
+            Connection[] connected = document.Connections
+                .Where(connection => connection.UsesTerminal(terminalId) &&
+                    routes.ContainsKey(connection.Id))
+                .ToArray();
+            TerminalAnchorDirection transformerDirection = transformerGeometry.HvDirection;
+            DocumentPoint transformerAnchor = terminalAnchor.Position;
+            if (connected.Length == 1)
+            {
+                Connection connection = connected[0];
+                OrthogonalRoute route = routes[connection.Id];
+                if (route.Segments.Count > 0)
+                {
+                    OrthogonalRouteSegment incoming = connection.StartTerminalId == terminalId
+                        ? route.Segments[0]
+                        : route.Segments[^1];
+                    if (incoming.IsHorizontal)
+                    {
+                        transformerDirection = TerminalAnchorDirection.Down;
+                    }
+                    else
+                    {
+                        double bodyCenterX = transformerGeometry.Bounds.XMillimeters +
+                            transformerGeometry.Bounds.WidthMillimeters / 2;
+                        transformerDirection = terminalAnchor.Position.XMillimeters < bodyCenterX
+                            ? TerminalAnchorDirection.Left
+                            : TerminalAnchorDirection.Right;
+                    }
+                }
+            }
+            else
+            {
+                transformerAnchor = MoveToOuterEdge(
+                    terminalAnchor.Position,
+                    transformerGeometry.Bounds,
+                    transformerDirection);
+            }
+
+            presentationAnchor = new GroundingPresentationAnchor(
+                transformerAnchor,
+                transformerDirection,
+                Policy: GroundingPresentationPolicy.TransformerTerminal);
+            return true;
         }
 
         CustomerStation? customerStation = document.CustomerStations.SingleOrDefault(station =>
@@ -182,12 +245,30 @@ public sealed class GroundingPresentationAnchorResolver
         DrawingLayout drawingLayout,
         TerminalAnchorIndex terminalAnchors,
         IReadOnlyDictionary<Guid, OrthogonalRoute> routes,
+        IReadOnlyDictionary<Guid, CustomerStationLayout>? customerStationLayouts,
         out GroundingPresentationAnchor presentationAnchor) => TryResolve(
             groundingPoint,
             document,
             drawingLayout,
             terminalAnchors,
             routes,
+            null,
+            customerStationLayouts,
+            out presentationAnchor);
+
+    public bool TryResolve(
+        GroundingPoint groundingPoint,
+        DrawingDocument document,
+        DrawingLayout drawingLayout,
+        TerminalAnchorIndex terminalAnchors,
+        IReadOnlyDictionary<Guid, OrthogonalRoute> routes,
+        out GroundingPresentationAnchor presentationAnchor) => TryResolve(
+            groundingPoint,
+            document,
+            drawingLayout,
+            terminalAnchors,
+            routes,
+            null,
             null,
             out presentationAnchor);
 
@@ -202,6 +283,7 @@ public sealed class GroundingPresentationAnchorResolver
             drawingLayout,
             terminalAnchors,
             new Dictionary<Guid, OrthogonalRoute>(),
+            null,
             null,
             out presentationAnchor);
 

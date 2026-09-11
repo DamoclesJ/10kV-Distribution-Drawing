@@ -54,12 +54,24 @@ public enum ProjectGroundingAccessLineSide
     LargerNumberSide
 }
 
+[JsonConverter(typeof(StrictStringEnumConverter<ProjectGroundingAdjacentEndpointKind>))]
+public enum ProjectGroundingAdjacentEndpointKind
+{
+    Pole,
+    Terminal
+}
+
+public sealed record ProjectGroundingAdjacentEndpointDto(
+    [property: JsonRequired] ProjectGroundingAdjacentEndpointKind Kind,
+    [property: JsonRequired] Guid TargetId);
+
 public sealed record ProjectGroundingAccessPointDto(
     [property: JsonRequired] Guid GroundingAccessPointId,
     [property: JsonRequired] Guid ConnectionId,
     [property: JsonRequired] Guid PoleId,
-    [property: JsonRequired] Guid AdjacentPoleId,
-    [property: JsonRequired] ProjectGroundingAccessLineSide LineSide);
+    [property: JsonRequired] Guid? AdjacentPoleId,
+    [property: JsonRequired] ProjectGroundingAccessLineSide LineSide,
+    ProjectGroundingAdjacentEndpointDto? AdjacentEndpoint = null);
 
 /// <summary>
 /// Validated, persistence-neutral Professional snapshot. It contains no
@@ -113,8 +125,9 @@ internal static class ProjectProfessionalMapper
                     point.GroundingAccessPointId,
                     point.ConnectionId,
                     point.PoleId,
-                    point.AdjacentPoleId,
-                    ToDto(point.LineSide)))
+                    null,
+                    ToDto(point.LineSide),
+                    ToDto(point.AdjacentEndpoint)))
                 .ToArray());
     }
 
@@ -129,13 +142,15 @@ internal static class ProjectProfessionalMapper
 
         foreach (ProjectGroundingAccessPointDto point in professional.GroundingAccessPoints ?? [])
         {
+            GroundingAdjacentEndpoint adjacentEndpoint = ToDomain(
+                NormalizeAdjacentEndpoint(point));
             try
             {
                 document.CreateGroundingAccessPoint(
                     point.GroundingAccessPointId,
                     point.ConnectionId,
                     point.PoleId,
-                    point.AdjacentPoleId,
+                    adjacentEndpoint,
                     ToDomain(point.LineSide));
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
@@ -254,18 +269,25 @@ internal static class ProjectProfessionalMapper
             }
         }
 
-        HashSet<(Guid ConnectionId, Guid PoleId, Guid AdjacentPoleId)> accessLocations = [];
+        HashSet<(Guid ConnectionId, Guid PoleId, ProjectGroundingAdjacentEndpointKind Kind,
+            Guid TargetId)> accessLocations = [];
         foreach (ProjectGroundingAccessPointDto point in groundingAccessPoints)
         {
+            ProjectGroundingAdjacentEndpointDto adjacentEndpoint =
+                NormalizeAdjacentEndpoint(point);
             if (point.ConnectionId == Guid.Empty ||
                 point.PoleId == Guid.Empty ||
-                point.AdjacentPoleId == Guid.Empty)
+                adjacentEndpoint.TargetId == Guid.Empty)
             {
                 throw new InvalidDataException(
                     $"Grounding access point '{point.GroundingAccessPointId}' has an empty reference.");
             }
 
-            if (!accessLocations.Add((point.ConnectionId, point.PoleId, point.AdjacentPoleId)))
+            if (!accessLocations.Add((
+                    point.ConnectionId,
+                    point.PoleId,
+                    adjacentEndpoint.Kind,
+                    adjacentEndpoint.TargetId)))
             {
                 throw new InvalidDataException(
                     "Grounding access point physical locations must be unique.");
@@ -325,6 +347,61 @@ internal static class ProjectProfessionalMapper
         GroundingTargetKind.GroundingAccessPoint => ProjectGroundingTargetKind.GroundingAccessPoint,
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
+
+    private static ProjectGroundingAdjacentEndpointDto ToDto(
+        GroundingAdjacentEndpoint endpoint) => new(
+        endpoint.Kind switch
+        {
+            GroundingAdjacentEndpointKind.Pole => ProjectGroundingAdjacentEndpointKind.Pole,
+            GroundingAdjacentEndpointKind.Terminal => ProjectGroundingAdjacentEndpointKind.Terminal,
+            _ => throw new ArgumentOutOfRangeException(nameof(endpoint))
+        },
+        endpoint.TargetId);
+
+    private static GroundingAdjacentEndpoint ToDomain(
+        ProjectGroundingAdjacentEndpointDto endpoint) => endpoint.Kind switch
+    {
+        ProjectGroundingAdjacentEndpointKind.Pole =>
+            GroundingAdjacentEndpoint.ForPole(endpoint.TargetId),
+        ProjectGroundingAdjacentEndpointKind.Terminal =>
+            GroundingAdjacentEndpoint.ForTerminal(endpoint.TargetId),
+        _ => throw new InvalidDataException(
+            $"Unsupported grounding adjacent endpoint kind '{endpoint.Kind}'.")
+    };
+
+    private static ProjectGroundingAdjacentEndpointDto NormalizeAdjacentEndpoint(
+        ProjectGroundingAccessPointDto point)
+    {
+        bool hasLegacy = point.AdjacentPoleId is Guid adjacentPoleId &&
+                         adjacentPoleId != Guid.Empty;
+        bool hasTyped = point.AdjacentEndpoint is not null;
+        if (hasLegacy == hasTyped)
+        {
+            throw new InvalidDataException(
+                $"Grounding access point '{point.GroundingAccessPointId}' requires exactly one adjacent endpoint representation.");
+        }
+
+        if (hasLegacy)
+        {
+            return new ProjectGroundingAdjacentEndpointDto(
+                ProjectGroundingAdjacentEndpointKind.Pole,
+                point.AdjacentPoleId!.Value);
+        }
+
+        if (point.AdjacentPoleId == Guid.Empty || point.AdjacentEndpoint!.TargetId == Guid.Empty)
+        {
+            throw new InvalidDataException(
+                $"Grounding access point '{point.GroundingAccessPointId}' has an empty adjacent endpoint reference.");
+        }
+
+        if (!Enum.IsDefined(point.AdjacentEndpoint.Kind))
+        {
+            throw new InvalidDataException(
+                $"Grounding access point '{point.GroundingAccessPointId}' has an invalid adjacent endpoint kind.");
+        }
+
+        return point.AdjacentEndpoint;
+    }
 
     private static GroundingTargetKind ToDomain(ProjectGroundingTargetKind kind) => kind switch
     {

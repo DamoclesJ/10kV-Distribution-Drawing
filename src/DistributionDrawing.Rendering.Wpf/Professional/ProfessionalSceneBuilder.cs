@@ -105,6 +105,7 @@ public sealed class ProfessionalSceneBuilder
                     drawingLayout,
                     anchors,
                     routeByConnectionId,
+                    transformerLayouts,
                     customerStationLayouts,
                     out GroundingPresentationAnchor anchor))
             {

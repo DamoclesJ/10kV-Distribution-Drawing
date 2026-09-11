@@ -7,14 +7,33 @@ public sealed record GroundingAccessPointCommandSnapshot(
     Guid GroundingAccessPointId,
     Guid ConnectionId,
     Guid PoleId,
-    Guid AdjacentPoleId,
+    GroundingAdjacentEndpoint AdjacentEndpoint,
     GroundingAccessLineSide LineSide)
 {
+    public GroundingAccessPointCommandSnapshot(
+        Guid groundingAccessPointId,
+        Guid connectionId,
+        Guid poleId,
+        Guid adjacentPoleId,
+        GroundingAccessLineSide lineSide)
+        : this(
+            groundingAccessPointId,
+            connectionId,
+            poleId,
+            GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
+            lineSide)
+    {
+    }
+
+    public Guid AdjacentPoleId => AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Pole
+        ? AdjacentEndpoint.TargetId
+        : throw new InvalidOperationException("This snapshot has a terminal adjacent endpoint.");
+
     public static GroundingAccessPointCommandSnapshot From(GroundingAccessPoint point) => new(
         point.GroundingAccessPointId,
         point.ConnectionId,
         point.PoleId,
-        point.AdjacentPoleId,
+        point.AdjacentEndpoint,
         point.LineSide);
 }
 
@@ -36,7 +55,7 @@ public sealed class AddGroundingAccessPointCommand : ICommand
         After.GroundingAccessPointId,
         After.ConnectionId,
         After.PoleId,
-        After.AdjacentPoleId,
+        After.AdjacentEndpoint,
         After.LineSide);
 
     public void Undo() => _document.RemoveGroundingAccessPoint(After.GroundingAccessPointId);
@@ -64,7 +83,7 @@ public sealed class RemoveGroundingAccessPointCommand : ICommand
         Before.GroundingAccessPointId,
         Before.ConnectionId,
         Before.PoleId,
-        Before.AdjacentPoleId,
+        Before.AdjacentEndpoint,
         Before.LineSide));
 
     public void Redo() => Execute();

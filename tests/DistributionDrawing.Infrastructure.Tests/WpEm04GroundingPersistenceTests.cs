@@ -37,7 +37,9 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
             opened.Professional!.GroundingAccessPoints!);
         Assert.Equal(fixture.Gap.GroundingAccessPointId, dto.GroundingAccessPointId);
         Assert.Equal(fixture.Middle.Id, dto.PoleId);
-        Assert.Equal(fixture.End.Id, dto.AdjacentPoleId);
+        Assert.Null(dto.AdjacentPoleId);
+        Assert.Equal(ProjectGroundingAdjacentEndpointKind.Pole, dto.AdjacentEndpoint!.Kind);
+        Assert.Equal(fixture.End.Id, dto.AdjacentEndpoint.TargetId);
 
         DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Domain!);
         Assert.Equal(replacement.Id, Assert.Single(restored.Connections).StartTerminalId);
@@ -74,6 +76,41 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         AssertInvalid(fixture, valid with
         {
             GroundingAccessPoints = [gap with { AdjacentPoleId = fixture.Unrelated.Id }]
+        });
+    }
+
+    [Fact]
+    public void Load_NormalizesLegacyPoleForm_AndRejectsBothOrNeitherRepresentations()
+    {
+        Fixture fixture = CreateFixture();
+        ProjectProfessionalDto valid = ProjectProfessionalMapper.ToDto(fixture.Document);
+        ProjectGroundingAccessPointDto typed = Assert.Single(valid.GroundingAccessPoints!);
+        ProjectGroundingAccessPointDto legacy = typed with
+        {
+            AdjacentPoleId = fixture.End.Id,
+            AdjacentEndpoint = null
+        };
+
+        DrawingDocument restored = ProjectDomainMapper.ToDomain(
+            ProjectDomainMapper.ToDto(fixture.DomainOnlyDocument));
+        ProjectProfessionalMapper.ToSnapshot(
+            restored,
+            valid with { GroundingAccessPoints = [legacy] });
+        GroundingAccessPoint point = Assert.Single(restored.GroundingAccessPoints);
+        Assert.Equal(legacy.GroundingAccessPointId, point.GroundingAccessPointId);
+        Assert.Equal(GroundingAdjacentEndpoint.ForPole(fixture.End.Id), point.AdjacentEndpoint);
+
+        AssertInvalid(fixture, valid with
+        {
+            GroundingAccessPoints = [typed with { AdjacentPoleId = fixture.End.Id }]
+        });
+        AssertInvalid(fixture, valid with
+        {
+            GroundingAccessPoints = [typed with { AdjacentPoleId = Guid.Empty }]
+        });
+        AssertInvalid(fixture, valid with
+        {
+            GroundingAccessPoints = [typed with { AdjacentPoleId = null, AdjacentEndpoint = null }]
         });
     }
 
@@ -116,6 +153,65 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
                 gapGrounding with { GroundingPointId = Guid.NewGuid(), Number = "L99" }
             ]
         });
+    }
+
+    [Fact]
+    public void V7RoundTrip_PreservesTerminalEndpointGapAndTransformerTerminalGrounding()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "WP-EM-07A persistence");
+        Pole pole = AddPole(document, "P-20");
+        Terminal poleTerminal = pole.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        document.AddTerminal(poleTerminal);
+        Guid transformerId = Guid.NewGuid();
+        Guid hvTerminalId = Guid.NewGuid();
+        var transformer = new Transformer(
+            transformerId,
+            TransformerKind.PublicPoleMounted,
+            hvTerminalId);
+        var hvTerminal = new Terminal(
+            hvTerminalId,
+            TopologyOwnerType.Device,
+            transformerId,
+            Transformer.HvTerminalRole,
+            Transformer.TenKilovolts,
+            true,
+            false,
+            allowedConnectionTypes: [ConnectionType.OverheadLine]);
+        document.AddTransformer(transformer, hvTerminal);
+        var connection = new Connection(
+            Guid.NewGuid(), ConnectionType.OverheadLine,
+            poleTerminal.Id, hvTerminal.Id, "短架空线", Transformer.TenKilovolts);
+        document.AddConnection(connection);
+        document.AddOverheadLine(new OverheadLine(connection.Id, "JKLYJ", [pole.Id]));
+        GroundingAccessPoint gap = document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), connection.Id, pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(hvTerminalId),
+            GroundingAccessLineSide.LargerNumberSide);
+        GroundingPoint grounding = document.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForTerminal(hvTerminalId),
+            "变压器高压侧", "S01", "保留备注");
+
+        string path = NextPath();
+        var container = new ProjectFileContainer();
+        container.Save(path, new ProjectFileDocument(
+            ProjectFileManifest.Create(document.Id, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
+            new ProjectFileMetadata(document.Title),
+            ProjectDomainMapper.ToDto(document),
+            ProjectLayoutDto.Empty(document.Id),
+            ProjectProfessionalMapper.ToDto(document)));
+        ProjectFileDocument opened = container.Open(path);
+        DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Domain!);
+        ProjectProfessionalMapper.ToSnapshot(restored, opened.Professional);
+
+        GroundingAccessPoint restoredGap = Assert.Single(restored.GroundingAccessPoints);
+        Assert.Equal(gap.GroundingAccessPointId, restoredGap.GroundingAccessPointId);
+        Assert.Equal(GroundingAdjacentEndpoint.ForTerminal(hvTerminalId), restoredGap.AdjacentEndpoint);
+        GroundingPoint restoredGrounding = Assert.Single(restored.GroundingPoints);
+        Assert.Equal(grounding.GroundingPointId, restoredGrounding.GroundingPointId);
+        Assert.Equal(GroundingTarget.ForTerminal(hvTerminalId), restoredGrounding.Target);
+        Assert.Equal("变压器高压侧", restoredGrounding.Location);
+        Assert.Equal("S01", restoredGrounding.Number);
+        Assert.Equal("保留备注", restoredGrounding.Note);
     }
 
     private static void AssertInvalid(Fixture fixture, ProjectProfessionalDto professional)

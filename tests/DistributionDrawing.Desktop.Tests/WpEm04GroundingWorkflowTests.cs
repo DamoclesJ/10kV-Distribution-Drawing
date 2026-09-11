@@ -33,6 +33,96 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
     private readonly List<string> _paths = [];
 
     [Fact]
+    public void ShortOverheadLineToTransformer_ExposesTerminalHalfEdgeCandidateAndCreatesGap()
+    {
+        ProjectRuntimeSession session = CreateSession("WP-EM-07A short OHL");
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand pole = factory.CreateAddPole(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new DocumentPoint(20, 40));
+        pole.Execute();
+        AddPoleSwitchAttachmentCommand fuse = factory.CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            pole.Pole.Id,
+            SwitchKind.DropoutFuse,
+            new DocumentPoint(15, 0));
+        fuse.Execute();
+        AddTransformerCommand transformer = factory.CreateAddTransformer(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            TransformerKind.PublicPoleMounted,
+            new DocumentPoint(90, 40));
+        transformer.Execute();
+        AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            fuse.Creation.SecondTerminal.Id,
+            transformer.Creation.HvTerminal.Id,
+            new DocumentPoint(35, 40),
+            new DocumentPoint(90, 40));
+        line.Execute();
+        session.RebuildScene();
+
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            session.PersistenceSession.Domain,
+            session.Layout.DrawingLayout,
+            session.Layout.RingCabinetLayouts,
+            transformerLayouts: session.Layout.TransformerLayouts);
+        Assert.True(anchors.TryGet(
+            transformer.Creation.HvTerminal.Id,
+            out TerminalAnchor transformerAnchor));
+        GroundingTargetCandidate picked = Assert.IsType<GroundingTargetCandidate>(
+            new GroundingTargetPicker().Resolve(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                session.Scene,
+                transformerAnchor.Position,
+                toleranceMillimeters: 1));
+        Assert.Equal(
+            GroundingTarget.ForTerminal(transformer.Creation.HvTerminal.Id),
+            picked.Target);
+
+        GroundingAccessCandidate candidate = Assert.Single(
+            GroundingAccessPointCreationService.GetCandidates(session, pole.Pole.Id));
+        Assert.Equal(GroundingAdjacentEndpointKind.Terminal, candidate.AdjacentEndpoint.Kind);
+        Assert.Equal(transformer.Creation.HvTerminal.Id, candidate.AdjacentEndpoint.TargetId);
+
+        session.CommandStack.ExecuteCommand(
+            GroundingAccessPointCreationService.CreateCommand(
+                session,
+                candidate,
+                GroundingAccessLineSide.LargerNumberSide,
+                addGroundingPoint: true),
+            session.RebuildScene);
+
+        GroundingAccessPoint gap = Assert.Single(
+            session.PersistenceSession.Domain.GroundingAccessPoints);
+        Assert.Equal(candidate.AdjacentEndpoint, gap.AdjacentEndpoint);
+        Assert.Equal(
+            GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
+            Assert.Single(session.PersistenceSession.Domain.GroundingPoints).Target);
+        Assert.DoesNotContain(session.Scene.Diagnostics, diagnostic =>
+            diagnostic.Code == "GroundingAccessPointAnchorMissing");
+        Assert.Contains(session.Scene.Elements.OfType<SceneEllipse>(), element =>
+            element.TargetId == gap.GroundingAccessPointId);
+
+        Guid groundingPointId = Assert.Single(
+            session.PersistenceSession.Domain.GroundingPoints).GroundingPointId;
+        Assert.True(session.CommandStack.Undo());
+        Assert.Empty(session.PersistenceSession.Domain.GroundingAccessPoints);
+        Assert.Empty(session.PersistenceSession.Domain.GroundingPoints);
+        Assert.True(session.CommandStack.Redo());
+        GroundingAccessPoint restoredGap = Assert.Single(
+            session.PersistenceSession.Domain.GroundingAccessPoints);
+        Assert.Equal(gap.GroundingAccessPointId, restoredGap.GroundingAccessPointId);
+        Assert.Equal(candidate.AdjacentEndpoint, restoredGap.AdjacentEndpoint);
+        Assert.Equal(groundingPointId, Assert.Single(
+            session.PersistenceSession.Domain.GroundingPoints).GroundingPointId);
+    }
+
+    [Fact]
     public void PoleWorkflow_ExposesOneOrMultipleRouteBasedCandidates()
     {
         Scenario scenario = CreateScenario();

@@ -262,7 +262,9 @@ internal sealed class ClipboardFragmentMaterializer
                     Map(snapshot.GroundingAccessPointId),
                     Map(snapshot.ConnectionId),
                     Map(snapshot.PoleId),
-                    Map(snapshot.AdjacentPoleId),
+                    new GroundingAdjacentEndpoint(
+                        snapshot.AdjacentEndpoint.Kind,
+                        Map(snapshot.AdjacentEndpoint.TargetId)),
                     snapshot.LineSide)));
         }
 
@@ -372,7 +374,7 @@ internal sealed class ClipboardFragmentMaterializer
                 item.GroundingAccessPointId,
                 item.ConnectionId,
                 item.PoleId,
-                item.AdjacentPoleId
+                item.AdjacentEndpoint.TargetId
             });
         }
 

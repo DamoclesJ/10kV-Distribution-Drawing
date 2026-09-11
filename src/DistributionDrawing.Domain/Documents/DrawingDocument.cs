@@ -1311,6 +1311,11 @@ public sealed class DrawingDocument
             AddConnection(after);
             line.ValidateAgainst(after);
             ValidateOverheadEndpoints(after, line);
+            foreach (GroundingAccessPoint point in _groundingAccessPoints.Where(point =>
+                         point.ConnectionId == line.ConnectionId))
+            {
+                ValidateGroundingAccessPoint(point);
+            }
         }
         catch
         {
@@ -1543,11 +1548,26 @@ public sealed class DrawingDocument
         Guid adjacentPoleId,
         GroundingAccessLineSide lineSide)
     {
+        return CreateGroundingAccessPoint(
+            groundingAccessPointId,
+            connectionId,
+            poleId,
+            GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
+            lineSide);
+    }
+
+    public GroundingAccessPoint CreateGroundingAccessPoint(
+        Guid groundingAccessPointId,
+        Guid connectionId,
+        Guid poleId,
+        GroundingAdjacentEndpoint adjacentEndpoint,
+        GroundingAccessLineSide lineSide)
+    {
         var point = new GroundingAccessPoint(
             groundingAccessPointId,
             connectionId,
             poleId,
-            adjacentPoleId,
+            adjacentEndpoint,
             lineSide);
         AddGroundingAccessPoint(point);
         return point;
@@ -1562,7 +1582,7 @@ public sealed class DrawingDocument
         if (_groundingAccessPoints.Any(existing =>
                 existing.ConnectionId == point.ConnectionId &&
                 existing.PoleId == point.PoleId &&
-                existing.AdjacentPoleId == point.AdjacentPoleId))
+                existing.AdjacentEndpoint == point.AdjacentEndpoint))
         {
             throw new InvalidOperationException(
                 "A grounding access point already exists on the selected conductor half-edge.");
@@ -1883,12 +1903,6 @@ public sealed class DrawingDocument
         {
             throw new InvalidOperationException($"Pole '{point.PoleId}' does not exist.");
         }
-        if (_devices.SingleOrDefault(device => device.Id == point.AdjacentPoleId) is not Pole)
-        {
-            throw new InvalidOperationException(
-                $"Adjacent pole '{point.AdjacentPoleId}' does not exist.");
-        }
-
         int poleIndex = line.SupportPoleIds.ToList().IndexOf(point.PoleId);
         if (poleIndex < 0)
         {
@@ -1896,14 +1910,62 @@ public sealed class DrawingDocument
                 $"Pole '{point.PoleId}' is not a support pole of overhead line '{point.ConnectionId}'.");
         }
 
-        bool isPredecessor = poleIndex > 0 &&
-                             line.SupportPoleIds[poleIndex - 1] == point.AdjacentPoleId;
-        bool isSuccessor = poleIndex + 1 < line.SupportPoleIds.Count &&
-                           line.SupportPoleIds[poleIndex + 1] == point.AdjacentPoleId;
-        if (!isPredecessor && !isSuccessor)
+        if (point.AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Pole)
+        {
+            Guid adjacentPoleId = point.AdjacentEndpoint.TargetId;
+            if (_devices.SingleOrDefault(device => device.Id == adjacentPoleId) is not Pole)
+            {
+                throw new InvalidOperationException(
+                    $"Adjacent pole '{adjacentPoleId}' does not exist.");
+            }
+
+            bool isPredecessor = poleIndex > 0 &&
+                                 line.SupportPoleIds[poleIndex - 1] == adjacentPoleId;
+            bool isSuccessor = poleIndex + 1 < line.SupportPoleIds.Count &&
+                               line.SupportPoleIds[poleIndex + 1] == adjacentPoleId;
+            if (!isPredecessor && !isSuccessor)
+            {
+                throw new InvalidOperationException(
+                    $"Pole '{adjacentPoleId}' is not directly adjacent to pole '{point.PoleId}' on overhead line '{point.ConnectionId}'.");
+            }
+            return;
+        }
+
+        if (point.AdjacentEndpoint.Kind != GroundingAdjacentEndpointKind.Terminal)
         {
             throw new InvalidOperationException(
-                $"Pole '{point.AdjacentPoleId}' is not directly adjacent to pole '{point.PoleId}' on overhead line '{point.ConnectionId}'.");
+                $"Unsupported grounding adjacent endpoint kind '{point.AdjacentEndpoint.Kind}'.");
+        }
+        if (line.SupportPoleIds.Count != 1 || line.SupportPoleIds[0] != point.PoleId)
+        {
+            throw new InvalidOperationException(
+                "A terminal grounding adjacent endpoint requires a single-support-pole overhead line.");
+        }
+
+        Guid terminalId = point.AdjacentEndpoint.TargetId;
+        Terminal terminal = GetTerminal(terminalId);
+        if (!connection.UsesTerminal(terminalId))
+        {
+            throw new InvalidOperationException(
+                $"Terminal '{terminalId}' is not an endpoint of connection '{connection.Id}'.");
+        }
+        if (terminal.OwnerType != TopologyOwnerType.Device ||
+            _devices.SingleOrDefault(device => device.Id == terminal.OwnerId) is not Transformer transformer ||
+            transformer.HvTerminalId != terminalId ||
+            transformer.TransformerKind is not (TransformerKind.PublicPoleMounted or
+                TransformerKind.DedicatedPoleMounted or TransformerKind.PublicIndoor))
+        {
+            throw new InvalidOperationException(
+                $"Terminal '{terminalId}' is not an eligible transformer HV terminal endpoint.");
+        }
+
+        Guid oppositeTerminalId = connection.StartTerminalId == terminalId
+            ? connection.EndTerminalId
+            : connection.StartTerminalId;
+        if (ValidateOverheadEndpoint(oppositeTerminalId, point.PoleId) != point.PoleId)
+        {
+            throw new InvalidOperationException(
+                $"The opposite endpoint of connection '{connection.Id}' is not physically owned by pole '{point.PoleId}'.");
         }
     }
 

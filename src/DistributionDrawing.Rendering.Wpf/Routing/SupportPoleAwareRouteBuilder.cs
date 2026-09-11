@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -20,6 +21,25 @@ public static class SupportPoleAwareRouteBuilder
         Guid adjacentPoleId,
         out GroundingAccessHalfEdge halfEdge)
     {
+        return TryResolveHalfEdge(
+            route,
+            line,
+            layout,
+            poleId,
+            GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
+            null,
+            out halfEdge);
+    }
+
+    public static bool TryResolveHalfEdge(
+        OrthogonalRoute route,
+        OverheadLine line,
+        DrawingLayout layout,
+        Guid poleId,
+        GroundingAdjacentEndpoint adjacentEndpoint,
+        Connection? connection,
+        out GroundingAccessHalfEdge halfEdge)
+    {
         ArgumentNullException.ThrowIfNull(route);
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(layout);
@@ -32,6 +52,34 @@ public static class SupportPoleAwareRouteBuilder
             return false;
         }
 
+        if (adjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Terminal)
+        {
+            if (connection is null || connection.Id != line.ConnectionId ||
+                line.SupportPoleIds.Count != 1 ||
+                !connection.UsesTerminal(adjacentEndpoint.TargetId) ||
+                route.Segments.Count == 0)
+            {
+                halfEdge = default;
+                return false;
+            }
+
+            DocumentPoint terminalEndpointPole = PoleProfessionalGeometry.GetPoleCenter(poleLayout);
+            bool poleSideIsStart = connection.EndTerminalId == adjacentEndpoint.TargetId;
+            OrthogonalRouteSegment segment = poleSideIsStart
+                ? route.Segments[0]
+                : route.Segments[^1];
+            DocumentPoint origin = poleSideIsStart ? segment.Start : segment.End;
+            DocumentPoint direction = poleSideIsStart ? segment.End : segment.Start;
+            if (origin == direction)
+            {
+                halfEdge = default;
+                return false;
+            }
+            halfEdge = new GroundingAccessHalfEdge(terminalEndpointPole, origin, direction);
+            return true;
+        }
+
+        Guid adjacentPoleId = adjacentEndpoint.TargetId;
         bool predecessor = poleIndex > 0 &&
                            line.SupportPoleIds[poleIndex - 1] == adjacentPoleId;
         bool successor = poleIndex + 1 < line.SupportPoleIds.Count &&

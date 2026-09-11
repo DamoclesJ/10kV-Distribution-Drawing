@@ -6,6 +6,41 @@ public enum GroundingAccessLineSide
     LargerNumberSide
 }
 
+public enum GroundingAdjacentEndpointKind
+{
+    Pole,
+    Terminal
+}
+
+public sealed record GroundingAdjacentEndpoint
+{
+    public GroundingAdjacentEndpoint(GroundingAdjacentEndpointKind kind, Guid targetId)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (targetId == Guid.Empty)
+        {
+            throw new ArgumentException("Adjacent endpoint target ID cannot be empty.", nameof(targetId));
+        }
+
+        Kind = kind;
+        TargetId = targetId;
+    }
+
+    public GroundingAdjacentEndpointKind Kind { get; }
+
+    public Guid TargetId { get; }
+
+    public static GroundingAdjacentEndpoint ForPole(Guid poleId) =>
+        new(GroundingAdjacentEndpointKind.Pole, poleId);
+
+    public static GroundingAdjacentEndpoint ForTerminal(Guid terminalId) =>
+        new(GroundingAdjacentEndpointKind.Terminal, terminalId);
+}
+
 public sealed class GroundingAccessPoint
 {
     public GroundingAccessPoint(
@@ -13,6 +48,21 @@ public sealed class GroundingAccessPoint
         Guid connectionId,
         Guid poleId,
         Guid adjacentPoleId,
+        GroundingAccessLineSide lineSide)
+        : this(
+            groundingAccessPointId,
+            connectionId,
+            poleId,
+            GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
+            lineSide)
+    {
+    }
+
+    public GroundingAccessPoint(
+        Guid groundingAccessPointId,
+        Guid connectionId,
+        Guid poleId,
+        GroundingAdjacentEndpoint adjacentEndpoint,
         GroundingAccessLineSide lineSide)
     {
         if (groundingAccessPointId == Guid.Empty)
@@ -32,12 +82,9 @@ public sealed class GroundingAccessPoint
             throw new ArgumentException("Pole ID cannot be empty.", nameof(poleId));
         }
 
-        if (adjacentPoleId == Guid.Empty)
-        {
-            throw new ArgumentException("Adjacent pole ID cannot be empty.", nameof(adjacentPoleId));
-        }
-
-        if (poleId == adjacentPoleId)
+        ArgumentNullException.ThrowIfNull(adjacentEndpoint);
+        if (adjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Pole &&
+            poleId == adjacentEndpoint.TargetId)
         {
             throw new ArgumentException("A grounding access point requires a different adjacent pole.");
         }
@@ -50,7 +97,7 @@ public sealed class GroundingAccessPoint
         GroundingAccessPointId = groundingAccessPointId;
         ConnectionId = connectionId;
         PoleId = poleId;
-        AdjacentPoleId = adjacentPoleId;
+        AdjacentEndpoint = adjacentEndpoint;
         LineSide = lineSide;
     }
 
@@ -60,7 +107,11 @@ public sealed class GroundingAccessPoint
 
     public Guid PoleId { get; }
 
-    public Guid AdjacentPoleId { get; }
+    public GroundingAdjacentEndpoint AdjacentEndpoint { get; }
+
+    public Guid AdjacentPoleId => AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Pole
+        ? AdjacentEndpoint.TargetId
+        : throw new InvalidOperationException("This grounding access point has a terminal adjacent endpoint.");
 
     public GroundingAccessLineSide LineSide { get; }
 }

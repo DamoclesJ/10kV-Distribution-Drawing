@@ -23,7 +23,7 @@ public sealed class ProfessionalCommandFactory
         if (!IsEligibleNewTerminalTarget(document, terminalId))
         {
             throw new InvalidOperationException(
-                "Only an eligible cable-side terminal can receive a new terminal-target grounding point.");
+                "Only an eligible terminal can receive a new terminal-target grounding point.");
         }
 
         return CreateAddGroundingPoint(
@@ -97,12 +97,29 @@ public sealed class ProfessionalCommandFactory
         GroundingAccessLineSide lineSide,
         Guid? groundingAccessPointId = null)
     {
+        return CreateAddGroundingAccessPoint(
+            document,
+            connectionId,
+            poleId,
+            GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
+            lineSide,
+            groundingAccessPointId);
+    }
+
+    public AddGroundingAccessPointCommand CreateAddGroundingAccessPoint(
+        DrawingDocument document,
+        Guid connectionId,
+        Guid poleId,
+        GroundingAdjacentEndpoint adjacentEndpoint,
+        GroundingAccessLineSide lineSide,
+        Guid? groundingAccessPointId = null)
+    {
         ArgumentNullException.ThrowIfNull(document);
         var snapshot = new GroundingAccessPointCommandSnapshot(
             groundingAccessPointId ?? Guid.NewGuid(),
             connectionId,
             poleId,
-            adjacentPoleId,
+            adjacentEndpoint,
             lineSide);
         return new AddGroundingAccessPointCommand(document, snapshot);
     }
@@ -133,11 +150,30 @@ public sealed class ProfessionalCommandFactory
         string? location = null,
         string? note = null)
     {
+        return CreateAddGroundingAccessPointWithGroundingPoint(
+            document,
+            connectionId,
+            poleId,
+            GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
+            lineSide,
+            location,
+            note);
+    }
+
+    public CompositeProfessionalCommand CreateAddGroundingAccessPointWithGroundingPoint(
+        DrawingDocument document,
+        Guid connectionId,
+        Guid poleId,
+        GroundingAdjacentEndpoint adjacentEndpoint,
+        GroundingAccessLineSide lineSide,
+        string? location = null,
+        string? note = null)
+    {
         AddGroundingAccessPointCommand addAccessPoint = CreateAddGroundingAccessPoint(
             document,
             connectionId,
             poleId,
-            adjacentPoleId,
+            adjacentEndpoint,
             lineSide);
         string normalizedLocation = string.IsNullOrWhiteSpace(location)
             ? GroundingPointLocationResolver.ResolveGroundingAccessPoint(
@@ -315,6 +351,12 @@ public sealed class ProfessionalCommandFactory
 
         if (document.CustomerStations.SelectMany(station => station.IncomingFeeders)
             .Any(feeder => feeder.CableTerminalId == terminalId))
+        {
+            return true;
+        }
+
+        if (document.Transformers.Any(transformer =>
+                transformer.HvTerminalId == terminalId))
         {
             return true;
         }

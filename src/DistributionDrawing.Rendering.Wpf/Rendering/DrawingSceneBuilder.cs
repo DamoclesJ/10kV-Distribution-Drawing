@@ -500,7 +500,9 @@ public sealed class DrawingSceneBuilder
                                 groundingAccessPoints?.Any(point =>
                                     point.ConnectionId == overheadLine.ConnectionId &&
                                     point.PoleId == poleId &&
-                                    point.AdjacentPoleId == adjacentPoleId) == true
+                                    point.AdjacentEndpoint.Kind ==
+                                        GroundingAdjacentEndpointKind.Pole &&
+                                    point.AdjacentEndpoint.TargetId == adjacentPoleId) == true
                                     ? DirectionalExtent(center, adjacent, envelope) +
                                       _metrics.Line.GroundingAccessClearance +
                                       (_metrics.Line.GroundingAccessMarkerDiameter +

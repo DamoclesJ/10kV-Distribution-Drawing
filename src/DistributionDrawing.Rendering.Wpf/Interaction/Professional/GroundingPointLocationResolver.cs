@@ -39,6 +39,12 @@ public static class GroundingPointLocationResolver
             return $"{feeder.DisplayName}进线";
         }
 
+        if (document.Transformers.Any(transformer =>
+                transformer.HvTerminalId == target.TargetId))
+        {
+            return "变压器高压侧";
+        }
+
         CableTermination? termination = document.Devices.OfType<CableTermination>()
             .SingleOrDefault(item => item.CableSideTerminalId == target.TargetId);
         if (termination is not null)

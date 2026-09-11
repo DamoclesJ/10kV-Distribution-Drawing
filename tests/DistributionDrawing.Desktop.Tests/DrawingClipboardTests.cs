@@ -833,6 +833,60 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
+    public void TransformerEndpointGapClipboard_RemapsTerminalEndpointToCopiedTransformer()
+    {
+        ProjectRuntimeSession session = CreateSession("WP-EM-07A GAP 复制");
+        AddPoleCommand pole = AddPole(session, new DocumentPoint(20, 40));
+        var factory = new DeviceCommandFactory();
+        AddPoleSwitchAttachmentCommand fuse = factory.CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            pole.Pole.Id,
+            SwitchKind.DropoutFuse,
+            new DocumentPoint(15, 0));
+        fuse.Execute();
+        AddTransformerCommand transformer = factory.CreateAddTransformer(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            TransformerKind.PublicPoleMounted,
+            new DocumentPoint(90, 40));
+        transformer.Execute();
+        AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            fuse.Creation.SecondTerminal.Id,
+            transformer.Creation.HvTerminal.Id,
+            new DocumentPoint(35, 40),
+            new DocumentPoint(90, 40));
+        line.Execute();
+        GroundingAccessPoint source = session.PersistenceSession.Domain.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            line.Connection.Id,
+            pole.Pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(transformer.Creation.HvTerminal.Id),
+            GroundingAccessLineSide.LargerNumberSide);
+        session.RebuildScene();
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.GroundingAccessPoint,
+            source.GroundingAccessPointId));
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        GroundingAccessPoint copied = Assert.Single(
+            session.PersistenceSession.Domain.GroundingAccessPoints,
+            point => point.GroundingAccessPointId != source.GroundingAccessPointId);
+        Transformer copiedTransformer = Assert.Single(
+            session.PersistenceSession.Domain.Transformers,
+            item => item.Id != transformer.Creation.Transformer.Id);
+        Assert.Equal(GroundingAdjacentEndpointKind.Terminal, copied.AdjacentEndpoint.Kind);
+        Assert.Equal(copiedTransformer.HvTerminalId, copied.AdjacentEndpoint.TargetId);
+        Assert.NotEqual(source.AdjacentEndpoint.TargetId, copied.AdjacentEndpoint.TargetId);
+        Assert.Equal(source.LineSide, copied.LineSide);
+    }
+
+    [Fact]
     public void GroundingPointInCopyClosureBlocksCopyUntilDeleted()
     {
         ProjectRuntimeSession session = CreateSession("GAP 工作地线阻止复制");

@@ -388,7 +388,7 @@ public partial class MainWindow : Window
             GroundingAccessPoint point = session.PersistenceSession.Domain.GroundingAccessPoints
                 .Single(item => item.ConnectionId == candidate.ConnectionId &&
                                 item.PoleId == candidate.PoleId &&
-                                item.AdjacentPoleId == candidate.AdjacentPoleId);
+                                item.AdjacentEndpoint == candidate.AdjacentEndpoint);
             session.SelectionManager.Select(new SelectionReference(
                 SelectionTargetKind.GroundingAccessPoint,
                 point.GroundingAccessPointId));

@@ -31,14 +31,18 @@ public sealed class GroundingAccessPointAnchorResolver
 
         OverheadLine? line = document.OverheadLines.SingleOrDefault(candidate =>
             candidate.ConnectionId == point.ConnectionId);
+        Connection? connection = document.Connections.SingleOrDefault(candidate =>
+            candidate.Id == point.ConnectionId);
         if (line is null ||
+            connection is null ||
             !routes.TryGetValue(point.ConnectionId, out OrthogonalRoute? route) ||
             !SupportPoleAwareRouteBuilder.TryResolveHalfEdge(
                 route,
                 line,
                 layout,
                 point.PoleId,
-                point.AdjacentPoleId,
+                point.AdjacentEndpoint,
+                connection,
                 out GroundingAccessHalfEdge halfEdge))
         {
             anchor = default;

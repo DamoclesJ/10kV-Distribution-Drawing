@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
@@ -345,7 +346,7 @@ public sealed class TransformerSliceCTests
     }
 
     [Fact]
-    public void FormalTransformerAnchor_DoesNotEnableGroundingCreation()
+    public void FormalTransformerAnchor_EnablesGroundingCreation()
     {
         TransformerCreation creation = Create(TransformerKind.PublicIndoor);
         DrawingDocument document = DocumentWith(creation);
@@ -357,9 +358,317 @@ public sealed class TransformerSliceCTests
             transformerLayouts: runtime.TransformerLayouts);
 
         Assert.True(anchors.TryGet(creation.HvTerminal.Id, out _));
-        Assert.False(ProfessionalCommandFactory.IsEligibleNewTerminalTarget(
+        Assert.True(ProfessionalCommandFactory.IsEligibleNewTerminalTarget(
             document,
             creation.HvTerminal.Id));
+    }
+
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted)]
+    [InlineData(TransformerKind.DedicatedPoleMounted)]
+    [InlineData(TransformerKind.PublicIndoor)]
+    public void TransformerHvGrounding_UsesExactTerminalAndDefaultLocation(
+        TransformerKind kind)
+    {
+        TransformerCreation creation = Create(kind);
+        DrawingDocument document = DocumentWith(creation);
+        ICommand command = new ProfessionalCommandFactory().CreateAddGroundingPoint(
+            document,
+            creation.HvTerminal.Id,
+            groundingPointId: Guid.NewGuid());
+
+        command.Execute();
+
+        GroundingPoint grounding = Assert.Single(document.GroundingPoints);
+        Assert.Equal(GroundingTarget.ForTerminal(creation.Transformer.HvTerminalId), grounding.Target);
+        Assert.Equal("变压器高压侧", grounding.Location);
+        Assert.Throws<InvalidOperationException>(() =>
+            document.RemoveDevice(creation.Transformer.Id));
+        command.Undo();
+        Assert.Empty(document.GroundingPoints);
+        command.Redo();
+        GroundingPoint restored = Assert.Single(document.GroundingPoints);
+        Assert.Equal(grounding.GroundingPointId, restored.GroundingPointId);
+        Assert.Equal(
+            GroundingTarget.ForTerminal(creation.Transformer.HvTerminalId),
+            restored.Target);
+        command.Undo();
+        document.RemoveDevice(creation.Transformer.Id);
+        Assert.DoesNotContain(creation.Transformer, document.Devices);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TransformerGroundingPresentation_FollowsConnectedRouteOrientation(
+        bool horizontalIncoming)
+    {
+        TransformerCreation creation = Create(TransformerKind.PublicIndoor);
+        DrawingDocument document = DocumentWith(creation);
+        RuntimeLayoutDocument runtime = RuntimeWith(creation);
+        var otherDevice = new Device(Guid.NewGuid(), DeviceType.PT);
+        var otherTerminal = new Terminal(
+            Guid.NewGuid(), TopologyOwnerType.Device, otherDevice.Id, "Cable",
+            Transformer.TenKilovolts, true, false,
+            allowedConnectionTypes: [ConnectionType.Cable]);
+        document.AddDevice(otherDevice);
+        document.AddTerminal(otherTerminal);
+        var connection = new Connection(
+            Guid.NewGuid(), ConnectionType.Cable,
+            creation.HvTerminal.Id, otherTerminal.Id,
+            "测试电缆", Transformer.TenKilovolts);
+        document.AddConnection(connection);
+        GroundingPoint point = document.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForTerminal(creation.HvTerminal.Id),
+            "变压器高压侧", "S01");
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts,
+            transformerLayouts: runtime.TransformerLayouts);
+        Assert.True(anchors.TryGet(creation.HvTerminal.Id, out TerminalAnchor terminalAnchor));
+        DocumentPoint end = horizontalIncoming
+            ? new DocumentPoint(terminalAnchor.Position.XMillimeters - 40, terminalAnchor.Position.YMillimeters)
+            : new DocumentPoint(terminalAnchor.Position.XMillimeters, terminalAnchor.Position.YMillimeters - 40);
+        var route = new OrthogonalRoute(
+            connection.Id,
+            connection.Type,
+            connection.StartTerminalId,
+            connection.EndTerminalId,
+            [terminalAnchor.Position, end]);
+
+        Assert.True(new GroundingPresentationAnchorResolver().TryResolve(
+            point,
+            document,
+            runtime.DrawingLayout,
+            anchors,
+            new Dictionary<Guid, OrthogonalRoute> { [connection.Id] = route },
+            runtime.TransformerLayouts,
+            null,
+            out GroundingPresentationAnchor presentation));
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            presentation,
+            null);
+        var manualLayout = new GroundingPointLayout(
+            point.GroundingPointId,
+            new DocumentPoint(7, -3));
+        GroundingPointResolvedLayout manual = new GroundingPointLayoutResolver().Resolve(
+            point,
+            presentation,
+            manualLayout);
+        Assert.Equal(
+            new DocumentPoint(
+                resolved.DefaultSymbolTop.XMillimeters + 7,
+                resolved.DefaultSymbolTop.YMillimeters - 3),
+            manual.SymbolTop);
+
+        if (horizontalIncoming)
+        {
+            Assert.Equal(TerminalAnchorDirection.Down, presentation.Direction);
+            Assert.True(Assert.Single(resolved.LeaderSegments).IsVertical);
+        }
+        else
+        {
+            Assert.Contains(presentation.Direction,
+                new[] { TerminalAnchorDirection.Left, TerminalAnchorDirection.Right });
+            Assert.True(resolved.LeaderSegments[0].IsHorizontal);
+        }
+        Assert.Equal(creation.HvTerminal.Id, point.Target.TargetId);
+    }
+
+    [Fact]
+    public void TransformerGroundingPresentation_VerticalIncomingChoosesLeftAwayFromBody()
+    {
+        TransformerCreation creation = Create(
+            TransformerKind.PublicIndoor,
+            TransformerOrientation.Horizontal);
+        DrawingDocument document = DocumentWith(creation);
+        RuntimeLayoutDocument runtime = RuntimeWith(creation);
+        var otherDevice = new Device(Guid.NewGuid(), DeviceType.PT);
+        var otherTerminal = new Terminal(
+            Guid.NewGuid(), TopologyOwnerType.Device, otherDevice.Id, "Cable",
+            Transformer.TenKilovolts, true, false,
+            allowedConnectionTypes: [ConnectionType.Cable]);
+        document.AddDevice(otherDevice);
+        document.AddTerminal(otherTerminal);
+        var connection = new Connection(
+            Guid.NewGuid(), ConnectionType.Cable,
+            creation.HvTerminal.Id, otherTerminal.Id,
+            "Vertical incoming cable", Transformer.TenKilovolts);
+        document.AddConnection(connection);
+        GroundingPoint point = document.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForTerminal(creation.HvTerminal.Id),
+            "变压器高压侧", "S01");
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts,
+            transformerLayouts: runtime.TransformerLayouts);
+        Assert.True(anchors.TryGet(
+            creation.HvTerminal.Id,
+            out TerminalAnchor terminalAnchor));
+        TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+            creation.Transformer,
+            creation.Layout,
+            DrawingMetrics.Default.Transformer);
+        double bodyCenterX = geometry.Bounds.XMillimeters +
+            geometry.Bounds.WidthMillimeters / 2;
+        Assert.True(terminalAnchor.Position.XMillimeters < bodyCenterX);
+        var route = new OrthogonalRoute(
+            connection.Id,
+            connection.Type,
+            connection.StartTerminalId,
+            connection.EndTerminalId,
+            [
+                terminalAnchor.Position,
+                new DocumentPoint(
+                    terminalAnchor.Position.XMillimeters,
+                    terminalAnchor.Position.YMillimeters - 40)
+            ]);
+
+        Assert.True(new GroundingPresentationAnchorResolver().TryResolve(
+            point,
+            document,
+            runtime.DrawingLayout,
+            anchors,
+            new Dictionary<Guid, OrthogonalRoute> { [connection.Id] = route },
+            runtime.TransformerLayouts,
+            null,
+            out GroundingPresentationAnchor presentation));
+        GroundingPointResolvedLayout resolved = new GroundingPointLayoutResolver().Resolve(
+            point,
+            presentation,
+            null);
+
+        Assert.Equal(GroundingPresentationPolicy.TransformerTerminal, presentation.Policy);
+        Assert.Equal(TerminalAnchorDirection.Left, presentation.Direction);
+        Assert.True(resolved.LeaderSegments[0].IsHorizontal);
+        Assert.Equal(creation.HvTerminal.Id, point.Target.TargetId);
+    }
+
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted)]
+    [InlineData(TransformerKind.DedicatedPoleMounted)]
+    [InlineData(TransformerKind.PublicIndoor)]
+    public void TransformerGroundingPresentation_WithoutConnectionUsesFormalDirection(
+        TransformerKind kind)
+    {
+        TransformerCreation creation = Create(kind);
+        DrawingDocument document = DocumentWith(creation);
+        RuntimeLayoutDocument runtime = RuntimeWith(creation);
+        GroundingPoint point = document.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForTerminal(creation.HvTerminal.Id),
+            "变压器高压侧", "S01");
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts,
+            transformerLayouts: runtime.TransformerLayouts);
+        Assert.True(anchors.TryGet(
+            creation.HvTerminal.Id,
+            out TerminalAnchor formalAnchor));
+        TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+            creation.Transformer,
+            creation.Layout,
+            DrawingMetrics.Default.Transformer);
+
+        Assert.True(new GroundingPresentationAnchorResolver().TryResolve(
+            point,
+            document,
+            runtime.DrawingLayout,
+            anchors,
+            new Dictionary<Guid, OrthogonalRoute>(),
+            runtime.TransformerLayouts,
+            null,
+            out GroundingPresentationAnchor presentation));
+
+        Assert.Equal(formalAnchor.Direction, presentation.Direction);
+        switch (formalAnchor.Direction)
+        {
+            case TerminalAnchorDirection.Left:
+                Assert.Equal(geometry.Bounds.XMillimeters, presentation.Position.XMillimeters);
+                break;
+            case TerminalAnchorDirection.Right:
+                Assert.Equal(
+                    geometry.Bounds.XMillimeters + geometry.Bounds.WidthMillimeters,
+                    presentation.Position.XMillimeters);
+                break;
+            case TerminalAnchorDirection.Up:
+                Assert.Equal(geometry.Bounds.YMillimeters, presentation.Position.YMillimeters);
+                break;
+            case TerminalAnchorDirection.Down:
+                Assert.Equal(
+                    geometry.Bounds.YMillimeters + geometry.Bounds.HeightMillimeters,
+                    presentation.Position.YMillimeters);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+        Assert.Equal(GroundingPresentationPolicy.TransformerTerminal, presentation.Policy);
+        Assert.Equal(creation.HvTerminal.Id, point.Target.TargetId);
+    }
+
+    [Fact]
+    public void PublicIndoorOrientationChange_ExistingGroundingKeepsIdentityAndFollowsAnchor()
+    {
+        TransformerCreation creation = Create(
+            TransformerKind.PublicIndoor,
+            TransformerOrientation.Horizontal);
+        DrawingDocument document = DocumentWith(creation);
+        RuntimeLayoutDocument runtime = RuntimeWith(creation);
+        GroundingPoint grounding = document.CreateGroundingPoint(
+            Guid.NewGuid(),
+            GroundingTarget.ForTerminal(creation.HvTerminal.Id),
+            "变压器高压侧",
+            "S01");
+        Guid groundingPointId = grounding.GroundingPointId;
+        Guid hvTerminalId = creation.Transformer.HvTerminalId;
+        GroundingTarget target = grounding.Target;
+        TerminalAnchor formalBefore = Anchor(document, runtime, hvTerminalId);
+        GroundingPresentationAnchor presentationBefore = ResolvePresentation(
+            grounding,
+            document,
+            runtime);
+        var stack = new CommandStack();
+        var command = new SetTransformerOrientationCommand(
+            runtime,
+            creation.Transformer,
+            TransformerOrientation.Vertical);
+
+        stack.ExecuteCommand(command);
+
+        GroundingPoint afterExecute = Assert.Single(document.GroundingPoints);
+        TerminalAnchor formalAfter = Anchor(document, runtime, hvTerminalId);
+        GroundingPresentationAnchor presentationAfter = ResolvePresentation(
+            afterExecute,
+            document,
+            runtime);
+        Assert.Equal(hvTerminalId, creation.Transformer.HvTerminalId);
+        Assert.Equal(groundingPointId, afterExecute.GroundingPointId);
+        Assert.Equal(target, afterExecute.Target);
+        Assert.NotEqual(formalBefore.Position, formalAfter.Position);
+        Assert.NotEqual(presentationBefore.Position, presentationAfter.Position);
+
+        Assert.True(stack.Undo());
+        GroundingPoint afterUndo = Assert.Single(document.GroundingPoints);
+        Assert.Equal(hvTerminalId, creation.Transformer.HvTerminalId);
+        Assert.Equal(groundingPointId, afterUndo.GroundingPointId);
+        Assert.Equal(target, afterUndo.Target);
+        Assert.Equal(formalBefore, Anchor(document, runtime, hvTerminalId));
+        Assert.Equal(
+            presentationBefore,
+            ResolvePresentation(afterUndo, document, runtime));
+
+        Assert.True(stack.Redo());
+        GroundingPoint afterRedo = Assert.Single(document.GroundingPoints);
+        Assert.Equal(hvTerminalId, creation.Transformer.HvTerminalId);
+        Assert.Equal(groundingPointId, afterRedo.GroundingPointId);
+        Assert.Equal(target, afterRedo.Target);
+        Assert.Equal(formalAfter, Anchor(document, runtime, hvTerminalId));
+        Assert.Equal(
+            presentationAfter,
+            ResolvePresentation(afterRedo, document, runtime));
     }
 
     private static TransformerCreation Create(
@@ -396,6 +705,28 @@ public sealed class TransformerSliceCTests
             runtime.TransformerLayouts);
         Assert.True(anchors.TryGet(terminalId, out TerminalAnchor anchor));
         return anchor;
+    }
+
+    private static GroundingPresentationAnchor ResolvePresentation(
+        GroundingPoint groundingPoint,
+        DrawingDocument document,
+        RuntimeLayoutDocument runtime)
+    {
+        TerminalAnchorIndex anchors = TerminalAnchorIndex.Build(
+            document,
+            runtime.DrawingLayout,
+            runtime.RingCabinetLayouts,
+            transformerLayouts: runtime.TransformerLayouts);
+        Assert.True(new GroundingPresentationAnchorResolver().TryResolve(
+            groundingPoint,
+            document,
+            runtime.DrawingLayout,
+            anchors,
+            new Dictionary<Guid, OrthogonalRoute>(),
+            runtime.TransformerLayouts,
+            null,
+            out GroundingPresentationAnchor presentation));
+        return presentation;
     }
 
     private static DocumentPoint CircleCenter(DocumentRect circle) => new(

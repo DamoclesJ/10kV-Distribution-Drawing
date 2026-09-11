@@ -29,13 +29,18 @@ public partial class GroundingAccessPointCreationDialog : Window
             return;
         }
         GroundingAccessLineSide? recommendation =
-            GroundingAccessPointCreationService.RecommendLineSide(
-                candidate.PoleNumber,
-                candidate.AdjacentPoleNumber);
+            candidate.AdjacentPoleNumber is string adjacentPoleNumber
+                ? GroundingAccessPointCreationService.RecommendLineSide(
+                    candidate.PoleNumber,
+                    adjacentPoleNumber)
+                : null;
         if (recommendation is null)
         {
             LineSideInput.SelectedIndex = -1;
-            RecommendationText.Text = "杆号无法可靠解析，请人工选择小号侧或大号侧。";
+            RecommendationText.Text = candidate.AdjacentEndpoint.Kind ==
+                GroundingAdjacentEndpointKind.Terminal
+                ? "变压器端没有相邻杆号，请人工选择小号侧或大号侧。"
+                : "杆号无法可靠解析，请人工选择小号侧或大号侧。";
             return;
         }
         LineSideInput.SelectedIndex = recommendation == GroundingAccessLineSide.SmallerNumberSide

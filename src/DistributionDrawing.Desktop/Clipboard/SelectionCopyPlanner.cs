@@ -123,7 +123,7 @@ internal sealed class SelectionCopyPlanner
                 point.GroundingAccessPointId,
                 point.ConnectionId,
                 point.PoleId,
-                point.AdjacentPoleId,
+                point.AdjacentEndpoint,
                 point.LineSide))
             .ToArray();
         HashSet<Guid> includedAccessPointIds = accessPoints
@@ -291,6 +291,30 @@ internal sealed class SelectionCopyPlanner
                 foreach (Guid poleId in line.SupportPoleIds)
                 {
                     poleIds.Add(poleId);
+                }
+                Connection gapConnection = document.Connections.Single(item =>
+                    item.Id == point.ConnectionId);
+                foreach (Guid terminalId in new[]
+                         { gapConnection.StartTerminalId, gapConnection.EndTerminalId })
+                {
+                    Terminal terminal = document.Terminals.Single(item => item.Id == terminalId);
+                    PoleAttachment? endpointAttachment = document.PoleAttachments
+                        .SingleOrDefault(attachment =>
+                            attachment.AttachedDeviceId == terminal.OwnerId);
+                    if (endpointAttachment is not null)
+                    {
+                        attachmentIds.Add(endpointAttachment.AttachmentId);
+                    }
+                }
+                if (point.AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Terminal)
+                {
+                    Transformer? transformer = document.Transformers.SingleOrDefault(candidate =>
+                        candidate.HvTerminalId == point.AdjacentEndpoint.TargetId);
+                    if (transformer is null)
+                    {
+                        return false;
+                    }
+                    transformerIds.Add(transformer.Id);
                 }
                 roots.Add(reference);
                 return true;

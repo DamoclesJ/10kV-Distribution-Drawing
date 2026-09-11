@@ -149,8 +149,13 @@ public sealed class PropertyProjector
         DrawingDocument document = selection.Document!;
         Connection connection = document.Connections.Single(item => item.Id == point.ConnectionId);
         Pole pole = document.Devices.OfType<Pole>().Single(item => item.Id == point.PoleId);
-        Pole adjacentPole = document.Devices.OfType<Pole>()
-            .Single(item => item.Id == point.AdjacentPoleId);
+        string adjacentEndpoint = point.AdjacentEndpoint.Kind switch
+        {
+            GroundingAdjacentEndpointKind.Pole => document.Devices.OfType<Pole>()
+                .Single(item => item.Id == point.AdjacentEndpoint.TargetId).PoleNumber,
+            GroundingAdjacentEndpointKind.Terminal => "变压器高压侧",
+            _ => throw new ArgumentOutOfRangeException()
+        };
         GroundingPoint? groundingPoint = document.GroundingPoints.SingleOrDefault(item =>
             item.Target == GroundingTarget.ForGroundingAccessPoint(point.GroundingAccessPointId));
         return Snapshot(
@@ -162,7 +167,7 @@ public sealed class PropertyProjector
                     "专业属性",
                     DomainRow("Connection", "线路", connection.DisplayName),
                     DomainRow("Pole", "杆塔", pole.PoleNumber),
-                    DomainRow("AdjacentPole", "相邻杆", adjacentPole.PoleNumber),
+                    DomainRow("AdjacentEndpoint", "相邻端点", adjacentEndpoint),
                     DomainRow("LineSide", "线路侧", LineSideText(point.LineSide)),
                     DomainRow("GroundingPoint", "工作地线", groundingPoint?.Number ?? "无"))
             ]);

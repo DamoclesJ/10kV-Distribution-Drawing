@@ -9,6 +9,62 @@ namespace DistributionDrawing.Domain.Tests;
 public sealed class GroundingAccessPointTests
 {
     [Fact]
+    public void TerminalAdjacentEndpoint_AllowsTransformerHvOnSingleSupportOverheadLine()
+    {
+        DrawingDocument document = TestFixtures.CreateDocument();
+        Pole pole = AddPole(document, "P-20");
+        Terminal poleTerminal = pole.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
+        document.AddTerminal(poleTerminal);
+        Guid transformerId = Guid.NewGuid();
+        Guid hvTerminalId = Guid.NewGuid();
+        var transformer = new Transformer(
+            transformerId,
+            TransformerKind.PublicPoleMounted,
+            hvTerminalId);
+        var hvTerminal = new Terminal(
+            hvTerminalId,
+            TopologyOwnerType.Device,
+            transformerId,
+            Transformer.HvTerminalRole,
+            Transformer.TenKilovolts,
+            true,
+            false,
+            allowedConnectionTypes: [ConnectionType.OverheadLine]);
+        document.AddTransformer(transformer, hvTerminal);
+        var connection = new Connection(
+            Guid.NewGuid(),
+            ConnectionType.OverheadLine,
+            poleTerminal.Id,
+            hvTerminal.Id,
+            "短架空线",
+            Transformer.TenKilovolts);
+        document.AddConnection(connection);
+        document.AddOverheadLine(new OverheadLine(connection.Id, "JKLYJ", [pole.Id]));
+
+        GroundingAccessPoint point = document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            connection.Id,
+            pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(hvTerminal.Id),
+            GroundingAccessLineSide.LargerNumberSide);
+
+        Assert.Equal(GroundingAdjacentEndpointKind.Terminal, point.AdjacentEndpoint.Kind);
+        Assert.Equal(hvTerminal.Id, point.AdjacentEndpoint.TargetId);
+        Assert.Throws<InvalidOperationException>(() => document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            connection.Id,
+            pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(poleTerminal.Id),
+            GroundingAccessLineSide.SmallerNumberSide));
+        Assert.Throws<InvalidOperationException>(() => document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            connection.Id,
+            pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(hvTerminal.Id),
+            GroundingAccessLineSide.SmallerNumberSide));
+    }
+
+    [Fact]
     public void Create_PreservesStableIdentityAndRequiresOverheadLine()
     {
         Scenario scenario = CreateScenario();
@@ -20,6 +76,10 @@ public sealed class GroundingAccessPointTests
         Assert.Equal(id, point.GroundingAccessPointId);
         Assert.Throws<InvalidOperationException>(() => scenario.Document.CreateGroundingAccessPoint(
             Guid.NewGuid(), Guid.NewGuid(), scenario.Start.Id, scenario.Middle.Id,
+            GroundingAccessLineSide.SmallerNumberSide));
+        Assert.Throws<InvalidOperationException>(() => scenario.Document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), scenario.Connection.Id, scenario.Start.Id,
+            GroundingAdjacentEndpoint.ForTerminal(scenario.Connection.EndTerminalId),
             GroundingAccessLineSide.SmallerNumberSide));
     }
 

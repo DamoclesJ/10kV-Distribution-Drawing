@@ -188,7 +188,7 @@ public sealed class TransformerSliceATests
     }
 
     [Fact]
-    public void TransformerHvTerminal_RemainsIneligibleForNewGroundingPoint()
+    public void TransformerHvTerminal_IsEligibleForNewGroundingPoint()
     {
         DrawingDocument document = CreateDocument();
         RuntimeLayoutDocument runtime = CreateRuntime();
@@ -197,7 +197,7 @@ public sealed class TransformerSliceATests
             new DocumentPoint(0, 0));
         new AddTransformerCommand(document, runtime, creation).Execute();
 
-        Assert.False(ProfessionalCommandFactory.IsEligibleNewTerminalTarget(
+        Assert.True(ProfessionalCommandFactory.IsEligibleNewTerminalTarget(
             document,
             creation.HvTerminal.Id));
     }
