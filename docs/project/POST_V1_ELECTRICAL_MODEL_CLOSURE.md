@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Requirements Frozen / Implementation Not Started / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Completed / WP-EM-02 Completed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -646,18 +646,25 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-07 — CustomerStation Vertical Slice
 
-**状态：Requirements Frozen / Implementation Not Started**
+**状态：Closed**
 
-正式需求合同以 3.3 节为准。完成 `BoxStation`、`IndoorStation`、one/two `IncomingFeeder`、required feeder `DisplayName`、feeder-owned `IsolationSwitch`、cable-only connection、independent feeder topology、GroundingPoint integration、per-feeder IndoorStation `ShowIncomingSwitch`、hidden-switch formal anchor switching、aggregate create/delete、professional rendering、selection、inspector、clipboard、Undo / Redo 和 V7 integration。
+正式需求合同以 3.3 节为准。WP-EM-07 已完成 implementation、code review、Windows automated verification 和 Windows professional visual acceptance。
 
-建议实施切片：
+#### WP-EM-07 Closure Evidence
 
-1. Slice A — Domain Aggregate + Commands + Connection / Grounding Legality：完成 CustomerStation / IncomingFeeder aggregate、typed switch owner runtime、两端 switch topology、atomic registration / removal、state / name commands、dependency guards，以及 Cable / Grounding eligibility；不进入 WPF glyph。
-2. Slice B — V7 Persistence + Clipboard + Topology Graph：在 V7 typed reservation 内补齐 feeder `Sequence` / `DisplayName` 与 per-feeder layout DTO，完成 mapper / validation / round-trip、Clipboard 全 aggregate ID remap 和 graph traversal regression；不升级 V8。
-3. Slice C — Professional Glyph + Formal Anchors + Scene + Selection + Inspector + Creation Workflow：完成 BoxStation / IndoorStation single / dual glyph、switch state geometry、per-feeder visibility、同一 Terminal ID 的 visible / hidden anchor、Cable / Grounding presentation、hit-test、selection、inspector、创建和统一删除工作流。
-4. Slice D — Windows Professional Acceptance + targeted fixes：基于 committed / pushed Slice A～C baseline 完成 Windows build、automated regression、single / dual feeder professional visual acceptance、independent switch operation、visibility / anchor、Cable / Grounding、Save / Reopen 与 Clipboard 场景；只做 targeted fixes，不吸收 WP-EM-08。
-
-WP-EM-07 requirements 已冻结：新建 feeder 的初始 `SwitchState = Open`；IndoorStation single feeder 固定左侧进线；dual feeder 固定 feeder A / `Sequence = 1` 位于左侧外缘、feeder B / `Sequence = 2` 位于右侧外缘；BoxStation 唯一 feeder 的 persisted `ShowIncomingSwitch` 必须为 `true`。本状态不表示 implementation started，Slice A 仍须在最终 diff review 后由独立实施轮次开始。
+- `CustomerStation` 已实现为正式 Electrical / Professional aggregate，支持 `StationKind.BoxStation` 与 `StationKind.IndoorStation`。
+- `BoxStation` 固定 exactly 1 个 `IncomingFeeder`；`IndoorStation` 支持 1 或 2 个 `IncomingFeeder`。每路 feeder 均拥有 stable `IncomingFeederId`、`Sequence`、`DisplayName`、`CableTerminalId`、`StationTerminalId`、`ElectricalNodeId` 和 feeder-owned `IsolationSwitch`。
+- feeder topology 已闭合为 `Cable → CableTerminalId → IsolationSwitch → StationTerminalId → ElectricalNodeId`。仅支持 Cable incoming；不支持 OverheadLine incoming；双 feeder 之间无 bus、coupler 或 electrical edge。
+- `CableTerminalId` 是合法的 terminal-based `GroundingTarget`。shown incoming switch 使用 CustomerStation-specific direct vertical downward grounding leader；hidden switch 回退到 body-edge presentation anchor。`GroundingTarget`、`GroundingPointId` 与 `CableTerminalId` identity 保持不变。
+- WP-EM-07 未增加 `SupplyState`、`Energized`、`DeEnergized`、`HasPower`、`IsEnergized` 或其它人工 Energization fact；Energization Analysis 继续 deferred，不在本 WP 维护第二套“有电 / 没电”事实。
+- 未实现 CustomerStation internal bus、bus coupler、station internal Transformer、LV topology 或 feeder-to-feeder electrical connection；这些边界保持明确排除。
+- `BoxStation` professional glyph 为 body + triangle + roof；最终 `RoofHeight = 15 mm`、`RoofOverhang = 5 mm`，屋面斜率约 `39.8°`，斜边经过 body top corners，eaves 向外并向下延伸。`IndoorStation` 无屋顶，单/双 feeder unit 保持相邻布局。
+- incoming switch 支持每路独立显示/隐藏；使用 2 mm short leads，不渲染 contact-circle presentation；formal CableTerminal anchor 随 shown/hidden presentation 派生切换。
+- CustomerStation toolbox icon 已与 `RingCabinet` 区分；用户界面使用“用户站号1 / 用户站号2”，底层正式业务事实仍为 `IncomingFeeder.DisplayName`；CustomerStation label 已接入统一 typography settings。
+- creation workflow、Inspector、feeder switch state control、aggregate delete、Selection、scene、hit-test、Clipboard、Undo / Redo、Save / Reopen 均已完成。
+- `FormatVersion` 保持 V7；typed CustomerStation persistence 已完成；未引入 V8 migration。
+- 验证结果：Domain tests PASS；Application tests PASS；Infrastructure tests PASS；Rendering.Wpf Windows tests PASS；Desktop Windows tests PASS；Windows professional visual acceptance PASS。
+- Closure 前最终实现基线：`ff1f76d6c88161e815ba295008ecfcf4f88e2c0c`。
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
@@ -698,7 +705,7 @@ WP-EM-07 requirements 已冻结：新建 feeder 的初始 `SwitchState = Open`�
 - WP-EM-02 V7 Format & Migration Foundation 已完成代码 Review、自动验证和 Windows 最终验证；
 - WP-EM-03 RingCabinet Optional CableTerminal Vertical Slice 已完成并 Closed，包含 Windows 最终验证；
 - WP-EM-04 requirements refinement、implementation、review、Windows runtime validation 和 GUI acceptance 已完成，WP-EM-04 Closed；
-- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint` vertical slice 与 Transformer vertical slice 已完成，CustomerStation 尚未实现；
+- 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
-- WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS，WP-EM-07 为 Next Work Package；
+- WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；WP-EM-08 为 Next Work Package；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
