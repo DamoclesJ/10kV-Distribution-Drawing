@@ -508,6 +508,18 @@ public sealed class DrawingSceneBuilder
                                       (_metrics.Line.GroundingAccessMarkerDiameter +
                                        _metrics.Line.ConnectionThickness) / 2
                                     : 0;
+                            bool TransformerTerminalGap(Guid terminalId) =>
+                                deviceById.Values.OfType<Transformer>().Any(transformer =>
+                                    transformer.HvTerminalId == terminalId &&
+                                    transformer.TransformerKind is
+                                        TransformerKind.PublicPoleMounted or
+                                        TransformerKind.DedicatedPoleMounted) &&
+                                groundingAccessPoints?.Any(point =>
+                                    point.ConnectionId == overheadLine.ConnectionId &&
+                                    point.PoleId == poleId &&
+                                    point.AdjacentEndpoint.Kind ==
+                                        GroundingAdjacentEndpointKind.Terminal &&
+                                    point.AdjacentEndpoint.TargetId == terminalId) == true;
                             double predecessor = supportIndex > 0
                                 ? Stub(overheadLine.SupportPoleIds[supportIndex - 1],
                                     PoleProfessionalGeometry.GetPoleCenter(
@@ -516,11 +528,15 @@ public sealed class DrawingSceneBuilder
                                 ? Stub(overheadLine.SupportPoleIds[supportIndex + 1],
                                     PoleProfessionalGeometry.GetPoleCenter(
                                         layout.Poles[overheadLine.SupportPoleIds[supportIndex + 1]])) : 0;
-                            if (allowStartSubstitution && successor > 0)
+                            bool terminalGapAtEnd = allowStartSubstitution &&
+                                TransformerTerminalGap(connection.EndTerminalId);
+                            bool terminalGapAtStart = allowEndSubstitution &&
+                                TransformerTerminalGap(connection.StartTerminalId);
+                            if (allowStartSubstitution && (successor > 0 || terminalGapAtEnd))
                             {
                                 successor = EndpointStub(connection.StartTerminalId);
                             }
-                            if (allowEndSubstitution && predecessor > 0)
+                            if (allowEndSubstitution && (predecessor > 0 || terminalGapAtStart))
                             {
                                 predecessor = EndpointStub(connection.EndTerminalId);
                             }

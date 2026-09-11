@@ -107,6 +107,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             diagnostic.Code == "GroundingAccessPointAnchorMissing");
         Assert.Contains(session.Scene.Elements.OfType<SceneEllipse>(), element =>
             element.TargetId == gap.GroundingAccessPointId);
+        AssertTerminalGapScene(session, pole.Pole.Id, gap);
 
         Guid groundingPointId = Assert.Single(
             session.PersistenceSession.Domain.GroundingPoints).GroundingPointId;
@@ -120,6 +121,61 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         Assert.Equal(candidate.AdjacentEndpoint, restoredGap.AdjacentEndpoint);
         Assert.Equal(groundingPointId, Assert.Single(
             session.PersistenceSession.Domain.GroundingPoints).GroundingPointId);
+    }
+
+    [Fact]
+    public void ShortOverheadLineToTransformer_WhenTransformerIsStart_ResolvesTerminalGapScene()
+    {
+        ProjectRuntimeSession session = CreateSession("WP-EM-07A mirrored short OHL");
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand pole = factory.CreateAddPole(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new DocumentPoint(20, 40));
+        pole.Execute();
+        AddPoleSwitchAttachmentCommand fuse = factory.CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            pole.Pole.Id,
+            SwitchKind.DropoutFuse,
+            new DocumentPoint(15, 0));
+        fuse.Execute();
+        AddTransformerCommand transformer = factory.CreateAddTransformer(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            TransformerKind.PublicPoleMounted,
+            new DocumentPoint(90, 40));
+        transformer.Execute();
+        AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            transformer.Creation.HvTerminal.Id,
+            fuse.Creation.SecondTerminal.Id,
+            new DocumentPoint(90, 40),
+            new DocumentPoint(35, 40));
+        line.Execute();
+        session.RebuildScene();
+
+        GroundingAccessCandidate candidate = Assert.Single(
+            GroundingAccessPointCreationService.GetCandidates(session, pole.Pole.Id));
+        Assert.Equal(GroundingAdjacentEndpointKind.Terminal, candidate.AdjacentEndpoint.Kind);
+        Assert.Equal(transformer.Creation.HvTerminal.Id, candidate.AdjacentEndpoint.TargetId);
+
+        session.CommandStack.ExecuteCommand(
+            GroundingAccessPointCreationService.CreateCommand(
+                session,
+                candidate,
+                GroundingAccessLineSide.LargerNumberSide,
+                addGroundingPoint: true),
+            session.RebuildScene);
+
+        GroundingAccessPoint gap = Assert.Single(
+            session.PersistenceSession.Domain.GroundingAccessPoints);
+        Assert.Equal(candidate.AdjacentEndpoint, gap.AdjacentEndpoint);
+        Assert.Equal(
+            GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
+            Assert.Single(session.PersistenceSession.Domain.GroundingPoints).Target);
+        AssertTerminalGapScene(session, pole.Pole.Id, gap);
     }
 
     [Fact]
@@ -827,6 +883,70 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         return Assert.Single(scene.Elements.OfType<SceneEllipse>(), ellipse =>
             Center(ellipse.Bounds) == center);
     }
+
+    private static void AssertTerminalGapScene(
+        ProjectRuntimeSession session,
+        Guid poleId,
+        GroundingAccessPoint gap)
+    {
+        DrawingDocument document = session.PersistenceSession.Domain;
+        OverheadLine line = Assert.Single(document.OverheadLines, item =>
+            item.ConnectionId == gap.ConnectionId);
+        Connection connection = Assert.Single(document.Connections, item =>
+            item.Id == gap.ConnectionId);
+        OrthogonalRoute route = Assert.Single(session.Scene.Routes, item =>
+            item.ConnectionId == gap.ConnectionId);
+        Assert.True(SupportPoleAwareRouteBuilder.TryResolveHalfEdge(
+            route,
+            line,
+            session.Layout.DrawingLayout,
+            poleId,
+            gap.AdjacentEndpoint,
+            connection,
+            out GroundingAccessHalfEdge halfEdge));
+        Assert.NotEqual(halfEdge.ConductorOrigin, halfEdge.DirectionPoint);
+        Assert.True(new GroundingAccessPointAnchorResolver().TryResolve(
+            gap,
+            document,
+            session.Layout.DrawingLayout,
+            new Dictionary<Guid, OrthogonalRoute> { [connection.Id] = route },
+            out GroundingPresentationAnchor anchor));
+        Assert.Contains(route.Segments, segment => Contains(segment, anchor.Position));
+
+        DocumentRect occupied = PoleProfessionalGeometry.GetOccupiedEnvelope(
+            poleId,
+            document,
+            session.Layout.DrawingLayout,
+            DrawingMetrics.Default);
+        double required = DrawingMetrics.Default.Line.GroundingAccessClearance +
+            (DrawingMetrics.Default.Line.GroundingAccessMarkerDiameter +
+             DrawingMetrics.Default.Line.ConnectionThickness) / 2;
+        DocumentRect forbidden = new(
+            occupied.XMillimeters - required,
+            occupied.YMillimeters - required,
+            occupied.WidthMillimeters + required * 2,
+            occupied.HeightMillimeters + required * 2);
+        Assert.True(
+            anchor.Position.XMillimeters <= forbidden.XMillimeters ||
+            anchor.Position.XMillimeters >= forbidden.XMillimeters + forbidden.WidthMillimeters ||
+            anchor.Position.YMillimeters <= forbidden.YMillimeters ||
+            anchor.Position.YMillimeters >= forbidden.YMillimeters + forbidden.HeightMillimeters);
+        Assert.Equal(anchor.Position, Center(FindGapMarker(
+            session.Scene,
+            gap.GroundingAccessPointId).Bounds));
+        Assert.DoesNotContain(session.Scene.Diagnostics, diagnostic =>
+            diagnostic.Code is "GroundingAccessPointAnchorMissing" or
+                "GroundingPresentationAnchorMissing");
+    }
+
+    private static bool Contains(OrthogonalRouteSegment segment, DocumentPoint point) =>
+        segment.IsHorizontal
+            ? point.YMillimeters == segment.Start.YMillimeters &&
+              point.XMillimeters >= Math.Min(segment.Start.XMillimeters, segment.End.XMillimeters) &&
+              point.XMillimeters <= Math.Max(segment.Start.XMillimeters, segment.End.XMillimeters)
+            : point.XMillimeters == segment.Start.XMillimeters &&
+              point.YMillimeters >= Math.Min(segment.Start.YMillimeters, segment.End.YMillimeters) &&
+              point.YMillimeters <= Math.Max(segment.Start.YMillimeters, segment.End.YMillimeters);
 
     private static DocumentPoint Center(DocumentRect bounds) => new(
         bounds.XMillimeters + bounds.WidthMillimeters / 2,
