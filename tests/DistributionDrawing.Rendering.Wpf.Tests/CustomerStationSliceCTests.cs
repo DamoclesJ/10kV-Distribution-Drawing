@@ -11,6 +11,7 @@ using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Rendering;
+using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
 
