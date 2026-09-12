@@ -543,23 +543,57 @@ Transformer creation dialog 必须在 aggregate 正式创建前取得 `Transform
 
 Transformer Professional Inspector 对三种 Kind 增加标题为“变压器名称”的 editable Domain row。`PublicIndoor` 既有 Orientation editor 保留，并与 naming editor 独立。修改名称必须进入 `CommandStack`，支持 Undo / Redo、scene refresh、Inspector refresh 和 dirty state。
 
-三种 Kind 的 Canvas 均始终显示 `DisplayName`。Label 是 derived rendering，由 Transformer glyph bounds / orientation 派生，使用统一 `DrawingMetrics` typography；它不进入 `TransformerLayout`，不保存 arbitrary label coordinates、user free-text position 或 visibility toggle。Canvas 与 PNG export 必须共用同一 Scene truth。选择 glyph 或文字必须继续解析到原 `Transformer` 的 `SelectionTargetKind.Device`；文字不形成第二份业务 identity。
+三种 Kind 的正常 named Transformer 在 Canvas 均始终显示真实 `DisplayName`。Label 是 derived rendering，由 Transformer glyph bounds / orientation 派生，使用统一 `DrawingMetrics` typography；它不进入 `TransformerLayout`，不保存 arbitrary label coordinates、user free-text position 或 visibility toggle。Canvas 与 PNG export 必须共用同一 Scene truth。选择 glyph 或文字必须继续解析到原 `Transformer` 的 `SelectionTargetKind.Device`；文字不形成第二份业务 identity。
+
+Legacy incomplete Transformer 是上述 label 要求的唯一 compatibility exception：Canvas 不显示名称 label，也不得显示或生成伪业务名称；Inspector 的“变压器名称” editable row 保持空值，并利用现有 UX 能力明确表现“历史工程待补录”或等效 incomplete 状态。具体视觉形式由 implementation 决定，但不得改变业务事实。
 
 #### 3.9.3 V7 persistence 与 legacy completion
 
-`FormatVersion` 保持 V7。`ProjectTransformerDto` additive 增加 `DisplayName`；为读取旧 V7，DTO representation 必须允许该字段 absent。New writer 对所有正常可保存 Transformer 必须始终写出 trimmed non-empty `DisplayName`，不得写出新的 unnamed Transformer。
+`FormatVersion` 保持 V7。为解决同一 V7 内的 temporal / schema ambiguity，`document.json` 根 `ProjectFilePayload` 层 additive 增加 nullable integer discriminator `TransformerNamingContractVersion`；按现有 camelCase JSON policy，其 persisted property name 为 `transformerNamingContractVersion`。该字段不是 Domain fact、Transformer business fact 或新的 `FormatVersion`，只用于判定 Transformer naming persistence contract。
 
-旧 V7 Transformer DTO 缺失 `DisplayName` 时必须允许工程成功打开，不得根据 `TransformerKind`、`Transformer.Id` / GUID、`HvTerminalId`、`PoleNumber`、CustomerStation、`Connection`、邻接设备或 position 猜测或生成名称，也不得生成“未命名变压器”“Transformer 1”、GUID-derived name、Pole-derived name 等伪业务事实。缺失名称只恢复为受控 legacy incomplete naming state，不得把 nullable Transformer name 扩大为新的正常 Domain contract。
+Discriminator 语义冻结如下：
 
-Legacy incomplete Transformer 允许打开、查看、selection、rendering、Inspector 查看和补录名称；但在工程内所有 legacy Transformer 补齐合法 `DisplayName` 前，Save / Save As 必须被阻止，并返回明确、非崩溃的 validation message。补录完成后，该 Transformer 从 legacy incomplete 转为 valid current Transformer，工程可以按 V7 正常保存并重新打开。历史文件可以读取，但新版本一旦重新写出，就必须满足当前 Transformer naming contract。
+- `TransformerNamingContractVersion` absent：表示 pre-WP-EM-07B V7，reader 对整个 document 进入 legacy Transformer naming compatibility mode；
+- `TransformerNamingContractVersion = 1`：表示 WP-EM-07B current V7 naming contract enabled，reader 对整个 document 进入 current Transformer naming mode；
+- Property 存在但值为 `null`，或值为 `1` 以外的任何 integer：必须 reject restore / open，不得猜测、fallback 或静默按 legacy 处理。Reader 必须基于现有 raw `JsonObject` / presence-aware boundary 区分 property absent 与 explicit `null`。
 
-实现必须明确区分 legacy compatibility shape 与 malformed current shape。新 V7 record 的 `DisplayName` missing / null / whitespace 不得作为普通 current valid record 静默接受。如果现有 V7 结构无法可靠区分两种 shape，implementation audit 必须停止并回报，不得自行生成 migration discriminator 或升级 V8。
+`ProjectTransformerDto` additive 增加 optional `DisplayName` JSON representation，以读取 legacy V7。Current-vs-legacy 判定只能来自 `TransformerNamingContractVersion`，不得依赖 nullable `DisplayName`、missing-vs-null inference、Transformer fields、GUID、Kind、position 或关联对象。
+
+Legacy compatibility mode 的 restore truth table 为：
+
+| `TransformerNamingContractVersion` | Transformer `DisplayName` JSON shape | Restore 结果 |
+| --- | --- | --- |
+| absent | property missing | controlled legacy incomplete naming state |
+| absent | `null` | controlled legacy incomplete naming state |
+| absent | `""` | controlled legacy incomplete naming state |
+| absent | whitespace-only string | controlled legacy incomplete naming state |
+| absent | trimmed non-empty string，例如 `"T1"` | 保留真实名称并恢复为 named Transformer |
+
+Legacy incomplete Transformer 允许 open、view、selection、rendering、Inspector 查看和补录名称，但不得根据 `TransformerKind`、`Transformer.Id` / GUID、`HvTerminalId`、`PoleNumber`、CustomerStation、`Connection`、邻接设备或 position 猜测或生成名称，也不得生成“未命名变压器”“Transformer 1”、GUID-derived name、Pole-derived name 等伪业务事实。Compatibility restore 不得把 nullable Transformer name 扩大为新的正常 Domain contract。
+
+Current mode 的 strict restore truth table 为：
+
+| `TransformerNamingContractVersion` | Transformer `DisplayName` JSON shape | Restore 结果 |
+| --- | --- | --- |
+| `1` | property missing | malformed current V7；reject restore / open |
+| `1` | `null` | malformed current V7；reject restore / open |
+| `1` | `""` | malformed current V7；reject restore / open |
+| `1` | whitespace-only string | malformed current V7；reject restore / open |
+| `1` | trimmed non-empty string，例如 `"T1"` | 恢复为 valid current named Transformer |
+
+WP-EM-07B 实施后的正常 writer 必须始终写出 `TransformerNamingContractVersion = 1`，并为所有 Transformer 写出 trimmed non-empty `DisplayName`。Current writer 禁止输出 missing、null、empty 或 whitespace `DisplayName`，也禁止在存在任意 legacy incomplete Transformer 时写文件。
+
+Legacy document 中即使 marker absent，也必须保留每个已有的 trimmed non-empty 真实 `DisplayName`；其它 unnamed Transformer 仍为 legacy incomplete。只要存在任意 legacy incomplete Transformer，Save / Save As 必须被阻止并返回明确、非崩溃的 validation message。全部补录完成后，Save / Save As 才允许执行；保存后的 document 保持 `FormatVersion = V7`、写出 `TransformerNamingContractVersion = 1`，从此按 current strict contract 读取。这是 legacy → current 的唯一收敛路径，不新增传统 V7 → V8 migration。
 
 #### 3.9.4 Clipboard、Undo / Redo 与 lifecycle
 
 Clipboard snapshot 必须包含 `DisplayName`。Paste 保留原 `DisplayName`，remap `Transformer.Id` 和 `HvTerminalId`，并保持既有 external `Connection` policy。由于名称不唯一，paste 不自动 rename、不追加“(1)”、不拒绝 duplicate name，也不提示冲突；Clipboard 不得产生 unnamed current Transformer。
 
+如果 copy closure 中包含任何 legacy incomplete Transformer，必须拒绝整个 copy 操作并提供明确、非崩溃提示；不得静默跳过该 Transformer，不得产生 partial topology copy，也不得允许 paste 创建 unnamed current Transformer。Legacy document 中已有合法真实名称的 Transformer 可按正常 named data copy。
+
 Create、Rename、Delete、Paste 的 Undo / Redo 必须正确保留或恢复 `DisplayName`，且不得重新生成 `Transformer.Id` 或 `HvTerminalId`。既有 delete dependency policy 保持不变，naming 不扩大任何 cascade。
+
+Legacy incomplete Transformer 的补录 rename 必须进入正常 `CommandStack`。Execute 后它成为 valid named current state；Undo 允许恢复原 legacy incomplete state，并保持 `Transformer.Id`、`HvTerminalId` 和 topology 不变，恢复后 Save / Save As 再次被阻止且 Canvas 再次不显示 name label；Redo 恢复同一个合法名称。不得为保持 Save eligibility 而破坏标准 Undo semantics。
 
 #### 3.9.5 Electrical-model boundary
 
@@ -572,8 +606,8 @@ WP-EM-07B implementation 至少必须通过以下验收：
 - Domain：三 Kind 新建名称必填、trim、whitespace rejection、rename，并证明 identity / topology 不变；
 - Creation：三 Kind 均通过合法名称创建，无效名称阻止创建；
 - Inspector：三 Kind 均提供 editable “变压器名称”，Undo / Redo 与 immediate refresh 正确；
-- Persistence：保持 V7，current round-trip 写出 non-empty `DisplayName`，legacy V7 无名称可打开且不伪造名称，legacy incomplete 阻止 Save / Save As，补录后 Save / Reopen 成功；
-- Clipboard：copy / paste 保留 `DisplayName`、remap IDs、允许 duplicate names；
+- Persistence：保持 V7；marker absent 的 legacy truth table 与 marker `1` 的 current strict truth table 全部通过；explicit `null` 或未知 integer marker reject；current round-trip 写出 `TransformerNamingContractVersion = 1` 与 non-empty `DisplayName`；legacy V7 无名称可打开且不伪造名称，legacy incomplete 阻止 Save / Save As，补录后 Save / Reopen 成功；
+- Clipboard：copy / paste 保留 `DisplayName`、remap IDs、允许 duplicate names；包含 legacy incomplete Transformer 的 copy closure 整体拒绝；
 - Rendering：三 Kind label 可见，覆盖 `PublicIndoor` Horizontal / Vertical，Canvas / PNG 一致，selection identity 不变；
 - Electrical regression：`Connection`、`HvTerminalId`、grounding、`WorkScope` 和 topology 不变；
 - Windows：automated tests PASS，professional visual acceptance PASS。
@@ -609,7 +643,7 @@ V7 至少容纳：
 
 本次 Post-EM-07 Sequencing Amendment 保持 `FormatVersion = V7`，不授权 V8。WP-EM-07A 复用现有 `GroundingTarget.Terminal`、`GroundingAccessPoint` 与 `Transformer.HvTerminalId`，并为 GAP adjacent endpoint 使用 3.5 节冻结的 backward-compatible additive V7 representation。当前 serializer 允许 additive fields；旧 V7 `AdjacentPoleId` 可在 mapper / restore 中无歧义归一化为 typed Pole endpoint；新 Terminal-endpoint GAP 可保存并 reopen。该兼容路径不增加 V7 migration step，不重新解释旧 `AdjacentPoleId`，不自动从旧数据生成 Terminal endpoint GAP，也不升级 V8。
 
-WP-EM-07B 保持 V7，并按 3.9.3 节采用 additive `DisplayName` 与受控 legacy incomplete naming state。旧 V7 无名称记录允许读取，但不得猜测名称，且在全部补录前不得 Save / Save As；new writer 只写出满足 current naming invariant 的 Transformer。如果 implementation audit 证明现有 V7 无法可靠区分 legacy compatibility shape 与 malformed current shape，必须停止并回报 Governance Review，不得自行生成 migration discriminator、伪造名称或升级 V8。
+WP-EM-07B 保持 V7，并按 3.9.3 节采用 additive `DisplayName`、document-level `TransformerNamingContractVersion` discriminator 与受控 legacy incomplete naming state。Marker absent 表示 pre-WP-EM-07B legacy compatibility mode，marker `1` 表示 current strict naming mode；property 存在但为 `null` 或未知 integer marker 必须 reject。旧 V7 的 missing / null / empty / whitespace 名称恢复为 controlled incomplete，真实 non-empty 名称保留；在全部补录前不得 Save / Save As。New writer 只写出满足 current naming invariant 的 Transformer，并始终写出 marker `1`。该 additive capability marker 解决同一 V7 内的 compatibility ambiguity，不是新 `FormatVersion`，不增加传统 V7 → V8 migration。
 
 ### 4.1 V6 → V7 无损迁移
 
@@ -861,9 +895,9 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-07B — Transformer Naming Amendment
 
-**状态：Requirements Frozen / Implementation Not Started**
+**状态：Requirements Frozen / Compatibility Blocker Resolved / Implementation Not Started**
 
-正式 requirement contract 以 3.9 节为准。该 WP 只建立 `Device.DisplayName` 这一项 Transformer naming fact，正式中文 UI 名称为“变压器名称”。三种 Kind 的 current data 均要求名称非空；旧 V7 缺失名称可进入受控 legacy incomplete state，但补录完成前禁止 Save / Save As。实现尚未开始；如 implementation audit 证明 V7 无法可靠区分 legacy compatibility shape 与 malformed current shape，必须停止并返回 Governance Review。
+正式 requirement contract 以 3.9 节为准。该 WP 只建立 `Device.DisplayName` 这一项 Transformer naming fact，正式中文 UI 名称为“变压器名称”。三种 Kind 的 current data 均要求名称非空；`document.json` 根 `ProjectFilePayload` 层的 additive `TransformerNamingContractVersion` discriminator 已解决同一 V7 内的 compatibility ambiguity。旧 V7 legacy incomplete Transformer 在补录完成前禁止 Save / Save As。Requirements 继续冻结，compatibility blocker 已解决，implementation 尚未开始。
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
