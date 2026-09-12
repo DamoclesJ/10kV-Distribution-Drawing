@@ -40,6 +40,7 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         Assert.Null(dto.AdjacentPoleId);
         Assert.Equal(ProjectGroundingAdjacentEndpointKind.Pole, dto.AdjacentEndpoint!.Kind);
         Assert.Equal(fixture.End.Id, dto.AdjacentEndpoint.TargetId);
+        Assert.Equal(ProjectGroundingAccessPlacementSide.PoleSide, dto.PlacementSide);
 
         DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Domain!);
         Assert.Equal(replacement.Id, Assert.Single(restored.Connections).StartTerminalId);
@@ -88,17 +89,35 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         ProjectGroundingAccessPointDto legacy = typed with
         {
             AdjacentPoleId = fixture.End.Id,
-            AdjacentEndpoint = null
+            AdjacentEndpoint = null,
+            PlacementSide = null
         };
 
-        DrawingDocument restored = ProjectDomainMapper.ToDomain(
-            ProjectDomainMapper.ToDto(fixture.DomainOnlyDocument));
-        ProjectProfessionalMapper.ToSnapshot(
-            restored,
-            valid with { GroundingAccessPoints = [legacy] });
-        GroundingAccessPoint point = Assert.Single(restored.GroundingAccessPoints);
-        Assert.Equal(legacy.GroundingAccessPointId, point.GroundingAccessPointId);
-        Assert.Equal(GroundingAdjacentEndpoint.ForPole(fixture.End.Id), point.AdjacentEndpoint);
+        foreach (ProjectGroundingAccessLineSide side in new[]
+                 {
+                     ProjectGroundingAccessLineSide.SmallerNumberSide,
+                     ProjectGroundingAccessLineSide.LargerNumberSide
+                 })
+        {
+            DrawingDocument restored = ProjectDomainMapper.ToDomain(
+                ProjectDomainMapper.ToDto(fixture.DomainOnlyDocument));
+            ProjectProfessionalMapper.ToSnapshot(
+                restored,
+                valid with { GroundingAccessPoints = [legacy with { LineSide = side }] });
+            GroundingAccessPoint point = Assert.Single(restored.GroundingAccessPoints);
+            Assert.Equal(legacy.GroundingAccessPointId, point.GroundingAccessPointId);
+            Assert.Equal(GroundingAdjacentEndpoint.ForPole(fixture.End.Id), point.AdjacentEndpoint);
+            Assert.Equal(GroundingAccessPlacementSide.PoleSide, point.PlacementSide);
+
+            DrawingDocument newShapeRestored = ProjectDomainMapper.ToDomain(
+                ProjectDomainMapper.ToDto(fixture.DomainOnlyDocument));
+            ProjectProfessionalMapper.ToSnapshot(
+                newShapeRestored,
+                valid with { GroundingAccessPoints = [typed with { LineSide = side }] });
+            Assert.Equal(
+                GroundingAccessPlacementSide.PoleSide,
+                Assert.Single(newShapeRestored.GroundingAccessPoints).PlacementSide);
+        }
 
         AssertInvalid(fixture, valid with
         {
@@ -124,6 +143,25 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         AssertInvalid(fixture, valid with
         {
             GroundingAccessPoints = [gap, gap with { GroundingAccessPointId = Guid.NewGuid() }]
+        });
+    }
+
+    [Fact]
+    public void Load_RejectsNewInvalidPoleLineAndPlacementCombinations()
+    {
+        Fixture fixture = CreateFixture();
+        ProjectProfessionalDto valid = ProjectProfessionalMapper.ToDto(fixture.Document);
+        ProjectGroundingAccessPointDto gap = Assert.Single(valid.GroundingAccessPoints!);
+
+        AssertInvalid(fixture, valid with
+        {
+            GroundingAccessPoints =
+            [gap with { LineSide = ProjectGroundingAccessLineSide.TransformerSide }]
+        });
+        AssertInvalid(fixture, valid with
+        {
+            GroundingAccessPoints =
+            [gap with { PlacementSide = ProjectGroundingAccessPlacementSide.AdjacentEndpointSide }]
         });
     }
 
@@ -186,10 +224,22 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         GroundingAccessPoint gap = document.CreateGroundingAccessPoint(
             Guid.NewGuid(), connection.Id, pole.Id,
             GroundingAdjacentEndpoint.ForTerminal(hvTerminalId),
-            GroundingAccessLineSide.LargerNumberSide);
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.AdjacentEndpointSide);
+        GroundingAccessPoint poleSideGap = document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), connection.Id, pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(hvTerminalId),
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.PoleSide);
         GroundingPoint grounding = document.CreateGroundingPoint(
             Guid.NewGuid(), GroundingTarget.ForTerminal(hvTerminalId),
             "变压器高压侧", "S01", "保留备注");
+        GroundingPoint conductorGrounding = document.CreateGroundingPoint(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(poleSideGap.GroundingAccessPointId),
+            $"{pole.PoleNumber}杆变压器侧",
+            "L01",
+            "导线侧备注");
 
         string path = NextPath();
         var container = new ProjectFileContainer();
@@ -200,18 +250,119 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
             ProjectLayoutDto.Empty(document.Id),
             ProjectProfessionalMapper.ToDto(document)));
         ProjectFileDocument opened = container.Open(path);
+        ProjectGroundingAccessPointDto writtenTransformerSide =
+            opened.Professional!.GroundingAccessPoints!.Single(point =>
+                point.GroundingAccessPointId == gap.GroundingAccessPointId);
+        ProjectGroundingAccessPointDto writtenPoleSide =
+            opened.Professional.GroundingAccessPoints!.Single(point =>
+                point.GroundingAccessPointId == poleSideGap.GroundingAccessPointId);
+        Assert.Null(writtenTransformerSide.AdjacentPoleId);
+        Assert.Equal(ProjectGroundingAccessLineSide.TransformerSide, writtenTransformerSide.LineSide);
+        Assert.Equal(
+            ProjectGroundingAccessPlacementSide.AdjacentEndpointSide,
+            writtenTransformerSide.PlacementSide);
+        Assert.Null(writtenPoleSide.AdjacentPoleId);
+        Assert.Equal(ProjectGroundingAccessLineSide.TransformerSide, writtenPoleSide.LineSide);
+        Assert.Equal(ProjectGroundingAccessPlacementSide.PoleSide, writtenPoleSide.PlacementSide);
         DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Domain!);
         ProjectProfessionalMapper.ToSnapshot(restored, opened.Professional);
 
-        GroundingAccessPoint restoredGap = Assert.Single(restored.GroundingAccessPoints);
+        GroundingAccessPoint restoredGap = Assert.Single(restored.GroundingAccessPoints,
+            point => point.GroundingAccessPointId == gap.GroundingAccessPointId);
         Assert.Equal(gap.GroundingAccessPointId, restoredGap.GroundingAccessPointId);
         Assert.Equal(GroundingAdjacentEndpoint.ForTerminal(hvTerminalId), restoredGap.AdjacentEndpoint);
-        GroundingPoint restoredGrounding = Assert.Single(restored.GroundingPoints);
+        Assert.Equal(GroundingAccessLineSide.TransformerSide, restoredGap.LineSide);
+        Assert.Equal(GroundingAccessPlacementSide.AdjacentEndpointSide, restoredGap.PlacementSide);
+        GroundingAccessPoint restoredPoleSideGap = Assert.Single(restored.GroundingAccessPoints,
+            point => point.GroundingAccessPointId == poleSideGap.GroundingAccessPointId);
+        Assert.Equal(GroundingAccessPlacementSide.PoleSide, restoredPoleSideGap.PlacementSide);
+        GroundingPoint restoredGrounding = Assert.Single(restored.GroundingPoints,
+            point => point.GroundingPointId == grounding.GroundingPointId);
         Assert.Equal(grounding.GroundingPointId, restoredGrounding.GroundingPointId);
         Assert.Equal(GroundingTarget.ForTerminal(hvTerminalId), restoredGrounding.Target);
         Assert.Equal("变压器高压侧", restoredGrounding.Location);
         Assert.Equal("S01", restoredGrounding.Number);
         Assert.Equal("保留备注", restoredGrounding.Note);
+        GroundingPoint restoredConductorGrounding = Assert.Single(restored.GroundingPoints,
+            point => point.GroundingPointId == conductorGrounding.GroundingPointId);
+        Assert.Equal(conductorGrounding.Target, restoredConductorGrounding.Target);
+        Assert.Equal(conductorGrounding.Location, restoredConductorGrounding.Location);
+        Assert.Equal("L01", restoredConductorGrounding.Number);
+        Assert.Equal("导线侧备注", restoredConductorGrounding.Note);
+
+        ProjectGroundingPointDto directGrounding = opened.Professional.GroundingPoints.Single(point =>
+            point.GroundingPointId == grounding.GroundingPointId);
+        ProjectGroundingPointDto conductorGroundingDto = opened.Professional.GroundingPoints.Single(point =>
+            point.GroundingPointId == conductorGrounding.GroundingPointId);
+        foreach (ProjectGroundingAccessLineSide legacySide in new[]
+                 {
+                     ProjectGroundingAccessLineSide.SmallerNumberSide,
+                     ProjectGroundingAccessLineSide.LargerNumberSide
+                 })
+        {
+            ProjectGroundingAccessPointDto oldTypedTerminal = writtenPoleSide with
+            {
+                LineSide = legacySide,
+                PlacementSide = null
+            };
+            DrawingDocument legacyRestored = ProjectDomainMapper.ToDomain(opened.Domain!);
+            ProjectProfessionalMapper.ToSnapshot(
+                legacyRestored,
+                opened.Professional with
+                {
+                    GroundingAccessPoints = [oldTypedTerminal],
+                    GroundingPoints = [directGrounding, conductorGroundingDto]
+                });
+            GroundingAccessPoint normalized = Assert.Single(legacyRestored.GroundingAccessPoints);
+            Assert.Equal(poleSideGap.GroundingAccessPointId, normalized.GroundingAccessPointId);
+            Assert.Equal(connection.Id, normalized.ConnectionId);
+            Assert.Equal(pole.Id, normalized.PoleId);
+            Assert.Equal(GroundingAdjacentEndpoint.ForTerminal(hvTerminalId), normalized.AdjacentEndpoint);
+            Assert.Equal(GroundingAccessLineSide.TransformerSide, normalized.LineSide);
+            Assert.Equal(GroundingAccessPlacementSide.PoleSide, normalized.PlacementSide);
+            GroundingPoint normalizedConductorGrounding = legacyRestored.GetGroundingPoint(
+                conductorGrounding.GroundingPointId);
+            Assert.Equal(conductorGrounding.Target, normalizedConductorGrounding.Target);
+            Assert.Equal(conductorGrounding.Location, normalizedConductorGrounding.Location);
+            Assert.Equal(conductorGrounding.Number, normalizedConductorGrounding.Number);
+            Assert.Equal(conductorGrounding.Note, normalizedConductorGrounding.Note);
+        }
+
+        foreach (ProjectGroundingAccessLineSide invalidSide in new[]
+                 {
+                     ProjectGroundingAccessLineSide.SmallerNumberSide,
+                     ProjectGroundingAccessLineSide.LargerNumberSide
+                 })
+        foreach (ProjectGroundingAccessPlacementSide explicitPlacement in new[]
+                 {
+                     ProjectGroundingAccessPlacementSide.PoleSide,
+                     ProjectGroundingAccessPlacementSide.AdjacentEndpointSide
+                 })
+        {
+            DrawingDocument malformedDomain = ProjectDomainMapper.ToDomain(opened.Domain!);
+            Assert.Throws<InvalidDataException>(() => ProjectProfessionalMapper.ToSnapshot(
+                malformedDomain,
+                opened.Professional with
+                {
+                    GroundingAccessPoints =
+                    [writtenTransformerSide with
+                    {
+                        LineSide = invalidSide,
+                        PlacementSide = explicitPlacement
+                    }],
+                    GroundingPoints = [directGrounding]
+                }));
+        }
+
+        DrawingDocument missingNewPlacementDomain = ProjectDomainMapper.ToDomain(opened.Domain!);
+        Assert.Throws<InvalidDataException>(() => ProjectProfessionalMapper.ToSnapshot(
+            missingNewPlacementDomain,
+            opened.Professional with
+            {
+                GroundingAccessPoints =
+                [writtenTransformerSide with { PlacementSide = null }],
+                GroundingPoints = [directGrounding]
+            }));
     }
 
     private static void AssertInvalid(Fixture fixture, ProjectProfessionalDto professional)

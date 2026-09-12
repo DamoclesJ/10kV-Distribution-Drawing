@@ -169,6 +169,7 @@ public sealed class PropertyProjector
                     DomainRow("Pole", "杆塔", pole.PoleNumber),
                     DomainRow("AdjacentEndpoint", "相邻端点", adjacentEndpoint),
                     DomainRow("LineSide", "线路侧", LineSideText(point.LineSide)),
+                    DomainRow("PlacementSide", "安装端侧", PlacementSideText(point.PlacementSide)),
                     DomainRow("GroundingPoint", "工作地线", groundingPoint?.Number ?? "无"))
             ]);
     }
@@ -215,6 +216,14 @@ public sealed class PropertyProjector
     {
         GroundingAccessLineSide.SmallerNumberSide => "小号侧",
         GroundingAccessLineSide.LargerNumberSide => "大号侧",
+        GroundingAccessLineSide.TransformerSide => "变压器侧",
+        _ => side.ToString()
+    };
+
+    private static string PlacementSideText(GroundingAccessPlacementSide side) => side switch
+    {
+        GroundingAccessPlacementSide.PoleSide => "杆塔端",
+        GroundingAccessPlacementSide.AdjacentEndpointSide => "变压器端",
         _ => side.ToString()
     };
 

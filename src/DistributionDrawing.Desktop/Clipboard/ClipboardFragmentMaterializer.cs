@@ -265,7 +265,8 @@ internal sealed class ClipboardFragmentMaterializer
                     new GroundingAdjacentEndpoint(
                         snapshot.AdjacentEndpoint.Kind,
                         Map(snapshot.AdjacentEndpoint.TargetId)),
-                    snapshot.LineSide)));
+                    snapshot.LineSide,
+                    snapshot.PlacementSide)));
         }
 
         SelectionReference[] mappedSelection = fragment.RootSelections

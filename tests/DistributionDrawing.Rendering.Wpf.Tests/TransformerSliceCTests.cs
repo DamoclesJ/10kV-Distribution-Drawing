@@ -609,6 +609,55 @@ public sealed class TransformerSliceCTests
         Assert.Equal(creation.HvTerminal.Id, point.Target.TargetId);
     }
 
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted, TransformerOrientation.Horizontal)]
+    [InlineData(TransformerKind.DedicatedPoleMounted, TransformerOrientation.Horizontal)]
+    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Horizontal)]
+    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Vertical)]
+    public void TransformerGroundingManualPlacement_LeaderStartsTowardSymbol(
+        TransformerKind kind,
+        TransformerOrientation orientation)
+    {
+        TransformerCreation creation = Create(
+            kind,
+            kind == TransformerKind.PublicIndoor ? orientation : null);
+        DrawingDocument document = DocumentWith(creation);
+        RuntimeLayoutDocument runtime = RuntimeWith(creation);
+        GroundingPoint point = document.CreateGroundingPoint(
+            Guid.NewGuid(),
+            GroundingTarget.ForTerminal(creation.HvTerminal.Id),
+            "变压器高压侧",
+            "S01");
+        GroundingPresentationAnchor presentation = ResolvePresentation(point, document, runtime);
+        var resolver = new GroundingPointLayoutResolver();
+        GroundingPointResolvedLayout automatic = resolver.Resolve(point, presentation, null);
+
+        foreach (double side in new[] { -1d, 1d })
+        {
+            double targetX = presentation.Position.XMillimeters + side * 40;
+            var offset = new DocumentPoint(
+                targetX - automatic.DefaultSymbolTop.XMillimeters,
+                8);
+            var manualLayout = new GroundingPointLayout(point.GroundingPointId, offset);
+            GroundingPointResolvedLayout manual = resolver.Resolve(
+                point,
+                presentation,
+                manualLayout);
+            OrthogonalRouteSegment first = Assert.Single(
+                manual.LeaderSegments.Take(1));
+            Assert.True(first.IsHorizontal);
+            Assert.Equal(side, Math.Sign(
+                first.End.XMillimeters - first.Start.XMillimeters));
+            Assert.Equal(offset, manualLayout.SymbolOffset);
+            Assert.Equal(creation.HvTerminal.Id, point.Target.TargetId);
+            Assert.DoesNotContain(manual.LeaderSegments.Zip(
+                    manual.LeaderSegments.Skip(1)),
+                pair => pair.First.IsHorizontal && pair.Second.IsHorizontal &&
+                        Math.Sign(pair.First.End.XMillimeters - pair.First.Start.XMillimeters) ==
+                        -Math.Sign(pair.Second.End.XMillimeters - pair.Second.Start.XMillimeters));
+        }
+    }
+
     [Fact]
     public void PublicIndoorOrientationChange_ExistingGroundingKeepsIdentityAndFollowsAnchor()
     {

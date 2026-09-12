@@ -58,9 +58,23 @@ public sealed class GroundingPointLayoutResolver
         bool effectiveManual = manualLayout is not null &&
             (offset.XMillimeters != 0 || offset.YMillimeters != 0);
         DocumentPoint symbolTop = Translate(defaultTop, offset);
+        GroundingPresentationAnchor leaderAnchor = anchor;
+        if (policy == GroundingPresentationPolicy.TransformerTerminal && effectiveManual)
+        {
+            double deltaX = symbolTop.XMillimeters - anchor.Position.XMillimeters;
+            if (Math.Abs(deltaX) > _metrics.Grounding.ManualSnapTolerance)
+            {
+                leaderAnchor = anchor with
+                {
+                    Direction = deltaX < 0
+                        ? TerminalAnchorDirection.Left
+                        : TerminalAnchorDirection.Right
+                };
+            }
+        }
         IReadOnlyList<OrthogonalRouteSegment> leader = ResolveLeader(
             policy,
-            anchor,
+            leaderAnchor,
             symbolTop,
             effectiveManual);
 
@@ -213,6 +227,13 @@ public sealed class GroundingPointLayoutResolver
             : Math.Max(
                 _metrics.Routing.PortStubLength,
                 anchor.MinimumStubLength);
+        if (isManual && policy == GroundingPresentationPolicy.TransformerTerminal &&
+            direction is TerminalAnchorDirection.Left or TerminalAnchorDirection.Right)
+        {
+            stub = Math.Min(
+                stub,
+                Math.Abs(symbolTop.XMillimeters - anchor.Position.XMillimeters));
+        }
         DocumentPoint first = Move(anchor.Position, direction, stub);
         AddPoint(points, first);
         double entryY = Math.Min(

@@ -18,7 +18,12 @@ public static class GroundingPointLocationResolver
         if (target.Kind == GroundingTargetKind.GroundingAccessPoint)
         {
             GroundingAccessPoint point = document.GetGroundingAccessPoint(target.TargetId);
-            return ResolveGroundingAccessPoint(document, point.PoleId, point.LineSide);
+            return ResolveGroundingAccessPoint(
+                document,
+                point.PoleId,
+                point.AdjacentEndpoint,
+                point.LineSide,
+                point.PlacementSide);
         }
 
         RingCabinet? cabinet = document.Devices.OfType<RingCabinet>()
@@ -74,8 +79,27 @@ public static class GroundingPointLocationResolver
         {
             GroundingAccessLineSide.SmallerNumberSide => "小号侧",
             GroundingAccessLineSide.LargerNumberSide => "大号侧",
+            GroundingAccessLineSide.TransformerSide => "变压器侧",
             _ => throw new ArgumentOutOfRangeException(nameof(lineSide))
         };
         return $"{pole.PoleNumber}杆{side}";
+    }
+
+    public static string ResolveGroundingAccessPoint(
+        DrawingDocument document,
+        Guid poleId,
+        GroundingAdjacentEndpoint adjacentEndpoint,
+        GroundingAccessLineSide lineSide,
+        GroundingAccessPlacementSide placementSide)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        Pole pole = document.Devices.OfType<Pole>().Single(item => item.Id == poleId);
+        if (adjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Terminal)
+        {
+            return placementSide == GroundingAccessPlacementSide.AdjacentEndpointSide
+                ? "变压器高压侧导线"
+                : $"{pole.PoleNumber}杆变压器侧";
+        }
+        return ResolveGroundingAccessPoint(document, poleId, lineSide);
     }
 }

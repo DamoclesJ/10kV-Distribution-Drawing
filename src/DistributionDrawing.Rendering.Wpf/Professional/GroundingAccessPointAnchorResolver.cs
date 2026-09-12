@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -22,6 +23,20 @@ public sealed class GroundingAccessPointAnchorResolver
         DrawingDocument document,
         DrawingLayout layout,
         IReadOnlyDictionary<Guid, OrthogonalRoute> routes,
+        out GroundingPresentationAnchor anchor) => TryResolve(
+            point,
+            document,
+            layout,
+            routes,
+            null,
+            out anchor);
+
+    public bool TryResolve(
+        GroundingAccessPoint point,
+        DrawingDocument document,
+        DrawingLayout layout,
+        IReadOnlyDictionary<Guid, OrthogonalRoute> routes,
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts,
         out GroundingPresentationAnchor anchor)
     {
         ArgumentNullException.ThrowIfNull(point);
@@ -43,17 +58,34 @@ public sealed class GroundingAccessPointAnchorResolver
                 point.PoleId,
                 point.AdjacentEndpoint,
                 connection,
+                point.PlacementSide,
                 out GroundingAccessHalfEdge halfEdge))
         {
             anchor = default;
             return false;
         }
 
-        TerminalAnchorDirection direction = ResolveDirection(
-            halfEdge.ConductorOrigin,
-            halfEdge.DirectionPoint);
-        DocumentRect envelope = PoleProfessionalGeometry.GetOccupiedEnvelope(
-            point.PoleId, document, layout, _metrics);
+        DocumentRect envelope;
+        if (point.PlacementSide == GroundingAccessPlacementSide.AdjacentEndpointSide)
+        {
+            Transformer? transformer = document.Transformers.SingleOrDefault(candidate =>
+                candidate.HvTerminalId == point.AdjacentEndpoint.TargetId);
+            if (transformer is null || transformerLayouts is null ||
+                !transformerLayouts.TryGetValue(transformer.Id, out TransformerLayout? transformerLayout))
+            {
+                anchor = default;
+                return false;
+            }
+            envelope = TransformerProfessionalGeometry.Create(
+                transformer,
+                transformerLayout,
+                _metrics.Transformer).Bounds;
+        }
+        else
+        {
+            envelope = PoleProfessionalGeometry.GetOccupiedEnvelope(
+                point.PoleId, document, layout, _metrics);
+        }
         double requiredCenterSeparation = _metrics.Line.GroundingAccessClearance +
             (_metrics.Line.GroundingAccessMarkerDiameter + _metrics.Line.ConnectionThickness) / 2;
         DocumentRect forbiddenEnvelope = new(
@@ -61,12 +93,11 @@ public sealed class GroundingAccessPointAnchorResolver
             envelope.YMillimeters - requiredCenterSeparation,
             envelope.WidthMillimeters + requiredCenterSeparation * 2,
             envelope.HeightMillimeters + requiredCenterSeparation * 2);
-        double distance = DirectionalExitDistance(
-            halfEdge.ConductorOrigin,
-            direction,
-            forbiddenEnvelope);
-        DocumentPoint position = Move(halfEdge.ConductorOrigin, direction, distance);
-        if (!route.Segments.Any(segment => Contains(segment, position)))
+        if (!TryFindPathExit(
+                halfEdge.OrientedPath,
+                forbiddenEnvelope,
+                out DocumentPoint position,
+                out TerminalAnchorDirection direction))
         {
             anchor = default;
             return false;
@@ -78,37 +109,52 @@ public sealed class GroundingAccessPointAnchorResolver
         return true;
     }
 
-    private static double DirectionalExitDistance(
-        DocumentPoint origin,
-        TerminalAnchorDirection direction,
-        DocumentRect forbiddenEnvelope)
+    private static bool TryFindPathExit(
+        IReadOnlyList<DocumentPoint> path,
+        DocumentRect forbiddenEnvelope,
+        out DocumentPoint position,
+        out TerminalAnchorDirection direction)
     {
-        bool withinHorizontalSpan = origin.XMillimeters > forbiddenEnvelope.XMillimeters &&
-            origin.XMillimeters < forbiddenEnvelope.XMillimeters + forbiddenEnvelope.WidthMillimeters;
-        bool withinVerticalSpan = origin.YMillimeters > forbiddenEnvelope.YMillimeters &&
-            origin.YMillimeters < forbiddenEnvelope.YMillimeters + forbiddenEnvelope.HeightMillimeters;
-        return direction switch
+        for (var index = 0; index + 1 < path.Count; index++)
         {
-            TerminalAnchorDirection.Left when withinVerticalSpan =>
-                Math.Max(0, origin.XMillimeters - forbiddenEnvelope.XMillimeters),
-            TerminalAnchorDirection.Right when withinVerticalSpan => Math.Max(0,
-                forbiddenEnvelope.XMillimeters + forbiddenEnvelope.WidthMillimeters - origin.XMillimeters),
-            TerminalAnchorDirection.Up when withinHorizontalSpan =>
-                Math.Max(0, origin.YMillimeters - forbiddenEnvelope.YMillimeters),
-            TerminalAnchorDirection.Down when withinHorizontalSpan => Math.Max(0,
-                forbiddenEnvelope.YMillimeters + forbiddenEnvelope.HeightMillimeters - origin.YMillimeters),
-            _ => 0
-        };
+            DocumentPoint start = path[index];
+            DocumentPoint end = path[index + 1];
+            direction = ResolveDirection(start, end);
+            if (!Contains(forbiddenEnvelope, start))
+            {
+                position = start;
+                return true;
+            }
+            if (Contains(forbiddenEnvelope, end))
+            {
+                continue;
+            }
+
+            position = direction switch
+            {
+                TerminalAnchorDirection.Left => new DocumentPoint(
+                    forbiddenEnvelope.XMillimeters, start.YMillimeters),
+                TerminalAnchorDirection.Right => new DocumentPoint(
+                    forbiddenEnvelope.XMillimeters + forbiddenEnvelope.WidthMillimeters,
+                    start.YMillimeters),
+                TerminalAnchorDirection.Up => new DocumentPoint(
+                    start.XMillimeters, forbiddenEnvelope.YMillimeters),
+                _ => new DocumentPoint(
+                    start.XMillimeters,
+                    forbiddenEnvelope.YMillimeters + forbiddenEnvelope.HeightMillimeters)
+            };
+            return true;
+        }
+        position = default;
+        direction = default;
+        return false;
     }
 
-    private static bool Contains(OrthogonalRouteSegment segment, DocumentPoint point) =>
-        segment.IsHorizontal
-            ? point.YMillimeters == segment.Start.YMillimeters &&
-              point.XMillimeters >= Math.Min(segment.Start.XMillimeters, segment.End.XMillimeters) &&
-              point.XMillimeters <= Math.Max(segment.Start.XMillimeters, segment.End.XMillimeters)
-            : point.XMillimeters == segment.Start.XMillimeters &&
-              point.YMillimeters >= Math.Min(segment.Start.YMillimeters, segment.End.YMillimeters) &&
-              point.YMillimeters <= Math.Max(segment.Start.YMillimeters, segment.End.YMillimeters);
+    private static bool Contains(DocumentRect rectangle, DocumentPoint point) =>
+        point.XMillimeters > rectangle.XMillimeters &&
+        point.XMillimeters < rectangle.XMillimeters + rectangle.WidthMillimeters &&
+        point.YMillimeters > rectangle.YMillimeters &&
+        point.YMillimeters < rectangle.YMillimeters + rectangle.HeightMillimeters;
 
     private static TerminalAnchorDirection ResolveDirection(DocumentPoint from, DocumentPoint to)
     {
@@ -123,15 +169,4 @@ public sealed class GroundingAccessPointAnchorResolver
             : TerminalAnchorDirection.Up;
     }
 
-    private static DocumentPoint Move(
-        DocumentPoint point,
-        TerminalAnchorDirection direction,
-        double distance) => direction switch
-        {
-            TerminalAnchorDirection.Left => new(point.XMillimeters - distance, point.YMillimeters),
-            TerminalAnchorDirection.Right => new(point.XMillimeters + distance, point.YMillimeters),
-            TerminalAnchorDirection.Up => new(point.XMillimeters, point.YMillimeters - distance),
-            TerminalAnchorDirection.Down => new(point.XMillimeters, point.YMillimeters + distance),
-            _ => point
-        };
 }

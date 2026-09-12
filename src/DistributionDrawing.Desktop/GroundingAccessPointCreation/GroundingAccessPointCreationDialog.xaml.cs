@@ -18,9 +18,12 @@ public partial class GroundingAccessPointCreationDialog : Window
         CandidateInput.SelectedItem as GroundingAccessCandidate;
 
     public GroundingAccessLineSide SelectedLineSide =>
-        ((ComboBoxItem)LineSideInput.SelectedItem).Tag?.ToString() == "LargerNumberSide"
-            ? GroundingAccessLineSide.LargerNumberSide
-            : GroundingAccessLineSide.SmallerNumberSide;
+        ((ComboBoxItem)LineSideInput.SelectedItem).Tag?.ToString() switch
+        {
+            "LargerNumberSide" => GroundingAccessLineSide.LargerNumberSide,
+            "TransformerSide" => GroundingAccessLineSide.TransformerSide,
+            _ => GroundingAccessLineSide.SmallerNumberSide
+        };
 
     private void OnCandidateChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -28,25 +31,23 @@ public partial class GroundingAccessPointCreationDialog : Window
         {
             return;
         }
-        GroundingAccessLineSide? recommendation =
-            candidate.AdjacentPoleNumber is string adjacentPoleNumber
-                ? GroundingAccessPointCreationService.RecommendLineSide(
-                    candidate.PoleNumber,
-                    adjacentPoleNumber)
-                : null;
+        GroundingAccessCandidateLineSideState state =
+            GroundingAccessPointCreationService.ResolveLineSideState(candidate);
+        LineSideInput.IsEnabled = !state.IsLocked;
+        GroundingAccessLineSide? recommendation = state.SelectedLineSide;
         if (recommendation is null)
         {
             LineSideInput.SelectedIndex = -1;
-            RecommendationText.Text = candidate.AdjacentEndpoint.Kind ==
-                GroundingAdjacentEndpointKind.Terminal
-                ? "变压器端没有相邻杆号，请人工选择小号侧或大号侧。"
-                : "杆号无法可靠解析，请人工选择小号侧或大号侧。";
+            RecommendationText.Text = state.Message;
             return;
         }
-        LineSideInput.SelectedIndex = recommendation == GroundingAccessLineSide.SmallerNumberSide
-            ? 0
-            : 1;
-        RecommendationText.Text = "已按简单杆号推荐；可人工覆盖，实际相邻杆方向不会改变。";
+        LineSideInput.SelectedIndex = recommendation switch
+        {
+            GroundingAccessLineSide.SmallerNumberSide => 0,
+            GroundingAccessLineSide.LargerNumberSide => 1,
+            _ => 2
+        };
+        RecommendationText.Text = state.Message;
     }
 
     private void OnConfirm(object sender, RoutedEventArgs e)

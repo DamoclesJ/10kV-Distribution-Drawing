@@ -225,6 +225,7 @@ public sealed class ProjectV7ContractTests : IDisposable
     [Theory]
     [InlineData(ProjectGroundingAccessLineSide.SmallerNumberSide)]
     [InlineData(ProjectGroundingAccessLineSide.LargerNumberSide)]
+    [InlineData(ProjectGroundingAccessLineSide.TransformerSide)]
     public void GroundingAccessPointLineSide_RoundTripsAsTypedEnum(
         ProjectGroundingAccessLineSide lineSide)
     {
@@ -252,6 +253,27 @@ public sealed class ProjectV7ContractTests : IDisposable
 
         Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize<ProjectGroundingTargetDto>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
+    }
+
+    [Fact]
+    public void GroundingAccessPlacementSide_RejectsUnknownString()
+    {
+        const string json = """
+            {
+              "groundingAccessPointId":"11111111-1111-1111-1111-111111111111",
+              "connectionId":"22222222-2222-2222-2222-222222222222",
+              "poleId":"33333333-3333-3333-3333-333333333333",
+              "adjacentPoleId":null,
+              "lineSide":"TransformerSide",
+              "adjacentEndpoint":{"kind":"Terminal","targetId":"44444444-4444-4444-4444-444444444444"},
+              "placementSide":"FutureSide"
+            }
+            """;
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<ProjectGroundingAccessPointDto>(
                 json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
     }

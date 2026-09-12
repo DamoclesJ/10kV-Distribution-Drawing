@@ -51,7 +51,15 @@ public sealed record ProjectGroundingTargetDto(
 public enum ProjectGroundingAccessLineSide
 {
     SmallerNumberSide,
-    LargerNumberSide
+    LargerNumberSide,
+    TransformerSide
+}
+
+[JsonConverter(typeof(StrictStringEnumConverter<ProjectGroundingAccessPlacementSide>))]
+public enum ProjectGroundingAccessPlacementSide
+{
+    PoleSide,
+    AdjacentEndpointSide
 }
 
 [JsonConverter(typeof(StrictStringEnumConverter<ProjectGroundingAdjacentEndpointKind>))]
@@ -71,7 +79,8 @@ public sealed record ProjectGroundingAccessPointDto(
     [property: JsonRequired] Guid PoleId,
     [property: JsonRequired] Guid? AdjacentPoleId,
     [property: JsonRequired] ProjectGroundingAccessLineSide LineSide,
-    ProjectGroundingAdjacentEndpointDto? AdjacentEndpoint = null);
+    ProjectGroundingAdjacentEndpointDto? AdjacentEndpoint = null,
+    ProjectGroundingAccessPlacementSide? PlacementSide = null);
 
 /// <summary>
 /// Validated, persistence-neutral Professional snapshot. It contains no
@@ -127,7 +136,8 @@ internal static class ProjectProfessionalMapper
                     point.PoleId,
                     null,
                     ToDto(point.LineSide),
-                    ToDto(point.AdjacentEndpoint)))
+                    ToDto(point.AdjacentEndpoint),
+                    ToDto(point.PlacementSide)))
                 .ToArray());
     }
 
@@ -142,16 +152,16 @@ internal static class ProjectProfessionalMapper
 
         foreach (ProjectGroundingAccessPointDto point in professional.GroundingAccessPoints ?? [])
         {
-            GroundingAdjacentEndpoint adjacentEndpoint = ToDomain(
-                NormalizeAdjacentEndpoint(point));
+            NormalizedGroundingAccessPoint normalized = NormalizeGroundingAccessPoint(point);
             try
             {
                 document.CreateGroundingAccessPoint(
                     point.GroundingAccessPointId,
                     point.ConnectionId,
                     point.PoleId,
-                    adjacentEndpoint,
-                    ToDomain(point.LineSide));
+                    ToDomain(normalized.AdjacentEndpoint),
+                    ToDomain(normalized.LineSide),
+                    ToDomain(normalized.PlacementSide));
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
@@ -270,11 +280,11 @@ internal static class ProjectProfessionalMapper
         }
 
         HashSet<(Guid ConnectionId, Guid PoleId, ProjectGroundingAdjacentEndpointKind Kind,
-            Guid TargetId)> accessLocations = [];
+            Guid TargetId, ProjectGroundingAccessPlacementSide PlacementSide)> accessLocations = [];
         foreach (ProjectGroundingAccessPointDto point in groundingAccessPoints)
         {
-            ProjectGroundingAdjacentEndpointDto adjacentEndpoint =
-                NormalizeAdjacentEndpoint(point);
+            NormalizedGroundingAccessPoint normalized = NormalizeGroundingAccessPoint(point);
+            ProjectGroundingAdjacentEndpointDto adjacentEndpoint = normalized.AdjacentEndpoint;
             if (point.ConnectionId == Guid.Empty ||
                 point.PoleId == Guid.Empty ||
                 adjacentEndpoint.TargetId == Guid.Empty)
@@ -287,7 +297,8 @@ internal static class ProjectProfessionalMapper
                     point.ConnectionId,
                     point.PoleId,
                     adjacentEndpoint.Kind,
-                    adjacentEndpoint.TargetId)))
+                    adjacentEndpoint.TargetId,
+                    normalized.PlacementSide)))
             {
                 throw new InvalidDataException(
                     "Grounding access point physical locations must be unique.");
@@ -369,7 +380,12 @@ internal static class ProjectProfessionalMapper
             $"Unsupported grounding adjacent endpoint kind '{endpoint.Kind}'.")
     };
 
-    private static ProjectGroundingAdjacentEndpointDto NormalizeAdjacentEndpoint(
+    private sealed record NormalizedGroundingAccessPoint(
+        ProjectGroundingAdjacentEndpointDto AdjacentEndpoint,
+        ProjectGroundingAccessLineSide LineSide,
+        ProjectGroundingAccessPlacementSide PlacementSide);
+
+    private static NormalizedGroundingAccessPoint NormalizeGroundingAccessPoint(
         ProjectGroundingAccessPointDto point)
     {
         bool hasLegacy = point.AdjacentPoleId is Guid adjacentPoleId &&
@@ -383,9 +399,17 @@ internal static class ProjectProfessionalMapper
 
         if (hasLegacy)
         {
-            return new ProjectGroundingAdjacentEndpointDto(
-                ProjectGroundingAdjacentEndpointKind.Pole,
-                point.AdjacentPoleId!.Value);
+            if (point.PlacementSide is not null)
+            {
+                throw new InvalidDataException(
+                    $"Legacy grounding access point '{point.GroundingAccessPointId}' cannot contain a placement side.");
+            }
+            return new NormalizedGroundingAccessPoint(
+                new ProjectGroundingAdjacentEndpointDto(
+                    ProjectGroundingAdjacentEndpointKind.Pole,
+                    point.AdjacentPoleId!.Value),
+                point.LineSide,
+                ProjectGroundingAccessPlacementSide.PoleSide);
         }
 
         if (point.AdjacentPoleId == Guid.Empty || point.AdjacentEndpoint!.TargetId == Guid.Empty)
@@ -400,7 +424,37 @@ internal static class ProjectProfessionalMapper
                 $"Grounding access point '{point.GroundingAccessPointId}' has an invalid adjacent endpoint kind.");
         }
 
-        return point.AdjacentEndpoint;
+        if (point.PlacementSide is ProjectGroundingAccessPlacementSide placementSide &&
+            !Enum.IsDefined(placementSide))
+        {
+            throw new InvalidDataException(
+                $"Grounding access point '{point.GroundingAccessPointId}' has an invalid placement side.");
+        }
+
+        ProjectGroundingAccessLineSide lineSide = point.LineSide;
+        ProjectGroundingAccessPlacementSide normalizedPlacement;
+        if (point.PlacementSide is null &&
+            point.AdjacentEndpoint.Kind == ProjectGroundingAdjacentEndpointKind.Terminal)
+        {
+            if (point.LineSide is not (ProjectGroundingAccessLineSide.SmallerNumberSide or
+                ProjectGroundingAccessLineSide.LargerNumberSide))
+            {
+                throw new InvalidDataException(
+                    $"Grounding access point '{point.GroundingAccessPointId}' requires an explicit placement side.");
+            }
+            lineSide = ProjectGroundingAccessLineSide.TransformerSide;
+            normalizedPlacement = ProjectGroundingAccessPlacementSide.PoleSide;
+        }
+        else
+        {
+            normalizedPlacement =
+                point.PlacementSide ?? ProjectGroundingAccessPlacementSide.PoleSide;
+        }
+
+        return new NormalizedGroundingAccessPoint(
+            point.AdjacentEndpoint,
+            lineSide,
+            normalizedPlacement);
     }
 
     private static GroundingTargetKind ToDomain(ProjectGroundingTargetKind kind) => kind switch
@@ -414,6 +468,7 @@ internal static class ProjectProfessionalMapper
     {
         GroundingAccessLineSide.SmallerNumberSide => ProjectGroundingAccessLineSide.SmallerNumberSide,
         GroundingAccessLineSide.LargerNumberSide => ProjectGroundingAccessLineSide.LargerNumberSide,
+        GroundingAccessLineSide.TransformerSide => ProjectGroundingAccessLineSide.TransformerSide,
         _ => throw new ArgumentOutOfRangeException(nameof(side))
     };
 
@@ -421,7 +476,26 @@ internal static class ProjectProfessionalMapper
     {
         ProjectGroundingAccessLineSide.SmallerNumberSide => GroundingAccessLineSide.SmallerNumberSide,
         ProjectGroundingAccessLineSide.LargerNumberSide => GroundingAccessLineSide.LargerNumberSide,
+        ProjectGroundingAccessLineSide.TransformerSide => GroundingAccessLineSide.TransformerSide,
         _ => throw new InvalidDataException($"Unsupported grounding access line side '{side}'.")
+    };
+
+    private static ProjectGroundingAccessPlacementSide ToDto(
+        GroundingAccessPlacementSide side) => side switch
+    {
+        GroundingAccessPlacementSide.PoleSide => ProjectGroundingAccessPlacementSide.PoleSide,
+        GroundingAccessPlacementSide.AdjacentEndpointSide =>
+            ProjectGroundingAccessPlacementSide.AdjacentEndpointSide,
+        _ => throw new ArgumentOutOfRangeException(nameof(side))
+    };
+
+    private static GroundingAccessPlacementSide ToDomain(
+        ProjectGroundingAccessPlacementSide side) => side switch
+    {
+        ProjectGroundingAccessPlacementSide.PoleSide => GroundingAccessPlacementSide.PoleSide,
+        ProjectGroundingAccessPlacementSide.AdjacentEndpointSide =>
+            GroundingAccessPlacementSide.AdjacentEndpointSide,
+        _ => throw new InvalidDataException($"Unsupported grounding access placement side '{side}'.")
     };
 
     private static void ValidateBoundaryStructure(

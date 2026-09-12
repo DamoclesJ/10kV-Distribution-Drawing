@@ -9,7 +9,8 @@ namespace DistributionDrawing.Rendering.Wpf.Routing;
 public readonly record struct GroundingAccessHalfEdge(
     DocumentPoint PoleCenter,
     DocumentPoint ConductorOrigin,
-    DocumentPoint DirectionPoint);
+    DocumentPoint DirectionPoint,
+    IReadOnlyList<DocumentPoint> OrientedPath);
 
 public static class SupportPoleAwareRouteBuilder
 {
@@ -28,6 +29,7 @@ public static class SupportPoleAwareRouteBuilder
             poleId,
             GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
             null,
+            GroundingAccessPlacementSide.PoleSide,
             out halfEdge);
     }
 
@@ -38,6 +40,24 @@ public static class SupportPoleAwareRouteBuilder
         Guid poleId,
         GroundingAdjacentEndpoint adjacentEndpoint,
         Connection? connection,
+        out GroundingAccessHalfEdge halfEdge) => TryResolveHalfEdge(
+            route,
+            line,
+            layout,
+            poleId,
+            adjacentEndpoint,
+            connection,
+            GroundingAccessPlacementSide.PoleSide,
+            out halfEdge);
+
+    public static bool TryResolveHalfEdge(
+        OrthogonalRoute route,
+        OverheadLine line,
+        DrawingLayout layout,
+        Guid poleId,
+        GroundingAdjacentEndpoint adjacentEndpoint,
+        Connection? connection,
+        GroundingAccessPlacementSide placementSide,
         out GroundingAccessHalfEdge halfEdge)
     {
         ArgumentNullException.ThrowIfNull(route);
@@ -64,18 +84,25 @@ public static class SupportPoleAwareRouteBuilder
             }
 
             DocumentPoint terminalEndpointPole = PoleProfessionalGeometry.GetPoleCenter(poleLayout);
-            bool poleSideIsStart = connection.EndTerminalId == adjacentEndpoint.TargetId;
-            OrthogonalRouteSegment segment = poleSideIsStart
-                ? route.Segments[0]
-                : route.Segments[^1];
-            DocumentPoint origin = poleSideIsStart ? segment.Start : segment.End;
-            DocumentPoint direction = poleSideIsStart ? segment.End : segment.Start;
+            bool terminalIsStart = connection.StartTerminalId == adjacentEndpoint.TargetId;
+            bool fromStart = placementSide == GroundingAccessPlacementSide.AdjacentEndpointSide
+                ? terminalIsStart
+                : !terminalIsStart;
+            DocumentPoint[] path = fromStart
+                ? route.Points.ToArray()
+                : route.Points.Reverse().ToArray();
+            DocumentPoint origin = path[0];
+            DocumentPoint direction = path[1];
             if (origin == direction)
             {
                 halfEdge = default;
                 return false;
             }
-            halfEdge = new GroundingAccessHalfEdge(terminalEndpointPole, origin, direction);
+            halfEdge = new GroundingAccessHalfEdge(
+                terminalEndpointPole,
+                origin,
+                direction,
+                Array.AsReadOnly(path));
             return true;
         }
 
@@ -102,17 +129,27 @@ public static class SupportPoleAwareRouteBuilder
                 out DocumentPoint endpoint,
                 out DocumentPoint endpointDirection))
         {
-            halfEdge = new GroundingAccessHalfEdge(pole, endpoint, endpointDirection);
+            halfEdge = CreateHalfEdge(
+                route,
+                pole,
+                endpoint,
+                endpointDirection,
+                PoleProfessionalGeometry.GetPoleCenter(adjacentLayout));
             return true;
         }
+        DocumentPoint? adjacentCenter = layout.Poles.TryGetValue(
+            adjacentPoleId,
+            out PoleLayout? adjacentPoleLayout)
+            ? PoleProfessionalGeometry.GetPoleCenter(adjacentPoleLayout)
+            : null;
         if (successor && TryFindForwardDirection(route, pole, out DocumentPoint forward))
         {
-            halfEdge = new GroundingAccessHalfEdge(pole, pole, forward);
+            halfEdge = CreateHalfEdge(route, pole, pole, forward, adjacentCenter);
             return true;
         }
         if (predecessor && TryFindBackwardDirection(route, pole, out DocumentPoint backward))
         {
-            halfEdge = new GroundingAccessHalfEdge(pole, pole, backward);
+            halfEdge = CreateHalfEdge(route, pole, pole, backward, adjacentCenter);
             return true;
         }
 
@@ -208,5 +245,87 @@ public static class SupportPoleAwareRouteBuilder
             : point.XMillimeters == segment.Start.XMillimeters &&
               point.YMillimeters >= Math.Min(segment.Start.YMillimeters, segment.End.YMillimeters) &&
               point.YMillimeters <= Math.Max(segment.Start.YMillimeters, segment.End.YMillimeters);
+    }
+
+    private static GroundingAccessHalfEdge CreateHalfEdge(
+        OrthogonalRoute route,
+        DocumentPoint pole,
+        DocumentPoint origin,
+        DocumentPoint direction,
+        DocumentPoint? stop = null)
+    {
+        for (var index = 0; index < route.Segments.Count; index++)
+        {
+            OrthogonalRouteSegment segment = route.Segments[index];
+            if (!Contains(segment, origin) || !Contains(segment, direction))
+            {
+                continue;
+            }
+            bool forward = direction == segment.End || direction != segment.Start;
+            var points = new List<DocumentPoint> { origin };
+            if (forward)
+            {
+                points.Add(segment.End);
+                points.AddRange(route.Points.Skip(index + 2));
+            }
+            else
+            {
+                points.Add(segment.Start);
+                points.AddRange(route.Points.Take(index).Reverse());
+            }
+            DocumentPoint[] normalized = TrimAt(
+                points.DistinctConsecutive().ToArray(),
+                stop);
+            return new GroundingAccessHalfEdge(
+                pole,
+                origin,
+                direction,
+                Array.AsReadOnly(normalized));
+        }
+
+        return new GroundingAccessHalfEdge(
+            pole,
+            origin,
+            direction,
+            Array.AsReadOnly(new[] { origin, direction }));
+    }
+
+    private static DocumentPoint[] TrimAt(
+        IReadOnlyList<DocumentPoint> path,
+        DocumentPoint? stop)
+    {
+        if (stop is not DocumentPoint stopPoint)
+        {
+            return path.ToArray();
+        }
+        var result = new List<DocumentPoint> { path[0] };
+        for (var index = 0; index + 1 < path.Count; index++)
+        {
+            var segment = new OrthogonalRouteSegment(path[index], path[index + 1], index);
+            if (Contains(segment, stopPoint))
+            {
+                if (result[^1] != stopPoint)
+                {
+                    result.Add(stopPoint);
+                }
+                return result.ToArray();
+            }
+            result.Add(path[index + 1]);
+        }
+        return path.ToArray();
+    }
+
+    private static IEnumerable<DocumentPoint> DistinctConsecutive(
+        this IEnumerable<DocumentPoint> points)
+    {
+        DocumentPoint? previous = null;
+        foreach (DocumentPoint point in points)
+        {
+            if (previous is null || previous.Value != point)
+            {
+                yield return point;
+                previous = point;
+            }
+        }
     }
 }

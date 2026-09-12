@@ -109,7 +109,8 @@ internal sealed record GroundingAccessPointSnapshot(
     Guid ConnectionId,
     Guid PoleId,
     GroundingAdjacentEndpoint AdjacentEndpoint,
-    GroundingAccessLineSide LineSide);
+    GroundingAccessLineSide LineSide,
+    GroundingAccessPlacementSide PlacementSide);
 
 internal sealed class ClipboardDrawingFragment
 {

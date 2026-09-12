@@ -864,7 +864,15 @@ public sealed class DrawingClipboardTests : IDisposable
             line.Connection.Id,
             pole.Pole.Id,
             GroundingAdjacentEndpoint.ForTerminal(transformer.Creation.HvTerminal.Id),
-            GroundingAccessLineSide.LargerNumberSide);
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.AdjacentEndpointSide);
+        GroundingAccessPoint sourcePoleSide = session.PersistenceSession.Domain.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            line.Connection.Id,
+            pole.Pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(transformer.Creation.HvTerminal.Id),
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.PoleSide);
         session.RebuildScene();
         session.SelectionManager.Select(new SelectionReference(
             SelectionTargetKind.GroundingAccessPoint,
@@ -874,16 +882,30 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.True(clipboard.Copy(session).IsSuccess);
         Assert.True(clipboard.Paste(session).IsSuccess);
 
-        GroundingAccessPoint copied = Assert.Single(
-            session.PersistenceSession.Domain.GroundingAccessPoints,
-            point => point.GroundingAccessPointId != source.GroundingAccessPointId);
+        HashSet<Guid> sourceIds = [source.GroundingAccessPointId, sourcePoleSide.GroundingAccessPointId];
+        GroundingAccessPoint[] copied = session.PersistenceSession.Domain.GroundingAccessPoints
+            .Where(point => !sourceIds.Contains(point.GroundingAccessPointId))
+            .ToArray();
+        Assert.Equal(2, copied.Length);
         Transformer copiedTransformer = Assert.Single(
             session.PersistenceSession.Domain.Transformers,
             item => item.Id != transformer.Creation.Transformer.Id);
-        Assert.Equal(GroundingAdjacentEndpointKind.Terminal, copied.AdjacentEndpoint.Kind);
-        Assert.Equal(copiedTransformer.HvTerminalId, copied.AdjacentEndpoint.TargetId);
-        Assert.NotEqual(source.AdjacentEndpoint.TargetId, copied.AdjacentEndpoint.TargetId);
-        Assert.Equal(source.LineSide, copied.LineSide);
+        Assert.All(copied, point =>
+        {
+            Assert.Equal(GroundingAdjacentEndpointKind.Terminal, point.AdjacentEndpoint.Kind);
+            Assert.Equal(copiedTransformer.HvTerminalId, point.AdjacentEndpoint.TargetId);
+            Assert.NotEqual(source.AdjacentEndpoint.TargetId, point.AdjacentEndpoint.TargetId);
+            Assert.Equal(GroundingAccessLineSide.TransformerSide, point.LineSide);
+            Assert.NotEqual(pole.Pole.Id, point.PoleId);
+            Assert.NotEqual(line.Connection.Id, point.ConnectionId);
+        });
+        Assert.Equal(
+            new[]
+            {
+                GroundingAccessPlacementSide.PoleSide,
+                GroundingAccessPlacementSide.AdjacentEndpointSide
+            }.OrderBy(side => side),
+            copied.Select(point => point.PlacementSide).OrderBy(side => side));
     }
 
     [Fact]

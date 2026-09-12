@@ -56,6 +56,45 @@ public sealed class WpEm04GroundingAccessTests
     }
 
     [Fact]
+    public void MarkerClearance_TraversesShortFirstSegmentAndNinetyDegreeBend()
+    {
+        SceneFixture fixture = CreateFixture();
+        GroundingAccessPoint gap = fixture.Document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            fixture.Connection.Id,
+            fixture.Middle.Id,
+            fixture.End.Id,
+            GroundingAccessLineSide.LargerNumberSide);
+        DocumentPoint start = Center(fixture.Runtime.DrawingLayout.Poles[fixture.Start.Id]);
+        DocumentPoint middle = Center(fixture.Runtime.DrawingLayout.Poles[fixture.Middle.Id]);
+        DocumentPoint end = Center(fixture.Runtime.DrawingLayout.Poles[fixture.End.Id]);
+        var route = new OrthogonalRoute(
+            fixture.Connection.Id,
+            ConnectionType.OverheadLine,
+            fixture.Connection.StartTerminalId,
+            fixture.Connection.EndTerminalId,
+            [
+                start,
+                new DocumentPoint(middle.XMillimeters, start.YMillimeters),
+                middle,
+                new DocumentPoint(middle.XMillimeters + 1, middle.YMillimeters),
+                new DocumentPoint(middle.XMillimeters + 1, end.YMillimeters),
+                end
+            ],
+            [middle, new DocumentPoint(middle.XMillimeters + 1, middle.YMillimeters)]);
+
+        Assert.True(new GroundingAccessPointAnchorResolver().TryResolve(
+            gap,
+            fixture.Document,
+            fixture.Runtime.DrawingLayout,
+            new Dictionary<Guid, OrthogonalRoute> { [route.ConnectionId] = route },
+            out GroundingPresentationAnchor anchor));
+        Assert.Contains(route.Segments, segment => Contains(segment, anchor.Position));
+        Assert.Equal(middle.XMillimeters + 1, anchor.Position.XMillimeters);
+        Assert.Equal(TerminalAnchorDirection.Up, anchor.Direction);
+    }
+
+    [Fact]
     public void Marker_UsesAdjacentHalfEdge_NotLineSideOrPoleNumber()
     {
         SceneFixture fixture = CreateFixture();

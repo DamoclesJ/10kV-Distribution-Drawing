@@ -68,6 +68,7 @@ public sealed class GroundingPresentationAnchorResolver
                 document,
                 drawingLayout,
                 routes,
+                transformerLayouts,
                 out presentationAnchor);
         }
 

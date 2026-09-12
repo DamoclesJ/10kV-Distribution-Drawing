@@ -20,15 +20,22 @@ public sealed record GroundingAccessCandidate(
     GroundingAdjacentEndpoint AdjacentEndpoint,
     string? AdjacentPoleNumber,
     string AdjacentEndpointLabel,
-    string VisualDirection)
+    string VisualDirection,
+    GroundingAccessPlacementSide PlacementSide = GroundingAccessPlacementSide.PoleSide,
+    GroundingAccessLineSide? FixedLineSide = null)
 {
     public string DisplayText =>
         $"{ConnectionName} · {VisualDirection} → {AdjacentEndpointLabel}";
 
-    public Guid AdjacentPoleId => AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Pole
+    public Guid? AdjacentPoleId => AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Pole
         ? AdjacentEndpoint.TargetId
-        : throw new InvalidOperationException("This candidate has a terminal adjacent endpoint.");
+        : null;
 }
+
+public sealed record GroundingAccessCandidateLineSideState(
+    GroundingAccessLineSide? SelectedLineSide,
+    bool IsLocked,
+    string Message);
 
 public static class GroundingAccessPointCreationService
 {
@@ -55,7 +62,8 @@ public static class GroundingAccessPointCreationService
                 if (document.GroundingAccessPoints.Any(point =>
                         point.ConnectionId == line.ConnectionId &&
                         point.PoleId == poleId &&
-                        point.AdjacentEndpoint == GroundingAdjacentEndpoint.ForPole(adjacentPoleId)))
+                        point.AdjacentEndpoint == GroundingAdjacentEndpoint.ForPole(adjacentPoleId) &&
+                        point.PlacementSide == GroundingAccessPlacementSide.PoleSide))
                 {
                     continue;
                 }
@@ -83,6 +91,66 @@ public static class GroundingAccessPointCreationService
         return candidates;
     }
 
+    public static IReadOnlyList<GroundingAccessCandidate> GetTransformerCandidates(
+        ProjectRuntimeSession session,
+        Guid transformerId)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        DrawingDocument document = session.PersistenceSession.Domain;
+        Transformer transformer = document.Transformers.Single(item => item.Id == transformerId);
+        if (transformer.TransformerKind == TransformerKind.PublicIndoor)
+        {
+            return [];
+        }
+
+        var candidates = new List<GroundingAccessCandidate>();
+        foreach (OverheadLine line in document.OverheadLines.Where(item =>
+                     item.SupportPoleIds.Count == 1))
+        {
+            Connection connection = document.Connections.Single(item => item.Id == line.ConnectionId);
+            if (!connection.UsesTerminal(transformer.HvTerminalId))
+            {
+                continue;
+            }
+            Pole pole = document.Devices.OfType<Pole>().Single(item =>
+                item.Id == line.SupportPoleIds[0]);
+            Guid oppositeTerminalId = connection.StartTerminalId == transformer.HvTerminalId
+                ? connection.EndTerminalId
+                : connection.StartTerminalId;
+            if (!IsPhysicallyAtPole(document, oppositeTerminalId, pole.Id))
+            {
+                continue;
+            }
+            GroundingAdjacentEndpoint endpoint =
+                GroundingAdjacentEndpoint.ForTerminal(transformer.HvTerminalId);
+            if (document.GroundingAccessPoints.Any(point =>
+                    point.ConnectionId == line.ConnectionId &&
+                    point.PoleId == pole.Id &&
+                    point.AdjacentEndpoint == endpoint &&
+                    point.PlacementSide == GroundingAccessPlacementSide.AdjacentEndpointSide))
+            {
+                continue;
+            }
+            candidates.Add(new GroundingAccessCandidate(
+                line.ConnectionId,
+                connection.DisplayName,
+                pole.Id,
+                pole.PoleNumber,
+                endpoint,
+                null,
+                "变压器高压侧导线",
+                ResolveDirection(
+                    session,
+                    line.ConnectionId,
+                    pole.Id,
+                    endpoint,
+                    GroundingAccessPlacementSide.AdjacentEndpointSide),
+                GroundingAccessPlacementSide.AdjacentEndpointSide,
+                GroundingAccessLineSide.TransformerSide));
+        }
+        return candidates;
+    }
+
     public static GroundingAccessLineSide? RecommendLineSide(
         string poleNumber,
         string adjacentPoleNumber)
@@ -98,6 +166,29 @@ public static class GroundingAccessPointCreationService
             : GroundingAccessLineSide.LargerNumberSide;
     }
 
+    public static GroundingAccessCandidateLineSideState ResolveLineSideState(
+        GroundingAccessCandidate candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        if (candidate.FixedLineSide == GroundingAccessLineSide.TransformerSide)
+        {
+            return new GroundingAccessCandidateLineSideState(
+                GroundingAccessLineSide.TransformerSide,
+                true,
+                "该方向为变压器侧；从杆塔入口创建靠杆塔端的导线验电接地环。");
+        }
+        GroundingAccessLineSide? recommendation =
+            candidate.AdjacentPoleNumber is string adjacentPoleNumber
+                ? RecommendLineSide(candidate.PoleNumber, adjacentPoleNumber)
+                : null;
+        return new GroundingAccessCandidateLineSideState(
+            recommendation,
+            false,
+            recommendation is null
+                ? "杆号无法可靠解析，请人工选择小号侧或大号侧。"
+                : "已按简单杆号推荐；可人工覆盖，实际相邻杆方向不会改变。");
+    }
+
     public static ICommand CreateCommand(
         ProjectRuntimeSession session,
         GroundingAccessCandidate candidate,
@@ -108,19 +199,22 @@ public static class GroundingAccessPointCreationService
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(candidate);
         ProfessionalCommandFactory commands = factory ?? new ProfessionalCommandFactory();
+        GroundingAccessLineSide effectiveSide = candidate.FixedLineSide ?? side;
         return addGroundingPoint
             ? commands.CreateAddGroundingAccessPointWithGroundingPoint(
                 session.PersistenceSession.Domain,
                 candidate.ConnectionId,
                 candidate.PoleId,
                 candidate.AdjacentEndpoint,
-                side)
+                effectiveSide,
+                candidate.PlacementSide)
             : commands.CreateAddGroundingAccessPoint(
                 session.PersistenceSession.Domain,
                 candidate.ConnectionId,
                 candidate.PoleId,
                 candidate.AdjacentEndpoint,
-                side);
+                effectiveSide,
+                candidate.PlacementSide);
     }
 
     private static bool TryParseSimpleNumber(string value, out int number)
@@ -141,7 +235,8 @@ public static class GroundingAccessPointCreationService
         ProjectRuntimeSession session,
         Guid connectionId,
         Guid poleId,
-        GroundingAdjacentEndpoint adjacentEndpoint)
+        GroundingAdjacentEndpoint adjacentEndpoint,
+        GroundingAccessPlacementSide placementSide = GroundingAccessPlacementSide.PoleSide)
     {
         DrawingDocument document = session.PersistenceSession.Domain;
         OverheadLine line = document.OverheadLines.Single(item =>
@@ -157,6 +252,7 @@ public static class GroundingAccessPointCreationService
                 poleId,
                 adjacentEndpoint,
                 connection,
+                placementSide,
                 out GroundingAccessHalfEdge halfEdge))
         {
             throw new InvalidOperationException("无法从正式线路解析验电接地环方向。");
@@ -187,7 +283,7 @@ public static class GroundingAccessPointCreationService
             Transformer? transformer = document.Transformers.SingleOrDefault(item =>
                 item.HvTerminalId == terminalId &&
                 item.TransformerKind is TransformerKind.PublicPoleMounted or
-                    TransformerKind.DedicatedPoleMounted or TransformerKind.PublicIndoor);
+                    TransformerKind.DedicatedPoleMounted);
             if (transformer is null)
             {
                 continue;
@@ -196,23 +292,7 @@ public static class GroundingAccessPointCreationService
             Guid oppositeTerminalId = connection.StartTerminalId == terminalId
                 ? connection.EndTerminalId
                 : connection.StartTerminalId;
-            Terminal oppositeTerminal = document.Terminals.Single(item =>
-                item.Id == oppositeTerminalId);
-            bool physicallyAtPole = oppositeTerminal.OwnerType == TopologyOwnerType.Device &&
-                document.Devices.Single(item => item.Id == oppositeTerminal.OwnerId) switch
-                {
-                    Pole ownerPole => ownerPole.Id == pole.Id,
-                    SwitchDevice switchDevice when
-                        switchDevice.InstallationType == SwitchInstallationType.Pole =>
-                        document.PoleAttachments.Any(attachment =>
-                            attachment.AttachedDeviceId == switchDevice.Id &&
-                            attachment.PoleId == pole.Id),
-                    CableTermination termination => document.PoleAttachments.Any(attachment =>
-                        attachment.AttachedDeviceId == termination.Id &&
-                        attachment.PoleId == pole.Id),
-                    _ => false
-                };
-            if (!physicallyAtPole)
+            if (!IsPhysicallyAtPole(document, oppositeTerminalId, pole.Id))
             {
                 continue;
             }
@@ -222,7 +302,8 @@ public static class GroundingAccessPointCreationService
             if (document.GroundingAccessPoints.Any(point =>
                     point.ConnectionId == line.ConnectionId &&
                     point.PoleId == pole.Id &&
-                    point.AdjacentEndpoint == endpoint))
+                    point.AdjacentEndpoint == endpoint &&
+                    point.PlacementSide == GroundingAccessPlacementSide.PoleSide))
             {
                 continue;
             }
@@ -235,7 +316,34 @@ public static class GroundingAccessPointCreationService
                 endpoint,
                 null,
                 "变压器高压侧导线",
-                ResolveDirection(session, line.ConnectionId, pole.Id, endpoint)));
+                ResolveDirection(session, line.ConnectionId, pole.Id, endpoint),
+                GroundingAccessPlacementSide.PoleSide,
+                GroundingAccessLineSide.TransformerSide));
         }
+    }
+
+    private static bool IsPhysicallyAtPole(
+        DrawingDocument document,
+        Guid terminalId,
+        Guid poleId)
+    {
+        Terminal terminal = document.Terminals.Single(item => item.Id == terminalId);
+        if (terminal.OwnerType != TopologyOwnerType.Device)
+        {
+            return false;
+        }
+        return document.Devices.Single(item => item.Id == terminal.OwnerId) switch
+        {
+            Pole pole => pole.Id == poleId,
+            SwitchDevice switchDevice when
+                switchDevice.InstallationType == SwitchInstallationType.Pole =>
+                document.PoleAttachments.Any(attachment =>
+                    attachment.AttachedDeviceId == switchDevice.Id &&
+                    attachment.PoleId == poleId),
+            CableTermination termination => document.PoleAttachments.Any(attachment =>
+                attachment.AttachedDeviceId == termination.Id &&
+                attachment.PoleId == poleId),
+            _ => false
+        };
     }
 }

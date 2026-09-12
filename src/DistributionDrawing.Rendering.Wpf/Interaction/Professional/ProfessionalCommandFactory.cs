@@ -103,7 +103,7 @@ public sealed class ProfessionalCommandFactory
             poleId,
             GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
             lineSide,
-            groundingAccessPointId);
+            groundingAccessPointId: groundingAccessPointId);
     }
 
     public AddGroundingAccessPointCommand CreateAddGroundingAccessPoint(
@@ -112,6 +112,7 @@ public sealed class ProfessionalCommandFactory
         Guid poleId,
         GroundingAdjacentEndpoint adjacentEndpoint,
         GroundingAccessLineSide lineSide,
+        GroundingAccessPlacementSide placementSide = GroundingAccessPlacementSide.PoleSide,
         Guid? groundingAccessPointId = null)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -120,7 +121,8 @@ public sealed class ProfessionalCommandFactory
             connectionId,
             poleId,
             adjacentEndpoint,
-            lineSide);
+            lineSide,
+            placementSide);
         return new AddGroundingAccessPointCommand(document, snapshot);
     }
 
@@ -156,8 +158,8 @@ public sealed class ProfessionalCommandFactory
             poleId,
             GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
             lineSide,
-            location,
-            note);
+            location: location,
+            note: note);
     }
 
     public CompositeProfessionalCommand CreateAddGroundingAccessPointWithGroundingPoint(
@@ -166,6 +168,7 @@ public sealed class ProfessionalCommandFactory
         Guid poleId,
         GroundingAdjacentEndpoint adjacentEndpoint,
         GroundingAccessLineSide lineSide,
+        GroundingAccessPlacementSide placementSide = GroundingAccessPlacementSide.PoleSide,
         string? location = null,
         string? note = null)
     {
@@ -174,10 +177,11 @@ public sealed class ProfessionalCommandFactory
             connectionId,
             poleId,
             adjacentEndpoint,
-            lineSide);
+            lineSide,
+            placementSide);
         string normalizedLocation = string.IsNullOrWhiteSpace(location)
             ? GroundingPointLocationResolver.ResolveGroundingAccessPoint(
-                document, poleId, lineSide)
+                document, poleId, adjacentEndpoint, lineSide, placementSide)
             : location.Trim();
         ICommand addGroundingPoint = new AddGroundingPointCommand(
             document,

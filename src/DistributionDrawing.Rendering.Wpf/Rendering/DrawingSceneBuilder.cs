@@ -519,7 +519,8 @@ public sealed class DrawingSceneBuilder
                                     point.PoleId == poleId &&
                                     point.AdjacentEndpoint.Kind ==
                                         GroundingAdjacentEndpointKind.Terminal &&
-                                    point.AdjacentEndpoint.TargetId == terminalId) == true;
+                                    point.AdjacentEndpoint.TargetId == terminalId &&
+                                    point.PlacementSide == GroundingAccessPlacementSide.PoleSide) == true;
                             double predecessor = supportIndex > 0
                                 ? Stub(overheadLine.SupportPoleIds[supportIndex - 1],
                                     PoleProfessionalGeometry.GetPoleCenter(
@@ -549,7 +550,8 @@ public sealed class DrawingSceneBuilder
                                 SuccessorMinimumStubLength: successor,
                                 AllowStartEndpointSubstitution: allowStartSubstitution,
                                 AllowEndEndpointSubstitution: allowEndSubstitution);
-                        }).ToArray()));
+                        }).ToArray(),
+                        groundingAccessPoints: groundingAccessPoints));
                 }
             }
 
@@ -849,13 +851,37 @@ public sealed class DrawingSceneBuilder
         Connection connection,
         IReadOnlyDictionary<Guid, TerminalAnchor> anchors,
         double? preferredHorizontalY = null,
-        IReadOnlyList<RequiredRouteWaypoint>? requiredWaypoints = null)
+        IReadOnlyList<RequiredRouteWaypoint>? requiredWaypoints = null,
+        IEnumerable<GroundingAccessPoint>? groundingAccessPoints = null)
     {
         if (!anchors.TryGetValue(connection.StartTerminalId, out TerminalAnchor start) ||
             !anchors.TryGetValue(connection.EndTerminalId, out TerminalAnchor end))
         {
             throw new InvalidOperationException(
                 $"No terminal anchors exist for connection '{connection.Id}'.");
+        }
+
+        double endpointClearance = DrawingMetrics.Default.Line.GroundingAccessClearance +
+            (DrawingMetrics.Default.Line.GroundingAccessMarkerDiameter +
+             DrawingMetrics.Default.Line.ConnectionThickness) / 2;
+        bool HasTransformerSideGap(Guid terminalId) => groundingAccessPoints?.Any(point =>
+            point.ConnectionId == connection.Id &&
+            point.AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Terminal &&
+            point.AdjacentEndpoint.TargetId == terminalId &&
+            point.PlacementSide == GroundingAccessPlacementSide.AdjacentEndpointSide) == true;
+        if (HasTransformerSideGap(connection.StartTerminalId))
+        {
+            start = start with
+            {
+                MinimumStubLength = Math.Max(start.MinimumStubLength, endpointClearance)
+            };
+        }
+        if (HasTransformerSideGap(connection.EndTerminalId))
+        {
+            end = end with
+            {
+                MinimumStubLength = Math.Max(end.MinimumStubLength, endpointClearance)
+            };
         }
 
         return new ConnectionRouteRequest(

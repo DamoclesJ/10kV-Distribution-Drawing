@@ -3,7 +3,14 @@ namespace DistributionDrawing.Domain.Professional;
 public enum GroundingAccessLineSide
 {
     SmallerNumberSide,
-    LargerNumberSide
+    LargerNumberSide,
+    TransformerSide
+}
+
+public enum GroundingAccessPlacementSide
+{
+    PoleSide,
+    AdjacentEndpointSide
 }
 
 public enum GroundingAdjacentEndpointKind
@@ -54,7 +61,8 @@ public sealed class GroundingAccessPoint
             connectionId,
             poleId,
             GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
-            lineSide)
+            lineSide,
+            GroundingAccessPlacementSide.PoleSide)
     {
     }
 
@@ -63,7 +71,8 @@ public sealed class GroundingAccessPoint
         Guid connectionId,
         Guid poleId,
         GroundingAdjacentEndpoint adjacentEndpoint,
-        GroundingAccessLineSide lineSide)
+        GroundingAccessLineSide lineSide,
+        GroundingAccessPlacementSide placementSide = GroundingAccessPlacementSide.PoleSide)
     {
         if (groundingAccessPointId == Guid.Empty)
         {
@@ -93,12 +102,30 @@ public sealed class GroundingAccessPoint
         {
             throw new ArgumentOutOfRangeException(nameof(lineSide));
         }
+        if (!Enum.IsDefined(placementSide))
+        {
+            throw new ArgumentOutOfRangeException(nameof(placementSide));
+        }
+        if (adjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Pole &&
+            (lineSide == GroundingAccessLineSide.TransformerSide ||
+             placementSide != GroundingAccessPlacementSide.PoleSide))
+        {
+            throw new ArgumentException(
+                "A pole adjacent endpoint requires a numbered line side and pole-side placement.");
+        }
+        if (adjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Terminal &&
+            lineSide != GroundingAccessLineSide.TransformerSide)
+        {
+            throw new ArgumentException(
+                "A terminal adjacent endpoint requires the transformer line side.");
+        }
 
         GroundingAccessPointId = groundingAccessPointId;
         ConnectionId = connectionId;
         PoleId = poleId;
         AdjacentEndpoint = adjacentEndpoint;
         LineSide = lineSide;
+        PlacementSide = placementSide;
     }
 
     public Guid GroundingAccessPointId { get; }
@@ -114,4 +141,6 @@ public sealed class GroundingAccessPoint
         : throw new InvalidOperationException("This grounding access point has a terminal adjacent endpoint.");
 
     public GroundingAccessLineSide LineSide { get; }
+
+    public GroundingAccessPlacementSide PlacementSide { get; }
 }

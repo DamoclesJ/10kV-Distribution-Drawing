@@ -88,6 +88,14 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             GroundingAccessPointCreationService.GetCandidates(session, pole.Pole.Id));
         Assert.Equal(GroundingAdjacentEndpointKind.Terminal, candidate.AdjacentEndpoint.Kind);
         Assert.Equal(transformer.Creation.HvTerminal.Id, candidate.AdjacentEndpoint.TargetId);
+        Assert.Equal(GroundingAccessLineSide.TransformerSide, candidate.FixedLineSide);
+        Assert.Equal(GroundingAccessPlacementSide.PoleSide, candidate.PlacementSide);
+        GroundingAccessCandidateLineSideState state =
+            GroundingAccessPointCreationService.ResolveLineSideState(candidate);
+        Assert.True(state.IsLocked);
+        Assert.Equal(GroundingAccessLineSide.TransformerSide, state.SelectedLineSide);
+        Assert.Contains("变压器侧", state.Message);
+        Assert.Null(candidate.AdjacentPoleId);
 
         session.CommandStack.ExecuteCommand(
             GroundingAccessPointCreationService.CreateCommand(
@@ -100,6 +108,8 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         GroundingAccessPoint gap = Assert.Single(
             session.PersistenceSession.Domain.GroundingAccessPoints);
         Assert.Equal(candidate.AdjacentEndpoint, gap.AdjacentEndpoint);
+        Assert.Equal(GroundingAccessLineSide.TransformerSide, gap.LineSide);
+        Assert.Equal(GroundingAccessPlacementSide.PoleSide, gap.PlacementSide);
         Assert.Equal(
             GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
             Assert.Single(session.PersistenceSession.Domain.GroundingPoints).Target);
@@ -160,6 +170,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             GroundingAccessPointCreationService.GetCandidates(session, pole.Pole.Id));
         Assert.Equal(GroundingAdjacentEndpointKind.Terminal, candidate.AdjacentEndpoint.Kind);
         Assert.Equal(transformer.Creation.HvTerminal.Id, candidate.AdjacentEndpoint.TargetId);
+        Assert.Equal(GroundingAccessLineSide.TransformerSide, candidate.FixedLineSide);
 
         session.CommandStack.ExecuteCommand(
             GroundingAccessPointCreationService.CreateCommand(
@@ -176,6 +187,208 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
             Assert.Single(session.PersistenceSession.Domain.GroundingPoints).Target);
         AssertTerminalGapScene(session, pole.Pole.Id, gap);
+    }
+
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted, false)]
+    [InlineData(TransformerKind.PublicPoleMounted, true)]
+    [InlineData(TransformerKind.DedicatedPoleMounted, false)]
+    [InlineData(TransformerKind.DedicatedPoleMounted, true)]
+    public void PoleAndTransformerWorkflows_CreateIndependentDualGap(
+        TransformerKind kind,
+        bool transformerIsStart)
+    {
+        ProjectRuntimeSession session = CreateSession("WP-EM-07A dual GAP");
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand pole = factory.CreateAddPole(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new DocumentPoint(20, 40));
+        pole.Execute();
+        AddPoleSwitchAttachmentCommand fuse = factory.CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            pole.Pole.Id,
+            SwitchKind.DropoutFuse,
+            new DocumentPoint(15, 0));
+        fuse.Execute();
+        AddTransformerCommand transformer = factory.CreateAddTransformer(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            kind,
+            new DocumentPoint(90, 40));
+        transformer.Execute();
+        Guid first = transformerIsStart
+            ? transformer.Creation.HvTerminal.Id
+            : fuse.Creation.SecondTerminal.Id;
+        Guid second = transformerIsStart
+            ? fuse.Creation.SecondTerminal.Id
+            : transformer.Creation.HvTerminal.Id;
+        AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            first,
+            second,
+            transformerIsStart ? new DocumentPoint(90, 40) : new DocumentPoint(35, 40),
+            transformerIsStart ? new DocumentPoint(35, 40) : new DocumentPoint(90, 40));
+        line.Execute();
+        session.RebuildScene();
+
+        GroundingAccessCandidate poleCandidate = Assert.Single(
+            GroundingAccessPointCreationService.GetCandidates(session, pole.Pole.Id));
+        session.CommandStack.ExecuteCommand(
+            GroundingAccessPointCreationService.CreateCommand(
+                session,
+                poleCandidate,
+                GroundingAccessLineSide.SmallerNumberSide,
+                addGroundingPoint: true),
+            session.RebuildScene);
+        GroundingAccessCandidate transformerCandidate = Assert.Single(
+            GroundingAccessPointCreationService.GetTransformerCandidates(
+                session,
+                transformer.Creation.Transformer.Id));
+        Assert.Equal(
+            GroundingAccessPlacementSide.AdjacentEndpointSide,
+            transformerCandidate.PlacementSide);
+        session.CommandStack.ExecuteCommand(
+            GroundingAccessPointCreationService.CreateCommand(
+                session,
+                transformerCandidate,
+                GroundingAccessLineSide.TransformerSide,
+                addGroundingPoint: true),
+            session.RebuildScene);
+
+        GroundingAccessPoint[] gaps = session.PersistenceSession.Domain.GroundingAccessPoints
+            .OrderBy(point => point.PlacementSide)
+            .ToArray();
+        Assert.Equal(2, gaps.Length);
+        Assert.Equal(GroundingAccessPlacementSide.PoleSide, gaps[0].PlacementSide);
+        Assert.Equal(GroundingAccessPlacementSide.AdjacentEndpointSide, gaps[1].PlacementSide);
+        Assert.Equal(2, session.PersistenceSession.Domain.GroundingPoints.Count);
+        Assert.Contains(session.PersistenceSession.Domain.GroundingPoints,
+            point => point.Location == $"{pole.Pole.PoleNumber}杆变压器侧");
+        Assert.Contains(session.PersistenceSession.Domain.GroundingPoints,
+            point => point.Location == "变压器高压侧导线");
+        DocumentPoint[] markerCenters = gaps.Select(gap => Center(
+            FindGapMarker(session.Scene, gap.GroundingAccessPointId).Bounds)).ToArray();
+        Assert.NotEqual(markerCenters[0], markerCenters[1]);
+        OrthogonalRoute finalRoute = Assert.Single(session.Scene.Routes,
+            route => route.ConnectionId == line.Connection.Id);
+        Assert.All(markerCenters, marker => Assert.Contains(
+            finalRoute.Segments,
+            segment => Contains(segment, marker)));
+        TransformerProfessionalGeometry transformerGeometry =
+            TransformerProfessionalGeometry.Create(
+                transformer.Creation.Transformer,
+                transformer.Creation.Layout,
+                DrawingMetrics.Default.Transformer);
+        DocumentPoint transformerMarker = markerCenters[Array.FindIndex(
+            gaps,
+            gap => gap.PlacementSide == GroundingAccessPlacementSide.AdjacentEndpointSide)];
+        Assert.False(transformerMarker.XMillimeters > transformerGeometry.Bounds.XMillimeters &&
+                     transformerMarker.XMillimeters < transformerGeometry.Bounds.XMillimeters +
+                         transformerGeometry.Bounds.WidthMillimeters &&
+                     transformerMarker.YMillimeters > transformerGeometry.Bounds.YMillimeters &&
+                     transformerMarker.YMillimeters < transformerGeometry.Bounds.YMillimeters +
+                         transformerGeometry.Bounds.HeightMillimeters);
+        Assert.DoesNotContain(session.Scene.Diagnostics, diagnostic =>
+            diagnostic.Code is "GroundingAccessPointAnchorMissing" or
+                "GroundingPresentationAnchorMissing");
+        Assert.Empty(GroundingAccessPointCreationService.GetCandidates(session, pole.Pole.Id));
+        Assert.Empty(GroundingAccessPointCreationService.GetTransformerCandidates(
+            session,
+            transformer.Creation.Transformer.Id));
+
+        Guid transformerSideGapId = gaps[1].GroundingAccessPointId;
+        Assert.True(session.CommandStack.Undo());
+        Assert.Single(session.PersistenceSession.Domain.GroundingAccessPoints);
+        Assert.True(session.CommandStack.Redo());
+        Assert.Contains(session.PersistenceSession.Domain.GroundingAccessPoints,
+            point => point.GroundingAccessPointId == transformerSideGapId);
+    }
+
+    [Fact]
+    public void TransformerWorkflow_PublicIndoorHasNoOverheadCandidate()
+    {
+        ProjectRuntimeSession session = CreateSession("WP-EM-07A indoor reject");
+        AddTransformerCommand transformer = new DeviceCommandFactory().CreateAddTransformer(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(90, 40));
+        transformer.Execute();
+        session.RebuildScene();
+
+        Assert.Empty(GroundingAccessPointCreationService.GetTransformerCandidates(
+            session,
+            transformer.Creation.Transformer.Id));
+    }
+
+    [Fact]
+    public void PoleWorkflow_MixedPoleAndTransformerCandidatesHaveSafeLineSideState()
+    {
+        ProjectRuntimeSession session = CreateSession("WP-EM-07A mixed candidates");
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand left = factory.CreateAddPole(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new DocumentPoint(10, 40));
+        AddPoleCommand middle = factory.CreateAddPole(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            new DocumentPoint(80, 40));
+        left.Execute();
+        middle.Execute();
+        left.Pole.RenamePoleNumber("11#");
+        middle.Pole.RenamePoleNumber("12#");
+        AddOverheadLineCommand ordinary = new OverheadLineCommandFactory().CreateAdd(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            left.Terminal.Id,
+            middle.Terminal.Id,
+            new DocumentPoint(10, 40),
+            new DocumentPoint(80, 40));
+        ordinary.Execute();
+        AddPoleSwitchAttachmentCommand fuse = factory.CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            middle.Pole.Id,
+            SwitchKind.DropoutFuse,
+            new DocumentPoint(15, 0));
+        fuse.Execute();
+        AddTransformerCommand transformer = factory.CreateAddTransformer(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            TransformerKind.PublicPoleMounted,
+            new DocumentPoint(150, 40));
+        transformer.Execute();
+        AddOverheadLineCommand shortLine = new OverheadLineCommandFactory().CreateAdd(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            fuse.Creation.SecondTerminal.Id,
+            transformer.Creation.HvTerminal.Id,
+            new DocumentPoint(95, 40),
+            new DocumentPoint(150, 40));
+        shortLine.Execute();
+        session.RebuildScene();
+
+        GroundingAccessCandidate[] candidates = GroundingAccessPointCreationService
+            .GetCandidates(session, middle.Pole.Id)
+            .ToArray();
+        Assert.Equal(2, candidates.Length);
+        GroundingAccessCandidate poleCandidate = Assert.Single(candidates,
+            candidate => candidate.AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Pole);
+        GroundingAccessCandidate transformerCandidate = Assert.Single(candidates,
+            candidate => candidate.AdjacentEndpoint.Kind == GroundingAdjacentEndpointKind.Terminal);
+        GroundingAccessCandidateLineSideState poleState =
+            GroundingAccessPointCreationService.ResolveLineSideState(poleCandidate);
+        GroundingAccessCandidateLineSideState transformerState =
+            GroundingAccessPointCreationService.ResolveLineSideState(transformerCandidate);
+        Assert.Equal(GroundingAccessLineSide.SmallerNumberSide, poleState.SelectedLineSide);
+        Assert.False(poleState.IsLocked);
+        Assert.Equal(GroundingAccessLineSide.TransformerSide, transformerState.SelectedLineSide);
+        Assert.True(transformerState.IsLocked);
+        Assert.Null(transformerCandidate.AdjacentPoleId);
     }
 
     [Fact]
@@ -195,7 +408,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             candidate.VisualDirection, new[] { "左侧", "右侧", "上侧", "下侧" }));
         Assert.Equal(
             new[] { scenario.Start.Pole.Id, scenario.End.Pole.Id }.OrderBy(id => id),
-            middle.Select(candidate => candidate.AdjacentPoleId).OrderBy(id => id));
+            middle.Select(candidate => candidate.AdjacentPoleId!.Value).OrderBy(id => id));
         OverheadLine line = Assert.Single(scenario.Session.PersistenceSession.Domain.OverheadLines);
         OrthogonalRoute route = Assert.Single(scenario.Session.Scene.Routes);
         foreach (GroundingAccessCandidate candidate in middle)
@@ -205,7 +418,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
                 line,
                 scenario.Session.Layout.DrawingLayout,
                 candidate.PoleId,
-                candidate.AdjacentPoleId,
+                candidate.AdjacentPoleId!.Value,
                 out GroundingAccessHalfEdge halfEdge));
             Assert.Equal(DirectionText(halfEdge), candidate.VisualDirection);
         }
@@ -868,8 +1081,8 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
 
     private static string DirectionText(GroundingAccessHalfEdge halfEdge)
     {
-        double dx = halfEdge.DirectionPoint.XMillimeters - halfEdge.PoleCenter.XMillimeters;
-        double dy = halfEdge.DirectionPoint.YMillimeters - halfEdge.PoleCenter.YMillimeters;
+        double dx = halfEdge.DirectionPoint.XMillimeters - halfEdge.ConductorOrigin.XMillimeters;
+        double dy = halfEdge.DirectionPoint.YMillimeters - halfEdge.ConductorOrigin.YMillimeters;
         return dx < 0 ? "左侧" : dx > 0 ? "右侧" : dy < 0 ? "上侧" : "下侧";
     }
 

@@ -124,7 +124,8 @@ internal sealed class SelectionCopyPlanner
                 point.ConnectionId,
                 point.PoleId,
                 point.AdjacentEndpoint,
-                point.LineSide))
+                point.LineSide,
+                point.PlacementSide))
             .ToArray();
         HashSet<Guid> includedAccessPointIds = accessPoints
             .Select(point => point.GroundingAccessPointId)

@@ -340,9 +340,19 @@ public partial class MainWindow : Window
     {
         ProjectRuntimeSession? session = _workspace.CurrentSession;
         ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
-        if (session is null || selection?.Pole is not Pole pole)
+        if (session is null)
         {
-            _messageService.ShowError("无法添加验电接地环", "请先选择一个杆塔。");
+            _messageService.ShowError("无法添加验电接地环", "当前没有打开的工程。");
+            return;
+        }
+        if (selection?.Transformer is Transformer transformer)
+        {
+            AddTransformerSideGroundingAccessPoint(session, transformer);
+            return;
+        }
+        if (selection?.Pole is not Pole pole)
+        {
+            _messageService.ShowError("无法添加验电接地环", "请先选择一个杆塔或柱上变压器。");
             return;
         }
 
@@ -388,7 +398,74 @@ public partial class MainWindow : Window
             GroundingAccessPoint point = session.PersistenceSession.Domain.GroundingAccessPoints
                 .Single(item => item.ConnectionId == candidate.ConnectionId &&
                                 item.PoleId == candidate.PoleId &&
-                                item.AdjacentEndpoint == candidate.AdjacentEndpoint);
+                                item.AdjacentEndpoint == candidate.AdjacentEndpoint &&
+                                item.PlacementSide == candidate.PlacementSide);
+            session.SelectionManager.Select(new SelectionReference(
+                SelectionTargetKind.GroundingAccessPoint,
+                point.GroundingAccessPointId));
+            RefreshDrawingScene();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            _messageService.ShowError("无法添加验电接地环", exception.Message);
+        }
+    }
+
+    private void AddTransformerSideGroundingAccessPoint(
+        ProjectRuntimeSession session,
+        Transformer transformer)
+    {
+        if (transformer.TransformerKind == TransformerKind.PublicIndoor)
+        {
+            _messageService.ShowError(
+                "无法添加验电接地环",
+                "站内公变只允许电缆连接，不能创建架空线变压器端验电接地环。");
+            return;
+        }
+
+        IReadOnlyList<GroundingAccessCandidate> candidates;
+        try
+        {
+            candidates = GroundingAccessPointCreationService.GetTransformerCandidates(
+                session,
+                transformer.Id);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            _messageService.ShowError("无法添加验电接地环", exception.Message);
+            return;
+        }
+        if (candidates.Count != 1)
+        {
+            _messageService.ShowError(
+                "无法添加验电接地环",
+                candidates.Count == 0
+                    ? "该变压器没有唯一可用的合法短架空线，或变压器端验电接地环已经存在。"
+                    : "该变压器连接了多条合法短架空线，无法唯一确定创建位置。");
+            return;
+        }
+
+        GroundingAccessCandidate candidate = candidates[0];
+        bool addGroundingPoint = MessageBox.Show(
+            this,
+            "是否在变压器端导线验电接地环处添加工作地线？",
+            "验电接地环",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question) == MessageBoxResult.Yes;
+        try
+        {
+            ICommand command = GroundingAccessPointCreationService.CreateCommand(
+                session,
+                candidate,
+                GroundingAccessLineSide.TransformerSide,
+                addGroundingPoint,
+                _professionalCommandFactory);
+            session.CommandStack.ExecuteCommand(command, session.RebuildScene);
+            GroundingAccessPoint point = session.PersistenceSession.Domain.GroundingAccessPoints
+                .Single(item => item.ConnectionId == candidate.ConnectionId &&
+                                item.PoleId == candidate.PoleId &&
+                                item.AdjacentEndpoint == candidate.AdjacentEndpoint &&
+                                item.PlacementSide == candidate.PlacementSide);
             session.SelectionManager.Select(new SelectionReference(
                 SelectionTargetKind.GroundingAccessPoint,
                 point.GroundingAccessPointId));

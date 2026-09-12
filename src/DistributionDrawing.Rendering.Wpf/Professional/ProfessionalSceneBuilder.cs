@@ -71,6 +71,7 @@ public sealed class ProfessionalSceneBuilder
                     document,
                     drawingLayout,
                     routeByConnectionId,
+                    transformerLayouts,
                     out GroundingPresentationAnchor anchor))
             {
                 diagnostics.Add(new SceneBuildDiagnostic(

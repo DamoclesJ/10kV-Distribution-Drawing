@@ -8,7 +8,8 @@ public sealed record GroundingAccessPointCommandSnapshot(
     Guid ConnectionId,
     Guid PoleId,
     GroundingAdjacentEndpoint AdjacentEndpoint,
-    GroundingAccessLineSide LineSide)
+    GroundingAccessLineSide LineSide,
+    GroundingAccessPlacementSide PlacementSide = GroundingAccessPlacementSide.PoleSide)
 {
     public GroundingAccessPointCommandSnapshot(
         Guid groundingAccessPointId,
@@ -21,7 +22,8 @@ public sealed record GroundingAccessPointCommandSnapshot(
             connectionId,
             poleId,
             GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
-            lineSide)
+            lineSide,
+            GroundingAccessPlacementSide.PoleSide)
     {
     }
 
@@ -34,7 +36,8 @@ public sealed record GroundingAccessPointCommandSnapshot(
         point.ConnectionId,
         point.PoleId,
         point.AdjacentEndpoint,
-        point.LineSide);
+        point.LineSide,
+        point.PlacementSide);
 }
 
 public sealed class AddGroundingAccessPointCommand : ICommand
@@ -56,7 +59,8 @@ public sealed class AddGroundingAccessPointCommand : ICommand
         After.ConnectionId,
         After.PoleId,
         After.AdjacentEndpoint,
-        After.LineSide);
+        After.LineSide,
+        After.PlacementSide);
 
     public void Undo() => _document.RemoveGroundingAccessPoint(After.GroundingAccessPointId);
 
@@ -84,7 +88,8 @@ public sealed class RemoveGroundingAccessPointCommand : ICommand
         Before.ConnectionId,
         Before.PoleId,
         Before.AdjacentEndpoint,
-        Before.LineSide));
+        Before.LineSide,
+        Before.PlacementSide));
 
     public void Redo() => Execute();
 }

@@ -19,6 +19,7 @@
       <ComboBox x:Name="LineSideInput" Margin="0,5,0,0">
         <ComboBoxItem Tag="SmallerNumberSide" Content="小号侧" />
         <ComboBoxItem Tag="LargerNumberSide" Content="大号侧" />
+        <ComboBoxItem Tag="TransformerSide" Content="变压器侧" />
       </ComboBox>
       <TextBlock x:Name="RecommendationText" Margin="0,6,0,0"
                  Foreground="Gray" TextWrapping="Wrap" />

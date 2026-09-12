@@ -46,22 +46,48 @@ public sealed class GroundingAccessPointTests
             connection.Id,
             pole.Id,
             GroundingAdjacentEndpoint.ForTerminal(hvTerminal.Id),
-            GroundingAccessLineSide.LargerNumberSide);
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.PoleSide);
 
         Assert.Equal(GroundingAdjacentEndpointKind.Terminal, point.AdjacentEndpoint.Kind);
         Assert.Equal(hvTerminal.Id, point.AdjacentEndpoint.TargetId);
+        Assert.Equal(GroundingAccessPlacementSide.PoleSide, point.PlacementSide);
+        GroundingAccessPoint transformerSide = document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            connection.Id,
+            pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(hvTerminal.Id),
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.AdjacentEndpointSide);
+        Assert.Equal(GroundingAccessPlacementSide.AdjacentEndpointSide, transformerSide.PlacementSide);
         Assert.Throws<InvalidOperationException>(() => document.CreateGroundingAccessPoint(
             Guid.NewGuid(),
             connection.Id,
             pole.Id,
             GroundingAdjacentEndpoint.ForTerminal(poleTerminal.Id),
+            GroundingAccessLineSide.TransformerSide));
+        Assert.Throws<ArgumentException>(() => document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            connection.Id,
+            pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(hvTerminal.Id),
             GroundingAccessLineSide.SmallerNumberSide));
         Assert.Throws<InvalidOperationException>(() => document.CreateGroundingAccessPoint(
             Guid.NewGuid(),
             connection.Id,
             pole.Id,
             GroundingAdjacentEndpoint.ForTerminal(hvTerminal.Id),
-            GroundingAccessLineSide.SmallerNumberSide));
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.PoleSide));
+        Assert.Throws<InvalidOperationException>(() => document.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            connection.Id,
+            pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(hvTerminal.Id),
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.AdjacentEndpointSide));
+        document.RemoveGroundingAccessPoint(transformerSide.GroundingAccessPointId);
+        Assert.Same(point, Assert.Single(document.GroundingAccessPoints));
     }
 
     [Fact]
@@ -80,7 +106,23 @@ public sealed class GroundingAccessPointTests
         Assert.Throws<InvalidOperationException>(() => scenario.Document.CreateGroundingAccessPoint(
             Guid.NewGuid(), scenario.Connection.Id, scenario.Start.Id,
             GroundingAdjacentEndpoint.ForTerminal(scenario.Connection.EndTerminalId),
-            GroundingAccessLineSide.SmallerNumberSide));
+            GroundingAccessLineSide.TransformerSide));
+    }
+
+    [Fact]
+    public void PoleAdjacentEndpoint_RequiresNumberedLineSideAndPolePlacement()
+    {
+        Scenario scenario = CreateScenario();
+
+        Assert.Throws<ArgumentException>(() => scenario.Document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), scenario.Connection.Id, scenario.Start.Id,
+            GroundingAdjacentEndpoint.ForPole(scenario.Middle.Id),
+            GroundingAccessLineSide.TransformerSide));
+        Assert.Throws<ArgumentException>(() => scenario.Document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), scenario.Connection.Id, scenario.Start.Id,
+            GroundingAdjacentEndpoint.ForPole(scenario.Middle.Id),
+            GroundingAccessLineSide.SmallerNumberSide,
+            GroundingAccessPlacementSide.AdjacentEndpointSide));
     }
 
     [Fact]

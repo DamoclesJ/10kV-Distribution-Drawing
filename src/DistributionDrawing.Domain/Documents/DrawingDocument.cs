@@ -1553,7 +1553,8 @@ public sealed class DrawingDocument
             connectionId,
             poleId,
             GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
-            lineSide);
+            lineSide,
+            GroundingAccessPlacementSide.PoleSide);
     }
 
     public GroundingAccessPoint CreateGroundingAccessPoint(
@@ -1561,14 +1562,16 @@ public sealed class DrawingDocument
         Guid connectionId,
         Guid poleId,
         GroundingAdjacentEndpoint adjacentEndpoint,
-        GroundingAccessLineSide lineSide)
+        GroundingAccessLineSide lineSide,
+        GroundingAccessPlacementSide placementSide = GroundingAccessPlacementSide.PoleSide)
     {
         var point = new GroundingAccessPoint(
             groundingAccessPointId,
             connectionId,
             poleId,
             adjacentEndpoint,
-            lineSide);
+            lineSide,
+            placementSide);
         AddGroundingAccessPoint(point);
         return point;
     }
@@ -1582,7 +1585,8 @@ public sealed class DrawingDocument
         if (_groundingAccessPoints.Any(existing =>
                 existing.ConnectionId == point.ConnectionId &&
                 existing.PoleId == point.PoleId &&
-                existing.AdjacentEndpoint == point.AdjacentEndpoint))
+                existing.AdjacentEndpoint == point.AdjacentEndpoint &&
+                existing.PlacementSide == point.PlacementSide))
         {
             throw new InvalidOperationException(
                 "A grounding access point already exists on the selected conductor half-edge.");
@@ -1953,7 +1957,7 @@ public sealed class DrawingDocument
             _devices.SingleOrDefault(device => device.Id == terminal.OwnerId) is not Transformer transformer ||
             transformer.HvTerminalId != terminalId ||
             transformer.TransformerKind is not (TransformerKind.PublicPoleMounted or
-                TransformerKind.DedicatedPoleMounted or TransformerKind.PublicIndoor))
+                TransformerKind.DedicatedPoleMounted))
         {
             throw new InvalidOperationException(
                 $"Terminal '{terminalId}' is not an eligible transformer HV terminal endpoint.");
