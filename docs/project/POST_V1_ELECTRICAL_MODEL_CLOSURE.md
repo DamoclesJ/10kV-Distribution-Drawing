@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Windows Professional Acceptance Fix-2 In Progress / Closure Blocked / WP-EM-07B Planned / Not Started / WP-EM-08 Planned / WP-EM-09 Planned / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Pending / Not Started / WP-EM-08 Deferred / Not Started / WP-EM-09 Planned / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -431,7 +431,7 @@ WP-EM-04 必须提供可用的 `GroundingAccessPoint` 创建、删除、选择�
 
 ### 3.8 WP-EM-07A Transformer & Pole-Device Grounding Amendment
 
-**状态：Implementation Complete / Code Review Passed / Windows Automated Tests Passed / Windows Professional Acceptance Fix-2 In Progress / Closure Blocked**
+**状态：Closed / Archived / Final accepted implementation `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`**
 
 #### 3.8.0 Windows Professional Acceptance Amendment
 
@@ -443,7 +443,7 @@ GAP marker 从所选物理端沿 transient oriented final route 按 conductor pa
 
 新建默认 `Location` 明确区分：Terminal-endpoint `PoleSide` GAP 为 `{PoleNumber}杆变压器侧`，`AdjacentEndpointSide` GAP 为 `变压器高压侧导线`，直接 Transformer HV Terminal grounding 仍为 `变压器高压侧`。FormatVersion 保持 V7；只增加 additive optional placement DTO field，不保存坐标、segment index、leader direction 或第二套 anchor fact。WP-EM-07B、WP-EM-08 及 Transformer naming 继续排除。
 
-WP-EM-07A 是 Post-EM-07 / Pre-EM-08 的独立 amendment Work Package，不重新打开 WP-EM-06 或 WP-EM-07。Complete Vertical Slice implementation、Code Review 与 Windows automated tests 已完成；当前只执行一次完整 Windows Professional Acceptance Fix-2 closure，不拆分为独立 slice。
+WP-EM-07A 是 Post-EM-07 / Pre-EM-08 的独立 amendment Work Package，不重新打开 WP-EM-06 或 WP-EM-07。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过；最终验收实现为 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`，本 WP 现 Closed / Archived。
 
 #### 3.8.1 Pole-device adjacent OHL grounding
 
@@ -518,7 +518,7 @@ WP-EM-07A 的最小能力范围仅包括：pole-mounted switch / `IsolationSwitc
 
 ### 3.9 WP-EM-07B Transformer Naming Amendment
 
-**状态：Planned / Not Started**
+**状态：Pending / Not Started**
 
 WP-EM-07B 是 Post-EM-07 / Pre-EM-08 的独立 amendment Work Package，不重新打开 WP-EM-06 或 WP-EM-07。业务所称“站号”正式解释为该 Transformer 的设备名称 / 设备编号，不得建立 `StationNumber`、`TransformerNumber`、`DeviceNumber` 等第二套重复业务事实。三种 Transformer 只维护一个正式 naming fact。
 
@@ -823,19 +823,19 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-07A — Transformer & Pole-Device Grounding Amendment
 
-**状态：Implementation Complete / Review Passed / Windows Automated Tests Passed / Windows Professional Acceptance Fix-2 In Progress / Closure Blocked**
+**状态：Closed / Archived / Final accepted implementation `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`**
 
-正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review 与 Windows automated verification 已完成；Windows Professional Acceptance Fix-2 正在闭合 dual GAP、Transformer-centric workflow、manual leader 与 90° route continuity，Closure 仍为 BLOCKED。FormatVersion 保持 V7；不得进入 WP-EM-07B 或 WP-EM-08。
+正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 为 Pending / Not Started，WP-EM-08 为 Deferred / Not Started。
 
 ### WP-EM-07B — Transformer Naming Amendment
 
-**状态：Planned / Not Started**
+**状态：Pending / Not Started**
 
 正式 requirement contract 以 3.9 节为准。该 WP 只建立一个 Transformer naming fact；实现前必须审计 `Device.DisplayName` 与 V7 compatibility。若无法形成明确、无歧义且不猜测业务事实的 V7 compatibility contract，必须停止并返回 Governance Review。
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
-**状态：Planned**
+**状态：Deferred / Not Started**
 
 WP-EM-08 只能在 WP-EM-07A 与 WP-EM-07B Closed 后开始，其 interaction-only 范围包括：
 
@@ -882,5 +882,5 @@ WP-EM-08 只能在 WP-EM-07A 与 WP-EM-07B Closed 后开始，其 interaction-on
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A implementation、Code Review 与 Windows automated verification 已完成，Windows Professional Acceptance Fix-2 正在进行且 Closure 仍为 BLOCKED；WP-EM-07B 为 Planned / Not Started，WP-EM-08 与 WP-EM-09 为 Planned；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 为 Pending / Not Started，WP-EM-08 为 Deferred / Not Started，WP-EM-09 为 Planned；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
