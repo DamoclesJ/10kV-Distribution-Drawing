@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Pending / Not Started / WP-EM-08 Deferred / Not Started / WP-EM-09 Planned / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Requirements Frozen / Implementation Not Started / WP-EM-08 Deferred / Not Started / WP-EM-09 Planned / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -518,46 +518,78 @@ WP-EM-07A 的最小能力范围仅包括：pole-mounted switch / `IsolationSwitc
 
 ### 3.9 WP-EM-07B Transformer Naming Amendment
 
-**状态：Pending / Not Started**
+**状态：Requirements Frozen / Implementation Not Started**
 
-WP-EM-07B 是 Post-EM-07 / Pre-EM-08 的独立 amendment Work Package，不重新打开 WP-EM-06 或 WP-EM-07。业务所称“站号”正式解释为该 Transformer 的设备名称 / 设备编号，不得建立 `StationNumber`、`TransformerNumber`、`DeviceNumber` 等第二套重复业务事实。三种 Transformer 只维护一个正式 naming fact。
+WP-EM-07B 是 Post-EM-07 / Pre-EM-08 的独立 naming amendment Work Package，不重新打开 WP-EM-06、WP-EM-07 或已归档的 WP-EM-07A。该 WP 的历史名称可以继续使用 Transformer Station Number Amendment，但正式业务字段统一称为 Transformer `DisplayName` / “变压器名称”。不得将 UI 字段标题写成“站号”“变压器编号”或“设备编号”，也不得建立 `StationNumber`、`StationNo`、`TransformerNumber`、`DeviceNumber`、`AssetNumber` 等第二套重复业务事实。
 
 #### 3.9.1 Naming semantic
 
-`PublicPoleMounted`、`DedicatedPoleMounted`、`PublicIndoor` 全部具备正式设备名称，并遵守以下冻结规则：
+`Device.DisplayName` 是 `Transformer` 唯一正式 naming fact，并适用于 `PublicPoleMounted`、`DedicatedPoleMounted`、`PublicIndoor`。它是正式 Domain business fact，并与 `Transformer.Id`、`TransformerKind`、`HvTerminalId`、HV Terminal identity、`Pole.PoleNumber`、CustomerStation naming 和 `SwitchDevice.DispatchNumber` 分离。
 
-- 新建时必须填写，trim 后不得为空；
+正常 current-data invariant 冻结如下：
+
+- 新建前必须取得 `DisplayName`；
+- `DisplayName` 必须 trim，trim 后必须为非空字符串；
+- whitespace-only input 必须拒绝；
+- 不提供自动默认业务名称，也不允许新建后保持 unnamed state；
 - 同一 `DrawingDocument` 内不要求唯一；
-- Canvas 始终显示；
-- Inspector 允许修改；
-- 修改不改变 `Transformer.Id`、`HvTerminalId`、`GroundingTarget` 或 topology。
+- 三种 `TransformerKind` 使用相同 naming invariant。
 
-后续 Repo Audit 必须优先确认并复用现有 `Device.DisplayName` 作为唯一正式 naming fact，不得在本治理合同中提前增加第二套字段。如果 audit 发现 `Device.DisplayName` 无法合法承担 Transformer persisted naming fact，必须停止并返回 Requirements / Architecture Review，不得自行增加重复字段。
+三种 Kind 全部允许 rename；rename 同样执行 trim、non-empty 和 whitespace-only rejection，且不要求 uniqueness。Rename 必须进入统一 `CommandStack` 并支持 Undo / Redo，不得修改 `Transformer.Id`、`TransformerKind`、`HvTerminalId`、HV Terminal identity、`Connection`、`GroundingAccessPoint`、`GroundingPoint`、`WorkScope`、electrical topology 或 conductivity。`DisplayName` 不参与 connection eligibility、`GroundingTarget` identity 或 `WorkScope` eligibility。
 
-#### 3.9.2 最小 Scope
+#### 3.9.2 Creation、Inspector 与 Rendering
 
-WP-EM-07B 的未来实现最小范围包括：
+Transformer creation dialog 必须在 aggregate 正式创建前取得 `TransformerKind + DisplayName` 并验证名称；无效名称不得进入正常 creation completion，不得先创建 unnamed Transformer 再要求后补。
 
-- all three Transformer kinds；
-- required creation input 与 trim / non-empty validation；
-- Inspector editing、CommandStack、Undo / Redo；
-- Clipboard、V7 persistence、Save / Reopen；
-- Canvas always-visible label、unified typography settings；
-- 从各 Transformer professional glyph geometry 派生的 professional label placement；
-- relevant selection / rendering regression。
+Transformer Professional Inspector 对三种 Kind 增加标题为“变压器名称”的 editable Domain row。`PublicIndoor` 既有 Orientation editor 保留，并与 naming editor 独立。修改名称必须进入 `CommandStack`，支持 Undo / Redo、scene refresh、Inspector refresh 和 dirty state。
 
-Canvas label 不保存 arbitrary label coordinates、user free text position 或 label visibility toggle；名称始终显示。
+三种 Kind 的 Canvas 均始终显示 `DisplayName`。Label 是 derived rendering，由 Transformer glyph bounds / orientation 派生，使用统一 `DrawingMetrics` typography；它不进入 `TransformerLayout`，不保存 arbitrary label coordinates、user free-text position 或 visibility toggle。Canvas 与 PNG export 必须共用同一 Scene truth。选择 glyph 或文字必须继续解析到原 `Transformer` 的 `SelectionTargetKind.Device`；文字不形成第二份业务 identity。
 
-#### 3.9.3 Explicit exclusions
+#### 3.9.3 V7 persistence 与 legacy completion
+
+`FormatVersion` 保持 V7。`ProjectTransformerDto` additive 增加 `DisplayName`；为读取旧 V7，DTO representation 必须允许该字段 absent。New writer 对所有正常可保存 Transformer 必须始终写出 trimmed non-empty `DisplayName`，不得写出新的 unnamed Transformer。
+
+旧 V7 Transformer DTO 缺失 `DisplayName` 时必须允许工程成功打开，不得根据 `TransformerKind`、`Transformer.Id` / GUID、`HvTerminalId`、`PoleNumber`、CustomerStation、`Connection`、邻接设备或 position 猜测或生成名称，也不得生成“未命名变压器”“Transformer 1”、GUID-derived name、Pole-derived name 等伪业务事实。缺失名称只恢复为受控 legacy incomplete naming state，不得把 nullable Transformer name 扩大为新的正常 Domain contract。
+
+Legacy incomplete Transformer 允许打开、查看、selection、rendering、Inspector 查看和补录名称；但在工程内所有 legacy Transformer 补齐合法 `DisplayName` 前，Save / Save As 必须被阻止，并返回明确、非崩溃的 validation message。补录完成后，该 Transformer 从 legacy incomplete 转为 valid current Transformer，工程可以按 V7 正常保存并重新打开。历史文件可以读取，但新版本一旦重新写出，就必须满足当前 Transformer naming contract。
+
+实现必须明确区分 legacy compatibility shape 与 malformed current shape。新 V7 record 的 `DisplayName` missing / null / whitespace 不得作为普通 current valid record 静默接受。如果现有 V7 结构无法可靠区分两种 shape，implementation audit 必须停止并回报，不得自行生成 migration discriminator 或升级 V8。
+
+#### 3.9.4 Clipboard、Undo / Redo 与 lifecycle
+
+Clipboard snapshot 必须包含 `DisplayName`。Paste 保留原 `DisplayName`，remap `Transformer.Id` 和 `HvTerminalId`，并保持既有 external `Connection` policy。由于名称不唯一，paste 不自动 rename、不追加“(1)”、不拒绝 duplicate name，也不提示冲突；Clipboard 不得产生 unnamed current Transformer。
+
+Create、Rename、Delete、Paste 的 Undo / Redo 必须正确保留或恢复 `DisplayName`，且不得重新生成 `Transformer.Id` 或 `HvTerminalId`。既有 delete dependency policy 保持不变，naming 不扩大任何 cascade。
+
+#### 3.9.5 Electrical-model boundary
+
+WP-EM-07B 是纯 naming vertical slice，不创建 `ElectricalNode`，不新增 Terminal，不改变 `HvTerminalId` 语义、`Connection`、Transformer connection eligibility、`GroundingTarget`、`GroundingAccessPoint`、`WorkScope`、conductivity 或任何 `TransformerKind` electrical semantics。
+
+#### 3.9.6 Acceptance
+
+WP-EM-07B implementation 至少必须通过以下验收：
+
+- Domain：三 Kind 新建名称必填、trim、whitespace rejection、rename，并证明 identity / topology 不变；
+- Creation：三 Kind 均通过合法名称创建，无效名称阻止创建；
+- Inspector：三 Kind 均提供 editable “变压器名称”，Undo / Redo 与 immediate refresh 正确；
+- Persistence：保持 V7，current round-trip 写出 non-empty `DisplayName`，legacy V7 无名称可打开且不伪造名称，legacy incomplete 阻止 Save / Save As，补录后 Save / Reopen 成功；
+- Clipboard：copy / paste 保留 `DisplayName`、remap IDs、允许 duplicate names；
+- Rendering：三 Kind label 可见，覆盖 `PublicIndoor` Horizontal / Vertical，Canvas / PNG 一致，selection identity 不变；
+- Electrical regression：`Connection`、`HvTerminalId`、grounding、`WorkScope` 和 topology 不变；
+- Windows：automated tests PASS，professional visual acceptance PASS。
+
+#### 3.9.7 Explicit exclusions
 
 明确不进入 WP-EM-07B：
 
 - second station-number field 或 uniqueness requirement；
-- capacity、model、manufacturer、voltage label、LV information；
+- Transformer capacity、model、manufacturer、voltage label、LV-side electrical model；
 - asset metadata framework、generic property bag；
+- CustomerStation naming redesign、`PoleNumber` redesign；
+- Transformer grounding redesign、Transformer electrical-model refactor；
 - Annotation text object、Energization；
 - arbitrary label drag、generic typography framework rewrite；
-- CustomerStation naming redesign。
+- WP-EM-08 interaction stabilization。
 
 ## 4. FormatVersion 7 与迁移合同
 
@@ -577,7 +609,7 @@ V7 至少容纳：
 
 本次 Post-EM-07 Sequencing Amendment 保持 `FormatVersion = V7`，不授权 V8。WP-EM-07A 复用现有 `GroundingTarget.Terminal`、`GroundingAccessPoint` 与 `Transformer.HvTerminalId`，并为 GAP adjacent endpoint 使用 3.5 节冻结的 backward-compatible additive V7 representation。当前 serializer 允许 additive fields；旧 V7 `AdjacentPoleId` 可在 mapper / restore 中无歧义归一化为 typed Pole endpoint；新 Terminal-endpoint GAP 可保存并 reopen。该兼容路径不增加 V7 migration step，不重新解释旧 `AdjacentPoleId`，不自动从旧数据生成 Terminal endpoint GAP，也不升级 V8。
 
-WP-EM-07B 的正式目标同样是 V7，但其实现前 Repo Audit 必须确认现有 V7 Transformer persistence 如何安全承载唯一正式 naming fact，并定义已有 V7 Transformer 文件缺失该值时的兼容策略。如果 required naming fact 无法在 V7 内通过明确、无歧义且不猜测业务事实的兼容合同表达，必须停止并重新进入 Governance Review。不得为坚持 V7 而猜测名称、在 Save-time 自动伪造名称或静默产生不真实业务数据。
+WP-EM-07B 保持 V7，并按 3.9.3 节采用 additive `DisplayName` 与受控 legacy incomplete naming state。旧 V7 无名称记录允许读取，但不得猜测名称，且在全部补录前不得 Save / Save As；new writer 只写出满足 current naming invariant 的 Transformer。如果 implementation audit 证明现有 V7 无法可靠区分 legacy compatibility shape 与 malformed current shape，必须停止并回报 Governance Review，不得自行生成 migration discriminator、伪造名称或升级 V8。
 
 ### 4.1 V6 → V7 无损迁移
 
@@ -825,13 +857,13 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 **状态：Closed / Archived / Final accepted implementation `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`**
 
-正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 为 Pending / Not Started，WP-EM-08 为 Deferred / Not Started。
+正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 为 Requirements Frozen / Implementation Not Started，WP-EM-08 为 Deferred / Not Started。
 
 ### WP-EM-07B — Transformer Naming Amendment
 
-**状态：Pending / Not Started**
+**状态：Requirements Frozen / Implementation Not Started**
 
-正式 requirement contract 以 3.9 节为准。该 WP 只建立一个 Transformer naming fact；实现前必须审计 `Device.DisplayName` 与 V7 compatibility。若无法形成明确、无歧义且不猜测业务事实的 V7 compatibility contract，必须停止并返回 Governance Review。
+正式 requirement contract 以 3.9 节为准。该 WP 只建立 `Device.DisplayName` 这一项 Transformer naming fact，正式中文 UI 名称为“变压器名称”。三种 Kind 的 current data 均要求名称非空；旧 V7 缺失名称可进入受控 legacy incomplete state，但补录完成前禁止 Save / Save As。实现尚未开始；如 implementation audit 证明 V7 无法可靠区分 legacy compatibility shape 与 malformed current shape，必须停止并返回 Governance Review。
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
@@ -882,5 +914,5 @@ WP-EM-08 只能在 WP-EM-07A 与 WP-EM-07B Closed 后开始，其 interaction-on
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 为 Pending / Not Started，WP-EM-08 为 Deferred / Not Started，WP-EM-09 为 Planned；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 为 Requirements Frozen / Implementation Not Started，WP-EM-08 为 Deferred / Not Started，WP-EM-09 为 Planned；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
