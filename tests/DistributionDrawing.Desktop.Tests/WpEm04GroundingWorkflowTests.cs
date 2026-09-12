@@ -362,10 +362,21 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             TransformerKind.PublicPoleMounted,
             new DocumentPoint(150, 40));
         transformer.Execute();
+        Terminal[] fuseTerminals =
+            [fuse.Creation.FirstTerminal, fuse.Creation.SecondTerminal];
+        Terminal occupiedFuseTerminal = Assert.Single(fuseTerminals, terminal =>
+            session.PersistenceSession.Domain.Connections.Any(connection =>
+                connection.UsesTerminal(terminal.Id)));
+        Terminal freeFuseTerminal = Assert.Single(fuseTerminals, terminal =>
+            !session.PersistenceSession.Domain.Connections.Any(connection =>
+                connection.UsesTerminal(terminal.Id)));
+        Connection migratedOrdinary = session.PersistenceSession.Domain.Connections.Single(
+            connection => connection.Id == ordinary.Connection.Id);
+        Assert.True(migratedOrdinary.UsesTerminal(occupiedFuseTerminal.Id));
         AddOverheadLineCommand shortLine = new OverheadLineCommandFactory().CreateAdd(
             session.PersistenceSession.Domain,
             session.Layout,
-            fuse.Creation.SecondTerminal.Id,
+            freeFuseTerminal.Id,
             transformer.Creation.HvTerminal.Id,
             new DocumentPoint(95, 40),
             new DocumentPoint(150, 40));
