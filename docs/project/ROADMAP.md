@@ -25,8 +25,16 @@ The Grounding Scope Amendment is complete and frozen. The Post-EM-07 Sequencing 
 7. WP-EM-07 CustomerStation Vertical Slice — Closed
 8. WP-EM-07A Transformer & Pole-Device Grounding Amendment — Closed / Archived (final accepted SHA `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`)
 9. WP-EM-07B Transformer Naming Amendment — Closed / Archived
-10. WP-EM-08 Electrical Model Interaction Stabilization — Deferred / Not Started
-11. WP-EM-09 Electrical Model Closure Integration — Planned
+10. WP-EM-08 Electrical Model Interaction Stabilization — Requirements Refinement / Implementation Not Started; refined into three internal implementation slices
+11. WP-EM-09 Electrical Model Closure Integration — Planned / Integration-only
+
+WP-EM-08 Implementation Audit & Scope Revalidation passed at `c4f61653f923f985bcd8835d9735c68decee783e`, and its Scope Amendment is complete. WP-EM-08 is now in Requirements Refinement with implementation not started. It remains one Work Package and one Codex Thread, implemented incrementally through three independently reviewable internal implementation slices. These slices do not create additional Work Packages or require separate Codex Threads:
+
+1. **Implementation Slice A — Move Capability Closure:** add direct drag for Transformer and CustomerStation and integrate them with group move, while preserving Pole drag, RingCabinet drag, CableTermination pole-orbit drag, and GroundingPoint symbol-offset drag. SwitchDevice / ordinary PoleAttachment and GroundingAccessPoint remain unavailable for independent free drag. This slice does not implement `LastValid`, a new drag transaction framework, route-family hysteresis, or routing-obstacle policy changes.
+2. **Implementation Slice B — Transactional Drag Stabilization:** establish explicit preview results, candidate validation, transient `LastValid`, invalid-candidate rollback with gesture continuation, invalid-release behavior, non-modal feedback, and CommandStack / Layout / scene atomicity. It does not implement route-family hysteresis, a generic router rewrite, or a new collision model.
+3. **Implementation Slice C — Route Continuity Stabilization:** characterize reproducible route flips before freezing a switching policy; introduce typed transient per-Connection continuity state only if the evidence requires it; cover cache invalidation and grounding / GAP / short-OHL regression; and complete Windows cross-device acceptance. Transformer / CustomerStation routing-obstacle participation is decided inside this slice after characterization.
+
+WP-EM-08 has no expected persistence schema impact and keeps FormatVersion V7. `LastValid`, invalid candidates, feedback, route-family identity, hysteresis cache, and transaction state remain transient. The accepted WP-EM-05 RingCabinet above-terminal grounding presentation limitation remains outside WP-EM-08. WP-EM-09 stays Integration-only and does not introduce Transformer drag, CustomerStation drag, `LastValid`, hysteresis, or other new business capability for the first time.
 
 WP-EM-07A and WP-EM-07B are Post-EM-07 / Pre-EM-08 amendment Work Packages. They do not reopen WP-EM-06 or WP-EM-07. This ordering does not define a new release version. No V1.1, V1.2, or V2.0 release scope is defined; Annotation and Energization remain Post-V1 candidates and are outside this stage.
 

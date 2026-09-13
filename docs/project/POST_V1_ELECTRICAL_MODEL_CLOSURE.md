@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Deferred / Not Started / WP-EM-09 Planned / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Requirements Refinement / Implementation Not Started / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -897,7 +897,7 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 **状态：Closed / Archived / Final accepted implementation `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`**
 
-正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 现 Closed / Archived，WP-EM-08 为 Deferred / Not Started。
+正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 现 Closed / Archived，WP-EM-08 为 Requirements Refinement / Implementation Not Started。
 
 ### WP-EM-07B — Transformer Naming Amendment
 
@@ -907,22 +907,130 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
-**状态：Deferred / Not Started**
+**状态：Requirements Refinement / Implementation Not Started**
 
-WP-EM-08 只能在 WP-EM-07A 与 WP-EM-07B Closed 后开始，其 interaction-only 范围包括：
+Implementation Audit & Scope Revalidation 已在 baseline `c4f61653f923f985bcd8835d9735c68decee783e` 通过。WP-EM-08 Scope Amendment 已完成，但本 WP 尚未 Requirements Frozen，也未进入 implementation。
 
-- pole/device drag route continuity 与 legal route-family hysteresis；
-- last-valid-position 与 illegal geometry handling；
-- continuous-drag non-modal feedback；
-- cross-device interaction regression；
-- stabilized drag/routing 下的 grounding presentation regression；
-- Pole / Switch / Transformer / CustomerStation drag behavior。
+WP-EM-08 始终是一个 Work Package，并在一个 Codex Thread 中推进。下述三个 Implementation Slice 是该 Work Package 内部、可独立评审的增量，不产生额外 Work Package，也不要求单独 Codex Thread。
 
-该 WP 应基于已经稳定的 Grounding eligibility、Transformer grounding target 与 Transformer naming / presentation 事实进行 interaction stabilization，不得吸收 WP-EM-07A 或 WP-EM-07B 的业务模型内容。该 WP 不包含 waypoint editor、manual route editor、generic diagram routing engine rewrite、Annotation、Energization、new Electrical Device 或 arbitrary layout framework。
+WP-EM-08 不建立 generic routing framework。其目标是在已经完成的 Electrical Model 基础上：
+
+1. 补齐正式 Device move capability；
+2. 统一 transactional drag legality；
+3. 提供 transient `LastValid`；
+4. 消除正常用户 drag legality failure 的 modal failure；
+5. 稳定连续合法拖动中的 route presentation；
+6. 完成 cross-device interaction regression；
+7. 保持 grounding、GAP、Transformer 与 CustomerStation 已关闭 Work Package 的业务事实和 identity 不变。
+
+#### WP-EM-08 move-capability policy
+
+- Pole 支持直接 drag。
+- RingCabinet 支持直接 drag。
+- CableTermination PoleAttachment 保持现有 pole-orbit drag。
+- GroundingPoint 保持现有独立 symbol-offset drag。
+- GroundingAccessPoint 不支持直接 drag；其 position 从 typed electrical route 派生。
+- Transformer 由 WP-EM-08 Slice A 补齐直接 drag capability。
+- CustomerStation 由 WP-EM-08 Slice A 补齐直接 drag capability。
+- SwitchDevice / ordinary PoleAttachment 不开放独立自由 drag。Switch 随父 Pole 移动，自身专业布局继续通过既有 attachment layout、rotation 或 property command 调整。
+
+不得为了表面上的交互一致而强制所有对象支持直接 drag。
+
+#### WP-EM-08 illegal geometry taxonomy
+
+“Illegal geometry”严格限于当前架构能够证明无法形成合法 Layout / Routing result 的情况：
+
+- non-finite layout coordinate；
+- route 无法保留两个 distinct points；
+- required stub capacity insufficient；
+- required stub direction / no-backtracking constraints impossible to satisfy；
+- scoped routing invariant failure；
+- current typed layout invariant violation。
+
+必须继续区分 Domain-invalid、Layout-invalid、Routing-invalid 与 Presentation-undesirable。WP-EM-08 不新增 device overlap、Transformer / CustomerStation body overlap、canvas bounds、Pole screen-coordinate ordering、arbitrary collision prohibition 或 route crossing itself 作为业务非法规则；视觉不理想不得自动升级为 electrical invalidity。
+
+#### WP-EM-08 `LastValid` and feedback contract
+
+`LastValid` 是 transient interaction state，不是 Domain fact，也不是 persisted Layout fact。每个 drag gesture 从 `Before` 开始；每个通过验证且发生实际移动的 candidate 成为新的 `LastValid`。非法 candidate 不终止 gesture，不污染 current / persisted Layout，正式 Layout 恢复或保持 `LastValid`，并使用 non-modal feedback 报告原因。用户可以继续拖动。
+
+在非法 candidate 上 release 时，最终 after state 为 `LastValid`。如果 gesture 从未产生实际合法移动，则结果为 NoChange，不创建 CommandStack history entry。只有当 `LastValid` 仍是起点时，最终位置才等于 gesture 起点。
+
+正常用户 drag legality failure 不得继续以 modal `MessageBox` 作为主要反馈。最低 UX contract 是：合法 candidate 使用 normal preview；非法 candidate 保持 gesture active 和 Layout `LastValid`，通过现有 `MainWindowViewModel.ShowFeedback()` / status bar 以及必要的轻量 preview indicator 提供反馈；gesture 结束后清除 invalid feedback。本 WP 不建立通用 notification framework。
+
+#### WP-EM-08 transaction and history contract
+
+Drag preview、Layout mutation、scene rebuild 和 command recording 必须形成事务型边界。Commit 只能提交已验证的 `LastValid`。不得出现 Command 已进入 `CommandStack` 但 final scene rebuild 失败，也不得让 failed candidate 污染 current 或 persisted Layout。Undo / Redo 失败时也必须保持 `CommandStack` 与 Layout 状态一致。具体实现方式留给 WP-EM-08 Slice B design。
+
+#### WP-EM-08 route continuity contract
+
+当前不存在正式 `RouteFamily` enum、previous route-family state、cross-frame route cache 或 hysteresis；每次 scene rebuild 都重新选择 route candidate。WP-EM-08 Slice C 应处理连续、小幅度、合法拖动中因评分临界点导致的无必要 HV / VH / channel / fallback route突然翻转，但不得在 characterization 前冻结 hysteresis threshold。
+
+WP-EM-08 Slice C 必须先建立 reproducible route-flip characterization，再决定 switching policy与margin。若证明确有需要，可以引入 internal typed transient `RouteFamilyKey` 或架构等价 identity，最小语义可覆盖 direct、HV、VH、preferred-guide、X-channel、Y-channel、obstacle-path 与 fallback。具体 enum / shape 留待该 Slice design。
+
+该 continuity state 按 `ConnectionId` 保存于 runtime/session transient context；mouse-up 后可以继续保持当前 session continuity；project close / reload 时清空；Connection endpoint、topology 或 route constraint materially changes 时重新验证或失效。Command、Undo / Redo 不持有 route-family business fact。该状态不得持久化。
+
+Transformer / CustomerStation presentation bounds 当前不属于 routing obstacle。线路穿越其 glyph 是 Presentation-undesirable candidate，不是 electrical invalidity。是否保持当前 obstacle set，或将两类 body 加入 presentation routing obstacle，是 WP-EM-08 Slice C characterization decision point；必须比较 short OHL、Transformer grounding / GAP、CustomerStation single / dual feeder、Cable route与route-family continuity后决定。Slice A、Slice B 不得提前加入该规则。
+
+WP-EM-05 已接受的 RingCabinet cable-side GroundingPoint above-terminal visual interference 继续保持 Accepted Known Limitation，明确排除出 WP-EM-08，且不得重定义为 routing invalidity。未来如处理，必须另行完成独立 requirement decision。
+
+#### WP-EM-08 closed-WP regression boundaries
+
+WP-EM-08 不得破坏：
+
+- WP-EM-05：`GroundingPointLayout.SymbolOffset`、GroundingPoint drag、grounding leader、GAP presentation、Canvas / PNG shared scene及accepted RingCabinet known limitation；
+- WP-EM-06：Transformer one-terminal topology、`Transformer.Id`、`HvTerminalId`、`TransformerKind`与orientation contract；
+- WP-EM-07：CustomerStation aggregate、one/two `IncomingFeeder` topology、feeder-owned `IsolationSwitch`与Cable-only incoming contract；
+- WP-EM-07A：`GroundingAccessPlacementSide`、`TransformerSide`、dual-end GAP identity、short OHL grounding semantics与typed `GroundingTarget`；
+- WP-EM-07B：`Device.DisplayName`、`TransformerNamingContractVersion`、legacy incomplete behavior、Creation / Inspector / Clipboard / Save naming与below-center Transformer name label。
+
+Move / routing stabilization 不得创建新 Terminal、新 ElectricalNode、改变 Connection endpoints、推断新 grounding target、改变 electrical conductivity或改变 business identity。
+
+#### WP-EM-08 Implementation Slice A — Move Capability Closure
+
+补齐并统一“谁可以移动”：
+
+- 实现 Transformer direct drag；
+- 实现 CustomerStation direct drag；
+- 集成 group move；
+- 保持 Pole drag、RingCabinet drag、CableTermination pole-orbit drag与GroundingPoint drag；
+- 明确保持 Switch direct drag unsupported与GAP direct drag unsupported。
+
+本 Slice 只复用当前 scene rebuild / route behavior，不实现 `LastValid`、新的 drag transaction framework、hysteresis、`RouteFamilyKey`或routing obstacle policy changes。
+
+Acceptance 覆盖 pointer drag、live connected route rebuild、Cancel、Commit、Undo / Redo、selection、label、grounding continuity与stable identity。
+
+#### WP-EM-08 Implementation Slice B — Transactional Drag Stabilization
+
+建立统一合法/非法 candidate 的事务型处理：explicit drag preview result、`LastValid`、candidate validation、invalid candidate rollback、gesture continuation、invalid release、non-modal feedback、移除正常 drag-time modal `MessageBox`、commit/history atomicity及Undo / Redo failure atomicity。
+
+本 Slice 不实现 route-family hysteresis、generic router rewrite或new collision model。
+
+#### WP-EM-08 Implementation Slice C — Route Continuity Stabilization
+
+本 Slice 必须按以下顺序推进：
+
+1. characterization tests；
+2. reproduce route flips；
+3. 如确有需要，定义 typed transient route-family identity；
+4. freeze switching policy / margin；
+5. implement transient continuity context；
+6. connection / cache invalidation；
+7. grounding / GAP / short-OHL regression；
+8. Windows cross-device acceptance。
+
+Transformer / CustomerStation 是否加入 routing obstacle set 在本 Slice characterization 后决定。本 Slice不得建立 generic waypoint editor、manual route editor、persistent route family或generic diagram routing rewrite。
+
+#### WP-EM-08 persistence and remaining decision
+
+WP-EM-08 persistence schema impact 预期为 none，FormatVersion 保持 V7。`LastValid`、invalid candidate、drag feedback、`RouteFamilyKey`、hysteresis cache与drag transaction state均不得持久化。已有合法 persisted Layout facts继续保留，包括object positions、attachment layouts、Transformer orientation、`CableRouteGuide`与GroundingPoint symbol offset；不得将 `CableRouteGuide` 泛化为generic waypoint system。
+
+Refinement 后唯一延后到 WP-EM-08 Slice C characterization 的presentation policy决定，是Transformer / CustomerStation是否加入routing obstacle set。该问题不阻止Slice A或Slice B分别进入slice-level Requirements Freeze / implementation review sequence。
+
+该 WP 不包含 waypoint editor、manual route editor、generic diagram routing engine rewrite、Annotation、Energization、new Electrical Device、arbitrary layout framework、WP-EM-07A business model changes或WP-EM-07B naming model changes。
 
 ### WP-EM-09 — Electrical Model Closure Integration
 
-**状态：Planned**
+**状态：Planned / Integration-only**
 
 只进行：
 
@@ -940,6 +1048,8 @@ WP-EM-08 只能在 WP-EM-07A 与 WP-EM-07B Closed 后开始，其 interaction-on
 
 不得在 WP-EM-09 增加新业务能力。
 
+WP-EM-09 保持 Integration-only，不得承担 Transformer drag、CustomerStation drag、`LastValid`、hysteresis或其它新业务能力的首次实现。其范围仅限 V6 / V7 regression、save/open、clipboard、Undo / Redo、dependency deletion、electrical topology、grounding、Transformer、CustomerStation、WP-EM-07A、WP-EM-07B、WP-EM-08 regression、V6 → V7 upgrade、Windows final professional acceptance与integration defect fixes。
+
 ## 9. 阶段执行状态
 
 当前执行状态：
@@ -954,5 +1064,5 @@ WP-EM-08 只能在 WP-EM-07A 与 WP-EM-07B Closed 后开始，其 interaction-on
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 为 Deferred / Not Started，WP-EM-09 为 Planned；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，当前为 Requirements Refinement / Implementation Not Started，并在同一个 Work Package 与 Codex Thread 内划分为 Slice A、Slice B 与 Slice C 三个内部 implementation slices；WP-EM-09 为 Planned / Integration-only；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
