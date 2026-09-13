@@ -1,4 +1,6 @@
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -52,7 +54,7 @@ public sealed class DeviceDragController
             return false;
         }
 
-        GroupMoveLayoutState before = CaptureState(plan.Roots, layout);
+        GroupMoveLayoutState before = CaptureState(plan.Roots, document, layout);
         SelectionMoveRoot anchor = plan.DragAnchorRoot!;
         _drag = new GroupDragState(
             dragTarget,
@@ -64,7 +66,9 @@ public sealed class DeviceDragController
             GetRootPosition(anchor, before),
             plan.Roots
                 .Where(item => item.Kind is SelectionMoveRootKind.Pole or
-                    SelectionMoveRootKind.RingCabinet)
+                    SelectionMoveRootKind.RingCabinet or
+                    SelectionMoveRootKind.Transformer or
+                    SelectionMoveRootKind.CustomerStation)
                 .Select(item => item.ObjectId)
                 .ToHashSet());
         return true;
@@ -74,7 +78,8 @@ public sealed class DeviceDragController
         SelectionReference target,
         DocumentPoint pointer,
         RuntimeLayoutDocument layout,
-        Guid? orbitParentPoleId = null)
+        Guid? orbitParentPoleId = null,
+        DrawingDocument? document = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(layout);
@@ -98,6 +103,40 @@ public sealed class DeviceDragController
                 layout,
                 cabinet,
                 cabinet);
+            return true;
+        }
+
+        if (target.Kind == SelectionTargetKind.Device &&
+            document?.Transformers.SingleOrDefault(item => item.Id == target.ObjectId)
+                is Transformer transformer &&
+            layout.TransformerLayouts.TryGetValue(
+                target.ObjectId,
+                out TransformerLayout? transformerLayout))
+        {
+            _drag = new TransformerDragState(
+                target,
+                pointer,
+                layout,
+                transformer.TransformerKind,
+                transformerLayout,
+                transformerLayout);
+            return true;
+        }
+
+        if (target.Kind == SelectionTargetKind.Device &&
+            document?.CustomerStations.SingleOrDefault(item => item.Id == target.ObjectId)
+                is CustomerStation station &&
+            layout.CustomerStationLayouts.TryGetValue(
+                target.ObjectId,
+                out CustomerStationLayout? stationLayout))
+        {
+            _drag = new CustomerStationDragState(
+                target,
+                pointer,
+                layout,
+                station,
+                stationLayout,
+                stationLayout);
             return true;
         }
 
@@ -202,6 +241,8 @@ public sealed class DeviceDragController
         {
             PoleDragState pole => UpdatePole(pole, position),
             RingCabinetDragState cabinet => UpdateRingCabinet(cabinet, position),
+            TransformerDragState transformer => UpdateTransformer(transformer, position),
+            CustomerStationDragState station => UpdateCustomerStation(station, position),
             _ => throw new InvalidOperationException("Unsupported device drag state.")
         };
         return true;
@@ -235,6 +276,17 @@ public sealed class DeviceDragController
                 cabinet.Before.CabinetId,
                 cabinet.Before.Position,
                 cabinet.Current.Position),
+            TransformerDragState transformer => new MoveTransformerCommand(
+                transformer.Layout,
+                transformer.Before.TransformerId,
+                transformer.TransformerKind,
+                transformer.Before.Position,
+                transformer.Current.Position),
+            CustomerStationDragState station => new MoveCustomerStationCommand(
+                station.Layout,
+                station.Station,
+                station.Before.Position,
+                station.Current.Position),
             AttachmentDragState attachment => new MoveAttachmentCommand(
                 attachment.Layout.DrawingLayout,
                 attachment.Before.AttachmentId,
@@ -262,6 +314,14 @@ public sealed class DeviceDragController
                 break;
             case RingCabinetDragState cabinet:
                 cabinet.Layout.ReplaceRingCabinet(cabinet.Before);
+                break;
+            case TransformerDragState transformer:
+                transformer.Layout.ReplaceTransformer(
+                    transformer.Before,
+                    transformer.TransformerKind);
+                break;
+            case CustomerStationDragState station:
+                station.Layout.ReplaceCustomerStation(station.Before, station.Station);
                 break;
             case AttachmentDragState attachment:
                 attachment.Layout.DrawingLayout.Replace(attachment.Before);
@@ -291,6 +351,28 @@ public sealed class DeviceDragController
         return drag with { Current = preview };
     }
 
+    private static TransformerDragState UpdateTransformer(
+        TransformerDragState drag,
+        DocumentPoint position)
+    {
+        TransformerLayout preview = drag.Before.MoveTo(
+            position,
+            drag.TransformerKind);
+        drag.Layout.ReplaceTransformer(preview, drag.TransformerKind);
+        return drag with { Current = preview };
+    }
+
+    private static CustomerStationDragState UpdateCustomerStation(
+        CustomerStationDragState drag,
+        DocumentPoint position)
+    {
+        CustomerStationLayout preview = drag.Before.MoveTo(
+            position,
+            drag.Station);
+        drag.Layout.ReplaceCustomerStation(preview, drag.Station);
+        return drag with { Current = preview };
+    }
+
     private bool UpdateGroup(GroupDragState drag, DocumentPoint pointer)
     {
         DocumentPoint rawDelta = Delta(pointer, drag.StartPointer);
@@ -314,6 +396,7 @@ public sealed class DeviceDragController
 
     private static GroupMoveLayoutState CaptureState(
         IEnumerable<SelectionMoveRoot> roots,
+        DrawingDocument document,
         RuntimeLayoutDocument layout)
     {
         SelectionMoveRoot[] values = roots.ToArray();
@@ -329,6 +412,28 @@ public sealed class DeviceDragController
             Array.AsReadOnly(values
                 .Where(item => item.Kind == SelectionMoveRootKind.PoleAttachment)
                 .Select(item => layout.DrawingLayout.Attachments[item.ObjectId])
+                .ToArray()),
+            Array.AsReadOnly(values
+                .Where(item => item.Kind == SelectionMoveRootKind.Transformer)
+                .Select(item =>
+                {
+                    Transformer transformer = document.Transformers.Single(value =>
+                        value.Id == item.ObjectId);
+                    return new TransformerGroupMoveLayout(
+                        layout.TransformerLayouts[item.ObjectId],
+                        transformer.TransformerKind);
+                })
+                .ToArray()),
+            Array.AsReadOnly(values
+                .Where(item => item.Kind == SelectionMoveRootKind.CustomerStation)
+                .Select(item =>
+                {
+                    CustomerStation station = document.CustomerStations.Single(value =>
+                        value.Id == item.ObjectId);
+                    return new CustomerStationGroupMoveLayout(
+                        layout.CustomerStationLayouts[item.ObjectId],
+                        station);
+                })
                 .ToArray()));
     }
 
@@ -342,6 +447,10 @@ public sealed class DeviceDragController
                 item.CabinetId == root.ObjectId).Position,
             SelectionMoveRootKind.PoleAttachment => state.Attachments.Single(item =>
                 item.AttachmentId == root.ObjectId).Offset,
+            SelectionMoveRootKind.Transformer => state.Transformers.Single(item =>
+                item.Layout.TransformerId == root.ObjectId).Layout.Position,
+            SelectionMoveRootKind.CustomerStation => state.CustomerStations.Single(item =>
+                item.Layout.CustomerStationId == root.ObjectId).Layout.Position,
             _ => throw new InvalidOperationException("Unsupported selection move root.")
         };
 
@@ -353,7 +462,19 @@ public sealed class DeviceDragController
         Array.AsReadOnly(state.RingCabinets.Select(item =>
             item.MoveTo(Translate(item.Position, delta))).ToArray()),
         Array.AsReadOnly(state.Attachments.Select(item =>
-            item.MoveTo(Translate(item.Offset, delta))).ToArray()));
+            item.MoveTo(Translate(item.Offset, delta))).ToArray()),
+        Array.AsReadOnly(state.Transformers.Select(item =>
+            new TransformerGroupMoveLayout(
+                item.Layout.MoveTo(
+                    Translate(item.Layout.Position, delta),
+                    item.TransformerKind),
+                item.TransformerKind)).ToArray()),
+        Array.AsReadOnly(state.CustomerStations.Select(item =>
+            new CustomerStationGroupMoveLayout(
+                item.Layout.MoveTo(
+                    Translate(item.Layout.Position, delta),
+                    item.Station),
+                item.Station)).ToArray()));
 
     private static DocumentPoint Delta(DocumentPoint value, DocumentPoint origin) => new(
         value.XMillimeters - origin.XMillimeters,
@@ -400,6 +521,34 @@ public sealed class DeviceDragController
         RuntimeLayoutDocument Layout,
         RingCabinetLayout Before,
         RingCabinetLayout Current)
+        : DragState(Target, StartPointer, Layout)
+    {
+        public override DocumentPoint StartPosition => Before.Position;
+
+        public override DocumentPoint CurrentPosition => Current.Position;
+    }
+
+    private sealed record TransformerDragState(
+        SelectionReference Target,
+        DocumentPoint StartPointer,
+        RuntimeLayoutDocument Layout,
+        TransformerKind TransformerKind,
+        TransformerLayout Before,
+        TransformerLayout Current)
+        : DragState(Target, StartPointer, Layout)
+    {
+        public override DocumentPoint StartPosition => Before.Position;
+
+        public override DocumentPoint CurrentPosition => Current.Position;
+    }
+
+    private sealed record CustomerStationDragState(
+        SelectionReference Target,
+        DocumentPoint StartPointer,
+        RuntimeLayoutDocument Layout,
+        CustomerStation Station,
+        CustomerStationLayout Before,
+        CustomerStationLayout Current)
         : DragState(Target, StartPointer, Layout)
     {
         public override DocumentPoint StartPosition => Before.Position;

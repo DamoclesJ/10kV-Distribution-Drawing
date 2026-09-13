@@ -2344,7 +2344,8 @@ public partial class MainWindow : Window
                       _deviceDrag.TryBeginDrag(
                           target,
                           documentPoint,
-                          session.Layout);
+                          session.Layout,
+                          document: session.PersistenceSession.Domain);
             }
         }
 

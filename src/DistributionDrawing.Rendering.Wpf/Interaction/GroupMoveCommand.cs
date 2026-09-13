@@ -1,11 +1,23 @@
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Rendering.Wpf.Layout;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
 
+public sealed record TransformerGroupMoveLayout(
+    TransformerLayout Layout,
+    TransformerKind TransformerKind);
+
+public sealed record CustomerStationGroupMoveLayout(
+    CustomerStationLayout Layout,
+    CustomerStation Station);
+
 public sealed record GroupMoveLayoutState(
     IReadOnlyList<PoleLayout> Poles,
     IReadOnlyList<RingCabinetLayout> RingCabinets,
-    IReadOnlyList<AttachmentLayout> Attachments)
+    IReadOnlyList<AttachmentLayout> Attachments,
+    IReadOnlyList<TransformerGroupMoveLayout> Transformers,
+    IReadOnlyList<CustomerStationGroupMoveLayout> CustomerStations)
 {
     public bool HasSamePositions(GroupMoveLayoutState other)
     {
@@ -17,7 +29,14 @@ public sealed record GroupMoveLayoutState(
                        (item.CabinetId, item.Position))) &&
                Attachments.Select(item => (item.AttachmentId, item.Offset))
                    .SequenceEqual(other.Attachments.Select(item =>
-                       (item.AttachmentId, item.Offset)));
+                       (item.AttachmentId, item.Offset))) &&
+               Transformers.Select(item => (item.Layout.TransformerId, item.Layout.Position))
+                   .SequenceEqual(other.Transformers.Select(item =>
+                       (item.Layout.TransformerId, item.Layout.Position))) &&
+               CustomerStations.Select(item =>
+                       (item.Layout.CustomerStationId, item.Layout.Position))
+                   .SequenceEqual(other.CustomerStations.Select(item =>
+                       (item.Layout.CustomerStationId, item.Layout.Position)));
     }
 }
 
@@ -80,6 +99,18 @@ public sealed class GroupMoveCommand : ICommand
         {
             layout.DrawingLayout.Replace(attachment);
         }
+
+        foreach (TransformerGroupMoveLayout transformer in state.Transformers)
+        {
+            layout.ReplaceTransformer(
+                transformer.Layout,
+                transformer.TransformerKind);
+        }
+
+        foreach (CustomerStationGroupMoveLayout station in state.CustomerStations)
+        {
+            layout.ReplaceCustomerStation(station.Layout, station.Station);
+        }
     }
 
     private static GroupMoveLayoutState CaptureCurrent(
@@ -90,7 +121,15 @@ public sealed class GroupMoveCommand : ICommand
         Array.AsReadOnly(roots.RingCabinets.Select(item =>
             layout.RingCabinetLayouts[item.CabinetId]).ToArray()),
         Array.AsReadOnly(roots.Attachments.Select(item =>
-            layout.DrawingLayout.Attachments[item.AttachmentId]).ToArray()));
+            layout.DrawingLayout.Attachments[item.AttachmentId]).ToArray()),
+        Array.AsReadOnly(roots.Transformers.Select(item =>
+            new TransformerGroupMoveLayout(
+                layout.TransformerLayouts[item.Layout.TransformerId],
+                item.TransformerKind)).ToArray()),
+        Array.AsReadOnly(roots.CustomerStations.Select(item =>
+            new CustomerStationGroupMoveLayout(
+                layout.CustomerStationLayouts[item.Layout.CustomerStationId],
+                item.Station)).ToArray()));
 
     private void ApplyAtomically(GroupMoveLayoutState state)
     {
@@ -106,7 +145,11 @@ public sealed class GroupMoveCommand : ICommand
             !before.RingCabinets.Select(item => item.CabinetId)
                 .SequenceEqual(after.RingCabinets.Select(item => item.CabinetId)) ||
             !before.Attachments.Select(item => item.AttachmentId)
-                .SequenceEqual(after.Attachments.Select(item => item.AttachmentId)))
+                .SequenceEqual(after.Attachments.Select(item => item.AttachmentId)) ||
+            !before.Transformers.Select(item => item.Layout.TransformerId)
+                .SequenceEqual(after.Transformers.Select(item => item.Layout.TransformerId)) ||
+            !before.CustomerStations.Select(item => item.Layout.CustomerStationId)
+                .SequenceEqual(after.CustomerStations.Select(item => item.Layout.CustomerStationId)))
         {
             throw new ArgumentException(
                 "Group move before and after states must contain the same layout roots.",

@@ -43,6 +43,9 @@ public sealed record TransformerLayout
 
     public TransformerOrientation Orientation { get; }
 
+    public TransformerLayout MoveTo(DocumentPoint position, TransformerKind transformerKind) =>
+        new(TransformerId, position, Orientation, transformerKind);
+
     public void ValidateFor(TransformerKind transformerKind)
     {
         if (!Enum.IsDefined(transformerKind))

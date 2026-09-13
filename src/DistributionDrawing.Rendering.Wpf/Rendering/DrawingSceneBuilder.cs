@@ -225,8 +225,7 @@ public sealed class DrawingSceneBuilder
                 hitTestEntries.Add(new SelectionHitTestEntry(
                     stationReference,
                     Expand(unit.Body, _metrics.CustomerStation.HitPadding),
-                    20,
-                    CanStartDrag: false));
+                    20));
             }
             if (geometry.Roof.Count > 0)
             {
@@ -234,8 +233,7 @@ public sealed class DrawingSceneBuilder
                     stationReference,
                     Expand(SceneGeometryBounds.FromPoints(geometry.Roof),
                         _metrics.CustomerStation.HitPadding),
-                    20,
-                    CanStartDrag: false));
+                    20));
             }
             foreach (CustomerStationSwitchGeometry switchGeometry in geometry.Switches)
             {

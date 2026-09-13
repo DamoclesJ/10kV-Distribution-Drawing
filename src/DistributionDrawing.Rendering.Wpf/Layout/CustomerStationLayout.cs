@@ -74,6 +74,18 @@ public sealed record CustomerStationLayout
     public IReadOnlyDictionary<Guid, CustomerStationIncomingFeederLayout> IncomingFeeders =>
         _incomingFeeders;
 
+    public CustomerStationLayout MoveTo(
+        DocumentPoint position,
+        CustomerStation station) =>
+        new CustomerStationLayout(CustomerStationId, position, _incomingFeeders.Values)
+            .AlsoValidate(station);
+
+    private CustomerStationLayout AlsoValidate(CustomerStation station)
+    {
+        ValidateFor(station);
+        return this;
+    }
+
     public void ValidateFor(CustomerStation station)
     {
         ArgumentNullException.ThrowIfNull(station);

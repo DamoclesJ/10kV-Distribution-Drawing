@@ -9,7 +9,9 @@ public enum SelectionMoveRootKind
 {
     Pole,
     RingCabinet,
-    PoleAttachment
+    PoleAttachment,
+    Transformer,
+    CustomerStation
 }
 
 public sealed record SelectionMoveRoot(
@@ -29,6 +31,8 @@ public sealed record SelectionMoveRoot(
             SelectionTargetKind.PoleAttachment,
             ObjectId,
             ParentPoleId),
+        SelectionMoveRootKind.Transformer or SelectionMoveRootKind.CustomerStation =>
+            new SelectionReference(SelectionTargetKind.Device, ObjectId),
         _ => throw new InvalidOperationException("Unsupported selection move root.")
     };
 }
@@ -60,6 +64,8 @@ public sealed class SelectionMovePlanner
         var poleIds = new HashSet<Guid>();
         var cabinetIds = new HashSet<Guid>();
         var attachmentIds = new HashSet<Guid>();
+        var transformerIds = new HashSet<Guid>();
+        var customerStationIds = new HashSet<Guid>();
 
         foreach (SelectionReference reference in selection.SelectedReferences)
         {
@@ -70,6 +76,7 @@ public sealed class SelectionMovePlanner
                 poleIds,
                 cabinetIds,
                 attachmentIds);
+            AddDeviceRoot(reference, document, layout, transformerIds, customerStationIds);
         }
 
         PoleAttachment[] attachments = document.PoleAttachments
@@ -92,6 +99,14 @@ public sealed class SelectionMovePlanner
                     SelectionMoveRootKind.PoleAttachment,
                     item.AttachmentId,
                     item.PoleId)))
+            .Concat(transformerIds.OrderBy(id => id)
+                .Select(id => new SelectionMoveRoot(
+                    SelectionMoveRootKind.Transformer,
+                    id)))
+            .Concat(customerStationIds.OrderBy(id => id)
+                .Select(id => new SelectionMoveRoot(
+                    SelectionMoveRootKind.CustomerStation,
+                    id)))
             .ToArray();
 
         SelectionMoveRoot? anchor = ResolveRoot(
@@ -199,6 +214,32 @@ public sealed class SelectionMovePlanner
         }
     }
 
+    private static void AddDeviceRoot(
+        SelectionReference reference,
+        DrawingDocument document,
+        RuntimeLayoutDocument layout,
+        ISet<Guid> transformerIds,
+        ISet<Guid> customerStationIds)
+    {
+        if (reference.Kind != SelectionTargetKind.Device)
+        {
+            return;
+        }
+
+        if (document.Transformers.Any(item => item.Id == reference.ObjectId) &&
+            layout.TransformerLayouts.ContainsKey(reference.ObjectId))
+        {
+            transformerIds.Add(reference.ObjectId);
+            return;
+        }
+
+        if (document.CustomerStations.Any(item => item.Id == reference.ObjectId) &&
+            layout.CustomerStationLayouts.ContainsKey(reference.ObjectId))
+        {
+            customerStationIds.Add(reference.ObjectId);
+        }
+    }
+
     private SelectionMoveRoot? ResolveRoot(
         SelectionReference reference,
         IReadOnlyList<SelectionMoveRoot> roots,
@@ -216,6 +257,14 @@ public sealed class SelectionMovePlanner
         {
             return roots.SingleOrDefault(item =>
                 item.Kind == SelectionMoveRootKind.RingCabinet &&
+                item.ObjectId == reference.ObjectId);
+        }
+
+        if (reference.Kind == SelectionTargetKind.Device)
+        {
+            return roots.SingleOrDefault(item =>
+                (item.Kind == SelectionMoveRootKind.Transformer ||
+                 item.Kind == SelectionMoveRootKind.CustomerStation) &&
                 item.ObjectId == reference.ObjectId);
         }
 
