@@ -7,7 +7,14 @@ namespace DistributionDrawing.Infrastructure.Persistence;
 
 public sealed record ProjectFileOpenResult(
     ProjectFileDocument Document,
-    int OpenedFormatVersion);
+    int OpenedFormatVersion,
+    TransformerNamingContractMode TransformerNamingMode);
+
+public enum TransformerNamingContractMode
+{
+    Legacy,
+    Current
+}
 
 public sealed class ProjectFileContainer
 {
@@ -92,7 +99,8 @@ public sealed class ProjectFileContainer
                         savedDocument.Metadata,
                         savedDocument.Domain,
                         savedDocument.Layout,
-                        savedDocument.Professional));
+                        savedDocument.Professional,
+                        TransformerNamingContractVersion: 1));
             }
 
             File.Move(temporaryPath, targetPath, overwrite: true);
@@ -135,6 +143,8 @@ public sealed class ProjectFileContainer
             rawPayload,
             manifest.FormatVersion,
             manifest.ProjectId);
+        TransformerNamingContractMode transformerNamingMode =
+            ReadTransformerNamingContractMode(migratedPayload);
         ProjectFilePayload payload = migratedPayload.Deserialize<ProjectFilePayload>(JsonOptions)
             ?? throw new InvalidDataException(
                 $"Entry '{manifest.MainEntry}' is empty or invalid.");
@@ -189,7 +199,8 @@ public sealed class ProjectFileContainer
                 payload.Domain,
                 payload.Layout,
                 professional),
-            manifest.FormatVersion);
+            manifest.FormatVersion,
+            transformerNamingMode);
     }
 
     private static void WriteJsonEntry<T>(ZipArchive archive, string entryName, T value)
@@ -246,6 +257,46 @@ public sealed class ProjectFileContainer
             throw new InvalidDataException(
                 "Professional document identity does not match the project manifest.");
         }
+
+        foreach (ProjectTransformerDto transformer in document.Domain?.Transformers ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(transformer.DisplayName) ||
+                !string.Equals(
+                    transformer.DisplayName,
+                    transformer.DisplayName.Trim(),
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"Transformer '{transformer.TransformerId}' requires a trimmed display name before persistence.");
+            }
+        }
+    }
+
+    private static TransformerNamingContractMode ReadTransformerNamingContractMode(
+        JsonObject payload)
+    {
+        const string propertyName = "transformerNamingContractVersion";
+        KeyValuePair<string, JsonNode?>[] matches = payload
+            .Where(property => string.Equals(
+                property.Key,
+                propertyName,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (matches.Length == 0)
+        {
+            return TransformerNamingContractMode.Legacy;
+        }
+
+        if (matches.Length != 1 ||
+            matches[0].Value is not JsonValue value ||
+            !value.TryGetValue<int>(out int version) ||
+            version != 1)
+        {
+            throw new InvalidDataException(
+                $"Property '{propertyName}' must be the integer 1 when present.");
+        }
+
+        return TransformerNamingContractMode.Current;
     }
 
     private static void ValidateManifest(ProjectFileManifest manifest)
@@ -312,5 +363,6 @@ public sealed class ProjectFileContainer
         ProjectFileMetadata Metadata,
         ProjectDomainDto? Domain,
         ProjectLayoutDto? Layout,
-        ProjectProfessionalDto? Professional = null);
+        ProjectProfessionalDto? Professional = null,
+        int? TransformerNamingContractVersion = null);
 }

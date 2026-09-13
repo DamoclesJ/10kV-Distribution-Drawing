@@ -32,9 +32,11 @@ public sealed class TransformerSliceATests
     {
         TransformerCreation creation = new TransformerCreationFactory().Create(
             transformerKind,
-            new DocumentPoint(12, 34));
+            new DocumentPoint(12, 34),
+            "测试变压器");
 
         Assert.Equal(transformerKind, creation.Transformer.TransformerKind);
+        Assert.Equal("测试变压器", creation.Transformer.DisplayName);
         Assert.Equal(creation.Transformer.Id, creation.Layout.TransformerId);
         Assert.Equal(creation.Transformer.HvTerminalId, creation.HvTerminal.Id);
         Assert.Equal(expectedOrientation, creation.Layout.Orientation);
@@ -89,6 +91,7 @@ public sealed class TransformerSliceATests
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
             new DocumentPoint(10, 20),
+            "测试变压器",
             TransformerOrientation.Vertical);
         var command = new AddTransformerCommand(document, runtime, creation);
 
@@ -113,7 +116,8 @@ public sealed class TransformerSliceATests
         DrawingDocument document = CreateDocument();
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(0, 0));
+            new DocumentPoint(0, 0),
+            "测试变压器");
         RuntimeLayoutDocument runtime = CreateRuntime(
             new Dictionary<Guid, TransformerLayout>
             {
@@ -138,7 +142,8 @@ public sealed class TransformerSliceATests
         RuntimeLayoutDocument runtime = CreateRuntime();
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.DedicatedPoleMounted,
-            new DocumentPoint(45, 67));
+            new DocumentPoint(45, 67),
+            "测试变压器");
         new AddTransformerCommand(document, runtime, creation).Execute();
         var command = new RemoveTransformerCommand(
             document,
@@ -165,7 +170,8 @@ public sealed class TransformerSliceATests
         RuntimeLayoutDocument runtime = CreateRuntime();
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
-            new DocumentPoint(1, 2));
+            new DocumentPoint(1, 2),
+            "测试变压器");
         new AddTransformerCommand(document, runtime, creation).Execute();
         Terminal other = AddOtherCableTerminal(document);
         Connection connection = new(
@@ -194,7 +200,8 @@ public sealed class TransformerSliceATests
         RuntimeLayoutDocument runtime = CreateRuntime();
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
-            new DocumentPoint(0, 0));
+            new DocumentPoint(0, 0),
+            "测试变压器");
         new AddTransformerCommand(document, runtime, creation).Execute();
 
         Assert.True(ProfessionalCommandFactory.IsEligibleNewTerminalTarget(
@@ -223,7 +230,8 @@ public sealed class TransformerSliceATests
             new PoleAttachment(Guid.NewGuid(), pole.Id, fuse.Id));
         TransformerCreation transformer = new TransformerCreationFactory().Create(
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(100, 0));
+            new DocumentPoint(100, 0),
+            "测试变压器");
         new AddTransformerCommand(document, runtime, transformer).Execute();
         AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
             document,
@@ -250,10 +258,12 @@ public sealed class TransformerSliceATests
         RuntimeLayoutDocument runtime = CreateRuntime();
         TransformerCreation start = new TransformerCreationFactory().Create(
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(0, 0));
+            new DocumentPoint(0, 0),
+            "起点变压器");
         TransformerCreation end = new TransformerCreationFactory().Create(
             TransformerKind.DedicatedPoleMounted,
-            new DocumentPoint(100, 0));
+            new DocumentPoint(100, 0),
+            "终点变压器");
         new AddTransformerCommand(document, runtime, start).Execute();
         new AddTransformerCommand(document, runtime, end).Execute();
 

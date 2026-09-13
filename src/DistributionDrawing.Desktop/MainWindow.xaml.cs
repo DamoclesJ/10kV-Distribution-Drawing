@@ -265,7 +265,7 @@ public partial class MainWindow : Window
 
         CancelDeviceDrag();
         CancelProfessionalPicking();
-        _drawingTools.BeginTransformer(dialog.SelectedKind);
+        _drawingTools.BeginTransformer(dialog.SelectedKind, dialog.DisplayName);
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.CreateTransformer);
         UpdateCanvasStatus();
     }

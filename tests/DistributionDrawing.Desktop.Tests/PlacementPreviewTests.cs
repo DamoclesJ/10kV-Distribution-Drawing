@@ -117,7 +117,7 @@ public sealed class PlacementPreviewTests : IDisposable
         ProjectRuntimeSession session = CreateSession();
         var controller = new PlacementController(() => session);
 
-        controller.BeginTransformer(kind);
+        controller.BeginTransformer(kind, "测试变压器");
         controller.UpdatePointer(new DocumentPoint(23, 37), snapEnabled: true);
 
         Assert.NotEmpty(controller.CreatePreviewElements());
@@ -126,6 +126,7 @@ public sealed class PlacementPreviewTests : IDisposable
 
         Transformer transformer = Assert.Single(session.PersistenceSession.Domain.Transformers);
         Assert.Equal(kind, transformer.TransformerKind);
+        Assert.Equal("测试变压器", transformer.DisplayName);
         Assert.Equal(new DocumentPoint(20, 40), session.Layout.TransformerLayouts[transformer.Id].Position);
         Assert.Equal(expectedOrientation, session.Layout.TransformerLayouts[transformer.Id].Orientation);
         Assert.Equal(new SelectionReference(SelectionTargetKind.Device, transformer.Id), session.SelectionManager.Selected);
@@ -138,7 +139,8 @@ public sealed class PlacementPreviewTests : IDisposable
         ProjectRuntimeSession session = CreateSession();
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
-            new DocumentPoint(30, 40));
+            new DocumentPoint(30, 40),
+            "测试变压器");
         new AddTransformerCommand(session.PersistenceSession.Domain, session.Layout, creation).Execute();
         SelectionSet selection = SelectionSet.Create(
             [new SelectionReference(SelectionTargetKind.Device, creation.Transformer.Id)]);

@@ -81,7 +81,8 @@ internal sealed class ClipboardFragmentMaterializer
             var transformer = new Transformer(
                 transformerId,
                 snapshot.TransformerKind,
-                terminalId);
+                terminalId,
+                snapshot.DisplayName);
             var transformerLayout = new TransformerLayout(
                 transformerId,
                 Add(snapshot.Layout.Position, offset),

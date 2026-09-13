@@ -22,6 +22,96 @@ public sealed class TransformerTests
     [InlineData(TransformerKind.PublicPoleMounted)]
     [InlineData(TransformerKind.DedicatedPoleMounted)]
     [InlineData(TransformerKind.PublicIndoor)]
+    public void Constructor_RequiresAndTrimsDisplayName(TransformerKind kind)
+    {
+        Guid transformerId = Guid.NewGuid();
+        Guid terminalId = Guid.NewGuid();
+
+        var transformer = new Transformer(transformerId, kind, terminalId, "  T1  ");
+
+        Assert.Equal("T1", transformer.DisplayName);
+        Assert.False(transformer.IsLegacyNamingIncomplete);
+        Assert.Throws<ArgumentException>(() =>
+            new Transformer(Guid.NewGuid(), kind, Guid.NewGuid(), null!));
+        Assert.Throws<ArgumentException>(() =>
+            new Transformer(Guid.NewGuid(), kind, Guid.NewGuid(), string.Empty));
+        Assert.Throws<ArgumentException>(() =>
+            new Transformer(Guid.NewGuid(), kind, Guid.NewGuid(), "   "));
+    }
+
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted)]
+    [InlineData(TransformerKind.DedicatedPoleMounted)]
+    [InlineData(TransformerKind.PublicIndoor)]
+    public void Rename_RequiresNameAndPreservesIdentityAndTopology(TransformerKind kind)
+    {
+        Guid transformerId = Guid.NewGuid();
+        Guid terminalId = Guid.NewGuid();
+        var transformer = new Transformer(transformerId, kind, terminalId, "Before");
+
+        transformer.Rename("  After  ");
+
+        Assert.Equal("After", transformer.DisplayName);
+        Assert.Equal(transformerId, transformer.Id);
+        Assert.Equal(terminalId, transformer.HvTerminalId);
+        Assert.Equal(kind, transformer.TransformerKind);
+        Assert.Throws<ArgumentException>(() => transformer.Rename(null));
+        Assert.Throws<ArgumentException>(() => transformer.Rename(string.Empty));
+        Assert.Throws<ArgumentException>(() => transformer.Rename("   "));
+        Assert.Equal("After", transformer.DisplayName);
+    }
+
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted)]
+    [InlineData(TransformerKind.DedicatedPoleMounted)]
+    [InlineData(TransformerKind.PublicIndoor)]
+    public void LegacyRestore_IncompleteCanBeCompletedAndRestoredForFutureUndo(
+        TransformerKind kind)
+    {
+        Guid transformerId = Guid.NewGuid();
+        Guid terminalId = Guid.NewGuid();
+        Transformer transformer = Transformer.RestoreLegacy(
+            transformerId,
+            kind,
+            terminalId,
+            displayName: null);
+
+        Assert.True(transformer.IsLegacyNamingIncomplete);
+        Assert.Null(transformer.DisplayName);
+
+        transformer.Rename("  补录名称  ");
+
+        Assert.False(transformer.IsLegacyNamingIncomplete);
+        Assert.Equal("补录名称", transformer.DisplayName);
+        Assert.Equal(transformerId, transformer.Id);
+        Assert.Equal(terminalId, transformer.HvTerminalId);
+        Assert.Equal(kind, transformer.TransformerKind);
+
+        transformer.RestoreLegacyNamingIncomplete();
+
+        Assert.True(transformer.IsLegacyNamingIncomplete);
+        Assert.Null(transformer.DisplayName);
+        Assert.Equal(transformerId, transformer.Id);
+        Assert.Equal(terminalId, transformer.HvTerminalId);
+    }
+
+    [Fact]
+    public void CurrentTransformer_CannotRestoreLegacyIncompleteState()
+    {
+        var transformer = new Transformer(
+            Guid.NewGuid(),
+            TransformerKind.PublicIndoor,
+            Guid.NewGuid(),
+            "T1");
+
+        Assert.Throws<InvalidOperationException>(() =>
+            transformer.RestoreLegacyNamingIncomplete());
+    }
+
+    [Theory]
+    [InlineData(TransformerKind.PublicPoleMounted)]
+    [InlineData(TransformerKind.DedicatedPoleMounted)]
+    [InlineData(TransformerKind.PublicIndoor)]
     public void CreateTransformer_RegistersExactlyOneHvTerminalWithoutElectricalNode(
         TransformerKind transformerKind)
     {
@@ -389,7 +479,11 @@ public sealed class TransformerTests
     {
         Guid transformerId = Guid.NewGuid();
         Guid terminalId = Guid.NewGuid();
-        var transformer = new Transformer(transformerId, transformerKind, terminalId);
+        var transformer = new Transformer(
+            transformerId,
+            transformerKind,
+            terminalId,
+            "测试变压器");
         return new Aggregate(transformer, CreateTerminal(transformer));
     }
 

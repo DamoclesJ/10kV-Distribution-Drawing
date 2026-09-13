@@ -78,6 +78,7 @@ public sealed class DeviceCommandFactory
         RuntimeLayoutDocument runtimeLayout,
         TransformerKind transformerKind,
         DocumentPoint position,
+        string displayName,
         TransformerOrientation? orientation = null)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -85,6 +86,7 @@ public sealed class DeviceCommandFactory
         TransformerCreation creation = _transformerCreationFactory.Create(
             transformerKind,
             position,
+            displayName,
             orientation);
         return new AddTransformerCommand(document, runtimeLayout, creation);
     }

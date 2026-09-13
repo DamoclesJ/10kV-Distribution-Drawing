@@ -119,7 +119,8 @@ public enum ProjectTransformerKind
 public sealed record ProjectTransformerDto(
     [property: JsonRequired] Guid TransformerId,
     [property: JsonRequired] ProjectTransformerKind TransformerKind,
-    [property: JsonRequired] Guid HvTerminalId);
+    [property: JsonRequired] Guid HvTerminalId,
+    string? DisplayName = null);
 
 [JsonConverter(typeof(StrictStringEnumConverter<ProjectStationKind>))]
 public enum ProjectStationKind
@@ -368,10 +369,17 @@ internal static class ProjectDomainMapper
                     ringCabinets.Add(ToDto(ringCabinet));
                     break;
                 case Transformer transformer:
+                    if (transformer.IsLegacyNamingIncomplete ||
+                        string.IsNullOrWhiteSpace(transformer.DisplayName))
+                    {
+                        throw new InvalidDataException(
+                            $"Transformer '{transformer.Id}' requires a display name before persistence.");
+                    }
                     transformers.Add(new ProjectTransformerDto(
                         transformer.Id,
                         Encode(transformer.TransformerKind),
-                        transformer.HvTerminalId));
+                        transformer.HvTerminalId,
+                        transformer.DisplayName));
                     break;
                 case CustomerStation customerStation:
                     customerStations.Add(ToDto(customerStation));
@@ -484,7 +492,9 @@ internal static class ProjectDomainMapper
         return result;
     }
 
-    public static DrawingDocument ToDomain(ProjectDomainDto dto)
+    public static DrawingDocument ToDomain(
+        ProjectDomainDto dto,
+        TransformerNamingContractMode transformerNamingMode = TransformerNamingContractMode.Current)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
@@ -593,10 +603,48 @@ internal static class ProjectDomainMapper
                     $"Transformer '{transformerDto.TransformerId}' must have exactly one HV terminal DTO.");
             }
             ProjectTerminalDto terminalDto = matchingTerminals[0];
-            var transformer = new Transformer(
-                transformerDto.TransformerId,
-                Decode(transformerDto.TransformerKind),
-                transformerDto.HvTerminalId);
+            Transformer transformer;
+            if (transformerNamingMode == TransformerNamingContractMode.Legacy)
+            {
+                if (!string.IsNullOrWhiteSpace(transformerDto.DisplayName) &&
+                    !string.Equals(
+                        transformerDto.DisplayName,
+                        transformerDto.DisplayName.Trim(),
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidDataException(
+                        $"Transformer '{transformerDto.TransformerId}' has an untrimmed legacy display name.");
+                }
+
+                transformer = Transformer.RestoreLegacy(
+                    transformerDto.TransformerId,
+                    Decode(transformerDto.TransformerKind),
+                    transformerDto.HvTerminalId,
+                    transformerDto.DisplayName);
+            }
+            else if (transformerNamingMode == TransformerNamingContractMode.Current)
+            {
+                if (string.IsNullOrWhiteSpace(transformerDto.DisplayName) ||
+                    !string.Equals(
+                        transformerDto.DisplayName,
+                        transformerDto.DisplayName.Trim(),
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidDataException(
+                        $"Transformer '{transformerDto.TransformerId}' requires a trimmed display name in the current naming contract.");
+                }
+
+                transformer = new Transformer(
+                    transformerDto.TransformerId,
+                    Decode(transformerDto.TransformerKind),
+                    transformerDto.HvTerminalId,
+                    transformerDto.DisplayName);
+            }
+            else
+            {
+                throw new InvalidDataException(
+                    $"Unsupported Transformer naming contract mode '{transformerNamingMode}'.");
+            }
             try
             {
                 document.AddTransformer(transformer, RestoreTerminal(terminalDto));

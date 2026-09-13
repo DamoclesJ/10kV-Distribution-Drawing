@@ -69,6 +69,7 @@ internal sealed record RingCabinetSnapshot(
 internal sealed record TransformerSnapshot(
     Guid Id,
     TransformerKind TransformerKind,
+    string DisplayName,
     TerminalSnapshot HvTerminal,
     TransformerLayout Layout);
 

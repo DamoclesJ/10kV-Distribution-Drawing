@@ -83,6 +83,7 @@ public sealed class DrawingClipboardTests : IDisposable
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
             new DocumentPoint(40, 50),
+            "  1号变压器  ",
             TransformerOrientation.Vertical);
         new AddTransformerCommand(
             session.PersistenceSession.Domain,
@@ -106,6 +107,7 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.NotEqual(creation.HvTerminal.Id, pastedTerminal.Id);
         Assert.Equal(pasted.HvTerminalId, pastedTerminal.Id);
         Assert.Equal(creation.Transformer.TransformerKind, pasted.TransformerKind);
+        Assert.Equal("1号变压器", pasted.DisplayName);
         Assert.Equal(creation.HvTerminal.AllowedConnectionTypes,
             pastedTerminal.AllowedConnectionTypes);
         Assert.Equal(creation.Layout.Orientation, pastedLayout.Orientation);
@@ -122,6 +124,7 @@ public sealed class DrawingClipboardTests : IDisposable
             session.PersistenceSession.Domain.Devices.OfType<Transformer>(),
             item => item.Id == pastedId);
         Assert.Equal(pastedTerminalId, redone.HvTerminalId);
+        Assert.Equal("1号变压器", redone.DisplayName);
     }
 
     [Fact]
@@ -131,6 +134,7 @@ public sealed class DrawingClipboardTests : IDisposable
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
             new DocumentPoint(40, 50),
+            "图面变压器",
             TransformerOrientation.Vertical);
         new AddTransformerCommand(
             session.PersistenceSession.Domain,
@@ -167,7 +171,7 @@ public sealed class DrawingClipboardTests : IDisposable
     {
         ProjectRuntimeSession session = CreateSession("变压器外部连接边界");
         TransformerCreation transformer = new TransformerCreationFactory().Create(
-            kind, new DocumentPoint(40, 50));
+            kind, new DocumentPoint(40, 50), "被复制变压器");
         new AddTransformerCommand(
             session.PersistenceSession.Domain, session.Layout, transformer).Execute();
         Terminal otherTerminal;
@@ -175,7 +179,7 @@ public sealed class DrawingClipboardTests : IDisposable
         if (connectionType == ConnectionType.Cable)
         {
             TransformerCreation other = new TransformerCreationFactory().Create(
-                TransformerKind.PublicIndoor, new DocumentPoint(100, 50));
+                TransformerKind.PublicIndoor, new DocumentPoint(100, 50), "外部变压器");
             new AddTransformerCommand(session.PersistenceSession.Domain, session.Layout, other).Execute();
             otherTerminal = other.HvTerminal;
         }
@@ -849,7 +853,8 @@ public sealed class DrawingClipboardTests : IDisposable
             session.PersistenceSession.Domain,
             session.Layout,
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(90, 40));
+            new DocumentPoint(90, 40),
+            "测试变压器");
         transformer.Execute();
         AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
             session.PersistenceSession.Domain,
@@ -1080,7 +1085,8 @@ public sealed class DrawingClipboardTests : IDisposable
             [true]);
         TransformerCreation transformer = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
-            new DocumentPoint(100, 30));
+            new DocumentPoint(100, 30),
+            "测试变压器");
         new AddTransformerCommand(
             session.PersistenceSession.Domain,
             session.Layout,
@@ -1146,7 +1152,8 @@ public sealed class DrawingClipboardTests : IDisposable
             [true]);
         TransformerCreation transformer = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
-            new DocumentPoint(100, 30));
+            new DocumentPoint(100, 30),
+            "测试变压器");
         new AddTransformerCommand(
             session.PersistenceSession.Domain,
             session.Layout,

@@ -90,7 +90,7 @@ public sealed class ElectricalConnectivityGraphBuilderTests
         Guid sourceId = Guid.NewGuid();
         Guid sourceTerminalId = Guid.NewGuid();
         var sourceTransformer = new Transformer(
-            sourceId, TransformerKind.PublicIndoor, sourceTerminalId);
+            sourceId, TransformerKind.PublicIndoor, sourceTerminalId, "Source");
         var source = new Terminal(
             sourceTerminalId, TopologyOwnerType.Device, sourceId,
             Transformer.HvTerminalRole, Transformer.TenKilovolts,
@@ -190,7 +190,7 @@ public sealed class ElectricalConnectivityGraphBuilderTests
         var document = new DrawingDocument(Guid.NewGuid(), "transformer graph");
         Guid transformerId = Guid.NewGuid();
         Guid terminalId = Guid.NewGuid();
-        var transformer = new Transformer(transformerId, kind, terminalId);
+        var transformer = new Transformer(transformerId, kind, terminalId, "Transformer");
         var terminal = new Terminal(
             terminalId,
             TopologyOwnerType.Device,

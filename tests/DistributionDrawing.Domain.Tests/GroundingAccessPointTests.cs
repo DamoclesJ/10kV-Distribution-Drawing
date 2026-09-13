@@ -20,7 +20,8 @@ public sealed class GroundingAccessPointTests
         var transformer = new Transformer(
             transformerId,
             TransformerKind.PublicPoleMounted,
-            hvTerminalId);
+            hvTerminalId,
+            "杆上变压器");
         var hvTerminal = new Terminal(
             hvTerminalId,
             TopologyOwnerType.Device,

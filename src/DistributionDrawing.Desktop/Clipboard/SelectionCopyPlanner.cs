@@ -55,6 +55,16 @@ internal sealed class SelectionCopyPlanner
             }
         }
 
+        if (document.Devices.OfType<Transformer>().Any(transformer =>
+                transformerIds.Contains(transformer.Id) &&
+                (transformer.IsLegacyNamingIncomplete ||
+                 string.IsNullOrWhiteSpace(transformer.DisplayName))))
+        {
+            return new CopyPlanResult(
+                null,
+                ["所选变压器存在未补录名称，补录后才能复制。"]);
+        }
+
         PoleSnapshot[] poles = poleIds.OrderBy(id => id)
             .Select(id => CapturePole(document, session.Layout, id))
             .ToArray();
@@ -381,6 +391,7 @@ internal sealed class SelectionCopyPlanner
         return new TransformerSnapshot(
             transformer.Id,
             transformer.TransformerKind,
+            transformer.DisplayName!,
             CaptureTerminal(terminal),
             layout.TransformerLayouts[transformer.Id] with { });
     }

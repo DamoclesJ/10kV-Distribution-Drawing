@@ -49,7 +49,8 @@ public sealed record ProjectSession
         ProjectLayoutSnapshot layout,
         ProjectProfessionalSnapshot professional,
         bool isDirty,
-        int openedFormatVersion = ProjectFileFormat.CurrentVersion)
+        int openedFormatVersion = ProjectFileFormat.CurrentVersion,
+        TransformerNamingContractMode transformerNamingMode = TransformerNamingContractMode.Current)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(document);
@@ -68,6 +69,7 @@ public sealed record ProjectSession
         Professional = professional;
         IsDirty = isDirty;
         OpenedFormatVersion = openedFormatVersion;
+        TransformerNamingMode = transformerNamingMode;
     }
 
     public string FilePath { get; }
@@ -89,6 +91,8 @@ public sealed record ProjectSession
     public bool IsDirty { get; init; }
 
     public int OpenedFormatVersion { get; }
+
+    public TransformerNamingContractMode TransformerNamingMode { get; }
 
     public bool RequiresUpgradeSaveAs =>
         OpenedFormatVersion < ProjectFileFormat.CurrentVersion;

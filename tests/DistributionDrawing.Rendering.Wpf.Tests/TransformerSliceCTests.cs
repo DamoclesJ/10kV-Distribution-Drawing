@@ -215,7 +215,8 @@ public sealed class TransformerSliceCTests
             TransformerOrientation.Horizontal);
         TransformerCreation second = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
-            new DocumentPoint(160, 100));
+            new DocumentPoint(160, 100),
+            "第二台变压器");
         DrawingDocument document = DocumentWith(first);
         document.AddTransformer(second.Transformer, second.HvTerminal);
         RuntimeLayoutDocument runtime = RuntimeWith(first);
@@ -310,7 +311,8 @@ public sealed class TransformerSliceCTests
             document,
             runtime,
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(90, 40));
+            new DocumentPoint(90, 40),
+            "测试变压器");
         transformer.Execute();
         AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
             document,
@@ -723,7 +725,11 @@ public sealed class TransformerSliceCTests
     private static TransformerCreation Create(
         TransformerKind kind,
         TransformerOrientation? orientation = null) =>
-        new TransformerCreationFactory().Create(kind, new DocumentPoint(100, 100), orientation);
+        new TransformerCreationFactory().Create(
+            kind,
+            new DocumentPoint(100, 100),
+            "测试变压器",
+            orientation);
 
     private static DrawingDocument DocumentWith(TransformerCreation creation)
     {

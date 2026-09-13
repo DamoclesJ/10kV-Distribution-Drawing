@@ -33,7 +33,9 @@ public sealed class ProjectService
             metadata,
             createdAtUtc);
 
-        DrawingDocument domain = RestoreDomain(document);
+        DrawingDocument domain = RestoreDomain(
+            document,
+            TransformerNamingContractMode.Current);
         ProjectProfessionalSnapshot professional = RestoreProfessional(document, domain);
         ProjectLayoutSnapshot layout = RestoreLayout(document, domain);
         ProjectSession candidate = new(
@@ -43,7 +45,8 @@ public sealed class ProjectService
             layout,
             professional,
             isDirty: false,
-            openedFormatVersion: ProjectFileFormat.CurrentVersion);
+            openedFormatVersion: ProjectFileFormat.CurrentVersion,
+            transformerNamingMode: TransformerNamingContractMode.Current);
         Current = candidate;
         return candidate;
     }
@@ -81,6 +84,7 @@ public sealed class ProjectService
     {
         ProjectSession current = RequireCurrent();
         ArgumentNullException.ThrowIfNull(layout);
+        ValidateTransformerNamingForSave(current.Domain);
 
         ProjectFileDocument snapshot = current.Document with
         {
@@ -97,7 +101,9 @@ public sealed class ProjectService
         // manifest timestamps and validates the complete container round trip.
         ProjectFileOpenResult persisted = _container.OpenWithSource(filePath);
         ProjectFileDocument persistedDocument = persisted.Document;
-        DrawingDocument validationDomain = RestoreDomain(persistedDocument);
+        DrawingDocument validationDomain = RestoreDomain(
+            persistedDocument,
+            persisted.TransformerNamingMode);
         _ = RestoreProfessional(persistedDocument, validationDomain);
         _ = RestoreLayout(persistedDocument, validationDomain);
         ProjectSession candidate = new(
@@ -107,7 +113,8 @@ public sealed class ProjectService
             layout,
             new ProjectProfessionalSnapshot(ProjectProfessionalMapper.ToDto(current.Domain)),
             isDirty: false,
-            openedFormatVersion: persisted.OpenedFormatVersion);
+            openedFormatVersion: persisted.OpenedFormatVersion,
+            transformerNamingMode: persisted.TransformerNamingMode);
 
         Current = candidate;
         return candidate;
@@ -120,7 +127,7 @@ public sealed class ProjectService
         // Build and validate the candidate before replacing the current session.
         ProjectFileOpenResult opened = _container.OpenWithSource(filePath);
         ProjectFileDocument document = opened.Document;
-        DrawingDocument domain = RestoreDomain(document);
+        DrawingDocument domain = RestoreDomain(document, opened.TransformerNamingMode);
         ProjectProfessionalSnapshot professional = RestoreProfessional(document, domain);
         ProjectLayoutSnapshot layout = RestoreLayout(document, domain);
         ProjectSession candidate = new(
@@ -130,7 +137,8 @@ public sealed class ProjectService
             layout,
             professional,
             isDirty: false,
-            openedFormatVersion: opened.OpenedFormatVersion);
+            openedFormatVersion: opened.OpenedFormatVersion,
+            transformerNamingMode: opened.TransformerNamingMode);
         Current = candidate;
         return candidate;
     }
@@ -177,12 +185,26 @@ public sealed class ProjectService
         }
     }
 
-    private static DrawingDocument RestoreDomain(ProjectFileDocument document)
+    private static DrawingDocument RestoreDomain(
+        ProjectFileDocument document,
+        TransformerNamingContractMode transformerNamingMode)
     {
         ProjectDomainDto domain = document.Domain ?? ProjectDomainDto.Empty(
             document.Manifest.ProjectId,
             document.Metadata.Title);
-        return ProjectDomainMapper.ToDomain(domain);
+        return ProjectDomainMapper.ToDomain(domain, transformerNamingMode);
+    }
+
+    private static void ValidateTransformerNamingForSave(DrawingDocument document)
+    {
+        int incompleteCount = document.Transformers.Count(transformer =>
+            transformer.IsLegacyNamingIncomplete ||
+            string.IsNullOrWhiteSpace(transformer.DisplayName));
+        if (incompleteCount > 0)
+        {
+            throw new InvalidOperationException(
+                $"工程中仍有 {incompleteCount} 台历史变压器未补录“变压器名称”，请全部补录后再保存。");
+        }
     }
 
     private static ProjectLayoutSnapshot RestoreLayout(

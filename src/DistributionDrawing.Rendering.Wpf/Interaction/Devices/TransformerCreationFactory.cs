@@ -10,6 +10,7 @@ public sealed class TransformerCreationFactory
     public TransformerCreation Create(
         TransformerKind transformerKind,
         DocumentPoint position,
+        string displayName,
         TransformerOrientation? orientation = null)
     {
         Guid transformerId = Guid.NewGuid();
@@ -25,7 +26,8 @@ public sealed class TransformerCreationFactory
         var transformer = new Transformer(
             transformerId,
             transformerKind,
-            hvTerminalId);
+            hvTerminalId,
+            displayName);
         var hvTerminal = new Terminal(
             hvTerminalId,
             TopologyOwnerType.Device,

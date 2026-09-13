@@ -580,7 +580,8 @@ public sealed class CustomerStationTests
         var transformer = new Transformer(
             Guid.NewGuid(),
             TransformerKind.PublicIndoor,
-            terminalId);
+            terminalId,
+            "电缆端变压器");
         var terminal = new Terminal(
             terminalId,
             TopologyOwnerType.Device,

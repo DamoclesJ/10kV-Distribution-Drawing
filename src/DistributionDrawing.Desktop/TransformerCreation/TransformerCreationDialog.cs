@@ -12,12 +12,13 @@ public sealed class TransformerCreationDialog : Window
     }
 
     private readonly ComboBox _kind = new();
+    private readonly TextBox _displayName = new();
 
     public TransformerCreationDialog()
     {
         Title = "新增变压器";
         Width = 340;
-        Height = 170;
+        Height = 220;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
@@ -32,6 +33,18 @@ public sealed class TransformerCreationDialog : Window
         var confirm = new Button { Content = "确定", Width = 80, IsDefault = true };
         confirm.Click += (_, _) =>
         {
+            if (string.IsNullOrWhiteSpace(_displayName.Text))
+            {
+                MessageBox.Show(
+                    this,
+                    "请输入变压器名称。",
+                    "输入无效",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                _displayName.Focus();
+                return;
+            }
+
             DialogResult = true;
             Close();
         };
@@ -43,6 +56,9 @@ public sealed class TransformerCreationDialog : Window
             Children = { confirm, cancel }
         };
         var panel = new StackPanel { Margin = new Thickness(20) };
+        panel.Children.Add(new TextBlock { Text = "变压器名称", Margin = new Thickness(0, 0, 0, 4) });
+        panel.Children.Add(_displayName);
+        panel.Children.Add(new Border { Height = 12 });
         panel.Children.Add(new TextBlock { Text = "业务类型", Margin = new Thickness(0, 0, 0, 4) });
         panel.Children.Add(_kind);
         panel.Children.Add(new Border { Height = 18 });
@@ -51,4 +67,6 @@ public sealed class TransformerCreationDialog : Window
     }
 
     public TransformerKind SelectedKind => ((KindOption)_kind.SelectedItem).Value;
+
+    public string DisplayName => _displayName.Text.Trim();
 }

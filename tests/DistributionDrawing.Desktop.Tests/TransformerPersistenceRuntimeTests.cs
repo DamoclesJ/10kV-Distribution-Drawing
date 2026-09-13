@@ -33,6 +33,7 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
         TransformerCreation creation = new TransformerCreationFactory().Create(
             kind,
             new DocumentPoint(123.5, 456.25),
+            "测试变压器",
             orientation);
         new AddTransformerCommand(
             runtime.PersistenceSession.Domain,
@@ -67,7 +68,8 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
             service.CreateProject(_path, "transformer orientation"));
         TransformerCreation creation = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
-            new DocumentPoint(40, 50));
+            new DocumentPoint(40, 50),
+            "测试变压器");
         new AddTransformerCommand(
             runtime.PersistenceSession.Domain,
             runtime.Layout,
@@ -103,9 +105,9 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
         ProjectRuntimeSession runtime = ProjectRuntimeSession.CreateEmpty(
             service.CreateProject(_path, "transformer graph"));
         TransformerCreation first = new TransformerCreationFactory().Create(
-            TransformerKind.PublicIndoor, new DocumentPoint(10, 20));
+            TransformerKind.PublicIndoor, new DocumentPoint(10, 20), "第一台变压器");
         TransformerCreation second = new TransformerCreationFactory().Create(
-            TransformerKind.PublicIndoor, new DocumentPoint(90, 20));
+            TransformerKind.PublicIndoor, new DocumentPoint(90, 20), "第二台变压器");
         new AddTransformerCommand(runtime.PersistenceSession.Domain, runtime.Layout, first).Execute();
         new AddTransformerCommand(runtime.PersistenceSession.Domain, runtime.Layout, second).Execute();
         Guid connectionId = Guid.NewGuid();
@@ -160,7 +162,8 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
         pole.Execute();
         TransformerCreation transformer = new TransformerCreationFactory().Create(
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(90, 20));
+            new DocumentPoint(90, 20),
+            "测试变压器");
         new AddTransformerCommand(
             runtime.PersistenceSession.Domain,
             runtime.Layout,

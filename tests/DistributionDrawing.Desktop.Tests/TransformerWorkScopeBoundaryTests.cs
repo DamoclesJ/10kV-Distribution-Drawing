@@ -20,7 +20,8 @@ public sealed class TransformerWorkScopeBoundaryTests
             new Dictionary<Guid, RingCabinetLayout>());
         TransformerCreation transformer = new TransformerCreationFactory().Create(
             TransformerKind.PublicIndoor,
-            new DocumentPoint(80, 40));
+            new DocumentPoint(80, 40),
+            "测试变压器");
         new AddTransformerCommand(document, runtime, transformer).Execute();
         AddPoleCommand pole = new DeviceCommandFactory().CreateAddPole(
             document,

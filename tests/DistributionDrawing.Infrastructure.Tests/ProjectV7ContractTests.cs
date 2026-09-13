@@ -99,7 +99,8 @@ public sealed class ProjectV7ContractTests : IDisposable
                 new ProjectTransformerDto(
                     transformerId,
                     ProjectTransformerKind.PublicIndoor,
-                    transformerTerminalId)
+                    transformerTerminalId,
+                    "T1")
             ],
             CustomerStations =
             [
@@ -190,7 +191,8 @@ public sealed class ProjectV7ContractTests : IDisposable
             new ProjectTransformerDto(
                 transformerId,
                 ProjectTransformerKind.PublicIndoor,
-                transformerTerminalId),
+                transformerTerminalId,
+                "T1"),
             Assert.Single(opened.Domain.Transformers!));
         ProjectCustomerStationDto station = Assert.Single(opened.Domain.CustomerStations!);
         Assert.Equal(ProjectStationKind.IndoorStation, station.StationKind);

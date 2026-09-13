@@ -22,6 +22,7 @@ public sealed class PlacementController
     private RingCabinet? _previewCabinet;
     private RingCabinetLayout? _previewCabinetLayout;
     private TransformerKind? _pendingTransformerKind;
+    private string? _pendingTransformerDisplayName;
     private TransformerOrientation? _pendingTransformerOrientation;
     private Transformer? _previewTransformer;
     private TransformerLayout? _previewTransformerLayout;
@@ -84,6 +85,7 @@ public sealed class PlacementController
 
     public void BeginTransformer(
         TransformerKind transformerKind,
+        string displayName,
         TransformerOrientation? orientation = null)
     {
         _pendingRingCabinetConfiguration = null;
@@ -94,8 +96,10 @@ public sealed class PlacementController
             session.Layout,
             transformerKind,
             new DocumentPoint(0, 0),
+            displayName,
             orientation);
         _pendingTransformerKind = transformerKind;
+        _pendingTransformerDisplayName = preview.Creation.Transformer.DisplayName;
         _pendingTransformerOrientation = preview.Creation.Layout.Orientation;
         _previewTransformer = preview.Creation.Transformer;
         _previewTransformerLayout = preview.Creation.Layout;
@@ -132,6 +136,7 @@ public sealed class PlacementController
     {
         _pendingRingCabinetConfiguration = null;
         _pendingTransformerKind = null;
+        _pendingTransformerDisplayName = null;
         _pendingTransformerOrientation = null;
         _pendingCustomerStationKind = null;
         _pendingCustomerStationFeederNames = null;
@@ -177,11 +182,15 @@ public sealed class PlacementController
                 TransformerKind transformerKind = _pendingTransformerKind
                     ?? throw new InvalidOperationException(
                         "Transformer placement has no creation configuration.");
+                string transformerDisplayName = _pendingTransformerDisplayName
+                    ?? throw new InvalidOperationException(
+                        "Transformer placement has no display name.");
                 AddTransformerCommand transformer = _commandFactory.CreateAddTransformer(
                     session.PersistenceSession.Domain,
                     session.Layout,
                     transformerKind,
                     position,
+                    transformerDisplayName,
                     _pendingTransformerOrientation);
                 command = transformer;
                 selection = new SelectionReference(
@@ -216,6 +225,7 @@ public sealed class PlacementController
         {
             _pendingRingCabinetConfiguration = null;
             _pendingTransformerKind = null;
+            _pendingTransformerDisplayName = null;
             _pendingTransformerOrientation = null;
             _pendingCustomerStationKind = null;
             _pendingCustomerStationFeederNames = null;

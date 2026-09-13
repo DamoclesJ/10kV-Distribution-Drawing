@@ -25,7 +25,9 @@ public sealed class TransformerPersistenceTests
         Terminal actualTerminal = Assert.Single(restored.Terminals);
         Assert.Equal(transformer.Id, persisted.TransformerId);
         Assert.Equal(transformer.HvTerminalId, persisted.HvTerminalId);
+        Assert.Equal(transformer.DisplayName, persisted.DisplayName);
         Assert.Equal(transformer.Id, actual.Id);
+        Assert.Equal(transformer.DisplayName, actual.DisplayName);
         Assert.Equal(kind, actual.TransformerKind);
         Assert.Equal(terminal.Id, actualTerminal.Id);
         Assert.Equal(terminal.OwnerId, actualTerminal.OwnerId);
@@ -42,7 +44,8 @@ public sealed class TransformerPersistenceTests
             Transformers = [new ProjectTransformerDto(
                 transformerId,
                 ProjectTransformerKind.PublicIndoor,
-                Guid.NewGuid())]
+                Guid.NewGuid(),
+                "T1")]
         };
 
         Assert.Throws<InvalidDataException>(() => ProjectDomainMapper.ToDomain(dto));
@@ -77,7 +80,8 @@ public sealed class TransformerPersistenceTests
             Transformers = [new ProjectTransformerDto(
                 transformerId,
                 ProjectTransformerKind.PublicIndoor,
-                terminalId)],
+                terminalId,
+                "T1")],
             Terminals = [terminal]
         };
 
@@ -94,7 +98,8 @@ public sealed class TransformerPersistenceTests
             Transformers = [new ProjectTransformerDto(
                 transformerId,
                 ProjectTransformerKind.PublicIndoor,
-                terminalId)],
+                terminalId,
+                "T1")],
             Terminals =
             [
                 ValidTerminal(transformerId, terminalId),
@@ -115,7 +120,8 @@ public sealed class TransformerPersistenceTests
             Transformers = [new ProjectTransformerDto(
                 transformerId,
                 ProjectTransformerKind.PublicIndoor,
-                terminalId)],
+                terminalId,
+                "T1")],
             Terminals = [ValidTerminal(transformerId, terminalId)],
             ElectricalNodes = [new ProjectElectricalNodeDto(
                 Guid.NewGuid(),
@@ -138,7 +144,8 @@ public sealed class TransformerPersistenceTests
             Transformers = [new ProjectTransformerDto(
                 transformerId,
                 (ProjectTransformerKind)999,
-                terminalId)],
+                terminalId,
+                "T1")],
             Terminals = [ValidTerminal(transformerId, terminalId)]
         };
 
@@ -232,7 +239,7 @@ public sealed class TransformerPersistenceTests
         var document = new DrawingDocument(Guid.NewGuid(), kind.ToString());
         Guid transformerId = Guid.NewGuid();
         Guid terminalId = Guid.NewGuid();
-        var transformer = new Transformer(transformerId, kind, terminalId);
+        var transformer = new Transformer(transformerId, kind, terminalId, "测试变压器");
         var terminal = new Terminal(
             terminalId,
             TopologyOwnerType.Device,

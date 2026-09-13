@@ -53,7 +53,8 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             session.PersistenceSession.Domain,
             session.Layout,
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(90, 40));
+            new DocumentPoint(90, 40),
+            "测试变压器");
         transformer.Execute();
         AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
             session.PersistenceSession.Domain,
@@ -154,7 +155,8 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             session.PersistenceSession.Domain,
             session.Layout,
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(90, 40));
+            new DocumentPoint(90, 40),
+            "测试变压器");
         transformer.Execute();
         AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
             session.PersistenceSession.Domain,
@@ -216,7 +218,8 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             session.PersistenceSession.Domain,
             session.Layout,
             kind,
-            new DocumentPoint(90, 40));
+            new DocumentPoint(90, 40),
+            "测试变压器");
         transformer.Execute();
         Guid first = transformerIsStart
             ? transformer.Creation.HvTerminal.Id
@@ -315,7 +318,8 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             session.PersistenceSession.Domain,
             session.Layout,
             TransformerKind.PublicIndoor,
-            new DocumentPoint(90, 40));
+            new DocumentPoint(90, 40),
+            "测试变压器");
         transformer.Execute();
         session.RebuildScene();
 
@@ -360,7 +364,8 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             session.PersistenceSession.Domain,
             session.Layout,
             TransformerKind.PublicPoleMounted,
-            new DocumentPoint(150, 40));
+            new DocumentPoint(150, 40),
+            "测试变压器");
         transformer.Execute();
         Terminal[] fuseTerminals =
             [fuse.Creation.FirstTerminal, fuse.Creation.SecondTerminal];

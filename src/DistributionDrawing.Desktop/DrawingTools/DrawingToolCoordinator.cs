@@ -78,13 +78,14 @@ public sealed class DrawingToolCoordinator
 
     public void BeginTransformer(
         TransformerKind transformerKind,
+        string displayName,
         TransformerOrientation? orientation = null)
     {
         _overheadLine.Cancel();
         _cableConnection.Cancel();
         _cableReconnect.Cancel();
         _poleSwitchAttachment.Cancel();
-        _placement.BeginTransformer(transformerKind, orientation);
+        _placement.BeginTransformer(transformerKind, displayName, orientation);
     }
 
     public void BeginCustomerStation(

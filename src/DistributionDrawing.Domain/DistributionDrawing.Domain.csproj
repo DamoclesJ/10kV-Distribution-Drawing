@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="DistributionDrawing.Domain.Tests" />
+    <InternalsVisibleTo Include="DistributionDrawing.Infrastructure" />
+  </ItemGroup>
+
 </Project>
