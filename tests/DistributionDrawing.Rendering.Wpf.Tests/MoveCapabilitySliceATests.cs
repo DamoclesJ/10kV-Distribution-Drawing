@@ -307,10 +307,13 @@ public sealed class MoveCapabilitySliceATests
         Assert.True(labelBounds.YMillimeters >= glyphBottom);
         Assert.NotEqual(beforeScene.Elements.OfType<SceneText>()
             .Single(item => item.Text == moving.Transformer.DisplayName).Origin, label.Origin);
-        SelectionReference labelTarget = Assert.IsType<SelectionReference>(
-            movedScene.HitTestIndex.HitTest(Center(labelBounds)));
-        Assert.Equal(SelectionTargetKind.Device, labelTarget.Kind);
-        Assert.Equal(moving.Transformer.Id, labelTarget.ObjectId);
+        SelectionHitTestEntry labelEntry = Assert.Single(
+            movedScene.HitTestIndex.Entries,
+            entry => entry.Target.Kind == SelectionTargetKind.Device &&
+                     entry.Target.ObjectId == moving.Transformer.Id &&
+                     entry.Bounds == labelBounds);
+        Assert.Equal(SelectionTargetKind.Device, labelEntry.Target.Kind);
+        Assert.Equal(moving.Transformer.Id, labelEntry.Target.ObjectId);
     }
 
     [Theory]
@@ -750,11 +753,21 @@ public sealed class MoveCapabilitySliceATests
 
     private static GroundingPresentationAnchor GroundingAnchor(
         DrawingScene scene,
-        Guid groundingPointId) =>
-        Assert.IsType<GroundingPresentationAnchor>(scene.HitTestIndex.Entries.Single(entry =>
-            entry.Target.Kind == SelectionTargetKind.GroundingPoint &&
-            entry.Target.ObjectId == groundingPointId &&
-            entry.GroundingAnchor is not null).GroundingAnchor);
+        Guid groundingPointId)
+    {
+        SelectionHitTestEntry[] entries = scene.HitTestIndex.Entries
+            .Where(entry =>
+                entry.Target.Kind == SelectionTargetKind.GroundingPoint &&
+                entry.Target.ObjectId == groundingPointId &&
+                entry.GroundingAnchor is not null)
+            .ToArray();
+        Assert.NotEmpty(entries);
+        GroundingPresentationAnchor anchor = entries[0].GroundingAnchor!.Value;
+        Assert.All(entries, entry => Assert.Equal(
+            anchor,
+            entry.GroundingAnchor!.Value));
+        return anchor;
+    }
 
     private static void AssertGapIdentity(
         GroundingAccessPoint gap,
