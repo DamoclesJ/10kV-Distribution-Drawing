@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Requirements Refinement / Implementation Not Started / WP-EM-08 Slice A Requirements Frozen / Implementation Not Started / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Implementation In Progress / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Requirements Refined / Not Started / WP-EM-08 Slice C Requirements Refined / Characterization Pending / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -897,7 +897,7 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 **状态：Closed / Archived / Final accepted implementation `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`**
 
-正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 现 Closed / Archived，WP-EM-08 为 Requirements Refinement / Implementation Not Started。
+正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 现 Closed / Archived；WP-EM-08 整体为 Implementation In Progress，Slice A 已 Closed / Accepted，Slice B 与 Slice C 仍待推进。
 
 ### WP-EM-07B — Transformer Naming Amendment
 
@@ -907,9 +907,9 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
-**状态：Requirements Refinement / Implementation Not Started**
+**状态：Implementation In Progress；Slice A Closed / Accepted；Slice B Requirements Refined / Not Started；Slice C Requirements Refined / Characterization Pending**
 
-Implementation Audit & Scope Revalidation 已在 baseline `c4f61653f923f985bcd8835d9735c68decee783e` 通过。WP-EM-08 Scope Amendment 已完成，但本 WP 尚未 Requirements Frozen，也未进入 implementation。
+Implementation Audit & Scope Revalidation 已在 baseline `c4f61653f923f985bcd8835d9735c68decee783e` 通过。WP-EM-08 Scope Amendment 已完成；Slice A 已完成 implementation、Windows automated verification 与 professional acceptance 并闭环，整体 WP 仍因 Slice B / Slice C 未完成而保持 Implementation In Progress。
 
 WP-EM-08 始终是一个 Work Package，并在一个 Codex Thread 中推进。下述三个 Implementation Slice 是该 Work Package 内部、可独立评审的增量，不产生额外 Work Package，也不要求单独 Codex Thread。
 
@@ -987,9 +987,9 @@ Move / routing stabilization 不得创建新 Terminal、新 ElectricalNode、改
 
 #### WP-EM-08 Implementation Slice A — Move Capability Closure
 
-**状态：Requirements Frozen / Implementation Not Started**
+**状态：Closed / Accepted — Implemented / Windows Verified / Professionally Accepted**
 
-Slice A 只关闭正式 electrical / professional objects 的 direct move capability matrix，并补齐 Transformer 与 CustomerStation 缺失的 direct drag。WP-EM-08 整体仍为 Requirements Refinement / Implementation Not Started；该 slice-level freeze 不代表整个 WP-EM-08 Requirements Frozen，也不推进 Slice B 或 Slice C。
+Slice A 已关闭正式 electrical / professional objects 的 direct move capability matrix，并补齐 Transformer 与 CustomerStation 缺失的 direct drag。WP-EM-08 整体保持 Implementation In Progress；该 slice-level closure 不推进 Slice B 或 Slice C。
 
 ##### Slice A move-capability matrix
 
@@ -999,8 +999,8 @@ Slice A 只关闭正式 electrical / professional objects 的 direct move capabi
 | RingCabinet | direct drag supported |
 | CableTermination PoleAttachment | direct pole-orbit drag supported |
 | GroundingPoint | independent symbol-offset drag supported |
-| Transformer | direct drag must be added in Slice A |
-| CustomerStation | direct drag must be added in Slice A |
+| Transformer | direct drag implemented and accepted |
+| CustomerStation | direct drag implemented and accepted |
 | GroundingAccessPoint | direct drag not supported；position 从 typed electrical route 派生 |
 | SwitchDevice / ordinary PoleAttachment | independent free drag not supported；随父 Pole 移动，或使用既有 rotation / property / attachment-layout commands |
 
@@ -1067,6 +1067,20 @@ Windows acceptance 必须覆盖：三种 Transformer Kind、`PublicIndoor` Horiz
 ##### Slice A exclusions
 
 Slice A 禁止实现 `LastValid`、invalid-candidate continuation、non-modal invalid feedback、drag transaction redesign、CommandStack atomicity redesign、route hysteresis、`RouteFamilyKey`、route switching margin、Transformer / CustomerStation obstacle policy、generic collision、canvas bounds、waypoint editor、manual route editor 或 routing engine rewrite。这些分别留在 Slice B、Slice C 或 WP-EM-08 范围之外。
+
+##### Slice A closure evidence
+
+Slice A closure chain is: Requirements Freeze `3e4dfe5fbada919b85fa1c84c1d1796f8376955e`; implementation `bfc551d358458433f37e517bf45e28138c24987d`; Windows Verification Fix-1 `4bb4887e6a75f56756ab45f48820ad799b396ec6`; Windows Verification Fix-2 / final accepted baseline `e84ff340cbf570d7ed6bb8b5dd7f4fc0befc6ec9`.
+
+Transformer closure covers `PublicPoleMounted`, `DedicatedPoleMounted`, `PublicIndoor` Horizontal / Vertical direct drag, group move, preview / Cancel / Commit / Undo / Redo / NoChange, live Cable / OverheadLine rebuild, stable `Transformer.Id`, `HvTerminalId`, `Device.DisplayName`, Orientation, below-center label, and Transformer-side GAP / grounding identity. CustomerStation closure covers `BoxStation`, `IndoorStation` single / dual feeder direct drag, group move, preview / Cancel / Commit / Undo / Redo / NoChange, Cable rebuild, stable station / feeder / Terminal / `ElectricalNode` / `IsolationSwitch` identity and state, and cable-side grounding identity.
+
+Existing move policies remain unchanged: Pole direct drag, RingCabinet direct drag, CableTermination pole-orbit drag, GroundingPoint symbol-offset drag, SwitchDevice / ordinary PoleAttachment no independent free drag, and GroundingAccessPoint no direct drag. The implementation reuses `DeviceDragController`, `SelectionMovePlanner`, `GroupMoveCommand`, MainWindow pointer lifecycle, `CommandStack`, `RuntimeLayoutDocument`, and `DrawingSceneBuilder`, with typed `MoveTransformerCommand` and `MoveCustomerStationCommand`; it does not create a second drag or routing framework.
+
+Moving either object changes only the existing `TransformerLayout.Position` or `CustomerStationLayout.Position`. Domain identity, Terminal identity, `ElectricalNode` identity, Connection identity / endpoints, `GroundingTarget`, GAP identity, topology, conductivity, naming, orientation, and aggregate state remain unchanged; routes, anchors, and grounding presentation are derived by scene rebuild. Persistence schema impact is none: existing layout positions are reused, no DTO / drag / route / history state is persisted, and FormatVersion remains V7.
+
+Windows automated verification is **PASS**, including Rendering.Wpf runtime tests and relevant Desktop / solution verification. Fix-1 corrected test-only GroundingPoint multi-hit-entry and Transformer label hit-priority assumptions; Fix-2 corrected the test-only Transformer body hit fixture so production `HitTest` selects `SelectionTargetKind.Device` rather than a CableSegment-covered connection point. No runtime-blocked state remains. Windows professional acceptance is **PASS** for direct drags, route rebuild, naming, short OHL / GAP / grounding, group move, Cancel, Undo / Redo, selection, and unsupported Switch / GAP drag behavior.
+
+Regression boundaries remain WP-EM-05 grounding layout / accepted limitation, WP-EM-06 Transformer topology, WP-EM-07 CustomerStation aggregate, WP-EM-07A GAP / short OHL / Transformer-side grounding, WP-EM-07B naming, Clipboard, Save / Open, Undo / Redo, selection identity, and existing Pole / RingCabinet / CableTermination behavior. Slice B is next at Requirements Freeze; Slice C remains Requirements Refined / Characterization Pending.
 
 #### WP-EM-08 Implementation Slice B — Transactional Drag Stabilization
 
@@ -1137,5 +1151,5 @@ WP-EM-09 保持 Integration-only，不得承担 Transformer drag、CustomerStati
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，当前为 Requirements Refinement / Implementation Not Started，并在同一个 Work Package 与 Codex Thread 内划分为三个内部 implementation slices：Slice A 为 Requirements Frozen / Implementation Not Started，Slice B 为 Requirements Refined / Not Started，Slice C 为 Requirements Refined / Characterization Pending；WP-EM-09 为 Planned / Integration-only；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，整体为 Implementation In Progress，并在同一个 Work Package 与 Codex Thread 内划分为三个内部 implementation slices：Slice A 为 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted，Slice B 为 Requirements Refined / Not Started，Slice C 为 Requirements Refined / Characterization Pending；下一步为 Slice B Requirements Freeze；WP-EM-09 为 Planned / Integration-only；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
