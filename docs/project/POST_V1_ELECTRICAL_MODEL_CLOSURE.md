@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Requirements Refinement / Implementation Not Started / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Requirements Refinement / Implementation Not Started / WP-EM-08 Slice A Requirements Frozen / Implementation Not Started / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -987,25 +987,98 @@ Move / routing stabilization 不得创建新 Terminal、新 ElectricalNode、改
 
 #### WP-EM-08 Implementation Slice A — Move Capability Closure
 
-补齐并统一“谁可以移动”：
+**状态：Requirements Frozen / Implementation Not Started**
 
-- 实现 Transformer direct drag；
-- 实现 CustomerStation direct drag；
-- 集成 group move；
-- 保持 Pole drag、RingCabinet drag、CableTermination pole-orbit drag与GroundingPoint drag；
-- 明确保持 Switch direct drag unsupported与GAP direct drag unsupported。
+Slice A 只关闭正式 electrical / professional objects 的 direct move capability matrix，并补齐 Transformer 与 CustomerStation 缺失的 direct drag。WP-EM-08 整体仍为 Requirements Refinement / Implementation Not Started；该 slice-level freeze 不代表整个 WP-EM-08 Requirements Frozen，也不推进 Slice B 或 Slice C。
 
-本 Slice 只复用当前 scene rebuild / route behavior，不实现 `LastValid`、新的 drag transaction framework、hysteresis、`RouteFamilyKey`或routing obstacle policy changes。
+##### Slice A move-capability matrix
 
-Acceptance 覆盖 pointer drag、live connected route rebuild、Cancel、Commit、Undo / Redo、selection、label、grounding continuity与stable identity。
+| Object | Frozen move capability |
+| --- | --- |
+| Pole | direct drag supported |
+| RingCabinet | direct drag supported |
+| CableTermination PoleAttachment | direct pole-orbit drag supported |
+| GroundingPoint | independent symbol-offset drag supported |
+| Transformer | direct drag must be added in Slice A |
+| CustomerStation | direct drag must be added in Slice A |
+| GroundingAccessPoint | direct drag not supported；position 从 typed electrical route 派生 |
+| SwitchDevice / ordinary PoleAttachment | independent free drag not supported；随父 Pole 移动，或使用既有 rotation / property / attachment-layout commands |
+
+不得为了表面交互统一开放 Switch free drag，也不得把 GroundingAccessPoint 变成用户可移动对象。
+
+##### Slice A Transformer direct-drag contract
+
+该合同覆盖 `PublicPoleMounted`、`DedicatedPoleMounted`、`PublicIndoor` Horizontal 与 `PublicIndoor` Vertical。拖动只修改 `TransformerLayout.Position`，不得修改 `Transformer.Id`、`TransformerKind`、`HvTerminalId`、`Device.DisplayName`、Orientation、Terminal identity、Connection endpoint、`GroundingTarget`、GroundingAccessPoint identity、electrical topology 或 conductivity。
+
+Preview 期间，Transformer glyph 必须实时移动，name label 必须继续位于 glyph 下方居中，HV Terminal anchor 必须实时更新，connected Cable / OverheadLine 必须通过当前 routing path 实时重建，Transformer-side GAP / GroundingPoint presentation 必须从最新 route / anchor 派生，selection 必须继续指向同一 `Transformer.Id`。
+
+##### Slice A CustomerStation direct-drag contract
+
+该合同覆盖 `BoxStation`、`IndoorStation` single feeder 与 `IndoorStation` dual feeder。拖动只修改 `CustomerStationLayout.Position`，不得修改 `CustomerStation.Id`、`StationKind`、IncomingFeeder identity、`IncomingFeeder.Sequence`、DisplayName、IsolationSwitch identity / state、Terminal identity、ElectricalNode identity、Connection endpoint、`GroundingTarget`、electrical topology 或 conductivity。
+
+Preview 期间，station body 与全部 feeder Terminal anchors 必须实时移动，shown / hidden incoming switch presentation 必须保持既有合同，全部 connected Cable 必须实时重建，cable-side grounding presentation 必须继续从正式 target / anchor 派生，selection 必须继续指向同一 `CustomerStation.Id`。Dual-feeder station 的两条 Cable 必须随 station move 同步重建。
+
+##### Slice A interaction, command, and Cancel contract
+
+Transformer / CustomerStation direct drag 必须从现有 Canvas pointer interaction 进入。Body hit area 可以启动 drag；既有 selectable name、text 或 sub-presentation hit-test 映射必须继续解析到同一 parent Device，不得创建 secondary move identity。CustomerStation 内部 IncomingFeeder / IsolationSwitch 不得成为独立 station-position drag root；aggregate root folding 必须避免重复 group root。
+
+实现应优先复用现有 `DeviceDragController`、`DragState`、MainWindow pointer lifecycle、`CommandStack` 与 `RefreshDrawingScene()`，不得建立第二套移动 UI；除非实现阶段证明确实无法复用，否则不得建立 `TransformerDragController` 或 `CustomerStationDragController`。任何新增 state 必须 typed，不得使用 `object` / property bag。
+
+Transformer 与 CustomerStation 必须分别拥有符合现有 command architecture 的 before / after position command，例如 `MoveTransformerCommand` 与 `MoveCustomerStationCommand` 或架构等价实现。Command 必须保存 stable target ID、before position 与 after position，并保证 Execute / Undo / Redo deterministic、不得重新生成 Guid、NoChange 不进入 history。Command 不得保存 route、anchor、route family、grounding geometry 或 drag pointer trajectory。
+
+Slice A 沿用当前 gesture semantics：right click、mouse capture lost、explicit drag cancel，以及 Undo / Redo 前取消当前 gesture，均恢复 `Before`。本 Slice 不引入 `LastValid`。
+
+##### Slice A live rebuild, group move, and selection contract
+
+Preview 继续采用 candidate Layout → `RefreshDrawingScene()` → rebuild anchors / routes / presentation 的现有路径。Slice A 不引入 transactional preview validation、hysteresis 或 route cache；如果现有 scene rebuild 异常，保持既有 failure behavior，不在本 Slice 修改 modal `MessageBox`。
+
+Transformer 与 CustomerStation 必须成为合法 group move roots，各自 position 使用相同 delta，所有 ID 与 aggregate topology 保持不变，connected routes 实时重建。CustomerStation feeder / IsolationSwitch 和 Transformer name label 不得重复成为 group roots。既有 Pole、Pole + attachment、RingCabinet 与 multi-Pole group move 行为不得回归。
+
+Transformer drag 前后使用 `SelectionTargetKind.Device + Transformer.Id`；CustomerStation 使用当前正式 CustomerStation selection identity。不得引入 layout selection object、text selection object 或 drag-only selection identity。Undo / Redo 后 selection 行为遵循既有 move command 习惯。
+
+##### Slice A grounding and closed-WP regression contract
+
+Transformer move 后，Terminal-target GroundingPoint 必须继续绑定同一 target；Transformer-side GAP 必须继续绑定同一 Connection / Pole / AdjacentEndpoint；grounding symbol / leader 从最新 route 重算，不得新建 `GroundingTarget`。CustomerStation move 后，cable-side grounding 必须继续绑定同一 Terminal target，leader / anchor 随最新 route 更新，grounding layout facts 不得被重写。Pole、RingCabinet 与 CableTermination 的既有行为不得回归。
+
+Transformer move 只是 Position 变化，不得破坏 WP-EM-06 one-terminal topology、`TransformerKind`、`HvTerminalId` 与 Orientation contract；不得破坏 WP-EM-07A short OHL、`TransformerSide`、`GroundingAccessPlacementSide`、dual-end GAP identity 与 Transformer grounding semantics；不得破坏 WP-EM-07B `Device.DisplayName`、naming compatibility、Inspector / Clipboard / Save 与 below-center name label。
+
+CustomerStation move 只是 Position 变化，不得破坏 WP-EM-07 aggregate、`BoxStation` single feeder、`IndoorStation` one / two feeder、IncomingFeeder identity / Sequence、feeder-owned IsolationSwitch、shown / hidden switch presentation、Cable-only incoming contract、grounding behavior、Clipboard 或 persistence。
+
+##### Slice A persistence and Clipboard contract
+
+Slice A 不修改 persistence schema，直接复用 `TransformerLayout.Position` 与 `CustomerStationLayout.Position`；FormatVersion 保持 V7。不得新增 move state、drag state、before / after state、route cache、route family 或 DTO。Save / Open round-trip 必须自然保存移动后的 position。
+
+Slice A 不修改 Clipboard 业务语义。移动后复制继续使用当前 layout position，不得改变 ID remap、name handling、topology closure 或 connection copy policy。
+
+##### Slice A required automated verification
+
+Transformer tests 至少覆盖 `PublicPoleMounted`、`DedicatedPoleMounted`、`PublicIndoor` Horizontal 与 `PublicIndoor` Vertical 的 pointer / controller begin、preview position、live anchor update、connected route rebuild、Commit、Cancel、Undo、Redo、stable `Transformer.Id`、stable `HvTerminalId`、unchanged DisplayName 与 below-center label；pole-mounted 使用 OverheadLine，indoor 使用 Cable。
+
+Transformer grounding tests 至少覆盖 pole-mounted short OHL + Transformer move，并验证 support Pole identity、Transformer endpoint identity、GAP identity、`TransformerSide` semantics 不变，以及 route / GAP presentation rebuild。若已有 direct Terminal GroundingPoint 场景，应复用并验证 target identity 不变。
+
+CustomerStation tests 至少覆盖 `BoxStation`、`IndoorStation` single feeder 与 `IndoorStation` dual feeder 的 direct drag、preview、Terminal anchor update、Cable reroute、Commit、Cancel、Undo、Redo，以及 stable station / feeder / Terminal / IsolationSwitch identities 和 unchanged switch states；dual feeder 的两条 Cable 均须验证。已有 cable-side grounding 场景必须验证 move 后 `GroundingTarget` 与 Terminal identity 不变、anchor / leader presentation 更新。
+
+Group-move tests 至少覆盖 Transformer 与 CustomerStation 的 same delta、stable IDs、connected route rebuild、Undo / Redo，并保留 Pole、Pole + attachment、RingCabinet 与 multi-Pole regressions。Unsupported-drag tests 必须明确验证 SwitchDevice direct drag 仍 unsupported，GroundingAccessPoint direct drag 仍 unsupported。
+
+##### Slice A Windows professional acceptance
+
+Windows acceptance 必须覆盖：三种 Transformer Kind、`PublicIndoor` Horizontal / Vertical、name 随 glyph 移动且保持下方居中、short OHL 实时跟随、grounding / GAP identity 不跳变；`BoxStation`、`IndoorStation` single / dual feeder、Cable 实时跟随、incoming switch shown / hidden state 不变、grounding leader 正常；以及 Cancel 恢复起点、Undo / Redo、selection、group move、Switch 不可自由拖动、GAP 不可自由拖动。
+
+##### Slice A exclusions
+
+Slice A 禁止实现 `LastValid`、invalid-candidate continuation、non-modal invalid feedback、drag transaction redesign、CommandStack atomicity redesign、route hysteresis、`RouteFamilyKey`、route switching margin、Transformer / CustomerStation obstacle policy、generic collision、canvas bounds、waypoint editor、manual route editor 或 routing engine rewrite。这些分别留在 Slice B、Slice C 或 WP-EM-08 范围之外。
 
 #### WP-EM-08 Implementation Slice B — Transactional Drag Stabilization
+
+**状态：Requirements Refined / Not Started**
 
 建立统一合法/非法 candidate 的事务型处理：explicit drag preview result、`LastValid`、candidate validation、invalid candidate rollback、gesture continuation、invalid release、non-modal feedback、移除正常 drag-time modal `MessageBox`、commit/history atomicity及Undo / Redo failure atomicity。
 
 本 Slice 不实现 route-family hysteresis、generic router rewrite或new collision model。
 
 #### WP-EM-08 Implementation Slice C — Route Continuity Stabilization
+
+**状态：Requirements Refined / Characterization Pending**
 
 本 Slice 必须按以下顺序推进：
 
@@ -1064,5 +1137,5 @@ WP-EM-09 保持 Integration-only，不得承担 Transformer drag、CustomerStati
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，当前为 Requirements Refinement / Implementation Not Started，并在同一个 Work Package 与 Codex Thread 内划分为 Slice A、Slice B 与 Slice C 三个内部 implementation slices；WP-EM-09 为 Planned / Integration-only；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，当前为 Requirements Refinement / Implementation Not Started，并在同一个 Work Package 与 Codex Thread 内划分为三个内部 implementation slices：Slice A 为 Requirements Frozen / Implementation Not Started，Slice B 为 Requirements Refined / Not Started，Slice C 为 Requirements Refined / Characterization Pending；WP-EM-09 为 Planned / Integration-only；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
