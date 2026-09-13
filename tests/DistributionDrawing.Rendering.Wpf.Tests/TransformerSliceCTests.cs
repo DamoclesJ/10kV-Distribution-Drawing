@@ -118,14 +118,13 @@ public sealed class TransformerSliceCTests
     }
 
     [Theory]
-    [InlineData(TransformerKind.PublicPoleMounted, TransformerOrientation.Vertical, "Above")]
-    [InlineData(TransformerKind.DedicatedPoleMounted, TransformerOrientation.Vertical, "Below")]
-    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Horizontal, "Above")]
-    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Vertical, "Right")]
-    public void DrawingSceneBuilder_RendersOneSelectableDerivedNameLabel(
+    [InlineData(TransformerKind.PublicPoleMounted, TransformerOrientation.Vertical)]
+    [InlineData(TransformerKind.DedicatedPoleMounted, TransformerOrientation.Vertical)]
+    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Horizontal)]
+    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Vertical)]
+    public void DrawingSceneBuilder_RendersOneSelectableNameLabelBelowAndCentered(
         TransformerKind kind,
-        TransformerOrientation orientation,
-        string placement)
+        TransformerOrientation orientation)
     {
         TransformerCreation creation = Create(kind, orientation);
         DrawingDocument document = DocumentWith(creation);
@@ -150,26 +149,21 @@ public sealed class TransformerSliceCTests
         Assert.Equal(expected, scene.HitTestIndex.HitTest(new DocumentPoint(
             labelBounds.XMillimeters + labelBounds.WidthMillimeters / 2,
             labelBounds.YMillimeters + labelBounds.HeightMillimeters / 2)));
-        if (placement == "Above")
-        {
-            Assert.True(label.Origin.YMillimeters < geometry.Bounds.YMillimeters);
-            Assert.True(labelBounds.YMillimeters + labelBounds.HeightMillimeters <=
-                geometry.Bounds.YMillimeters);
-        }
-        else if (placement == "Below")
-        {
-            Assert.True(label.Origin.YMillimeters >
-                geometry.Bounds.YMillimeters + geometry.Bounds.HeightMillimeters);
-            Assert.True(labelBounds.YMillimeters >=
-                geometry.Bounds.YMillimeters + geometry.Bounds.HeightMillimeters);
-        }
-        else
-        {
-            Assert.True(label.Origin.XMillimeters >
-                geometry.Bounds.XMillimeters + geometry.Bounds.WidthMillimeters);
-            Assert.True(labelBounds.XMillimeters >=
-                geometry.Bounds.XMillimeters + geometry.Bounds.WidthMillimeters);
-        }
+        double glyphCenterX = geometry.Bounds.XMillimeters +
+            geometry.Bounds.WidthMillimeters / 2;
+        double glyphBottom = geometry.Bounds.YMillimeters +
+            geometry.Bounds.HeightMillimeters;
+        Assert.Equal(SceneTextHorizontalAlignment.Center, label.HorizontalAlignment);
+        Assert.Equal(glyphCenterX, label.Origin.XMillimeters, 8);
+        Assert.Equal(
+            glyphCenterX,
+            labelBounds.XMillimeters + labelBounds.WidthMillimeters / 2,
+            8);
+        Assert.Equal(
+            glyphBottom + DrawingMetrics.Default.Transformer.NameLabelGap,
+            label.Origin.YMillimeters,
+            8);
+        Assert.True(labelBounds.YMillimeters >= glyphBottom);
         TerminalAnchor anchor = Anchor(document, runtime, creation.HvTerminal.Id);
         Assert.Equal(geometry.HvAnchor, anchor.Position);
         Assert.Equal(geometry.HvDirection, anchor.Direction);

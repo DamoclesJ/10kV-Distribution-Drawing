@@ -45,7 +45,7 @@ public sealed class TransformerRenderer
         if (!transformer.IsLegacyNamingIncomplete &&
             !string.IsNullOrWhiteSpace(transformer.DisplayName))
         {
-            elements.Add(CreateNameLabel(transformer, layout, geometry));
+            elements.Add(CreateNameLabel(transformer, geometry));
         }
 
         return elements;
@@ -53,43 +53,16 @@ public sealed class TransformerRenderer
 
     private SceneText CreateNameLabel(
         Transformer transformer,
-        TransformerLayout layout,
         TransformerProfessionalGeometry geometry)
     {
         double fontSize = _metrics.Typography.TransformerNameFontSize;
         double gap = _metrics.Transformer.NameLabelGap;
         DocumentRect bounds = geometry.Bounds;
-        (DocumentPoint origin, SceneTextHorizontalAlignment alignment) =
-            transformer.TransformerKind switch
-            {
-                TransformerKind.PublicPoleMounted
-                    when geometry.HvDirection == TerminalAnchorDirection.Down =>
-                    (new DocumentPoint(
-                        bounds.XMillimeters + bounds.WidthMillimeters / 2,
-                        bounds.YMillimeters - gap - fontSize),
-                     SceneTextHorizontalAlignment.Center),
-                TransformerKind.DedicatedPoleMounted
-                    when geometry.HvDirection == TerminalAnchorDirection.Up =>
-                    (new DocumentPoint(
-                        bounds.XMillimeters + bounds.WidthMillimeters / 2,
-                        bounds.YMillimeters + bounds.HeightMillimeters + gap),
-                     SceneTextHorizontalAlignment.Center),
-                TransformerKind.PublicIndoor
-                    when layout.Orientation == TransformerOrientation.Vertical &&
-                         geometry.HvDirection == TerminalAnchorDirection.Up =>
-                    (new DocumentPoint(
-                        bounds.XMillimeters + bounds.WidthMillimeters + gap,
-                        bounds.YMillimeters + bounds.HeightMillimeters / 2 - fontSize / 2),
-                     SceneTextHorizontalAlignment.Left),
-                TransformerKind.PublicIndoor
-                    when layout.Orientation == TransformerOrientation.Horizontal &&
-                         geometry.HvDirection == TerminalAnchorDirection.Left =>
-                    (new DocumentPoint(
-                        bounds.XMillimeters + bounds.WidthMillimeters / 2,
-                        bounds.YMillimeters - gap - fontSize),
-                     SceneTextHorizontalAlignment.Center),
-                _ => throw new ArgumentOutOfRangeException(nameof(transformer))
-            };
+        var origin = new DocumentPoint(
+            bounds.XMillimeters + bounds.WidthMillimeters / 2,
+            bounds.YMillimeters + bounds.HeightMillimeters + gap);
+        const SceneTextHorizontalAlignment alignment =
+            SceneTextHorizontalAlignment.Center;
         DocumentRect hitBounds = EstimateTextBounds(
             origin,
             transformer.DisplayName!,
