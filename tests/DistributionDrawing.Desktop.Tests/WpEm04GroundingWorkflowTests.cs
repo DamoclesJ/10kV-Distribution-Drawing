@@ -977,6 +977,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             }
             var dialog = new DrawingTypographyDialog();
             Assert.NotNull(dialog.FindName("GroundingPointNumberFontSizeInput"));
+            Assert.NotNull(dialog.FindName("TransformerNameFontSizeInput"));
             dialog.Close();
             try
             {

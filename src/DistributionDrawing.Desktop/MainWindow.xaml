@@ -593,6 +593,22 @@
             <Button Content="应用方向"
                     Click="OnApplyTransformerOrientation" />
           </StackPanel>
+          <StackPanel x:Name="TransformerNameEditorPanel"
+                      DockPanel.Dock="Top"
+                      Margin="0,0,0,10"
+                      Visibility="Collapsed">
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="变压器名称" />
+            <TextBox x:Name="TransformerDisplayNameInput"
+                     Margin="0,4,0,4" />
+            <TextBlock x:Name="TransformerNamingStatusText"
+                       Margin="0,0,0,4"
+                       Foreground="{StaticResource DangerBrush}"
+                       Text="历史工程待补录"
+                       Visibility="Collapsed" />
+            <Button Content="应用变压器名称"
+                    Click="OnApplyTransformerDisplayName" />
+          </StackPanel>
           <StackPanel x:Name="CustomerStationEditorPanel"
                       DockPanel.Dock="Top"
                       Margin="0,0,0,10"

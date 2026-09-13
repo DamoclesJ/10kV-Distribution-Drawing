@@ -838,6 +838,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
+        UpdateTransformerNameEditor();
         UpdateTransformerOrientationEditor();
         UpdateCustomerStationEditor();
         UpdatePoleInstalledDevicesEditor();
@@ -2557,6 +2558,7 @@ public partial class MainWindow : Window
                 _selectionResolver.Resolve(_selectionManager.Selected)));
         UpdateRingCabinetEditor();
         UpdatePoleNumberEditor();
+        UpdateTransformerNameEditor();
         UpdateTransformerOrientationEditor();
         UpdateCustomerStationEditor();
         UpdatePoleInstalledDevicesEditor();
@@ -2575,6 +2577,7 @@ public partial class MainWindow : Window
         _intervalPreview.Cancel();
         RingCabinetEditorPanel.Visibility = Visibility.Collapsed;
         PoleNumberEditorPanel.Visibility = Visibility.Collapsed;
+        TransformerNameEditorPanel.Visibility = Visibility.Collapsed;
         TransformerOrientationEditorPanel.Visibility = Visibility.Collapsed;
         CustomerStationEditorPanel.Visibility = Visibility.Collapsed;
         PoleInstalledDevicesPanel.Visibility = Visibility.Collapsed;
@@ -2990,6 +2993,46 @@ public partial class MainWindow : Window
         TransformerOrientationEditorPanel.Visibility = Visibility.Visible;
         TransformerOrientationInput.SelectedIndex =
             layout.Orientation == TransformerOrientation.Horizontal ? 0 : 1;
+    }
+
+    private void UpdateTransformerNameEditor()
+    {
+        ResolvedSelection? selection = _selectionResolver.Resolve(_selectionManager.Selected);
+        if (selection?.Transformer is not { } transformer)
+        {
+            TransformerNameEditorPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        TransformerNameEditorPanel.Visibility = Visibility.Visible;
+        TransformerDisplayNameInput.Text = transformer.DisplayName ?? string.Empty;
+        TransformerNamingStatusText.Visibility = transformer.IsLegacyNamingIncomplete
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void OnApplyTransformerDisplayName(object sender, RoutedEventArgs e)
+    {
+        if (_selectionManager.Selected is not
+            { Kind: SelectionTargetKind.Device } target)
+        {
+            ShowCommandError("变压器名称修改失败", "请先选择一个变压器。");
+            return;
+        }
+
+        PropertyEditResult result = _propertyEditor.TryEdit(
+            target,
+            PropertyCommandFactory.TransformerDisplayNamePropertyKey,
+            TransformerDisplayNameInput.Text);
+        if (!result.IsSuccess)
+        {
+            ShowCommandError(
+                "变压器名称修改失败",
+                result.ErrorMessage ?? "变压器名称未能应用。");
+            return;
+        }
+
+        RefreshDrawingScene();
     }
 
     private void UpdateCustomerStationEditor()

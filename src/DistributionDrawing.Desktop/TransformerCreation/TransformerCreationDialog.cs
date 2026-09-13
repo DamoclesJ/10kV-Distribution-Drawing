@@ -13,6 +13,7 @@ public sealed class TransformerCreationDialog : Window
 
     private readonly ComboBox _kind = new();
     private readonly TextBox _displayName = new();
+    private string? _validatedDisplayName;
 
     public TransformerCreationDialog()
     {
@@ -33,7 +34,7 @@ public sealed class TransformerCreationDialog : Window
         var confirm = new Button { Content = "确定", Width = 80, IsDefault = true };
         confirm.Click += (_, _) =>
         {
-            if (string.IsNullOrWhiteSpace(_displayName.Text))
+            if (!TryNormalizeDisplayName(_displayName.Text, out string displayName))
             {
                 MessageBox.Show(
                     this,
@@ -45,6 +46,7 @@ public sealed class TransformerCreationDialog : Window
                 return;
             }
 
+            _validatedDisplayName = displayName;
             DialogResult = true;
             Close();
         };
@@ -68,5 +70,12 @@ public sealed class TransformerCreationDialog : Window
 
     public TransformerKind SelectedKind => ((KindOption)_kind.SelectedItem).Value;
 
-    public string DisplayName => _displayName.Text.Trim();
+    public string DisplayName => _validatedDisplayName ?? throw new InvalidOperationException(
+        "Transformer creation has not been confirmed.");
+
+    internal static bool TryNormalizeDisplayName(string? input, out string displayName)
+    {
+        displayName = input?.Trim() ?? string.Empty;
+        return displayName.Length > 0;
+    }
 }

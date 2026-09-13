@@ -175,15 +175,30 @@ public sealed class DrawingSceneBuilder
                 transformer,
                 transformerLayout,
                 _metrics.Transformer);
-            elements.AddRange(_transformerRenderer.Render(transformer, transformerLayout));
+            IReadOnlyList<SceneElement> transformerElements =
+                _transformerRenderer.Render(transformer, transformerLayout);
+            elements.AddRange(transformerElements);
+            var transformerSelection = new SelectionReference(
+                SelectionTargetKind.Device,
+                transformer.Id);
             hitTestEntries.Add(new SelectionHitTestEntry(
-                new SelectionReference(SelectionTargetKind.Device, transformer.Id),
+                transformerSelection,
                 new DocumentRect(
                     geometry.Bounds.XMillimeters - _metrics.Transformer.HitPadding,
                     geometry.Bounds.YMillimeters - _metrics.Transformer.HitPadding,
                     geometry.Bounds.WidthMillimeters + _metrics.Transformer.HitPadding * 2,
                     geometry.Bounds.HeightMillimeters + _metrics.Transformer.HitPadding * 2),
                 20));
+            foreach (DocumentRect textBounds in transformerElements
+                         .OfType<SceneText>()
+                         .Select(text => text.HitTestBounds)
+                         .OfType<DocumentRect>())
+            {
+                hitTestEntries.Add(new SelectionHitTestEntry(
+                    transformerSelection,
+                    textBounds,
+                    20));
+            }
         }
 
         foreach (CustomerStation station in document.CustomerStations)

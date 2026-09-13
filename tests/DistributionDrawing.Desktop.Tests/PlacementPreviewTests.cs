@@ -14,6 +14,7 @@ using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Professional;
+using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -125,12 +126,87 @@ public sealed class PlacementPreviewTests : IDisposable
         Assert.True(controller.Place(new DocumentPoint(23, 37), snapEnabled: true));
 
         Transformer transformer = Assert.Single(session.PersistenceSession.Domain.Transformers);
+        Guid transformerId = transformer.Id;
+        Guid terminalId = transformer.HvTerminalId;
         Assert.Equal(kind, transformer.TransformerKind);
         Assert.Equal("测试变压器", transformer.DisplayName);
         Assert.Equal(new DocumentPoint(20, 40), session.Layout.TransformerLayouts[transformer.Id].Position);
         Assert.Equal(expectedOrientation, session.Layout.TransformerLayouts[transformer.Id].Orientation);
         Assert.Equal(new SelectionReference(SelectionTargetKind.Device, transformer.Id), session.SelectionManager.Selected);
         Assert.Equal(PlacementMode.Idle, controller.Mode);
+
+        Assert.True(session.CommandStack.Undo());
+        Assert.Empty(session.PersistenceSession.Domain.Transformers);
+        Assert.True(session.CommandStack.Redo());
+        Transformer redone = Assert.Single(session.PersistenceSession.Domain.Transformers);
+        Assert.Equal(transformerId, redone.Id);
+        Assert.Equal(terminalId, redone.HvTerminalId);
+        Assert.Equal("测试变压器", redone.DisplayName);
+    }
+
+    [Fact]
+    public void CancelClearsNamedTransformerPreviewWithoutCreatingAggregate()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        var controller = new PlacementController(() => session);
+
+        controller.BeginTransformer(TransformerKind.PublicPoleMounted, "待取消变压器");
+        controller.UpdatePointer(new DocumentPoint(23, 37), snapEnabled: true);
+        Assert.Contains(controller.CreatePreviewElements().OfType<SceneText>(),
+            text => text.Text == "待取消变压器");
+
+        controller.Cancel();
+
+        Assert.Equal(PlacementMode.Idle, controller.Mode);
+        Assert.Empty(controller.CreatePreviewElements());
+        Assert.Empty(session.PersistenceSession.Domain.Transformers);
+        Assert.False(session.CommandStack.IsDirty);
+    }
+
+    [Fact]
+    public void TransformerInspectorRename_RefreshesSceneAndKeepsSelection()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        TransformerCreation creation = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(30, 40),
+            "原名称");
+        session.CommandStack.ExecuteCommand(
+            new AddTransformerCommand(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                creation),
+            session.RebuildScene);
+        session.CommandStack.MarkSaved();
+        var selected = new SelectionReference(
+            SelectionTargetKind.Device,
+            creation.Transformer.Id);
+        session.SelectionManager.Select(selected);
+        var editor = new PropertyEditor(
+            session.SelectionResolver,
+            session.CommandStack,
+            session.Layout);
+
+        Assert.True(editor.TryEdit(
+            selected,
+            PropertyCommandFactory.TransformerDisplayNamePropertyKey,
+            "  新名称  ").IsSuccess);
+        session.RebuildScene();
+
+        Assert.Equal(selected, session.SelectionManager.Selected);
+        Assert.Contains(session.Scene.Elements.OfType<SceneText>(),
+            text => text.Text == "新名称");
+        Assert.True(session.IsDirty);
+
+        Assert.True(session.CommandStack.Undo());
+        session.RebuildScene();
+        Assert.Equal("原名称", creation.Transformer.DisplayName);
+        Assert.Equal(selected, session.SelectionManager.Selected);
+        Assert.False(session.IsDirty);
+        Assert.True(session.CommandStack.Redo());
+        session.RebuildScene();
+        Assert.Equal("新名称", creation.Transformer.DisplayName);
+        Assert.Equal(selected, session.SelectionManager.Selected);
     }
 
     [Fact]
@@ -153,6 +229,7 @@ public sealed class PlacementPreviewTests : IDisposable
         Assert.True(session.CommandStack.Undo());
         session.RebuildScene();
         Assert.Same(creation.Transformer, Assert.Single(session.PersistenceSession.Domain.Transformers));
+        Assert.Equal("测试变压器", creation.Transformer.DisplayName);
         Assert.Same(creation.HvTerminal, Assert.Single(session.PersistenceSession.Domain.Terminals));
         Assert.Same(creation.Layout, session.Layout.TransformerLayouts[creation.Transformer.Id]);
     }

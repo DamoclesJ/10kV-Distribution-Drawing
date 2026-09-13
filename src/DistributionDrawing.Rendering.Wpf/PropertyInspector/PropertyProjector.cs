@@ -354,15 +354,29 @@ public sealed class PropertyProjector
             TransformerKind.PublicIndoor => "站内公变",
             _ => transformer.TransformerKind.ToString()
         };
+        var domainRows = new List<PropertyRowViewModel>
+        {
+            EditableDomainRow(
+                PropertyCommandFactory.TransformerDisplayNamePropertyKey,
+                "变压器名称",
+                transformer.DisplayName),
+            DomainRow("TransformerKind", "业务类型", kindText),
+            DomainRow("VoltageLevel", "电压等级", Transformer.TenKilovolts)
+        };
+        if (transformer.IsLegacyNamingIncomplete)
+        {
+            domainRows.Add(DomainRow(
+                "Transformer.NamingStatus",
+                "名称状态",
+                "历史工程待补录"));
+        }
+
         return Snapshot(
             selection,
             "变压器",
-            kindText,
+            transformer.DisplayName ?? kindText,
             [
-                Section(
-                    "专业属性",
-                    DomainRow("TransformerKind", "业务类型", kindText),
-                    DomainRow("VoltageLevel", "电压等级", Transformer.TenKilovolts)),
+                new PropertySectionViewModel("专业属性", domainRows),
                 TransformerLayoutSection(transformer, selection.TransformerLayout)
             ]);
     }

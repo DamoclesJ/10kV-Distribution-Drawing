@@ -108,6 +108,8 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.Equal(pasted.HvTerminalId, pastedTerminal.Id);
         Assert.Equal(creation.Transformer.TransformerKind, pasted.TransformerKind);
         Assert.Equal("1号变压器", pasted.DisplayName);
+        Assert.Equal(2, session.PersistenceSession.Domain.Transformers.Count(
+            item => item.DisplayName == "1号变压器"));
         Assert.Equal(creation.HvTerminal.AllowedConnectionTypes,
             pastedTerminal.AllowedConnectionTypes);
         Assert.Equal(creation.Layout.Orientation, pastedLayout.Orientation);
@@ -125,6 +127,49 @@ public sealed class DrawingClipboardTests : IDisposable
             item => item.Id == pastedId);
         Assert.Equal(pastedTerminalId, redone.HvTerminalId);
         Assert.Equal("1号变压器", redone.DisplayName);
+    }
+
+    [Fact]
+    public void LegacyIncompleteTransformer_CopyFailsWithoutReplacingClipboardOrMutatingDocument()
+    {
+        ProjectRuntimeSession session = CreateSession("历史变压器复制保护");
+        Guid transformerId = Guid.NewGuid();
+        Guid terminalId = Guid.NewGuid();
+        Transformer transformer = Transformer.RestoreLegacy(
+            transformerId,
+            TransformerKind.PublicIndoor,
+            terminalId,
+            displayName: null);
+        var terminal = new Terminal(
+            terminalId,
+            TopologyOwnerType.Device,
+            transformerId,
+            Transformer.HvTerminalRole,
+            Transformer.TenKilovolts,
+            isExternal: true,
+            allowsMultipleConnections: false,
+            electricalNodeId: null,
+            allowedConnectionTypes: [ConnectionType.Cable]);
+        session.PersistenceSession.Domain.AddTransformer(transformer, terminal);
+        session.Layout.AddTransformer(
+            new TransformerLayout(
+                transformerId,
+                new DocumentPoint(40, 50),
+                TransformerOrientation.Horizontal,
+                TransformerKind.PublicIndoor),
+            TransformerKind.PublicIndoor);
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            transformerId));
+        var clipboard = new DrawingClipboardService();
+
+        ClipboardActionResult result = clipboard.Copy(session);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("未补录名称", result.Message);
+        Assert.False(clipboard.HasContent);
+        Assert.Single(session.PersistenceSession.Domain.Transformers);
+        Assert.False(session.CommandStack.IsDirty);
     }
 
     [Fact]

@@ -20,6 +20,7 @@ public partial class DrawingTypographyDialog : Window
         PTLabelFontSizeInput.Text = Format(_metrics.PTLabelFontSize);
         GroundingPointNumberFontSizeInput.Text = Format(_metrics.GroundingPointNumberFontSize);
         CustomerStationNumberFontSizeInput.Text = Format(_metrics.CustomerStationNumberFontSize);
+        TransformerNameFontSizeInput.Text = Format(_metrics.TransformerNameFontSize);
     }
 
     private void OnApply(object sender, RoutedEventArgs e)
@@ -31,7 +32,8 @@ public partial class DrawingTypographyDialog : Window
             !TryParse(PoleNumberFontSizeInput.Text, out double poleNumber) ||
             !TryParse(PTLabelFontSizeInput.Text, out double ptLabel) ||
             !TryParse(GroundingPointNumberFontSizeInput.Text, out double groundingPointNumber) ||
-            !TryParse(CustomerStationNumberFontSizeInput.Text, out double customerStationNumber))
+            !TryParse(CustomerStationNumberFontSizeInput.Text, out double customerStationNumber) ||
+            !TryParse(TransformerNameFontSizeInput.Text, out double transformerName))
         {
             ValidationMessage.Text = "请输入大于 0 的有效字号。";
             return;
@@ -45,7 +47,8 @@ public partial class DrawingTypographyDialog : Window
             poleNumber,
             ptLabel,
             groundingPointNumber,
-            customerStationNumber);
+            customerStationNumber,
+            transformerName);
         DialogResult = true;
     }
 

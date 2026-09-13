@@ -9,6 +9,9 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DistributionDrawing.Domain.Tests" />
     <InternalsVisibleTo Include="DistributionDrawing.Infrastructure" />
+    <InternalsVisibleTo Include="DistributionDrawing.Rendering.Wpf" />
+    <InternalsVisibleTo Include="DistributionDrawing.Rendering.Wpf.Tests" />
+    <InternalsVisibleTo Include="DistributionDrawing.Desktop.Tests" />
   </ItemGroup>
 
 </Project>

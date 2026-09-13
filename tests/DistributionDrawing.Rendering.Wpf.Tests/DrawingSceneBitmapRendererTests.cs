@@ -2,6 +2,10 @@ using System.Runtime.ExceptionServices;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Symbols.Library;
@@ -28,6 +32,33 @@ public sealed class DrawingSceneBitmapRendererTests
             Assert.Equal(10, result.ContentBounds.XMillimeters - result.ExportBounds.XMillimeters, 6);
             Assert.Equal(543, result.WidthPixels);
             Assert.Equal(543, result.HeightPixels);
+            Assert.True(stream.Length > 0);
+        });
+    }
+
+    [Fact]
+    public void RenderPng_UsesTheSameTransformerNameSceneTextAsCanvas()
+    {
+        RunOnSta(() =>
+        {
+            TransformerCreation creation = new TransformerCreationFactory().Create(
+                TransformerKind.PublicIndoor,
+                new DocumentPoint(40, 50),
+                "导出变压器",
+                TransformerOrientation.Vertical);
+            IReadOnlyList<SceneElement> elements = new TransformerRenderer().Render(
+                creation.Transformer,
+                creation.Layout);
+            SceneText name = Assert.Single(elements.OfType<SceneText>());
+            var scene = new DrawingScene(elements);
+            using var stream = new MemoryStream();
+
+            new DrawingSceneBitmapRenderer().RenderPng(scene, stream);
+
+            Assert.Equal("导出变压器", name.Text);
+            Assert.Equal(
+                DrawingMetrics.Default.Typography.TransformerNameFontSize,
+                name.FontSizeMillimeters);
             Assert.True(stream.Length > 0);
         });
     }

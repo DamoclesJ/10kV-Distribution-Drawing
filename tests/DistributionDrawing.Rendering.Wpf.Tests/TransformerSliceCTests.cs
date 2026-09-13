@@ -83,7 +83,10 @@ public sealed class TransformerSliceCTests
         Assert.Equal(ellipseCount, elements.OfType<SceneEllipse>().Count());
         Assert.Equal(lineCount, elements.OfType<SceneLine>().Count());
         Assert.Equal(polylineCount, elements.OfType<ScenePolyline>().Count());
-        Assert.Empty(elements.OfType<SceneText>());
+        SceneText label = Assert.Single(elements.OfType<SceneText>());
+        Assert.Equal("测试变压器", label.Text);
+        Assert.Equal(DrawingMetrics.Default.Typography.TransformerNameFontSize,
+            label.FontSizeMillimeters);
     }
 
     [Theory]
@@ -115,20 +118,61 @@ public sealed class TransformerSliceCTests
     }
 
     [Theory]
-    [InlineData(TransformerKind.PublicPoleMounted)]
-    [InlineData(TransformerKind.DedicatedPoleMounted)]
-    [InlineData(TransformerKind.PublicIndoor)]
-    public void DrawingSceneBuilder_RendersSelectableTransformer(TransformerKind kind)
+    [InlineData(TransformerKind.PublicPoleMounted, TransformerOrientation.Vertical, "Above")]
+    [InlineData(TransformerKind.DedicatedPoleMounted, TransformerOrientation.Vertical, "Below")]
+    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Horizontal, "Above")]
+    [InlineData(TransformerKind.PublicIndoor, TransformerOrientation.Vertical, "Right")]
+    public void DrawingSceneBuilder_RendersOneSelectableDerivedNameLabel(
+        TransformerKind kind,
+        TransformerOrientation orientation,
+        string placement)
     {
-        TransformerCreation creation = Create(kind);
+        TransformerCreation creation = Create(kind, orientation);
         DrawingDocument document = DocumentWith(creation);
         RuntimeLayoutDocument runtime = RuntimeWith(creation);
 
         DrawingScene scene = new DrawingSceneBuilder().Build(document, runtime);
 
         SelectionReference expected = new(SelectionTargetKind.Device, creation.Transformer.Id);
-        Assert.NotNull(scene.HitTestIndex.Find(expected));
+        TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+            creation.Transformer,
+            creation.Layout,
+            DrawingMetrics.Default.Transformer);
+        SceneText label = Assert.Single(scene.Elements.OfType<SceneText>(), text =>
+            text.Text == creation.Transformer.DisplayName);
+        Assert.Null(label.TargetKind);
+        Assert.Null(label.TargetId);
+        Assert.Equal(2, scene.HitTestIndex.FindAll(expected).Count);
+        Assert.All(scene.HitTestIndex.FindAll(expected), entry =>
+            Assert.Equal(expected, entry.Target));
         Assert.Equal(expected, scene.HitTestIndex.HitTest(creation.Layout.Position));
+        DocumentRect labelBounds = Assert.IsType<DocumentRect>(label.HitTestBounds);
+        Assert.Equal(expected, scene.HitTestIndex.HitTest(new DocumentPoint(
+            labelBounds.XMillimeters + labelBounds.WidthMillimeters / 2,
+            labelBounds.YMillimeters + labelBounds.HeightMillimeters / 2)));
+        if (placement == "Above")
+        {
+            Assert.True(label.Origin.YMillimeters < geometry.Bounds.YMillimeters);
+            Assert.True(labelBounds.YMillimeters + labelBounds.HeightMillimeters <=
+                geometry.Bounds.YMillimeters);
+        }
+        else if (placement == "Below")
+        {
+            Assert.True(label.Origin.YMillimeters >
+                geometry.Bounds.YMillimeters + geometry.Bounds.HeightMillimeters);
+            Assert.True(labelBounds.YMillimeters >=
+                geometry.Bounds.YMillimeters + geometry.Bounds.HeightMillimeters);
+        }
+        else
+        {
+            Assert.True(label.Origin.XMillimeters >
+                geometry.Bounds.XMillimeters + geometry.Bounds.WidthMillimeters);
+            Assert.True(labelBounds.XMillimeters >=
+                geometry.Bounds.XMillimeters + geometry.Bounds.WidthMillimeters);
+        }
+        TerminalAnchor anchor = Anchor(document, runtime, creation.HvTerminal.Id);
+        Assert.Equal(geometry.HvAnchor, anchor.Position);
+        Assert.Equal(geometry.HvDirection, anchor.Direction);
         Assert.DoesNotContain(scene.Elements.OfType<SceneText>(), text =>
             text.Text is "公变" or "专变" or "站内公变");
     }
@@ -172,7 +216,15 @@ public sealed class TransformerSliceCTests
 
         Assert.Same(creation.Transformer, resolved.Transformer);
         Assert.Same(creation.Layout, resolved.TransformerLayout);
-        Assert.Equal(expectedKindText, snapshot.ObjectTitle);
+        Assert.Equal("测试变压器", snapshot.ObjectTitle);
+        Assert.Contains(snapshot.Sections.SelectMany(section => section.Properties), row =>
+            row.DisplayName == "业务类型" && row.DisplayValue == expectedKindText);
+        PropertyRowViewModel name = Assert.Single(
+            snapshot.Sections.SelectMany(section => section.Properties),
+            row => row.PropertyKey == PropertyCommandFactory.TransformerDisplayNamePropertyKey);
+        Assert.Equal("变压器名称", name.DisplayName);
+        Assert.Equal("测试变压器", name.DisplayValue);
+        Assert.False(name.IsReadOnly);
         Assert.Contains(snapshot.Sections.SelectMany(section => section.Properties), row =>
             row.DisplayName == "电压等级" && row.DisplayValue == Transformer.TenKilovolts);
         PropertyRowViewModel orientation = Assert.Single(
@@ -205,6 +257,103 @@ public sealed class TransformerSliceCTests
         Assert.NotEqual(horizontalGeometry.HvAnchor, verticalGeometry.HvAnchor);
         Assert.Equal(TransformerKind.PublicIndoor, horizontal.Transformer.TransformerKind);
         Assert.Equal(horizontal.Transformer.Id, vertical.TransformerId);
+    }
+
+    [Fact]
+    public void RenameTransformerCommand_TrimsAndPreservesIdentityThroughUndoRedo()
+    {
+        TransformerCreation creation = Create(TransformerKind.PublicIndoor);
+        Guid transformerId = creation.Transformer.Id;
+        Guid terminalId = creation.Transformer.HvTerminalId;
+        TransformerKind kind = creation.Transformer.TransformerKind;
+        var command = new RenameTransformerCommand(creation.Transformer, "  新名称  ");
+
+        command.Execute();
+        Assert.Equal("新名称", creation.Transformer.DisplayName);
+        command.Undo();
+        Assert.Equal("测试变压器", creation.Transformer.DisplayName);
+        command.Redo();
+
+        Assert.Equal("新名称", creation.Transformer.DisplayName);
+        Assert.Equal(transformerId, creation.Transformer.Id);
+        Assert.Equal(terminalId, creation.Transformer.HvTerminalId);
+        Assert.Equal(kind, creation.Transformer.TransformerKind);
+    }
+
+    [Fact]
+    public void LegacyIncompleteRename_UndoRedoRestoresPresentationAndInspectorState()
+    {
+        TransformerCreation creation = CreateLegacyIncomplete(TransformerKind.PublicIndoor);
+        var command = new RenameTransformerCommand(creation.Transformer, "补录名称");
+
+        Assert.Empty(new TransformerRenderer().Render(
+            creation.Transformer, creation.Layout).OfType<SceneText>());
+        PropertyInspectorSnapshot incomplete = Project(creation);
+        Assert.Contains(incomplete.Sections.SelectMany(section => section.Properties), row =>
+            row.DisplayName == "名称状态" && row.DisplayValue == "历史工程待补录");
+
+        command.Execute();
+        Assert.False(creation.Transformer.IsLegacyNamingIncomplete);
+        Assert.Equal("补录名称", Assert.Single(new TransformerRenderer().Render(
+            creation.Transformer, creation.Layout).OfType<SceneText>()).Text);
+
+        command.Undo();
+        Assert.True(creation.Transformer.IsLegacyNamingIncomplete);
+        Assert.Null(creation.Transformer.DisplayName);
+        Assert.Empty(new TransformerRenderer().Render(
+            creation.Transformer, creation.Layout).OfType<SceneText>());
+
+        command.Redo();
+        Assert.False(creation.Transformer.IsLegacyNamingIncomplete);
+        Assert.Equal("补录名称", creation.Transformer.DisplayName);
+    }
+
+    [Fact]
+    public void TransformerPropertyEditor_ValidatesNoChangeAndTracksDirtyState()
+    {
+        TransformerCreation creation = Create(TransformerKind.DedicatedPoleMounted);
+        var resolver = new SelectionObjectResolver();
+        resolver.SetSource(new PropertyInspectionSource
+        {
+            Devices = [creation.Transformer],
+            TransformerLayouts = new Dictionary<Guid, TransformerLayout>
+            {
+                [creation.Transformer.Id] = creation.Layout
+            }
+        });
+        var stack = new CommandStack();
+        stack.MarkSaved();
+        var editor = new PropertyEditor(resolver, stack);
+        var reference = new SelectionReference(SelectionTargetKind.Device, creation.Transformer.Id);
+
+        PropertyEditResult invalid = editor.TryEdit(
+            reference,
+            PropertyCommandFactory.TransformerDisplayNamePropertyKey,
+            "   ");
+        Assert.False(invalid.IsSuccess);
+        Assert.Equal("InputInvalid", invalid.ErrorCode);
+        Assert.False(stack.IsDirty);
+
+        PropertyEditResult noChange = editor.TryEdit(
+            reference,
+            PropertyCommandFactory.TransformerDisplayNamePropertyKey,
+            " 测试变压器 ");
+        Assert.False(noChange.IsSuccess);
+        Assert.Equal("NoChange", noChange.ErrorCode);
+        Assert.False(stack.IsDirty);
+
+        Assert.True(editor.TryEdit(
+            reference,
+            PropertyCommandFactory.TransformerDisplayNamePropertyKey,
+            " 新名称 ").IsSuccess);
+        Assert.Equal("新名称", creation.Transformer.DisplayName);
+        Assert.True(stack.IsDirty);
+        Assert.True(stack.Undo());
+        Assert.Equal("测试变压器", creation.Transformer.DisplayName);
+        Assert.False(stack.IsDirty);
+        Assert.True(stack.Redo());
+        Assert.Equal("新名称", creation.Transformer.DisplayName);
+        Assert.True(stack.IsDirty);
     }
 
     [Fact]
@@ -730,6 +879,50 @@ public sealed class TransformerSliceCTests
             new DocumentPoint(100, 100),
             "测试变压器",
             orientation);
+
+    private static TransformerCreation CreateLegacyIncomplete(TransformerKind kind)
+    {
+        Guid transformerId = Guid.NewGuid();
+        Guid terminalId = Guid.NewGuid();
+        Transformer transformer = Transformer.RestoreLegacy(
+            transformerId,
+            kind,
+            terminalId,
+            displayName: null);
+        var terminal = new Terminal(
+            terminalId,
+            TopologyOwnerType.Device,
+            transformerId,
+            Transformer.HvTerminalRole,
+            Transformer.TenKilovolts,
+            isExternal: true,
+            allowsMultipleConnections: false,
+            electricalNodeId: null,
+            allowedConnectionTypes: [transformer.AllowedConnectionType]);
+        var layout = new TransformerLayout(
+            transformerId,
+            new DocumentPoint(100, 100),
+            kind == TransformerKind.PublicIndoor
+                ? TransformerOrientation.Horizontal
+                : TransformerOrientation.Vertical,
+            kind);
+        return new TransformerCreation(transformer, terminal, layout);
+    }
+
+    private static PropertyInspectorSnapshot Project(TransformerCreation creation)
+    {
+        var resolver = new SelectionObjectResolver();
+        resolver.SetSource(new PropertyInspectionSource
+        {
+            Devices = [creation.Transformer],
+            TransformerLayouts = new Dictionary<Guid, TransformerLayout>
+            {
+                [creation.Transformer.Id] = creation.Layout
+            }
+        });
+        return new PropertyProjector().Project(resolver.Resolve(
+            new SelectionReference(SelectionTargetKind.Device, creation.Transformer.Id)));
+    }
 
     private static DrawingDocument DocumentWith(TransformerCreation creation)
     {

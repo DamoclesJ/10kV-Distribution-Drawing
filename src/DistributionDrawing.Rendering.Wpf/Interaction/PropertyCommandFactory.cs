@@ -35,6 +35,7 @@ public sealed class PropertyCommandFactory
         EditPropertyCommand.RingCabinetDisplayNameProperty;
     public const string RingCabinetLineNamePropertyKey =
         EditPropertyCommand.RingCabinetLineNameProperty;
+    public const string TransformerDisplayNamePropertyKey = "Transformer.DisplayName";
     private const string CustomerStationFeederPrefix = "CustomerStation.Feeder.";
     private const string CustomerStationDisplayNameSuffix = ".DisplayName";
     private const string CustomerStationVisibilitySuffix = ".ShowIncomingSwitch";
@@ -165,6 +166,35 @@ public sealed class PropertyCommandFactory
 
         command = null;
         error = null;
+
+        if (selection.Transformer is not null &&
+            selection.Reference.Kind == SelectionTargetKind.Device)
+        {
+            if (propertyKey != TransformerDisplayNamePropertyKey)
+            {
+                error = new PropertyEditError(
+                    "PropertyReadOnly",
+                    $"Property '{propertyKey}' is not editable.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                error = new PropertyEditError("InputInvalid", "变压器名称不能为空。");
+                return false;
+            }
+
+            string transformerAfter = input.Trim();
+            if (!selection.Transformer.IsLegacyNamingIncomplete &&
+                selection.Transformer.DisplayName == transformerAfter)
+            {
+                error = new PropertyEditError("NoChange", "变压器名称没有变化。");
+                return false;
+            }
+
+            command = new RenameTransformerCommand(selection.Transformer, transformerAfter);
+            return true;
+        }
 
         if (selection.CustomerStation is not null &&
             selection.Reference.Kind == SelectionTargetKind.Device)

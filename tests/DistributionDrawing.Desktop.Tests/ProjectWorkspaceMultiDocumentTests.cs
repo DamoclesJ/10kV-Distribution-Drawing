@@ -3,8 +3,10 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DistributionDrawing.Desktop.Workspace;
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using Xunit;
 
@@ -76,6 +78,56 @@ public sealed class ProjectWorkspaceMultiDocumentTests : IDisposable
         Assert.True(second.IsDirty);
         Assert.DoesNotContain("*", first.TabTitle);
         Assert.Contains("*", second.TabTitle);
+    }
+
+    [Fact]
+    public void LegacyIncompleteTransformer_SaveUxTracksRenameUndoRedoEligibility()
+    {
+        string sourcePath = CreateLegacyIncompleteTransformerProject();
+        string targetPath = NextPath();
+        byte[] sourceBefore = File.ReadAllBytes(sourcePath);
+        var dialogs = new TestDialogs();
+        dialogs.OpenPaths.Enqueue(sourcePath);
+        dialogs.SaveAsPaths.Enqueue(targetPath);
+        ProjectWorkspaceController controller = CreateController(dialogs);
+        Assert.True(controller.OpenProject());
+        ProjectRuntimeSession runtime = controller.CurrentSession!;
+        runtime.CommandStack.ExecuteCommand(new TestCommand());
+        Transformer transformer = Assert.Single(runtime.PersistenceSession.Domain.Transformers);
+
+        Assert.False(controller.SaveProject());
+        Assert.True(controller.IsDirty);
+        Assert.Equal(sourceBefore, File.ReadAllBytes(sourcePath));
+        Assert.Contains(dialogs.Errors, message =>
+            message.Contains("1 台历史变压器", StringComparison.Ordinal) &&
+            message.Contains("变压器名称", StringComparison.Ordinal));
+
+        Assert.False(controller.SaveProjectAs());
+        Assert.False(File.Exists(targetPath));
+        Assert.True(controller.IsDirty);
+
+        runtime.CommandStack.ExecuteCommand(
+            new RenameTransformerCommand(transformer, "补录名称"),
+            runtime.RebuildScene);
+        Assert.True(controller.SaveProject());
+        Assert.False(controller.IsDirty);
+        Assert.Equal(TransformerNamingContractMode.Current,
+            new ProjectFileContainer().OpenWithSource(sourcePath).TransformerNamingMode);
+
+        Assert.True(runtime.CommandStack.Undo());
+        runtime.RebuildScene();
+        Assert.True(transformer.IsLegacyNamingIncomplete);
+        Assert.True(controller.IsDirty);
+        Assert.False(controller.SaveProject());
+
+        Assert.True(runtime.CommandStack.Redo());
+        runtime.RebuildScene();
+        dialogs.SaveAsPaths.Enqueue(targetPath);
+        Assert.True(controller.SaveProjectAs());
+        Assert.False(controller.IsDirty);
+        ProjectSession reopened = new ProjectService().LoadProject(targetPath);
+        Assert.Equal(TransformerNamingContractMode.Current, reopened.TransformerNamingMode);
+        Assert.Equal("补录名称", Assert.Single(reopened.Domain.Transformers).DisplayName);
     }
 
     [Fact]
@@ -432,6 +484,72 @@ public sealed class ProjectWorkspaceMultiDocumentTests : IDisposable
         Assert.IsType<JsonObject>(payload["layout"]).Remove("customerStationLayouts");
         Assert.IsType<JsonObject>(payload["layout"]).Remove("groundingPointLayouts");
         ReplaceJson(archive, ProjectFileFormat.ManifestEntryName, manifest);
+        ReplaceJson(archive, ProjectFileFormat.DocumentEntryName, payload);
+        return path;
+    }
+
+    private string CreateLegacyIncompleteTransformerProject()
+    {
+        string path = NextPath();
+        Guid projectId = Guid.NewGuid();
+        Guid transformerId = Guid.NewGuid();
+        Guid terminalId = Guid.NewGuid();
+        ProjectDomainDto domain = ProjectDomainDto.Empty(projectId, "历史变压器") with
+        {
+            Transformers =
+            [
+                new ProjectTransformerDto(
+                    transformerId,
+                    ProjectTransformerKind.PublicIndoor,
+                    terminalId,
+                    "待移除名称")
+            ],
+            Terminals =
+            [
+                new ProjectTerminalDto(
+                    terminalId,
+                    "device",
+                    transformerId,
+                    Transformer.HvTerminalRole,
+                    Transformer.TenKilovolts,
+                    true,
+                    false,
+                    null,
+                    ["cable"])
+            ]
+        };
+        ProjectLayoutDto layout = ProjectLayoutDto.Empty(projectId) with
+        {
+            TransformerLayouts =
+            [
+                new ProjectTransformerLayoutDto(
+                    transformerId,
+                    new ProjectPointDto(10, 20),
+                    ProjectTransformerOrientation.Horizontal)
+            ]
+        };
+        var document = new ProjectFileDocument(
+            ProjectFileManifest.Create(
+                projectId,
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow),
+            new ProjectFileMetadata("历史变压器"),
+            domain,
+            layout,
+            ProjectProfessionalDto.Empty(projectId));
+        new ProjectFileContainer().Save(path, document);
+
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: false);
+        JsonObject payload = ReadJson(archive, ProjectFileFormat.DocumentEntryName);
+        payload.Remove("transformerNamingContractVersion");
+        JsonObject payloadDomain = Assert.IsType<JsonObject>(payload["domain"]);
+        JsonArray transformers = Assert.IsType<JsonArray>(payloadDomain["transformers"]);
+        Assert.IsType<JsonObject>(Assert.Single(transformers)).Remove("displayName");
         ReplaceJson(archive, ProjectFileFormat.DocumentEntryName, payload);
         return path;
     }
