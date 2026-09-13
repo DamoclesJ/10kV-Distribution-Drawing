@@ -271,14 +271,14 @@ public sealed class MoveCapabilitySliceATests
         DocumentPoint[] beforeRoute = Route(beforeScene, connection.Id);
         Guid[] endpointIds =
             [connection.StartTerminalId, connection.EndTerminalId];
-        SelectionReference productionTarget = Assert.IsType<SelectionReference>(
-            beforeScene.HitTestIndex.HitTest(moving.Layout.Position));
+        (DocumentPoint bodyPoint, SelectionReference productionTarget) =
+            FindTransformerBodyHit(beforeScene, moving.Transformer, moving.Layout);
         Assert.Equal(SelectionTargetKind.Device, productionTarget.Kind);
         Assert.Equal(moving.Transformer.Id, productionTarget.ObjectId);
         var controller = new DeviceDragController();
         Assert.True(controller.TryBeginDrag(
             productionTarget,
-            moving.Layout.Position,
+            bodyPoint,
             layout,
             document: document));
         Assert.True(controller.UpdatePreview(new DocumentPoint(135, 155)));
@@ -821,6 +821,56 @@ public sealed class MoveCapabilitySliceATests
     private static DocumentPoint Center(DocumentRect bounds) => new(
         bounds.XMillimeters + bounds.WidthMillimeters / 2,
         bounds.YMillimeters + bounds.HeightMillimeters / 2);
+
+    private static bool Contains(DocumentRect bounds, DocumentPoint point) =>
+        point.XMillimeters >= bounds.XMillimeters &&
+        point.XMillimeters <= bounds.XMillimeters + bounds.WidthMillimeters &&
+        point.YMillimeters >= bounds.YMillimeters &&
+        point.YMillimeters <= bounds.YMillimeters + bounds.HeightMillimeters;
+
+    private static (DocumentPoint Point, SelectionReference Target) FindTransformerBodyHit(
+        DrawingScene scene,
+        Transformer transformer,
+        TransformerLayout layout)
+    {
+        TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+            transformer,
+            layout,
+            DrawingMetrics.Default.Transformer);
+        SelectionHitTestEntry[] deviceEntries = scene.HitTestIndex.Entries
+            .Where(entry => entry.Target.Kind == SelectionTargetKind.Device &&
+                            entry.Target.ObjectId == transformer.Id)
+            .ToArray();
+        Assert.NotEmpty(deviceEntries);
+
+        foreach (DocumentRect circle in geometry.Circles)
+        {
+            DocumentPoint center = Center(circle);
+            double inset = Math.Min(circle.WidthMillimeters, circle.HeightMillimeters) / 2;
+            DocumentPoint[] candidates =
+            [
+                new DocumentPoint(center.XMillimeters, center.YMillimeters - inset),
+                new DocumentPoint(center.XMillimeters, center.YMillimeters + inset),
+                new DocumentPoint(center.XMillimeters - inset, center.YMillimeters),
+                new DocumentPoint(center.XMillimeters + inset, center.YMillimeters),
+                center
+            ];
+            foreach (DocumentPoint candidate in candidates)
+            {
+                SelectionHitTestEntry? hit = scene.HitTestIndex.HitTestEntry(candidate);
+                if (hit is not null &&
+                    hit.Target.Kind == SelectionTargetKind.Device &&
+                    hit.Target.ObjectId == transformer.Id)
+                {
+                    Assert.Contains(deviceEntries, entry => Contains(entry.Bounds, candidate));
+                    return (candidate, hit.Target);
+                }
+            }
+        }
+
+        Assert.Fail("No deterministic transformer body point resolved to its Device hit target.");
+        return default;
+    }
 
     private sealed record CustomerStationIdentity(
         Guid CustomerStationId,
