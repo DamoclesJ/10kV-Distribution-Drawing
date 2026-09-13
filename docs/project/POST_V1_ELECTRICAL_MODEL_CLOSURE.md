@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Implementation In Progress / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Requirements Refined / Not Started / WP-EM-08 Slice C Requirements Refined / Characterization Pending / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Implementation In Progress / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Requirements Frozen / Implementation Not Started / WP-EM-08 Slice C Requirements Refined / Characterization Pending / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -907,7 +907,7 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
-**状态：Implementation In Progress；Slice A Closed / Accepted；Slice B Requirements Refined / Not Started；Slice C Requirements Refined / Characterization Pending**
+**状态：Implementation In Progress；Slice A Closed / Accepted；Slice B Requirements Frozen / Implementation Not Started；Slice C Requirements Refined / Characterization Pending**
 
 Implementation Audit & Scope Revalidation 已在 baseline `c4f61653f923f985bcd8835d9735c68decee783e` 通过。WP-EM-08 Scope Amendment 已完成；Slice A 已完成 implementation、Windows automated verification 与 professional acceptance 并闭环，整体 WP 仍因 Slice B / Slice C 未完成而保持 Implementation In Progress。
 
@@ -1080,15 +1080,87 @@ Moving either object changes only the existing `TransformerLayout.Position` or `
 
 Windows automated verification is **PASS**, including Rendering.Wpf runtime tests and relevant Desktop / solution verification. Fix-1 corrected test-only GroundingPoint multi-hit-entry and Transformer label hit-priority assumptions; Fix-2 corrected the test-only Transformer body hit fixture so production `HitTest` selects `SelectionTargetKind.Device` rather than a CableSegment-covered connection point. No runtime-blocked state remains. Windows professional acceptance is **PASS** for direct drags, route rebuild, naming, short OHL / GAP / grounding, group move, Cancel, Undo / Redo, selection, and unsupported Switch / GAP drag behavior.
 
-Regression boundaries remain WP-EM-05 grounding layout / accepted limitation, WP-EM-06 Transformer topology, WP-EM-07 CustomerStation aggregate, WP-EM-07A GAP / short OHL / Transformer-side grounding, WP-EM-07B naming, Clipboard, Save / Open, Undo / Redo, selection identity, and existing Pole / RingCabinet / CableTermination behavior. Slice B is next at Requirements Freeze; Slice C remains Requirements Refined / Characterization Pending.
+Regression boundaries remain WP-EM-05 grounding layout / accepted limitation, WP-EM-06 Transformer topology, WP-EM-07 CustomerStation aggregate, WP-EM-07A GAP / short OHL / Transformer-side grounding, WP-EM-07B naming, Clipboard, Save / Open, Undo / Redo, selection identity, and existing Pole / RingCabinet / CableTermination behavior. Slice B Requirements are frozen; Slice C remains Requirements Refined / Characterization Pending.
 
 #### WP-EM-08 Implementation Slice B — Transactional Drag Stabilization
 
-**状态：Requirements Refined / Not Started**
+**状态：Requirements Frozen / Implementation Not Started**
 
-建立统一合法/非法 candidate 的事务型处理：explicit drag preview result、`LastValid`、candidate validation、invalid candidate rollback、gesture continuation、invalid release、non-modal feedback、移除正常 drag-time modal `MessageBox`、commit/history atomicity及Undo / Redo failure atomicity。
+Slice B 只稳定已经存在的 drag gesture，不新增 draggable object。最终 move matrix 保持：Pole、RingCabinet、Transformer、CustomerStation direct drag；CableTermination pole-orbit drag；GroundingPoint symbol-offset drag；GroundingAccessPoint no direct drag；SwitchDevice / ordinary PoleAttachment no independent free drag。
 
-本 Slice 不实现 route-family hysteresis、generic router rewrite或new collision model。
+当前 `DeviceDragController`、`GroundingPointDragController` 与 `CableRouteDragController` 都经 MainWindow 的统一 pointer preview、`CommitActiveDrag()`、Cancel 与 scene refresh lifecycle，但各自保有 typed drag state。现状在 preview rebuild failure 时取消整个 gesture并进入 modal error path；mouse-up 可能先记录 command 再 rebuild；Undo / Redo 也可能先移动 history cursor 再 rebuild。Slice B 必须关闭这些一致性风险，不得静默排除任何 controller。
+
+##### Slice B three-state gesture contract
+
+每个 gesture 至少具有三个概念状态：`Before` 是 gesture 开始时的正式完整 Layout state；`Candidate` 是当前 pointer 经既有 snap、orbit、normalization 或 clamp 后产生的尝试状态；`LastValid` 是本 gesture 中最近一次已经成功应用 Layout、通过既有 Layout / Routing validity，并完成完整 scene rebuild 的状态。Gesture 开始时 `LastValid = Before`。
+
+`LastValid` 仅在 `Candidate mutation → existing validation → complete scene rebuild` 全部成功后更新。Pointer move、构造 layout object 或 partial route calculation 均不得提前更新 `LastValid`。`Before`、`Candidate`、`LastValid` 都是 typed runtime interaction state；`LastValid` 不是 Domain、persisted Layout、Command 或 Undo / Redo fact。
+
+Candidate processing 顺序冻结为 `pointer → existing snap/orbit/normalization → Candidate → transactional apply → scene rebuild → valid/invalid decision`。Pole、RingCabinet、Transformer、CustomerStation 沿用既有 snapping；CableTermination 先沿用 pole-orbit normalization；GroundingPoint 沿用 `SymbolOffset` normalization / clamp；CableRouteGuide 沿用现有 guide semantics。Slice B 不改变这些算法。
+
+##### Slice B validity and failure-classification contract
+
+Expected candidate invalidity 仅来自当前正式 Layout、Routing 或 scene construction contract 能识别的失败，例如 non-finite layout coordinate、existing object-specific layout validation、distinct terminal anchor、required waypoint / stub capacity、no-backtracking / required routing constraint 或 candidate 无法构建正式 route。Slice B 不新增 device / Transformer / CustomerStation overlap、canvas bounds、Pole screen-coordinate order、generic collision 或 route-crossing legality。
+
+Presentation-undesirable 仍不是 invalid：legal route-family switch、line crossing、ordinary obstacle fallback、glyph overlap、route 穿过 Transformer / CustomerStation body与Pole视觉顺序变化，只要当前正式合同接受，均为 legal candidate。Route continuity 留给 Slice C。
+
+Expected candidate invalidity 必须与 unexpected programming / structural invariant failure 明确分类。Missing persisted identity、unresolved aggregate mapping、corrupted mapping 导致的 unexpected `KeyNotFoundException`、impossible internal state及无关 programming exception不得无条件降级为 invalid drag。Expected invalidity执行 `LastValid` rejection；unexpected invariant failure 可以终止 gesture并进入现有 error path，但不得伪装为普通 non-modal rejection。Freeze 不强制具体 exception class，implementation 必须建立明确、可测试的 typed failure boundary。
+
+##### Slice B invalid, release, and Cancel semantics
+
+Expected invalid `Candidate` 不结束 gesture；完整 Layout 与 scene 恢复或保持 `LastValid`；`LastValid` 不变；pointer gesture继续；不写 `CommandStack`；显示 non-modal feedback。后续 legal candidate 立即恢复 normal preview、更新 `LastValid` 并清除 invalid feedback。
+
+正式序列为：`Before → Valid A → Invalid B → Valid C → release`，最终 Layout与history command均为 `Before → Valid C`；Invalid B 不进入 history、不改变 `LastValid`、不终止 gesture。若 `Before → Valid A → Invalid B → release`，提交 Valid A；若 `Before → Invalid → release`，`LastValid == Before`，结果为 NoChange且无 history entry。
+
+Cancel 与 invalid release 不同。Right click、mouse capture lost、explicit drag cancel以及Undo / Redo前取消 active gesture，必须恢复完整 `Before`，而不是 `LastValid`，并且不得提交 command。`Before → Valid A → Invalid B → Cancel` 的最终状态必须是 `Before`。
+
+##### Slice B group and presentation consistency
+
+Group move 的 `Before`、`Candidate` 与 `LastValid` 必须是整个 group 的完整 typed state；candidate要么整体成功，要么所有 roots 一起回滚。不得出现 Pole保留 Candidate而Transformer或CustomerStation回到 `LastValid` 的partial state。Invalid release整体提交 `LastValid`；Cancel整体恢复 `Before`。
+
+Preview transaction必须使 Layout、scene与`LastValid`一致。只有完整 rebuild成功的 candidate 才能成为正式 preview；失败后不得留下candidate Layout + `LastValid` scene或candidate scene + `LastValid` Layout。恢复完成后必须满足 `Layout == scene == LastValid`。Invalid期间selection identity保持不变，rollback不得清空selection、切换target或生成secondary identity。
+
+Grounding continuity不改变 `GroundingTarget`、`GroundingPointId`、`GroundingAccessPointId`、`ConnectionId`、`PoleId`、AdjacentEndpoint、LineSide或PlacementSide。Invalid rollback恢复`LastValid` grounding presentation；后续valid candidate从新的合法route / anchor重新派生presentation。
+
+##### Slice B non-modal feedback contract
+
+Expected invalid candidate不得以modal `MessageBox`作为正常drag交互；优先复用 `MainWindowViewModel.ShowFeedback()`、status bar或现有轻量feedback，至少表达“当前拖动位置无效，已保持最近一次有效位置”。不要求invalid ghost、red shadow、overlay、toast framework或advanced cursor；正式 Layout / scene保持`LastValid`即可。
+
+进入invalid时显示一次可更新的non-modal feedback；连续invalid pointer move不得堆积提示或终止gesture；下一次valid candidate、release与Cancel均清除feedback。Unexpected invariant failure仍可进入现有error reporting path，不得把内部错误隐藏为status text。
+
+##### Slice B commit and history atomicity
+
+成功commit后，`CommandStack`、Layout与scene必须共同表示committed `LastValid`。若command application或final scene rebuild失败，必须恢复commit前的一致状态，history不得留下未成功呈现的move，也不得最终出现`commandRecorded == true`而scene仍处于prior或invalid状态。
+
+对本 Slice覆盖的drag-generated move commands，Undo / Redo后的history cursor、Layout与scene必须一致。Undo rebuild failure必须恢复调用前cursor、Layout和scene；Redo rebuild failure同样必须恢复调用前一致状态或采用等价transaction strategy。Selection必须保持合法，恢复后后续command仍可执行。
+
+该atomicity scope只覆盖本 Slice的drag-generated commands及MainWindow / runtime integration path，不要求重写generic `CommandStack`、all commands或全应用transaction architecture。允许最小typed协调器或failure-injection seam，但不得引入production global mutable test flag。
+
+覆盖的commands至少包括 current main 中的 `MoveCommand`、`MoveRingCabinetCommand`、`MoveAttachmentCommand`、`MoveTransformerCommand`、`MoveCustomerStationCommand`、`GroupMoveCommand`、`MoveGroundingPointLayoutCommand` 与 `SetCableRouteGuideCommand`。
+
+##### Slice B required characterization and automated verification
+
+Implementation开始时必须先锁定真实invalid fixtures：至少一个正式OHL routing-invalid candidate（优先既有required waypoint / stub capacity类router failure）；一个Cable或device drag的valid-invalid-valid sequence；GroundingPoint或CableRouteGuide至少一个可证明统一transaction语义的场景。不得只靠人工throw证明全部行为；可以额外使用injected failure专门测试atomicity recovery。
+
+Core sequence tests至少覆盖：`Before → Valid → Release`提交valid；`Before → Invalid → Release`为NoChange；`Before → Valid A → Invalid B → Release`提交Valid A；`Before → Valid A → Invalid B → Valid C → Release`提交Valid C；`Before → Valid → Cancel`恢复Before；`Before → Valid → Invalid → Cancel`恢复Before。
+
+Device matrix必须保护Pole、RingCabinet、CableTermination、Transformer、CustomerStation与group move，并证明统一transaction path适用于完整move-capability matrix；不要求每个对象重复所有invalid fixture。Mixed group至少使用Pole + Transformer或Transformer + CustomerStation制造candidate scene failure，验证全组回退、继续legal preview并最终commit。
+
+GroundingPoint tests覆盖legal preview、可适用的invalid/rejected candidate、rollback、Cancel与commit / Undo / Redo atomicity。CableRouteGuide tests覆盖legal preview、invalid route result、`LastValid`、release与Undo / Redo。若controller不存在自然invalid candidate，必须记录原因，并至少以injected scene-rebuild failure验证统一transaction rollback。
+
+Feedback tests必须证明expected invalid candidate保持gesture active、显示non-modal feedback、不进入modal command-error path、repeated invalid不终止、next valid / release / Cancel清除feedback。Commit tests必须构造release时command application或scene rebuild failure，证明无corrupt history、Layout / scene恢复、selection合法且后续command可工作。Undo / Redo tests分别覆盖Undo rebuild failure与successful Undo后的Redo rebuild failure，证明history cursor、Layout、scene不发生partial transition。
+
+Existing regression matrix继续覆盖Slice A move capability、WP-EM-05 grounding、WP-EM-06 Transformer、WP-EM-07 CustomerStation、WP-EM-07A GAP / short OHL、WP-EM-07B naming、Pole、RingCabinet、CableTermination、GroundingPoint、CableRouteGuide、group move、Selection、Clipboard与Save / Open，不改变任何electrical fact。
+
+##### Slice B Windows professional acceptance
+
+Windows acceptance至少验证：legal drag实时跟随；进入已知routing-invalid区域时对象保持`LastValid`、gesture不中断且显示non-modal feedback；继续回到legal区域时preview恢复且feedback消失；在invalid pointer位置release提交`LastValid`；起点直接invalid后release无history；invalid期间Cancel恢复`Before`；Undo / Redo保持scene与Layout一致；group invalid candidate全组回退；expected invalid drag不弹正常错误`MessageBox`。Unexpected internal error不属于人工专业验收主流程。
+
+##### Slice B persistence and exclusions
+
+Persistence impact为NONE。不得持久化`Before`、`Candidate`、`LastValid`、validity、feedback、failure reason或transaction state，不新增DTO / schema；FormatVersion保持V7。
+
+Slice B禁止实现route-family hysteresis、`RouteFamilyKey`、route switching margin、route continuity cache、Transformer / CustomerStation obstacle policy、generic routing rewrite、waypoint editor、manual routing editor、generic collision engine、device overlap legality、canvas bounds legality、Pole visual-order legality、new electrical device、new topology model或new persistence schema。Transformer / CustomerStation obstacle participation保持当前行为，其decision point仅属于Slice C characterization。
 
 #### WP-EM-08 Implementation Slice C — Route Continuity Stabilization
 
@@ -1111,7 +1183,7 @@ Transformer / CustomerStation 是否加入 routing obstacle set 在本 Slice cha
 
 WP-EM-08 persistence schema impact 预期为 none，FormatVersion 保持 V7。`LastValid`、invalid candidate、drag feedback、`RouteFamilyKey`、hysteresis cache与drag transaction state均不得持久化。已有合法 persisted Layout facts继续保留，包括object positions、attachment layouts、Transformer orientation、`CableRouteGuide`与GroundingPoint symbol offset；不得将 `CableRouteGuide` 泛化为generic waypoint system。
 
-Refinement 后唯一延后到 WP-EM-08 Slice C characterization 的presentation policy决定，是Transformer / CustomerStation是否加入routing obstacle set。该问题不阻止Slice A或Slice B分别进入slice-level Requirements Freeze / implementation review sequence。
+Refinement 后唯一延后到 WP-EM-08 Slice C characterization 的presentation policy决定，是Transformer / CustomerStation是否加入routing obstacle set。该问题不阻止已冻结的Slice B进入implementation review sequence。
 
 该 WP 不包含 waypoint editor、manual route editor、generic diagram routing engine rewrite、Annotation、Energization、new Electrical Device、arbitrary layout framework、WP-EM-07A business model changes或WP-EM-07B naming model changes。
 
@@ -1151,5 +1223,5 @@ WP-EM-09 保持 Integration-only，不得承担 Transformer drag、CustomerStati
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，整体为 Implementation In Progress，并在同一个 Work Package 与 Codex Thread 内划分为三个内部 implementation slices：Slice A 为 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted，Slice B 为 Requirements Refined / Not Started，Slice C 为 Requirements Refined / Characterization Pending；下一步为 Slice B Requirements Freeze；WP-EM-09 为 Planned / Integration-only；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，整体为 Implementation In Progress，并在同一个 Work Package 与 Codex Thread 内划分为三个内部 implementation slices：Slice A 为 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted，Slice B 为 Requirements Frozen / Implementation Not Started，Slice C 为 Requirements Refined / Characterization Pending；下一步为 Slice B implementation review sequence；WP-EM-09 为 Planned / Integration-only；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
