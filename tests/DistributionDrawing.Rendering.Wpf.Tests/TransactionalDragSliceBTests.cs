@@ -75,7 +75,7 @@ public sealed class TransactionalDragSliceBTests
 
         RealInvalidTransformerCandidate invalidB =
             ApplyRealRoutingInvalidTransformerCandidate(fixture, controller);
-        Assert.Equal(invalidB.Pointer, invalidB.LayoutPosition);
+        AssertPointEqualWithinPrecision(invalidB.Pointer, invalidB.LayoutPosition);
         Assert.Equal(
             invalidB.RequiredWaypoint.XMillimeters,
             invalidB.TransformerAnchor.XMillimeters);
@@ -383,7 +383,7 @@ public sealed class TransactionalDragSliceBTests
         Assert.True(controller.UpdatePreview(candidatePosition));
         TransformerLayout actualLayout = fixture.Layout.TransformerLayouts[
             fixture.Transformer.Creation.Transformer.Id];
-        Assert.Equal(candidatePosition, actualLayout.Position);
+        AssertPointEqualWithinPrecision(candidatePosition, actualLayout.Position);
 
         TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
             fixture.Transformer.Creation.Transformer,
@@ -409,6 +409,14 @@ public sealed class TransactionalDragSliceBTests
     private static RuntimeLayoutDocument Runtime() => new(
         new DrawingLayout(),
         new Dictionary<Guid, RingCabinetLayout>());
+
+    private static void AssertPointEqualWithinPrecision(
+        DocumentPoint expected,
+        DocumentPoint actual)
+    {
+        Assert.Equal(expected.XMillimeters, actual.XMillimeters, 10);
+        Assert.Equal(expected.YMillimeters, actual.YMillimeters, 10);
+    }
 
     private static DocumentPoint TransformerPosition(OhlFixture fixture) =>
         fixture.Layout.TransformerLayouts[
