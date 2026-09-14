@@ -52,16 +52,20 @@ public sealed class PlacementPreviewTests : IDisposable
         Assert.Empty(controller.CreatePreviewElements());
     }
 
-    [Fact]
-    public void RingCabinetGhostUsesTheConfiguredIntervalsAndCommitsOnlyOnClick()
+    [Theory]
+    [InlineData(RingCabinetPTPlacement.Left, 1)]
+    [InlineData(RingCabinetPTPlacement.Right, 5)]
+    public void RingCabinetGhostUsesTheConfiguredIntervalsAndCommitsOnlyOnClick(
+        RingCabinetPTPlacement placement,
+        int expectedPTIndex)
     {
         ProjectRuntimeSession session = CreateSession();
         var controller = new PlacementController(() => session);
         RingCabinetTemplate template = new RingCabinetCreationTemplateFactory().Create(
             RingCabinetTemplateType.PrimarySecondaryIntegrated,
-            5,
+            4,
             includePTInterval: true,
-            ptPlacement: RingCabinetPTPlacement.Left);
+            ptPlacement: placement);
         var configuration = new RingCabinetCreationConfiguration("Ghost cabinet", template);
 
         controller.BeginRingCabinet(configuration);
@@ -72,14 +76,20 @@ public sealed class PlacementPreviewTests : IDisposable
         Assert.Empty(session.CommandStack.History);
         Assert.False(session.CommandStack.IsDirty);
         Assert.Contains(preview.OfType<SceneText>(), text => text.Text == "PT");
+        Assert.All(Enumerable.Range(1, 5), index =>
+            Assert.Contains(preview.OfType<SceneText>(), text => text.Text == $"负{index}"));
         Assert.True(preview.OfType<SceneLine>().Count() > 5);
 
         Assert.True(controller.Place(new DocumentPoint(26, 34), snapEnabled: true));
         RingCabinet cabinet = Assert.Single(
             session.PersistenceSession.Domain.Devices.OfType<RingCabinet>());
         Assert.Equal(5, cabinet.Intervals.Count);
-        Assert.Equal(1, Assert.Single(cabinet.Intervals, interval =>
+        Assert.Equal(4, cabinet.Intervals.Count(interval =>
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval));
+        Assert.Equal(expectedPTIndex, Assert.Single(cabinet.Intervals, interval =>
             interval.IntervalKind == IntervalKind.PTInterval).BayIndex);
+        Assert.Equal(Enumerable.Range(1, 5),
+            cabinet.Intervals.Select(interval => interval.BayIndex));
         Assert.Equal(new DocumentPoint(30, 30), session.Layout.RingCabinetLayouts[cabinet.Id].Position);
         Assert.Single(session.CommandStack.History);
         Assert.Equal(PlacementMode.Idle, controller.Mode);

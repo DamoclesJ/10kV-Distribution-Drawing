@@ -4,8 +4,10 @@ namespace DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 
 public sealed class RingCabinetCreationTemplateFactory
 {
-    public const int MinimumIntervalCount = 2;
-    public const int MaximumIntervalCount = 24;
+    private static readonly IReadOnlySet<int> ConventionalCounts =
+        new HashSet<int> { 3, 4, 5, 6 };
+    private static readonly IReadOnlySet<int> IntegratedCounts =
+        new HashSet<int> { 4, 6 };
 
     public RingCabinetTemplate Create(
         RingCabinetTemplateType cabinetType,
@@ -23,11 +25,21 @@ public sealed class RingCabinetCreationTemplateFactory
                 "Only conventional and primary-secondary integrated cabinets are supported.");
         }
 
-        if (businessIntervalCount is < MinimumIntervalCount or > MaximumIntervalCount)
+        IReadOnlySet<int> supportedCounts = cabinetType == RingCabinetTemplateType.Conventional
+            ? ConventionalCounts
+            : IntegratedCounts;
+        if (!supportedCounts.Contains(businessIntervalCount))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(businessIntervalCount),
-                $"Interval count must be between {MinimumIntervalCount} and {MaximumIntervalCount}.");
+                $"Unsupported business interval count '{businessIntervalCount}' for '{cabinetType}'.");
+        }
+
+        if (cabinetType == RingCabinetTemplateType.Conventional && includePTInterval)
+        {
+            throw new ArgumentException(
+                "PT intervals are currently available only for primary-secondary integrated creation.",
+                nameof(includePTInterval));
         }
 
         if (!Enum.IsDefined(integratedGroundingStructureKind))
@@ -40,11 +52,10 @@ public sealed class RingCabinetCreationTemplateFactory
             throw new ArgumentOutOfRangeException(nameof(ptPlacement));
         }
 
-        int ptIndex = ptPlacement == RingCabinetPTPlacement.Left
-            ? 1
-            : businessIntervalCount;
-        var bays = new List<BayTemplate>(businessIntervalCount);
-        for (int index = 1; index <= businessIntervalCount; index++)
+        int totalIntervalCount = businessIntervalCount + (includePTInterval ? 1 : 0);
+        int ptIndex = ptPlacement == RingCabinetPTPlacement.Left ? 1 : totalIntervalCount;
+        var bays = new List<BayTemplate>(totalIntervalCount);
+        for (int index = 1; index <= totalIntervalCount; index++)
         {
             bool isPT = includePTInterval && index == ptIndex;
             BayEquipmentConfiguration equipment = isPT

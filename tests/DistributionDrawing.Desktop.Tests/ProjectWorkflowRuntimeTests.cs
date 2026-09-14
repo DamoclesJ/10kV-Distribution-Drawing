@@ -73,8 +73,12 @@ public sealed class ProjectWorkflowRuntimeTests
         Assert.False(controller.IsDirty);
     }
 
-    [Fact]
-    public void PTTemplateCreation_IsAtomicSelectableAndRoundTripsDeterministicLayout()
+    [Theory]
+    [InlineData(RingCabinetPTPlacement.Left, 1)]
+    [InlineData(RingCabinetPTPlacement.Right, 5)]
+    public void PTTemplateCreation_IsAtomicSelectableAndRoundTripsDeterministicLayout(
+        RingCabinetPTPlacement placement,
+        int expectedPTIndex)
     {
         using var files = new TemporaryProjectFiles();
         string path = files.Next();
@@ -88,7 +92,8 @@ public sealed class ProjectWorkflowRuntimeTests
         RingCabinetTemplate template = new RingCabinetCreationTemplateFactory().Create(
             RingCabinetTemplateType.PrimarySecondaryIntegrated,
             4,
-            includePTInterval: true);
+            includePTInterval: true,
+            ptPlacement: placement);
         AddRingCabinetCommand command = new DeviceCommandFactory().CreateAddRingCabinet(
             session.PersistenceSession.Domain,
             session.Layout,
@@ -103,7 +108,16 @@ public sealed class ProjectWorkflowRuntimeTests
         session.RebuildScene();
         RingCabinetInterval pt = Assert.Single(command.Cabinet.Intervals.Where(interval =>
             interval.IntervalKind == IntervalKind.PTInterval));
+        Assert.Equal(5, command.Cabinet.Intervals.Count);
+        Assert.Equal(4, command.Cabinet.Intervals.Count(interval =>
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval));
+        Assert.Equal(expectedPTIndex, pt.BayIndex);
+        Assert.Equal($"负{expectedPTIndex}", pt.BusinessNumber);
+        Assert.Equal(5, session.Layout.RingCabinetLayouts[cabinetId].IntervalLayouts.Count);
         Assert.Contains(session.Scene.Elements.OfType<SceneText>(), text => text.Text == "PT");
+        Assert.All(Enumerable.Range(1, 5), index =>
+            Assert.Contains(session.Scene.Elements.OfType<SceneText>(),
+                text => text.Text == $"负{index}"));
         Assert.Contains(session.Scene.HitTestIndex.Entries, entry =>
             entry.Target.Kind == SelectionTargetKind.RingCabinetInterval &&
             entry.Target.ObjectId == pt.IntervalId);
@@ -115,6 +129,7 @@ public sealed class ProjectWorkflowRuntimeTests
         RingCabinet redone = Assert.Single(
             session.PersistenceSession.Domain.Devices.OfType<RingCabinet>());
         Assert.Equal(intervalIds, redone.Intervals.Select(interval => interval.IntervalId));
+        Assert.Equal(5, redone.Intervals.Count);
 
         session.RebuildScene();
         Assert.True(controller.SaveProject());
@@ -132,6 +147,11 @@ public sealed class ProjectWorkflowRuntimeTests
 
         Assert.Equal("用户 PT 柜", restored.DisplayName);
         Assert.Equal(intervalIds, restored.Intervals.Select(interval => interval.IntervalId));
+        Assert.Equal(5, restored.Intervals.Count);
+        Assert.Equal(4, restored.Intervals.Count(interval =>
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval));
+        Assert.Equal(expectedPTIndex, restoredPT.BayIndex);
+        Assert.Equal($"负{expectedPTIndex}", restoredPT.BusinessNumber);
         Assert.Equal(
             before,
             reopened.Layout.RingCabinetLayouts[cabinetId]

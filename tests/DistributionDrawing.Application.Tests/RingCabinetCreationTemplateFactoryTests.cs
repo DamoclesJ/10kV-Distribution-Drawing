@@ -9,14 +9,12 @@ public sealed class RingCabinetCreationTemplateFactoryTests
     private readonly RingCabinetCreationTemplateFactory _factory = new();
 
     [Theory]
+    [InlineData(RingCabinetTemplateType.Conventional, 3)]
     [InlineData(RingCabinetTemplateType.Conventional, 4)]
     [InlineData(RingCabinetTemplateType.Conventional, 5)]
     [InlineData(RingCabinetTemplateType.Conventional, 6)]
-    [InlineData(RingCabinetTemplateType.Conventional, 7)]
     [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, 4)]
-    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, 5)]
     [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, 6)]
-    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, 7)]
     public void Create_GeneratesSupportedBusinessIntervalsWithStableNames(
         RingCabinetTemplateType type,
         int count)
@@ -40,51 +38,58 @@ public sealed class RingCabinetCreationTemplateFactoryTests
         }
     }
 
-    [Fact]
-    public void Create_WithPT_ReplacesTheRightmostBayByDefaultWithoutChangingCount()
+    [Theory]
+    [InlineData(4, RingCabinetPTPlacement.Left, 1, 5)]
+    [InlineData(4, RingCabinetPTPlacement.Right, 5, 5)]
+    [InlineData(6, RingCabinetPTPlacement.Left, 1, 7)]
+    [InlineData(6, RingCabinetPTPlacement.Right, 7, 7)]
+    public void Create_IntegratedWithPTAddsOneBayAtTheRequestedEnd(
+        int businessIntervalCount,
+        RingCabinetPTPlacement placement,
+        int expectedPTIndex,
+        int expectedTotalCount)
     {
         RingCabinetTemplate template = _factory.Create(
             RingCabinetTemplateType.PrimarySecondaryIntegrated,
-            4,
-            includePTInterval: true);
-
-        BayTemplate pt = Assert.Single(template.Bays, bay =>
-            bay.EquipmentConfiguration is PTConfiguration);
-        Assert.Equal(4, template.Bays.Count);
-        Assert.Equal(4, pt.Index);
-        Assert.Equal("PT", pt.DisplayName);
-        Assert.Contains(TemplateCapability.PTInterval, template.RequiredCapabilities);
-        Assert.DoesNotContain(TemplateCapability.DtuSecondary, template.RequiredCapabilities);
-    }
-
-    [Theory]
-    [InlineData(RingCabinetPTPlacement.Left, 1)]
-    [InlineData(RingCabinetPTPlacement.Right, 5)]
-    public void Create_WithPTPlacesItAtTheRequestedEnd(
-        RingCabinetPTPlacement placement,
-        int expectedIndex)
-    {
-        RingCabinetTemplate template = _factory.Create(
-            RingCabinetTemplateType.Conventional,
-            5,
+            businessIntervalCount,
             includePTInterval: true,
             ptPlacement: placement);
 
         BayTemplate pt = Assert.Single(template.Bays, bay =>
             bay.EquipmentConfiguration is PTConfiguration);
-        Assert.Equal(5, template.Bays.Count);
-        Assert.Equal(expectedIndex, pt.Index);
-        Assert.All(template.Bays.Where(bay => bay.Index != expectedIndex), bay =>
-            Assert.IsType<LoadSwitchConfiguration>(bay.EquipmentConfiguration));
+        Assert.Equal(expectedTotalCount, template.Bays.Count);
+        Assert.Equal(Enumerable.Range(1, expectedTotalCount), template.Bays.Select(bay => bay.Index));
+        Assert.Equal(expectedPTIndex, pt.Index);
+        Assert.Equal("PT", pt.DisplayName);
+        Assert.Equal(businessIntervalCount, template.Bays.Count(bay =>
+            bay.EquipmentConfiguration is IntegratedFeederConfiguration));
+        Assert.All(template.Bays.Where(bay => bay.Index != expectedPTIndex), bay =>
+            Assert.IsType<IntegratedFeederConfiguration>(bay.EquipmentConfiguration));
+        Assert.Contains(TemplateCapability.PTInterval, template.RequiredCapabilities);
+        Assert.DoesNotContain(TemplateCapability.DtuSecondary, template.RequiredCapabilities);
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(25)]
-    public void Create_RejectsCountsOutsideTheSupportedProductRange(int count)
+    [InlineData(RingCabinetTemplateType.Conventional, 2)]
+    [InlineData(RingCabinetTemplateType.Conventional, 7)]
+    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, 3)]
+    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, 5)]
+    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, 7)]
+    public void Create_RejectsCountsOutsideTheSupportedProductRange(
+        RingCabinetTemplateType type,
+        int count)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => _factory.Create(
-            RingCabinetTemplateType.Conventional,
+            type,
             count));
+    }
+
+    [Fact]
+    public void Create_ConventionalRejectsPTInterval()
+    {
+        Assert.Throws<ArgumentException>(() => _factory.Create(
+            RingCabinetTemplateType.Conventional,
+            4,
+            includePTInterval: true));
     }
 }

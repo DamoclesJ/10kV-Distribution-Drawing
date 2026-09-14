@@ -1,6 +1,7 @@
 using DistributionDrawing.Application.Interaction;
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.Building;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
@@ -34,6 +35,57 @@ public sealed class AddDeviceRuntimeTests
         command.Redo();
         Assert.Same(cabinet, Assert.Single(document.Devices.OfType<RingCabinet>()));
         Assert.Equal(cabinet.Id, selection.CurrentSelection?.TargetId);
+    }
+
+    [Theory]
+    [InlineData(4, 5)]
+    [InlineData(6, 7)]
+    public void AddIntegratedRingCabinetWithPT_ExecuteUndoRedoPreservesCompleteAggregate(
+        int businessIntervalCount,
+        int totalIntervalCount)
+    {
+        DrawingDocument document = new(Guid.NewGuid(), "Test");
+        var runtime = new RuntimeLayoutDocument(
+            new DrawingLayout(),
+            new Dictionary<Guid, RingCabinetLayout>());
+        RingCabinetTemplate template = new RingCabinetCreationTemplateFactory().Create(
+            RingCabinetTemplateType.PrimarySecondaryIntegrated,
+            businessIntervalCount,
+            includePTInterval: true);
+        AddRingCabinetCommand command = new DeviceCommandFactory().CreateAddRingCabinet(
+            document,
+            runtime,
+            new RingCabinetCreationConfiguration("Integrated PT cabinet", template),
+            new DocumentPoint(1, 2));
+        Guid cabinetId = command.Cabinet.Id;
+        Guid[] intervalIds = command.Cabinet.Intervals
+            .Select(interval => interval.IntervalId)
+            .ToArray();
+        Guid[] switchIds = command.Cabinet.Intervals
+            .SelectMany(interval => interval.SwitchDevices)
+            .Select(device => device.Id)
+            .ToArray();
+
+        command.Execute();
+        Assert.Equal(totalIntervalCount, Assert.Single(
+            document.Devices.OfType<RingCabinet>()).Intervals.Count);
+        Assert.Equal(totalIntervalCount, runtime.RingCabinetLayouts[cabinetId]
+            .IntervalLayouts.Count);
+
+        command.Undo();
+        Assert.Empty(document.Devices);
+        Assert.False(runtime.RingCabinetLayouts.ContainsKey(cabinetId));
+
+        command.Redo();
+        RingCabinet redone = Assert.Single(document.Devices.OfType<RingCabinet>());
+        Assert.Equal(intervalIds, redone.Intervals.Select(interval => interval.IntervalId));
+        Assert.Equal(switchIds, redone.Intervals
+            .SelectMany(interval => interval.SwitchDevices)
+            .Select(device => device.Id));
+        Assert.Equal(businessIntervalCount, redone.Intervals.Count(interval =>
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval));
+        Assert.Single(redone.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
     }
 
     [Fact]

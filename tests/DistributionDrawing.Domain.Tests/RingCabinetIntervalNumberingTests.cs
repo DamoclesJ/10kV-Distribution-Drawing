@@ -64,6 +64,33 @@ public sealed class RingCabinetIntervalNumberingTests
         Assert.Equal($"负{bayIndex}-7", NumberFor(interval, SwitchKind.GroundSwitch));
     }
 
+    [Theory]
+    [InlineData(4, false, 5)]
+    [InlineData(4, true, 1)]
+    [InlineData(6, false, 7)]
+    [InlineData(6, true, 1)]
+    public void IntegratedCabinetWithPT_UsesFinalIntervalOrderForAllNumbers(
+        int businessIntervalCount,
+        bool ptAtLeft,
+        int expectedPTIndex)
+    {
+        RingCabinet cabinet = CreateIntegratedCabinetWithPT(
+            businessIntervalCount,
+            ptAtLeft);
+
+        Assert.Equal(Enumerable.Range(1, businessIntervalCount + 1),
+            cabinet.Intervals.Select(interval => interval.BayIndex));
+        Assert.Equal(Enumerable.Range(1, businessIntervalCount + 1)
+                .Select(index => $"负{index}"),
+            cabinet.Intervals.Select(interval => interval.BusinessNumber));
+        RingCabinetInterval pt = Assert.Single(cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        Assert.Equal(expectedPTIndex, pt.BayIndex);
+        Assert.Equal($"负{expectedPTIndex}", pt.BusinessNumber);
+        Assert.Equal($"负{expectedPTIndex}-2", NumberFor(pt, SwitchKind.IsolationSwitch));
+        Assert.Equal($"负{expectedPTIndex}-7", NumberFor(pt, SwitchKind.GroundSwitch));
+    }
+
     [Fact]
     public void LoadSwitch_ReturnsConfirmedCableSideGroundNumber()
     {
@@ -152,5 +179,32 @@ public sealed class RingCabinetIntervalNumberingTests
             definitions));
 
         return cabinet;
+    }
+
+    private static RingCabinet CreateIntegratedCabinetWithPT(
+        int businessIntervalCount,
+        bool ptAtLeft)
+    {
+        int totalIntervalCount = businessIntervalCount + 1;
+        RingCabinetIntervalDefinition[] definitions = Enumerable.Range(1, totalIntervalCount)
+            .Select(index => index == (ptAtLeft ? 1 : totalIntervalCount)
+                ? RingCabinetIntervalDefinition.CreatePT(
+                    index,
+                    SwitchState.Open,
+                    SwitchState.Open,
+                    "PT")
+                : RingCabinetIntervalDefinition.CreateIntegratedFeeder(
+                    index,
+                    GroundingStructureKind.UpperIsolationGrounding,
+                    SwitchState.Open,
+                    SwitchState.Open,
+                    SwitchState.Open,
+                    $"负{index}"))
+            .ToArray();
+
+        return RingCabinet.Create(RingCabinetDefinition.Create(
+            Guid.NewGuid(),
+            "Integrated numbering test cabinet",
+            definitions));
     }
 }

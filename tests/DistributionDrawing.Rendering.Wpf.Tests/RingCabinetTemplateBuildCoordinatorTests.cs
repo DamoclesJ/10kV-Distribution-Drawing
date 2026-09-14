@@ -1,6 +1,8 @@
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.Building;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Templates.RingCabinets.Building;
 using Xunit;
@@ -79,6 +81,43 @@ public sealed class RingCabinetTemplateBuildCoordinatorTests
         Assert.Contains(
             TemplateCapability.IntegratedFeederBay,
             result.RequiredCapabilities);
+    }
+
+    [Theory]
+    [InlineData(4, 5)]
+    [InlineData(6, 7)]
+    public void Build_IntegratedWithRightPTKeepsAllBusinessIntervalsAcrossLayers(
+        int businessIntervalCount,
+        int totalIntervalCount)
+    {
+        RingCabinetTemplate template = new RingCabinetCreationTemplateFactory().Create(
+            RingCabinetTemplateType.PrimarySecondaryIntegrated,
+            businessIntervalCount,
+            includePTInterval: true,
+            ptPlacement: RingCabinetPTPlacement.Right);
+
+        RingCabinetTemplateBuildResult result = BuildSuccessfully(
+            new RingCabinetTemplateBuildRequest(
+                template,
+                "带 PT 融合柜",
+                new DocumentPoint(0, 0)));
+        IReadOnlyList<SceneElement> scene = new RingCabinetRenderer().Render(
+            result.Cabinet,
+            result.Layout);
+
+        Assert.Equal(totalIntervalCount, template.Bays.Count);
+        Assert.Equal(totalIntervalCount, result.Definition.IntervalDefinitions.Count);
+        Assert.Equal(totalIntervalCount, result.Cabinet.Intervals.Count);
+        Assert.Equal(businessIntervalCount, result.Cabinet.Intervals.Count(interval =>
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval));
+        RingCabinetInterval pt = Assert.Single(result.Cabinet.Intervals, interval =>
+            interval.IntervalKind == IntervalKind.PTInterval);
+        Assert.Equal(totalIntervalCount, pt.BayIndex);
+        Assert.Equal($"负{totalIntervalCount}", pt.BusinessNumber);
+        Assert.Equal(totalIntervalCount, result.Layout.IntervalLayouts.Count);
+        Assert.Contains(scene.OfType<SceneText>(), text => text.Text == "PT");
+        Assert.All(Enumerable.Range(1, totalIntervalCount), index =>
+            Assert.Contains(scene.OfType<SceneText>(), text => text.Text == $"负{index}"));
     }
 
     [Fact]

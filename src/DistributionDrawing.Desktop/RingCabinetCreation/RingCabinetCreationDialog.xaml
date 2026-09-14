@@ -64,6 +64,7 @@
               SelectedItem="{Binding IntegratedGroundingStructureKind}" />
     <TextBlock Grid.Row="5" Grid.Column="0" Margin="0,4,12,12" Text="PT 间隔" />
     <CheckBox Grid.Row="5" Grid.Column="1" Margin="0,4,0,12"
+              IsEnabled="{Binding IsPrimarySecondaryIntegrated}"
               IsChecked="{Binding IncludePTInterval}"
               Content="包含 PT 间隔（不包含 DTU）" />
     <TextBlock Grid.Row="6" Grid.Column="0" Margin="0,4,12,12" Text="PT 位置" />

@@ -15,7 +15,6 @@ public sealed class RingCabinetCreationViewModelTests
     [InlineData(4)]
     [InlineData(5)]
     [InlineData(6)]
-    [InlineData(7)]
     public void ConventionalTemplate_AutomaticallyCreatesNamedLoadSwitchIntervals(int count)
     {
         RingCabinet cabinet = CreateCabinet(
@@ -36,9 +35,7 @@ public sealed class RingCabinetCreationViewModelTests
 
     [Theory]
     [InlineData(4)]
-    [InlineData(5)]
     [InlineData(6)]
-    [InlineData(7)]
     public void IntegratedTemplate_AutomaticallyCreatesNamedFeederIntervals(int count)
     {
         RingCabinet cabinet = CreateCabinet(
@@ -66,26 +63,32 @@ public sealed class RingCabinetCreationViewModelTests
 
         RingCabinetInterval pt = Assert.Single(cabinet.Intervals.Where(interval =>
             interval.IntervalKind == IntervalKind.PTInterval));
-        Assert.Equal(4, cabinet.Intervals.Count);
-        Assert.Equal(4, pt.BayIndex);
+        Assert.Equal(5, cabinet.Intervals.Count);
+        Assert.Equal(4, cabinet.Intervals.Count(interval =>
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval));
+        Assert.Equal(5, pt.BayIndex);
         Assert.Equal("PT", pt.DisplayName);
         Assert.Contains(pt.SwitchDevices, device => device.SwitchKind == SwitchKind.IsolationSwitch);
         Assert.Contains(pt.SwitchDevices, device => device.SwitchKind == SwitchKind.GroundSwitch);
     }
 
     [Theory]
-    [InlineData(RingCabinetPTPlacement.Left, 1)]
-    [InlineData(RingCabinetPTPlacement.Right, 5)]
+    [InlineData(4, RingCabinetPTPlacement.Left, 1, 5)]
+    [InlineData(4, RingCabinetPTPlacement.Right, 5, 5)]
+    [InlineData(6, RingCabinetPTPlacement.Left, 1, 7)]
+    [InlineData(6, RingCabinetPTPlacement.Right, 7, 7)]
     public void IncludePT_CreatesTheRequestedEndWithoutAnIntermediateEdit(
+        int businessIntervalCount,
         RingCabinetPTPlacement placement,
-        int expectedBayIndex)
+        int expectedBayIndex,
+        int expectedTotalCount)
     {
         var viewModel = new RingCabinetCreationViewModel
         {
             DisplayName = "PT 位置测试",
             LineName = "10kV 测试线路",
             CabinetType = RingCabinetTemplateType.PrimarySecondaryIntegrated,
-            BusinessIntervalCount = 5,
+            BusinessIntervalCount = businessIntervalCount,
             IncludePTInterval = true,
             PTPlacement = placement
         };
@@ -98,7 +101,13 @@ public sealed class RingCabinetCreationViewModelTests
         RingCabinetInterval pt = Assert.Single(cabinet.Intervals, interval =>
             interval.IntervalKind == IntervalKind.PTInterval);
         Assert.Equal(expectedBayIndex, pt.BayIndex);
-        Assert.Equal(5, cabinet.Intervals.Count);
+        Assert.Equal(expectedTotalCount, cabinet.Intervals.Count);
+        Assert.Equal(Enumerable.Range(1, expectedTotalCount),
+            cabinet.Intervals.Select(interval => interval.BayIndex));
+        Assert.Equal(Enumerable.Range(1, expectedTotalCount).Select(index => $"负{index}"),
+            cabinet.Intervals.Select(interval => interval.BusinessNumber));
+        Assert.Equal(businessIntervalCount, cabinet.Intervals.Count(interval =>
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval));
         Assert.All(cabinet.Intervals.Where(interval => interval.IntervalId != pt.IntervalId),
             interval => Assert.Equal(
                 IntervalKind.IntegratedFeederInterval,
@@ -112,6 +121,7 @@ public sealed class RingCabinetCreationViewModelTests
         {
             DisplayName = "默认右 PT",
             LineName = "10kV 测试线路",
+            CabinetType = RingCabinetTemplateType.PrimarySecondaryIntegrated,
             BusinessIntervalCount = 6,
             IncludePTInterval = true
         };
@@ -121,19 +131,27 @@ public sealed class RingCabinetCreationViewModelTests
             out RingCabinetCreationConfiguration? configuration,
             out string error), error);
         RingCabinet cabinet = new RingCabinetCreationFactory().Create(configuration!);
-        Assert.Equal(6, Assert.Single(cabinet.Intervals, interval =>
+        Assert.Equal(7, cabinet.Intervals.Count);
+        Assert.Equal(7, Assert.Single(cabinet.Intervals, interval =>
             interval.IntervalKind == IntervalKind.PTInterval).BayIndex);
     }
 
     [Theory]
-    [InlineData("1")]
-    [InlineData("25")]
-    [InlineData("not-a-number")]
-    public void CustomIntervalCount_RejectsValuesOutsideTheSupportedProductRange(string input)
+    [InlineData(RingCabinetTemplateType.Conventional, "2")]
+    [InlineData(RingCabinetTemplateType.Conventional, "7")]
+    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, "3")]
+    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, "5")]
+    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, "7")]
+    [InlineData(RingCabinetTemplateType.PrimarySecondaryIntegrated, "not-a-number")]
+    public void CustomIntervalCount_RejectsValuesOutsideTheSupportedProductRange(
+        RingCabinetTemplateType type,
+        string input)
     {
         var viewModel = new RingCabinetCreationViewModel
         {
             DisplayName = "数量校验",
+            LineName = "10kV 测试线路",
+            CabinetType = type,
             IntervalCountText = input
         };
 
@@ -141,6 +159,38 @@ public sealed class RingCabinetCreationViewModelTests
             out RingCabinetCreationConfiguration? _,
             out string error));
         Assert.NotEmpty(error);
+    }
+
+    [Theory]
+    [InlineData(RingCabinetPTPlacement.Left, "负1(PT)、负2、负3、负4、负5")]
+    [InlineData(RingCabinetPTPlacement.Right, "负1、负2、负3、负4、负5(PT)")]
+    public void GeneratedIntervalNames_UsesTheFinalTemplateOrder(
+        RingCabinetPTPlacement placement,
+        string expected)
+    {
+        var viewModel = new RingCabinetCreationViewModel
+        {
+            CabinetType = RingCabinetTemplateType.PrimarySecondaryIntegrated,
+            BusinessIntervalCount = 4,
+            IncludePTInterval = true,
+            PTPlacement = placement
+        };
+
+        Assert.Equal(expected, viewModel.GeneratedIntervalNames);
+    }
+
+    [Fact]
+    public void ConventionalTemplate_DoesNotRetainPTSelection()
+    {
+        var viewModel = new RingCabinetCreationViewModel
+        {
+            CabinetType = RingCabinetTemplateType.PrimarySecondaryIntegrated,
+            IncludePTInterval = true
+        };
+
+        viewModel.CabinetType = RingCabinetTemplateType.Conventional;
+
+        Assert.False(viewModel.IncludePTInterval);
     }
 
     private static RingCabinet CreateCabinet(

@@ -64,6 +64,11 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
                 BusinessIntervalCount = 4;
             }
 
+            if (!IsPrimarySecondaryIntegrated)
+            {
+                IncludePTInterval = false;
+            }
+
             OnPropertyChanged(nameof(IsPrimarySecondaryIntegrated));
             OnPropertyChanged(nameof(GeneratedIntervalNames));
         }
@@ -163,16 +168,28 @@ public sealed class RingCabinetCreationViewModel : INotifyPropertyChanged
     {
         get
         {
-            int count = int.TryParse(IntervalCountText, out int parsed) &&
-                        parsed is >= RingCabinetCreationTemplateFactory.MinimumIntervalCount and
-                            <= RingCabinetCreationTemplateFactory.MaximumIntervalCount
-                ? parsed
-                : 0;
-            int ptIndex = PTPlacement == RingCabinetPTPlacement.Left ? 1 : count;
-            return string.Join("、", Enumerable.Range(1, count)
-                .Select(index => IncludePTInterval && index == ptIndex
-                    ? "PT"
-                    : $"负{index}"));
+            if (!int.TryParse(IntervalCountText, out int count))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                RingCabinetTemplate template = _templateFactory.Create(
+                    CabinetType,
+                    count,
+                    IntegratedGroundingStructureKind,
+                    IncludePTInterval,
+                    PTPlacement);
+                return string.Join("、", template.Bays.Select(bay =>
+                    bay.EquipmentConfiguration is PTConfiguration
+                        ? $"负{bay.Index}(PT)"
+                        : $"负{bay.Index}"));
+            }
+            catch (ArgumentException)
+            {
+                return string.Empty;
+            }
         }
     }
 
