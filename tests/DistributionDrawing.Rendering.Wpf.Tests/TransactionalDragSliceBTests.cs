@@ -8,6 +8,8 @@ using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -17,6 +19,39 @@ namespace DistributionDrawing.Rendering.Wpf.Tests;
 
 public sealed class TransactionalDragSliceBTests
 {
+    [Fact]
+    public void TransformerDrag_OldInvalidPointer_IsActuallyNonCollinearAndValid()
+    {
+        OhlFixture fixture = CreateOhlFixture();
+        var controller = new DeviceDragController();
+        DocumentPoint oldPointer = new(30, 66);
+
+        Assert.True(controller.TryBeginDrag(
+            new SelectionReference(
+                SelectionTargetKind.Device,
+                fixture.Transformer.Creation.Transformer.Id),
+            fixture.Transformer.Creation.Layout.Position,
+            fixture.Layout,
+            document: fixture.Document));
+        Assert.True(controller.UpdatePreview(oldPointer));
+
+        TransformerLayout actualLayout = fixture.Layout.TransformerLayouts[
+            fixture.Transformer.Creation.Transformer.Id];
+        Assert.Equal(oldPointer, actualLayout.Position);
+        DocumentPoint poleAnchor = PoleProfessionalGeometry.GetPoleCenter(fixture.Pole.Layout);
+        TransformerProfessionalGeometry transformerGeometry =
+            TransformerProfessionalGeometry.Create(
+                fixture.Transformer.Creation.Transformer,
+                actualLayout,
+                DrawingMetrics.Default.Transformer);
+        Assert.Equal(new DocumentPoint(40.5, 90.5), poleAnchor);
+        Assert.Equal(new DocumentPoint(30, 78), transformerGeometry.HvAnchor);
+        Assert.NotEqual(poleAnchor.XMillimeters, transformerGeometry.HvAnchor.XMillimeters);
+        Assert.NotEqual(poleAnchor.YMillimeters, transformerGeometry.HvAnchor.YMillimeters);
+
+        fixture.Builder.Build(fixture.Document, fixture.Layout);
+    }
+
     [Fact]
     public void TransformerDrag_RealOhlConstraint_AllowsValidInvalidValidContinuation()
     {
@@ -38,10 +73,13 @@ public sealed class TransactionalDragSliceBTests
         DrawingScene validAScene = fixture.Builder.Build(fixture.Document, fixture.Layout);
         controller.AcceptCurrentPreview();
 
-        DocumentPoint invalidB = new(30, 66);
-        Assert.True(controller.UpdatePreview(invalidB));
-        Assert.Throws<RoutingConstraintException>(() =>
-            fixture.Builder.Build(fixture.Document, fixture.Layout));
+        RealInvalidTransformerCandidate invalidB =
+            ApplyRealRoutingInvalidTransformerCandidate(fixture, controller);
+        Assert.Equal(invalidB.Pointer, invalidB.LayoutPosition);
+        Assert.Equal(
+            invalidB.RequiredWaypoint.XMillimeters,
+            invalidB.TransformerAnchor.XMillimeters);
+        Assert.True(invalidB.Span < invalidB.RequiredStubCapacity);
         Assert.True(controller.RollbackToLastValid());
         Assert.True(controller.IsActive);
         Assert.Equal(validA, TransformerPosition(fixture));
@@ -85,9 +123,7 @@ public sealed class TransactionalDragSliceBTests
             fixture.Transformer.Creation.Layout.Position,
             fixture.Layout,
             document: fixture.Document));
-        Assert.True(controller.UpdatePreview(new DocumentPoint(30, 66)));
-        Assert.Throws<RoutingConstraintException>(() =>
-            fixture.Builder.Build(fixture.Document, fixture.Layout));
+        ApplyRealRoutingInvalidTransformerCandidate(fixture, controller);
         controller.RollbackToLastValid();
 
         Assert.Null(controller.Commit());
@@ -116,9 +152,7 @@ public sealed class TransactionalDragSliceBTests
         Assert.True(controller.UpdatePreview(validA));
         DrawingScene validScene = fixture.Builder.Build(fixture.Document, fixture.Layout);
         controller.AcceptCurrentPreview();
-        Assert.True(controller.UpdatePreview(new DocumentPoint(30, 66)));
-        Assert.Throws<RoutingConstraintException>(() =>
-            fixture.Builder.Build(fixture.Document, fixture.Layout));
+        ApplyRealRoutingInvalidTransformerCandidate(fixture, controller);
         Assert.True(controller.RollbackToLastValid());
         Assert.Equal(target, selection.Selected);
 
@@ -150,9 +184,7 @@ public sealed class TransactionalDragSliceBTests
         Assert.True(controller.UpdatePreview(new DocumentPoint(185, 120)));
         fixture.Builder.Build(fixture.Document, fixture.Layout);
         controller.AcceptCurrentPreview();
-        Assert.True(controller.UpdatePreview(new DocumentPoint(30, 66)));
-        Assert.Throws<RoutingConstraintException>(() =>
-            fixture.Builder.Build(fixture.Document, fixture.Layout));
+        ApplyRealRoutingInvalidTransformerCandidate(fixture, controller);
         controller.RollbackToLastValid();
 
         Assert.True(controller.Cancel());
@@ -332,6 +364,48 @@ public sealed class TransactionalDragSliceBTests
             new DrawingSceneBuilder());
     }
 
+    private static RealInvalidTransformerCandidate ApplyRealRoutingInvalidTransformerCandidate(
+        OhlFixture fixture,
+        DeviceDragController controller)
+    {
+        DrawingMetrics metrics = DrawingMetrics.Default;
+        DocumentPoint requiredWaypoint = PoleProfessionalGeometry.GetPoleCenter(
+            fixture.Pole.Layout,
+            metrics);
+        double requiredStubCapacity = metrics.Line.GroundingAccessClearance +
+            (metrics.Line.GroundingAccessMarkerDiameter +
+             metrics.Line.ConnectionThickness) / 2;
+        double invalidSpan = requiredStubCapacity / 2;
+        DocumentPoint candidatePosition = new(
+            requiredWaypoint.XMillimeters,
+            requiredWaypoint.YMillimeters + invalidSpan - metrics.Transformer.MainRadius);
+
+        Assert.True(controller.UpdatePreview(candidatePosition));
+        TransformerLayout actualLayout = fixture.Layout.TransformerLayouts[
+            fixture.Transformer.Creation.Transformer.Id];
+        Assert.Equal(candidatePosition, actualLayout.Position);
+
+        TransformerProfessionalGeometry geometry = TransformerProfessionalGeometry.Create(
+            fixture.Transformer.Creation.Transformer,
+            actualLayout,
+            metrics.Transformer);
+        Assert.Equal(requiredWaypoint.XMillimeters, geometry.HvAnchor.XMillimeters);
+        double actualSpan = Math.Abs(
+            geometry.HvAnchor.YMillimeters - requiredWaypoint.YMillimeters);
+        Assert.Equal(invalidSpan, actualSpan, 10);
+        Assert.True(actualSpan < requiredStubCapacity);
+        Assert.Throws<RoutingConstraintException>(() =>
+            fixture.Builder.Build(fixture.Document, fixture.Layout));
+
+        return new RealInvalidTransformerCandidate(
+            candidatePosition,
+            actualLayout.Position,
+            requiredWaypoint,
+            geometry.HvAnchor,
+            actualSpan,
+            requiredStubCapacity);
+    }
+
     private static RuntimeLayoutDocument Runtime() => new(
         new DrawingLayout(),
         new Dictionary<Guid, RingCabinetLayout>());
@@ -376,4 +450,12 @@ public sealed class TransactionalDragSliceBTests
         AddOverheadLineCommand Line,
         GroundingAccessPoint AccessPoint,
         DrawingSceneBuilder Builder);
+
+    private sealed record RealInvalidTransformerCandidate(
+        DocumentPoint Pointer,
+        DocumentPoint LayoutPosition,
+        DocumentPoint RequiredWaypoint,
+        DocumentPoint TransformerAnchor,
+        double Span,
+        double RequiredStubCapacity);
 }

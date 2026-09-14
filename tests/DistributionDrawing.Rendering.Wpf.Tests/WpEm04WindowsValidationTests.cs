@@ -672,7 +672,8 @@ public sealed class WpEm04WindowsValidationTests
             new TerminalAnchor(endId, new DocumentPoint(30, 0), TerminalAnchorDirection.Left),
             RequiredWaypoints: [new RequiredRouteWaypoint(Guid.NewGuid(), new DocumentPoint(15, 0),
                 PredecessorMinimumStubLength: 20, SuccessorMinimumStubLength: 20)]);
-        Assert.Throws<InvalidOperationException>(() => new OrthogonalRoutePlanner().Plan([request], []));
+        Assert.Throws<RoutingConstraintException>(() =>
+            new OrthogonalRoutePlanner().Plan([request], []));
     }
 
     [Theory]
