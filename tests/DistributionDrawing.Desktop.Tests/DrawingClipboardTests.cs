@@ -712,7 +712,9 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.True(drag.UpdatePreview(new DocumentPoint(
             before.XMillimeters + 40,
             before.YMillimeters + 25)));
-        Assert.IsType<GroupMoveCommand>(drag.Commit());
+        drag.AcceptCurrentPreview();
+        GroupMoveCommand command = Assert.IsType<GroupMoveCommand>(drag.Commit());
+        command.Execute();
         session.RebuildScene();
     }
 

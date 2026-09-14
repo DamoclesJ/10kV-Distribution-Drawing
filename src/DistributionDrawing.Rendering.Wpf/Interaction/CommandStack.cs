@@ -1,5 +1,11 @@
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
 
+public enum CommandTransactionFailureStage
+{
+    Application,
+    Validation
+}
+
 public sealed class CommandStack
 {
     private readonly List<ICommand> _history = [];
@@ -62,20 +68,41 @@ public sealed class CommandStack
             throw;
         }
 
-        if (CurrentIndex < _history.Count)
-        {
-            _history.RemoveRange(CurrentIndex, _history.Count - CurrentIndex);
-            _afterStateIds.RemoveRange(CurrentIndex, _afterStateIds.Count - CurrentIndex);
-        }
-
-        _history.Add(command);
-        _afterStateIds.Add(_nextStateId++);
-        CurrentIndex++;
-        TrimHistory();
-        NotifyStateChanged(wasDirty);
+        RecordSuccessfulExecution(command, wasDirty);
     }
 
-    public bool Undo()
+    public void ExecuteCommand(
+        ICommand command,
+        Action validateAfterExecute,
+        Action<CommandTransactionFailureStage> restoreAfterFailure)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(validateAfterExecute);
+        ArgumentNullException.ThrowIfNull(restoreAfterFailure);
+
+        bool wasDirty = IsDirty;
+        CommandTransactionFailureStage failureStage =
+            CommandTransactionFailureStage.Application;
+        try
+        {
+            command.Execute();
+            failureStage = CommandTransactionFailureStage.Validation;
+            validateAfterExecute();
+        }
+        catch
+        {
+            restoreAfterFailure(failureStage);
+            throw;
+        }
+
+        RecordSuccessfulExecution(command, wasDirty);
+    }
+
+    public bool Undo() => Undo(null);
+
+    public bool Undo(Action? validateAfterUndo) => Undo(validateAfterUndo, null);
+
+    public bool Undo(Action? validateAfterUndo, Action? restoreSceneAfterFailure)
     {
         if (!CanUndo)
         {
@@ -85,12 +112,26 @@ public sealed class CommandStack
         bool wasDirty = IsDirty;
         ICommand command = _history[CurrentIndex - 1];
         command.Undo();
+        try
+        {
+            validateAfterUndo?.Invoke();
+        }
+        catch
+        {
+            command.Redo();
+            restoreSceneAfterFailure?.Invoke();
+            throw;
+        }
         CurrentIndex--;
         NotifyStateChanged(wasDirty);
         return true;
     }
 
-    public bool Redo()
+    public bool Redo() => Redo(null);
+
+    public bool Redo(Action? validateAfterRedo) => Redo(validateAfterRedo, null);
+
+    public bool Redo(Action? validateAfterRedo, Action? restoreSceneAfterFailure)
     {
         if (!CanRedo)
         {
@@ -100,6 +141,16 @@ public sealed class CommandStack
         bool wasDirty = IsDirty;
         ICommand command = _history[CurrentIndex];
         command.Redo();
+        try
+        {
+            validateAfterRedo?.Invoke();
+        }
+        catch
+        {
+            command.Undo();
+            restoreSceneAfterFailure?.Invoke();
+            throw;
+        }
         CurrentIndex++;
         NotifyStateChanged(wasDirty);
         return true;
@@ -119,6 +170,21 @@ public sealed class CommandStack
         {
             DirtyChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private void RecordSuccessfulExecution(ICommand command, bool wasDirty)
+    {
+        if (CurrentIndex < _history.Count)
+        {
+            _history.RemoveRange(CurrentIndex, _history.Count - CurrentIndex);
+            _afterStateIds.RemoveRange(CurrentIndex, _afterStateIds.Count - CurrentIndex);
+        }
+
+        _history.Add(command);
+        _afterStateIds.Add(_nextStateId++);
+        CurrentIndex++;
+        TrimHistory();
+        NotifyStateChanged(wasDirty);
     }
 
     private void TrimHistory()

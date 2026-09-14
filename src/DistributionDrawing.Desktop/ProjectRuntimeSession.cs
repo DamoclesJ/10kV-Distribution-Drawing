@@ -117,8 +117,13 @@ public sealed class ProjectRuntimeSession
 
     public void RebuildScene()
     {
-        Scene = _sceneBuilder.Build(PersistenceSession.Domain, Layout);
-        InspectionSource = CreateInspectionSource(PersistenceSession, Layout, Scene);
+        DrawingScene scene = _sceneBuilder.Build(PersistenceSession.Domain, Layout);
+        PropertyInspectionSource inspectionSource = CreateInspectionSource(
+            PersistenceSession,
+            Layout,
+            scene);
+        Scene = scene;
+        InspectionSource = inspectionSource;
         SelectionResolver.SetSource(InspectionSource);
         SelectionManager.Retain(reference => SelectionResolver.Resolve(reference) is not null);
     }

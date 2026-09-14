@@ -53,6 +53,7 @@ public sealed class CableTerminationOrbitDragTests
             DrawingMetrics.Default.CableTermination.TriangleHeight,
             tipDistance,
             6);
+        controller.AcceptCurrentPreview();
         Assert.IsType<MoveAttachmentCommand>(controller.Commit());
     }
 
@@ -93,6 +94,7 @@ public sealed class CableTerminationOrbitDragTests
         Assert.True(controller.UpdatePreview(new DocumentPoint(
             poleCenter.XMillimeters,
             poleCenter.YMillimeters + 60)));
+        controller.AcceptCurrentPreview();
         var command = Assert.IsType<MoveAttachmentCommand>(controller.Commit());
         var stack = new CommandStack();
         stack.ExecuteCommand(command);

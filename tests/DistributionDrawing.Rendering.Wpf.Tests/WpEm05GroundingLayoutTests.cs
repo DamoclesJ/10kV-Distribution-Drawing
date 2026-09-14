@@ -561,6 +561,7 @@ public sealed class WpEm05GroundingLayoutTests
             intendedY - automatic.DefaultSymbolTop.YMillimeters - before.SymbolOffset.YMillimeters)));
         GroundingPointLayout normalizedAfter =
             runtime.GroundingPointLayouts[point.GroundingPointId];
+        controller.AcceptCurrentPreview();
         ICommand command = Assert.IsAssignableFrom<ICommand>(controller.Commit());
 
         Assert.Equal(cabinetBefore.Position, runtime.RingCabinetLayouts.Values.Single().Position);
@@ -768,6 +769,7 @@ public sealed class WpEm05GroundingLayoutTests
             new DocumentPoint(0, 4),
             runtime.GroundingPointLayouts[point.GroundingPointId].SymbolOffset);
 
+        controller.AcceptCurrentPreview();
         ICommand command = Assert.IsAssignableFrom<ICommand>(controller.Commit());
         command.Undo();
         Assert.Equal(before, runtime.GroundingPointLayouts[point.GroundingPointId]);
@@ -1000,6 +1002,7 @@ public sealed class WpEm05GroundingLayoutTests
         Assert.Equal(
             new DocumentPoint(15, -8),
             layout.GroundingPointLayouts[point.GroundingPointId].SymbolOffset);
+        controller.AcceptCurrentPreview();
         ICommand command = Assert.IsType<MoveGroundingPointLayoutCommand>(controller.Commit());
         command.Execute();
         command.Undo();

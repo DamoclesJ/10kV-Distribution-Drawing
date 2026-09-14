@@ -11,7 +11,7 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction;
 /// Coordinates transient document-space dragging for device layouts.
 /// Domain objects and topology are never changed here.
 /// </summary>
-public sealed class DeviceDragController
+public sealed class DeviceDragController : ITransactionalDragPreview
 {
     private readonly LayoutSnapService _snapService;
     private readonly SelectionMovePlanner _movePlanner;
@@ -62,6 +62,7 @@ public sealed class DeviceDragController
             layout,
             before,
             before,
+            before,
             anchor,
             GetRootPosition(anchor, before),
             plan.Roots
@@ -88,7 +89,7 @@ public sealed class DeviceDragController
         if (target.Kind == SelectionTargetKind.Device &&
             layout.DrawingLayout.Poles.TryGetValue(target.ObjectId, out PoleLayout? pole))
         {
-            _drag = new PoleDragState(target, pointer, layout, pole, pole);
+            _drag = new PoleDragState(target, pointer, layout, pole, pole, pole);
             return true;
         }
 
@@ -101,6 +102,7 @@ public sealed class DeviceDragController
                 target,
                 pointer,
                 layout,
+                cabinet,
                 cabinet,
                 cabinet);
             return true;
@@ -119,6 +121,7 @@ public sealed class DeviceDragController
                 layout,
                 transformer.TransformerKind,
                 transformerLayout,
+                transformerLayout,
                 transformerLayout);
             return true;
         }
@@ -136,6 +139,7 @@ public sealed class DeviceDragController
                 layout,
                 station,
                 stationLayout,
+                stationLayout,
                 stationLayout);
             return true;
         }
@@ -152,6 +156,7 @@ public sealed class DeviceDragController
                 pointer,
                 layout,
                 parentPole,
+                attachment,
                 attachment,
                 attachment,
                 true);
@@ -189,6 +194,7 @@ public sealed class DeviceDragController
             parentPole,
             attachment,
             attachment,
+            attachment,
             orbitAroundPole);
         return true;
     }
@@ -199,6 +205,7 @@ public sealed class DeviceDragController
         {
             throw new InvalidOperationException("No device drag is active.");
         }
+        DragCandidateGuard.EnsureFinite(pointer);
 
         if (drag is GroupDragState group)
         {
@@ -215,6 +222,7 @@ public sealed class DeviceDragController
                 : Translate(
                     attachment.Before.Offset,
                     Delta(pointer, attachment.StartPointer));
+            DragCandidateGuard.EnsureFinite(offset);
             AttachmentLayout current = attachment.Before.MoveTo(offset);
             if (current.Offset == attachment.Current.Offset)
             {
@@ -231,7 +239,9 @@ public sealed class DeviceDragController
                 pointer.XMillimeters - drag.StartPointer.XMillimeters,
             drag.StartPosition.YMillimeters +
                 pointer.YMillimeters - drag.StartPointer.YMillimeters);
+        DragCandidateGuard.EnsureFinite(position);
         position = _snapService.Snap(drag.Target, position, drag.Layout);
+        DragCandidateGuard.EnsureFinite(position);
         if (position == drag.CurrentPosition)
         {
             return false;
@@ -256,44 +266,87 @@ public sealed class DeviceDragController
         }
 
         _drag = null;
-        if (drag.StartPosition == drag.CurrentPosition)
+        if (drag.StartPosition == drag.LastValidPosition)
         {
+            RestoreBefore(drag);
             return null;
         }
 
-        return drag switch
+        ICommand command = drag switch
         {
             GroupDragState group => new GroupMoveCommand(
                 group.Layout,
                 group.Before,
-                group.Current),
+                group.LastValid),
             PoleDragState pole => new MoveCommand(
                 pole.Layout.DrawingLayout,
                 pole.Before,
-                pole.Current),
+                pole.LastValid),
             RingCabinetDragState cabinet => new MoveRingCabinetCommand(
                 cabinet.Layout,
                 cabinet.Before.CabinetId,
                 cabinet.Before.Position,
-                cabinet.Current.Position),
+                cabinet.LastValid.Position),
             TransformerDragState transformer => new MoveTransformerCommand(
                 transformer.Layout,
                 transformer.Before.TransformerId,
                 transformer.TransformerKind,
                 transformer.Before.Position,
-                transformer.Current.Position),
+                transformer.LastValid.Position),
             CustomerStationDragState station => new MoveCustomerStationCommand(
                 station.Layout,
                 station.Station,
                 station.Before.Position,
-                station.Current.Position),
+                station.LastValid.Position),
             AttachmentDragState attachment => new MoveAttachmentCommand(
                 attachment.Layout.DrawingLayout,
                 attachment.Before.AttachmentId,
                 attachment.Before.Offset,
-                attachment.Current.Offset),
+                attachment.LastValid.Offset),
             _ => throw new InvalidOperationException("Unsupported device drag state.")
         };
+        RestoreBefore(drag);
+        return command;
+    }
+
+    public void AcceptCurrentPreview()
+    {
+        _drag = _drag switch
+        {
+            GroupDragState group => group with { LastValid = group.Current },
+            PoleDragState pole => pole with { LastValid = pole.Current },
+            RingCabinetDragState cabinet => cabinet with { LastValid = cabinet.Current },
+            TransformerDragState transformer => transformer with
+            {
+                LastValid = transformer.Current
+            },
+            CustomerStationDragState station => station with { LastValid = station.Current },
+            AttachmentDragState attachment => attachment with { LastValid = attachment.Current },
+            null => throw new InvalidOperationException("No device drag is active."),
+            _ => throw new InvalidOperationException("Unsupported device drag state.")
+        };
+    }
+
+    public bool RollbackToLastValid()
+    {
+        DragState drag = _drag ?? throw new InvalidOperationException(
+            "No device drag is active.");
+        bool changed = drag.CurrentPosition != drag.LastValidPosition;
+        ApplyLastValid(drag);
+        _drag = drag switch
+        {
+            GroupDragState group => group with { Current = group.LastValid },
+            PoleDragState pole => pole with { Current = pole.LastValid },
+            RingCabinetDragState cabinet => cabinet with { Current = cabinet.LastValid },
+            TransformerDragState transformer => transformer with
+            {
+                Current = transformer.LastValid
+            },
+            CustomerStationDragState station => station with { Current = station.LastValid },
+            AttachmentDragState attachment => attachment with { Current = attachment.LastValid },
+            _ => throw new InvalidOperationException("Unsupported device drag state.")
+        };
+        return changed;
     }
 
     public bool Cancel()
@@ -304,6 +357,13 @@ public sealed class DeviceDragController
         }
 
         _drag = null;
+        RestoreBefore(drag);
+
+        return true;
+    }
+
+    private static void RestoreBefore(DragState drag)
+    {
         switch (drag)
         {
             case GroupDragState group:
@@ -329,8 +389,35 @@ public sealed class DeviceDragController
             default:
                 throw new InvalidOperationException("Unsupported device drag state.");
         }
+    }
 
-        return true;
+    private static void ApplyLastValid(DragState drag)
+    {
+        switch (drag)
+        {
+            case GroupDragState group:
+                GroupMoveCommand.Apply(group.Layout, group.LastValid);
+                break;
+            case PoleDragState pole:
+                pole.Layout.DrawingLayout.Replace(pole.LastValid);
+                break;
+            case RingCabinetDragState cabinet:
+                cabinet.Layout.ReplaceRingCabinet(cabinet.LastValid);
+                break;
+            case TransformerDragState transformer:
+                transformer.Layout.ReplaceTransformer(
+                    transformer.LastValid,
+                    transformer.TransformerKind);
+                break;
+            case CustomerStationDragState station:
+                station.Layout.ReplaceCustomerStation(station.LastValid, station.Station);
+                break;
+            case AttachmentDragState attachment:
+                attachment.Layout.DrawingLayout.Replace(attachment.LastValid);
+                break;
+            default:
+                throw new InvalidOperationException("Unsupported device drag state.");
+        }
     }
 
     private static PoleDragState UpdatePole(
@@ -377,11 +464,13 @@ public sealed class DeviceDragController
     {
         DocumentPoint rawDelta = Delta(pointer, drag.StartPointer);
         DocumentPoint anchorCandidate = Translate(drag.AnchorStartPosition, rawDelta);
+        DragCandidateGuard.EnsureFinite(anchorCandidate);
         DocumentPoint snappedAnchor = _snapService.Snap(
             drag.AnchorRoot.SelectionReference,
             anchorCandidate,
             drag.Layout,
             drag.ExcludedSnapObjectIds);
+        DragCandidateGuard.EnsureFinite(snappedAnchor);
         DocumentPoint finalDelta = Delta(snappedAnchor, drag.AnchorStartPosition);
         GroupMoveLayoutState current = Translate(drag.Before, finalDelta);
         if (current.HasSamePositions(drag.Current))
@@ -480,9 +569,14 @@ public sealed class DeviceDragController
         value.XMillimeters - origin.XMillimeters,
         value.YMillimeters - origin.YMillimeters);
 
-    private static DocumentPoint Translate(DocumentPoint value, DocumentPoint delta) => new(
-        value.XMillimeters + delta.XMillimeters,
-        value.YMillimeters + delta.YMillimeters);
+    private static DocumentPoint Translate(DocumentPoint value, DocumentPoint delta)
+    {
+        DocumentPoint result = new(
+            value.XMillimeters + delta.XMillimeters,
+            value.YMillimeters + delta.YMillimeters);
+        DragCandidateGuard.EnsureFinite(result);
+        return result;
+    }
 
     private void EnsureInactive()
     {
@@ -500,6 +594,8 @@ public sealed class DeviceDragController
         public abstract DocumentPoint StartPosition { get; }
 
         public abstract DocumentPoint CurrentPosition { get; }
+
+        public abstract DocumentPoint LastValidPosition { get; }
     }
 
     private sealed record PoleDragState(
@@ -507,12 +603,15 @@ public sealed class DeviceDragController
         DocumentPoint StartPointer,
         RuntimeLayoutDocument Layout,
         PoleLayout Before,
-        PoleLayout Current)
+        PoleLayout Current,
+        PoleLayout LastValid)
         : DragState(Target, StartPointer, Layout)
     {
         public override DocumentPoint StartPosition => Before.Position;
 
         public override DocumentPoint CurrentPosition => Current.Position;
+
+        public override DocumentPoint LastValidPosition => LastValid.Position;
     }
 
     private sealed record RingCabinetDragState(
@@ -520,12 +619,15 @@ public sealed class DeviceDragController
         DocumentPoint StartPointer,
         RuntimeLayoutDocument Layout,
         RingCabinetLayout Before,
-        RingCabinetLayout Current)
+        RingCabinetLayout Current,
+        RingCabinetLayout LastValid)
         : DragState(Target, StartPointer, Layout)
     {
         public override DocumentPoint StartPosition => Before.Position;
 
         public override DocumentPoint CurrentPosition => Current.Position;
+
+        public override DocumentPoint LastValidPosition => LastValid.Position;
     }
 
     private sealed record TransformerDragState(
@@ -534,12 +636,15 @@ public sealed class DeviceDragController
         RuntimeLayoutDocument Layout,
         TransformerKind TransformerKind,
         TransformerLayout Before,
-        TransformerLayout Current)
+        TransformerLayout Current,
+        TransformerLayout LastValid)
         : DragState(Target, StartPointer, Layout)
     {
         public override DocumentPoint StartPosition => Before.Position;
 
         public override DocumentPoint CurrentPosition => Current.Position;
+
+        public override DocumentPoint LastValidPosition => LastValid.Position;
     }
 
     private sealed record CustomerStationDragState(
@@ -548,12 +653,15 @@ public sealed class DeviceDragController
         RuntimeLayoutDocument Layout,
         CustomerStation Station,
         CustomerStationLayout Before,
-        CustomerStationLayout Current)
+        CustomerStationLayout Current,
+        CustomerStationLayout LastValid)
         : DragState(Target, StartPointer, Layout)
     {
         public override DocumentPoint StartPosition => Before.Position;
 
         public override DocumentPoint CurrentPosition => Current.Position;
+
+        public override DocumentPoint LastValidPosition => LastValid.Position;
     }
 
     private sealed record AttachmentDragState(
@@ -563,12 +671,15 @@ public sealed class DeviceDragController
         PoleLayout ParentPole,
         AttachmentLayout Before,
         AttachmentLayout Current,
+        AttachmentLayout LastValid,
         bool OrbitAroundPole)
         : DragState(Target, StartPointer, Layout)
     {
         public override DocumentPoint StartPosition => Before.Offset;
 
         public override DocumentPoint CurrentPosition => Current.Offset;
+
+        public override DocumentPoint LastValidPosition => LastValid.Offset;
     }
 
     private sealed record GroupDragState(
@@ -577,6 +688,7 @@ public sealed class DeviceDragController
         RuntimeLayoutDocument Layout,
         GroupMoveLayoutState Before,
         GroupMoveLayoutState Current,
+        GroupMoveLayoutState LastValid,
         SelectionMoveRoot AnchorRoot,
         DocumentPoint AnchorStartPosition,
         IReadOnlySet<Guid> ExcludedSnapObjectIds)
@@ -587,5 +699,9 @@ public sealed class DeviceDragController
         public override DocumentPoint CurrentPosition => GetRootPosition(
             AnchorRoot,
             Current);
+
+        public override DocumentPoint LastValidPosition => GetRootPosition(
+            AnchorRoot,
+            LastValid);
     }
 }

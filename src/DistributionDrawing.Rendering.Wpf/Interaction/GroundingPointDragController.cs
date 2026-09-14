@@ -10,7 +10,7 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction;
 /// <summary>
 /// Coordinates presentation-only dragging of a GroundingPoint body.
 /// </summary>
-public sealed class GroundingPointDragController
+public sealed class GroundingPointDragController : ITransactionalDragPreview
 {
     private DragState? _drag;
 
@@ -55,6 +55,8 @@ public sealed class GroundingPointDragController
             startOffset,
             before,
             startOffset,
+            startOffset,
+            before,
             constraint);
         return true;
     }
@@ -63,10 +65,13 @@ public sealed class GroundingPointDragController
     {
         DragState drag = _drag ?? throw new InvalidOperationException(
             "No grounding-point drag is active.");
+        DragCandidateGuard.EnsureFinite(pointer);
         DocumentPoint current = new(
             drag.StartOffset.XMillimeters + pointer.XMillimeters - drag.StartPointer.XMillimeters,
             drag.StartOffset.YMillimeters + pointer.YMillimeters - drag.StartPointer.YMillimeters);
+        DragCandidateGuard.EnsureFinite(current);
         current = drag.Constraint?.Normalize(current) ?? current;
+        DragCandidateGuard.EnsureFinite(current);
         if (current == drag.CurrentOffset)
         {
             return false;
@@ -85,17 +90,40 @@ public sealed class GroundingPointDragController
             return null;
         }
         _drag = null;
-        if (drag.StartOffset == drag.CurrentOffset)
+        if (drag.StartOffset == drag.LastValidOffset)
         {
             Restore(drag);
             return null;
         }
-        return new MoveGroundingPointLayoutCommand(
+        var command = new MoveGroundingPointLayoutCommand(
             drag.Document,
             drag.Layout,
             drag.GroundingPointId,
             drag.Before,
-            new GroundingPointLayout(drag.GroundingPointId, drag.CurrentOffset));
+            new GroundingPointLayout(drag.GroundingPointId, drag.LastValidOffset));
+        Restore(drag);
+        return command;
+    }
+
+    public void AcceptCurrentPreview()
+    {
+        DragState drag = _drag ?? throw new InvalidOperationException(
+            "No grounding-point drag is active.");
+        _drag = drag with
+        {
+            LastValidOffset = drag.CurrentOffset,
+            LastValid = new GroundingPointLayout(drag.GroundingPointId, drag.CurrentOffset)
+        };
+    }
+
+    public bool RollbackToLastValid()
+    {
+        DragState drag = _drag ?? throw new InvalidOperationException(
+            "No grounding-point drag is active.");
+        bool changed = drag.CurrentOffset != drag.LastValidOffset;
+        Restore(drag.Layout, drag.GroundingPointId, drag.LastValid);
+        _drag = drag with { CurrentOffset = drag.LastValidOffset };
+        return changed;
     }
 
     public bool Cancel()
@@ -111,13 +139,21 @@ public sealed class GroundingPointDragController
 
     private static void Restore(DragState drag)
     {
-        if (drag.Before is null)
+        Restore(drag.Layout, drag.GroundingPointId, drag.Before);
+    }
+
+    private static void Restore(
+        RuntimeLayoutDocument layout,
+        Guid groundingPointId,
+        GroundingPointLayout? value)
+    {
+        if (value is null)
         {
-            drag.Layout.RemoveGroundingPointLayout(drag.GroundingPointId);
+            layout.RemoveGroundingPointLayout(groundingPointId);
         }
         else
         {
-            drag.Layout.SetGroundingPointLayout(drag.Before);
+            layout.SetGroundingPointLayout(value);
         }
     }
 
@@ -129,5 +165,7 @@ public sealed class GroundingPointDragController
         DocumentPoint StartOffset,
         GroundingPointLayout? Before,
         DocumentPoint CurrentOffset,
+        DocumentPoint LastValidOffset,
+        GroundingPointLayout? LastValid,
         GroundingPointOffsetConstraint? Constraint);
 }

@@ -23,6 +23,7 @@ public sealed class CableRouteDragControllerTests
 
         Assert.True(controller.TryBeginDrag(segments[1], segments, layout));
         Assert.True(controller.UpdatePreview(new DocumentPoint(40, 80)));
+        controller.AcceptCurrentPreview();
         ICommand command = Assert.IsAssignableFrom<ICommand>(controller.Commit());
         var stack = new CommandStack();
         stack.ExecuteCommand(command);

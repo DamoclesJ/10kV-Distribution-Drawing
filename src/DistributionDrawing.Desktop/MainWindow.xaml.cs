@@ -77,6 +77,7 @@ public partial class MainWindow : Window
     private readonly DrawingToolCoordinator _drawingTools;
     private readonly DesktopUserActions _actions;
     private readonly IDesktopMessageService _messageService;
+    private bool _dragInvalidFeedbackVisible;
     private readonly DesktopContextMenuResolver _contextMenuResolver = new();
     private readonly ExportDrawingController _exportDrawing;
     private readonly IntervalConfigurationPreviewController _intervalPreview = new();
@@ -665,6 +666,24 @@ public partial class MainWindow : Window
         _statusFeedbackTimer.Start();
     }
 
+    private void ShowDragInvalidFeedback(string message)
+    {
+        _statusFeedbackTimer.Stop();
+        _dragInvalidFeedbackVisible = true;
+        _shellViewModel.ShowFeedback(message);
+    }
+
+    private void ClearDragInvalidFeedback()
+    {
+        if (!_dragInvalidFeedbackVisible)
+        {
+            return;
+        }
+
+        _dragInvalidFeedbackVisible = false;
+        _shellViewModel.ClearFeedback();
+    }
+
     private void OnStatusFeedbackTimerTick(object? sender, EventArgs e)
     {
         _statusFeedbackTimer.Stop();
@@ -936,14 +955,19 @@ public partial class MainWindow : Window
             DrawingSurface.ReleaseMouseCapture();
             if (command is not null)
             {
-                _commandStack.ExecuteCommand(command);
+                ExecuteDragCommand(command);
             }
-
-            RefreshDrawingScene();
+            else
+            {
+                RefreshDrawingScene();
+            }
+            ClearDragInvalidFeedback();
             return true;
         }
         catch (Exception exception)
         {
+            RecoverSceneAfterFailedDragTransaction("拖动恢复失败");
+            ClearDragInvalidFeedback();
             ShowCommandError("提交拖动失败", exception.Message);
             return false;
         }
@@ -1571,6 +1595,7 @@ public partial class MainWindow : Window
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
         changed |= _groundingPointDrag.Cancel();
+        ClearDragInvalidFeedback();
         bool selectionRectangleCanceled = _selectionRectangle.Cancel();
         if (changed)
         {
@@ -1592,6 +1617,7 @@ public partial class MainWindow : Window
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
         changed |= _groundingPointDrag.Cancel();
+        ClearDragInvalidFeedback();
         if (!changed)
         {
             return;
@@ -1614,6 +1640,22 @@ public partial class MainWindow : Window
         return _cableRouteDrag.IsActive
             ? _cableRouteDrag.Commit()
             : _deviceDrag.Commit();
+    }
+
+    private void ExecuteDragCommand(ICommand command)
+    {
+        RefreshDrawingScene();
+        _commandStack.ExecuteCommand(
+            command,
+            RefreshDrawingScene,
+            failureStage =>
+            {
+                if (failureStage == CommandTransactionFailureStage.Validation)
+                {
+                    command.Undo();
+                }
+                RefreshDrawingScene();
+            });
     }
 
     private void OnApplyIntervalConfiguration(object sender, RoutedEventArgs e)
@@ -1799,18 +1841,19 @@ public partial class MainWindow : Window
                     out selection);
             }
 
-            if (_commandStack.Undo())
+            if (_commandStack.Undo(RefreshDrawingScene, RefreshDrawingScene))
             {
-                RefreshDrawingScene();
                 ApplySelectionTransition(hasTransition, selection);
             }
         }
         catch (ArgumentException exception)
         {
+            RecoverSceneAfterFailedDragTransaction("撤销恢复失败");
             _messageService.ShowError("撤销失败", exception.Message);
         }
         catch (InvalidOperationException exception)
         {
+            RecoverSceneAfterFailedDragTransaction("撤销恢复失败");
             _messageService.ShowError("撤销失败", exception.Message);
         }
     }
@@ -1836,18 +1879,19 @@ public partial class MainWindow : Window
                     out selection);
             }
 
-            if (_commandStack.Redo())
+            if (_commandStack.Redo(RefreshDrawingScene, RefreshDrawingScene))
             {
-                RefreshDrawingScene();
                 ApplySelectionTransition(hasTransition, selection);
             }
         }
         catch (ArgumentException exception)
         {
+            RecoverSceneAfterFailedDragTransaction("重做恢复失败");
             _messageService.ShowError("重做失败", exception.Message);
         }
         catch (InvalidOperationException exception)
         {
+            RecoverSceneAfterFailedDragTransaction("重做恢复失败");
             _messageService.ShowError("重做失败", exception.Message);
         }
     }
@@ -2439,25 +2483,21 @@ public partial class MainWindow : Window
         }
 
         DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
-        try
-        {
-            bool changed = _groundingPointDrag.IsActive
-                ? _groundingPointDrag.UpdatePreview(documentPoint)
-                : _cableRouteDrag.IsActive
-                    ? _cableRouteDrag.UpdatePreview(documentPoint)
-                    : _deviceDrag.UpdatePreview(documentPoint);
-            if (changed)
+        DragPreviewTransactionCoordinator.ProcessPointerUpdate(
+            ActiveDragPreview(),
+            () =>
             {
-                RefreshDrawingScene();
-            }
-        }
-        catch (Exception exception) when (
-            exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
-        {
-            CancelDeviceDrag();
-            ShowCommandError("拖动预览失败", exception.Message);
-        }
-
+                return _groundingPointDrag.IsActive
+                    ? _groundingPointDrag.UpdatePreview(documentPoint)
+                    : _cableRouteDrag.IsActive
+                        ? _cableRouteDrag.UpdatePreview(documentPoint)
+                        : _deviceDrag.UpdatePreview(documentPoint);
+            },
+            RefreshDrawingScene,
+            ShowDragInvalidFeedback,
+            ClearDragInvalidFeedback,
+            CancelDeviceDrag,
+            exception => ShowCommandError("拖动预览失败", exception.Message));
         e.Handled = true;
     }
 
@@ -2494,16 +2534,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        ICommand? command = null;
-        bool commandRecorded = false;
         try
         {
-            command = CommitActiveDrag();
+            ICommand? command = CommitActiveDrag();
             DrawingSurface.ReleaseMouseCapture();
             if (command is not null)
             {
-                _commandStack.ExecuteCommand(command);
-                commandRecorded = true;
+                ExecuteDragCommand(command);
+            }
+            else
+            {
                 RefreshDrawingScene();
             }
         }
@@ -2512,10 +2552,6 @@ public partial class MainWindow : Window
         {
             try
             {
-                if (!commandRecorded)
-                {
-                    command?.Undo();
-                }
                 if (_workspace.CurrentSession is not null)
                 {
                     RefreshDrawingScene();
@@ -2529,8 +2565,37 @@ public partial class MainWindow : Window
 
             ShowCommandError("提交拖动失败", exception.Message);
         }
+        finally
+        {
+            ClearDragInvalidFeedback();
+        }
 
         e.Handled = true;
+    }
+
+    private ITransactionalDragPreview ActiveDragPreview()
+    {
+        if (_groundingPointDrag.IsActive)
+        {
+            return _groundingPointDrag;
+        }
+        return _cableRouteDrag.IsActive ? _cableRouteDrag : _deviceDrag;
+    }
+
+    private void RecoverSceneAfterFailedDragTransaction(string title)
+    {
+        try
+        {
+            if (_workspace.CurrentSession is not null)
+            {
+                RefreshDrawingScene();
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
+        {
+            ShowCommandError(title, exception.Message);
+        }
     }
 
     private void OnSelectionChanged(object? sender, EventArgs e)
@@ -3627,8 +3692,7 @@ public partial class MainWindow : Window
                 source.Devices,
                 source.Connections,
                 source.OverheadLines);
-        _currentScene = scene;
-        _activeSource = new PropertyInspectionSource
+        var refreshedSource = new PropertyInspectionSource
         {
             Document = source.Document,
             DrawingLayout = layout,
@@ -3646,6 +3710,8 @@ public partial class MainWindow : Window
             Terminals = source.Terminals,
             HitTestIndex = scene.HitTestIndex
         };
+        _currentScene = scene;
+        _activeSource = refreshedSource;
         _selectionResolver.SetSource(_activeSource);
         _selectionManager.Retain(reference =>
             _selectionResolver.Resolve(reference) is not null);

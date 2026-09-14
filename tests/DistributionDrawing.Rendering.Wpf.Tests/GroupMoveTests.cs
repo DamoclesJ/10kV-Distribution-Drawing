@@ -63,6 +63,7 @@ public sealed class GroupMoveTests
             fixture.Document,
             fixture.Layout));
         Assert.True(controller.UpdatePreview(new DocumentPoint(35, 45)));
+        controller.AcceptCurrentPreview();
         GroupMoveCommand command = Assert.IsType<GroupMoveCommand>(controller.Commit());
         var stack = new CommandStack();
         stack.ExecuteCommand(command);
@@ -114,6 +115,7 @@ public sealed class GroupMoveTests
             fixture.FirstPole.Id].Position);
         Assert.Equal(attachmentBefore, fixture.Layout.DrawingLayout.Attachments[
             fixture.Attachment.AttachmentId]);
+        controller.AcceptCurrentPreview();
         GroupMoveCommand command = Assert.IsType<GroupMoveCommand>(controller.Commit());
         Assert.Single(command.After.Poles);
         Assert.Empty(command.After.Attachments);
@@ -214,6 +216,7 @@ public sealed class GroupMoveTests
             fixture.Document,
             fixture.Layout));
         Assert.True(controller.UpdatePreview(new DocumentPoint(30, 30)));
+        controller.AcceptCurrentPreview();
         Assert.IsType<GroupMoveCommand>(controller.Commit());
 
         Assert.Equal(deviceIds, fixture.Document.Devices.Select(item => item.Id));
@@ -242,6 +245,7 @@ public sealed class GroupMoveTests
 
         Assert.Equal(new DocumentPoint(20, 5), fixture.Layout.DrawingLayout.Attachments[
             fixture.Attachment.AttachmentId].Offset);
+        controller.AcceptCurrentPreview();
         Assert.IsType<MoveAttachmentCommand>(controller.Commit());
     }
 
@@ -273,7 +277,9 @@ public sealed class GroupMoveTests
             fixture.Document,
             fixture.Layout));
         Assert.True(controller.UpdatePreview(new DocumentPoint(70, 80)));
-        Assert.IsType<GroupMoveCommand>(controller.Commit());
+        controller.AcceptCurrentPreview();
+        GroupMoveCommand command = Assert.IsType<GroupMoveCommand>(controller.Commit());
+        command.Execute();
         string after = GeometryKey(
             fixture.Builder.Build(fixture.Document, fixture.Layout),
             fixture.Connection.Id);

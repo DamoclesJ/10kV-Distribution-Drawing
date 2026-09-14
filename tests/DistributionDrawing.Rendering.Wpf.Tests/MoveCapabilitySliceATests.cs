@@ -57,6 +57,7 @@ public sealed class MoveCapabilitySliceATests
         Assert.Equal("变压器测试", creation.Transformer.DisplayName);
         Assert.Equal(creation.Transformer.HvTerminalId, creation.HvTerminal.Id);
 
+        controller.AcceptCurrentPreview();
         MoveTransformerCommand command = Assert.IsType<MoveTransformerCommand>(
             controller.Commit());
         var stack = new CommandStack();
@@ -213,6 +214,7 @@ public sealed class MoveCapabilitySliceATests
             layout,
             document: document));
         Assert.True(controller.UpdatePreview(new DocumentPoint(185, 120)));
+        controller.AcceptCurrentPreview();
         MoveTransformerCommand command = Assert.IsType<MoveTransformerCommand>(
             controller.Commit());
         var stack = new CommandStack();
@@ -352,6 +354,7 @@ public sealed class MoveCapabilitySliceATests
             .Select(item => item.IncomingFeederId)
             .ToArray();
 
+        controller.AcceptCurrentPreview();
         MoveCustomerStationCommand command = Assert.IsType<MoveCustomerStationCommand>(
             controller.Commit());
         var stack = new CommandStack();
@@ -489,6 +492,7 @@ public sealed class MoveCapabilitySliceATests
             layout,
             document: document));
         Assert.True(controller.UpdatePreview(new DocumentPoint(145, 170)));
+        controller.AcceptCurrentPreview();
         MoveCustomerStationCommand command = Assert.IsType<MoveCustomerStationCommand>(
             controller.Commit());
         var stack = new CommandStack();
@@ -656,6 +660,7 @@ public sealed class MoveCapabilitySliceATests
         DocumentPoint[] afterRoute = Route(builder.Build(document, layout), connection.Id);
         Assert.NotEqual(beforeRoute, afterRoute);
 
+        controller.AcceptCurrentPreview();
         GroupMoveCommand command = Assert.IsType<GroupMoveCommand>(controller.Commit());
         Assert.Single(command.After.Transformers);
         Assert.Single(command.After.CustomerStations);

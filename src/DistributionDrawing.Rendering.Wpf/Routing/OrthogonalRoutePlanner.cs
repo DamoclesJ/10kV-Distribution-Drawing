@@ -152,7 +152,8 @@ public sealed class OrthogonalRoutePlanner
             double required = startAnchor.MinimumStubLength + endAnchor.MinimumStubLength;
             if (span < required)
             {
-                throw new InvalidOperationException("杆间距不足，无法容纳所需导线段和接地环间隙。");
+                throw new RoutingConstraintException(
+                    "杆间距不足，无法容纳所需导线段和接地环间隙。");
             }
         }
 

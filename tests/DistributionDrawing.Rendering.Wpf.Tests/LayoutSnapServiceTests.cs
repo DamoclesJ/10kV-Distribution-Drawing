@@ -59,7 +59,9 @@ public sealed class LayoutSnapServiceTests
 
         Assert.True(controller.TryBeginDrag(target, new DocumentPoint(0, 0), runtime));
         Assert.True(controller.UpdatePreview(new DocumentPoint(47, 43)));
+        controller.AcceptCurrentPreview();
         ICommand command = Assert.IsAssignableFrom<ICommand>(controller.Commit());
+        command.Execute();
         Assert.Equal(new DocumentPoint(50, 40), drawingLayout.Poles[movingId].Position);
 
         command.Undo();

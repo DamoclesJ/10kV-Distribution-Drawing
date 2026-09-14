@@ -3,7 +3,7 @@ using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
 
-public sealed class CableRouteDragController
+public sealed class CableRouteDragController : ITransactionalDragPreview
 {
     private DragState? _drag;
 
@@ -38,10 +38,12 @@ public sealed class CableRouteDragController
         }
 
         CableRouteGuide? before = layout.CableRouteGuides.GetValueOrDefault(hit.Target.ObjectId);
+        double initialY = before?.HorizontalYMillimeters ?? start.YMillimeters;
         _drag = new DragState(
             hit.Target.ObjectId,
-            start.YMillimeters,
-            start.YMillimeters,
+            initialY,
+            initialY,
+            before,
             before,
             layout);
         return true;
@@ -53,6 +55,7 @@ public sealed class CableRouteDragController
         {
             throw new InvalidOperationException("No cable route drag is active.");
         }
+        DragCandidateGuard.EnsureFinite(pointer.YMillimeters);
 
         if (pointer.YMillimeters == drag.CurrentY)
         {
@@ -73,17 +76,41 @@ public sealed class CableRouteDragController
         }
 
         _drag = null;
-        if (drag.InitialY == drag.CurrentY)
+        double lastValidY = drag.LastValid?.HorizontalYMillimeters ?? drag.InitialY;
+        if (drag.InitialY == lastValidY)
         {
             RestoreBefore(drag);
             return null;
         }
 
-        return new SetCableRouteGuideCommand(
+        var command = new SetCableRouteGuideCommand(
             drag.Layout,
             drag.CableSegmentId,
             drag.Before,
-            new CableRouteGuide(drag.CableSegmentId, drag.CurrentY));
+            new CableRouteGuide(drag.CableSegmentId, lastValidY));
+        RestoreBefore(drag);
+        return command;
+    }
+
+    public void AcceptCurrentPreview()
+    {
+        DragState drag = _drag ?? throw new InvalidOperationException(
+            "No cable-route drag is active.");
+        _drag = drag with
+        {
+            LastValid = new CableRouteGuide(drag.CableSegmentId, drag.CurrentY)
+        };
+    }
+
+    public bool RollbackToLastValid()
+    {
+        DragState drag = _drag ?? throw new InvalidOperationException(
+            "No cable-route drag is active.");
+        double lastValidY = drag.LastValid?.HorizontalYMillimeters ?? drag.InitialY;
+        bool changed = drag.CurrentY != lastValidY;
+        Restore(drag.Layout, drag.CableSegmentId, drag.LastValid);
+        _drag = drag with { CurrentY = lastValidY };
+        return changed;
     }
 
     public bool Cancel()
@@ -100,13 +127,21 @@ public sealed class CableRouteDragController
 
     private static void RestoreBefore(DragState drag)
     {
-        if (drag.Before is null)
+        Restore(drag.Layout, drag.CableSegmentId, drag.Before);
+    }
+
+    private static void Restore(
+        RuntimeLayoutDocument layout,
+        Guid cableSegmentId,
+        CableRouteGuide? value)
+    {
+        if (value is null)
         {
-            drag.Layout.RemoveCableRouteGuide(drag.CableSegmentId);
+            layout.RemoveCableRouteGuide(cableSegmentId);
         }
         else
         {
-            drag.Layout.SetCableRouteGuide(drag.Before);
+            layout.SetCableRouteGuide(value);
         }
     }
 
@@ -130,6 +165,7 @@ public sealed class CableRouteDragController
         double InitialY,
         double CurrentY,
         CableRouteGuide? Before,
+        CableRouteGuide? LastValid,
         RuntimeLayoutDocument Layout);
 }
 

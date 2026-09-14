@@ -215,7 +215,7 @@ public sealed class OrthogonalRouter
              route.Segments.Any(segment => obstacles.Any(obstacle =>
                  IntersectsInterior(segment, obstacle.Bounds))))))
         {
-            throw new InvalidOperationException(
+            throw new RoutingConstraintException(
                 "无法在当前杆间距或障碍物条件下生成满足最小导线段的线路。 ");
         }
 
