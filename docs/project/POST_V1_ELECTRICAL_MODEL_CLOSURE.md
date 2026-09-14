@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Implementation In Progress / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Requirements Frozen / Implementation Not Started / WP-EM-08 Slice C Requirements Refined / Characterization Pending / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Implementation In Progress / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-08 Slice C Requirements Refined / Characterization Pending / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -1084,11 +1084,11 @@ Regression boundaries remain WP-EM-05 grounding layout / accepted limitation, WP
 
 #### WP-EM-08 Implementation Slice B — Transactional Drag Stabilization
 
-**状态：Requirements Frozen / Implementation Not Started**
+**状态：Closed / Accepted / Implemented / Windows Verified / Professionally Accepted**
 
 Slice B 只稳定已经存在的 drag gesture，不新增 draggable object。最终 move matrix 保持：Pole、RingCabinet、Transformer、CustomerStation direct drag；CableTermination pole-orbit drag；GroundingPoint symbol-offset drag；GroundingAccessPoint no direct drag；SwitchDevice / ordinary PoleAttachment no independent free drag。
 
-当前 `DeviceDragController`、`GroundingPointDragController` 与 `CableRouteDragController` 都经 MainWindow 的统一 pointer preview、`CommitActiveDrag()`、Cancel 与 scene refresh lifecycle，但各自保有 typed drag state。现状在 preview rebuild failure 时取消整个 gesture并进入 modal error path；mouse-up 可能先记录 command 再 rebuild；Undo / Redo 也可能先移动 history cursor 再 rebuild。Slice B 必须关闭这些一致性风险，不得静默排除任何 controller。
+`DeviceDragController`、`GroundingPointDragController` 与 `CableRouteDragController` 已通过 MainWindow 的统一 pointer preview、`CommitActiveDrag()`、Cancel 与 scene refresh lifecycle 完成事务稳定化。Preview rebuild failure、mouse-up command application / validation failure、Undo / Redo rebuild failure 均已纳入明确的 typed recovery boundary；不得静默排除任何 controller。
 
 ##### Slice B three-state gesture contract
 
@@ -1155,6 +1155,16 @@ Existing regression matrix继续覆盖Slice A move capability、WP-EM-05 groundi
 ##### Slice B Windows professional acceptance
 
 Windows acceptance至少验证：legal drag实时跟随；进入已知routing-invalid区域时对象保持`LastValid`、gesture不中断且显示non-modal feedback；继续回到legal区域时preview恢复且feedback消失；在invalid pointer位置release提交`LastValid`；起点直接invalid后release无history；invalid期间Cancel恢复`Before`；Undo / Redo保持scene与Layout一致；group invalid candidate全组回退；expected invalid drag不弹正常错误`MessageBox`。Unexpected internal error不属于人工专业验收主流程。
+
+Windows automated verification = **PASS**；`Rendering.Wpf`、Desktop 与 full solution 均通过。GUI Professional Acceptance = **PASS**，覆盖 Transformer / CustomerStation drag、Pole / RingCabinet regression、CableTermination orbit、GroundingPoint offset、valid → invalid → valid continuation、invalid release → `LastValid`、NoChange、Cancel → `Before`、group rollback 与 expected-invalid non-modal behavior。
+
+##### Slice B closure evidence
+
+- Main implementation: `502851c0ac4e21da1eec3a6d82fb8334b1b3a483` — `feat(interaction): stabilize transactional drag lifecycle`。
+- Windows Verification Fix-1: `09e6e2d3c5648d9fea1e46ffb302e4bbbddb5c27` — `test(interaction): fix Slice B Windows routing fixture`。
+- Windows Verification Fix-2: `7307f1802ab8316f37020f563068390e10a470de` — `test(interaction): tolerate Slice B fixture rounding`。
+- 已接受 `Before` / `Candidate` / `LastValid` 生命周期、expected-invalid rollback 与 gesture continuation、invalid release commit、NoChange、Cancel restore、typed `DragCandidateConstraintException`、typed `RoutingConstraintException`、non-modal feedback、unexpected modal/error boundary、Execute / Undo / Redo atomic recovery、Layout / Scene / history consistency 与 all-or-none group rollback。
+- Slice B 未引入 route hysteresis、`RouteFamilyKey`、route continuity cache、switching margin、Transformer / CustomerStation obstacle policy、router rewrite、generic collision 或 overlap / bounds legality。
 
 ##### Slice B persistence and exclusions
 
