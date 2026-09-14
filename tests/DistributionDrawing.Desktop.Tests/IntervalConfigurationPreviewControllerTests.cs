@@ -85,7 +85,7 @@ public sealed class IntervalConfigurationPreviewControllerTests
     {
         RingCabinetTemplate template = new RingCabinetCreationTemplateFactory().Create(
             RingCabinetTemplateType.PrimarySecondaryIntegrated,
-            5,
+            4,
             includePTInterval: true,
             ptPlacement: placement);
         return new RingCabinetCreationFactory().Create(

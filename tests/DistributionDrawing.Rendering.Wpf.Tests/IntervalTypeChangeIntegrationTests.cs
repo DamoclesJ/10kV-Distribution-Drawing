@@ -582,7 +582,7 @@ public sealed class IntervalTypeChangeIntegrationTests
     {
         RingCabinetTemplate template = new RingCabinetCreationTemplateFactory().Create(
             RingCabinetTemplateType.PrimarySecondaryIntegrated,
-            5,
+            4,
             includePTInterval: true,
             ptPlacement: placement);
         RingCabinetDomainBuildOutcome outcome = new RingCabinetTemplateDomainBuilder().Build(
