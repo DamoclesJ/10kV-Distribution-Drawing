@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Implementation In Progress / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-08 Slice C Requirements Refined / Characterization Pending / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Implementation In Progress / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-08 Slice C Requirements Frozen / Implementation Pending / WP-EM-09 Planned / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -897,7 +897,7 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 **状态：Closed / Archived / Final accepted implementation `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`**
 
-正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 现 Closed / Archived；WP-EM-08 整体为 Implementation In Progress，Slice A 已 Closed / Accepted，Slice B 与 Slice C 仍待推进。
+正式 requirement contract 以 3.8 节为准。Complete Vertical Slice implementation、Code Review、Windows automated verification 与 Windows professional acceptance 均已通过，WP-EM-07A 现 Closed / Archived。FormatVersion 保持 V7；WP-EM-07B 现 Closed / Archived；WP-EM-08 整体为 Implementation In Progress，Slice A 与 Slice B 已 Closed / Accepted，Slice C 为 Requirements Frozen / Implementation Pending。
 
 ### WP-EM-07B — Transformer Naming Amendment
 
@@ -907,9 +907,9 @@ Standard three-bar grounding symbol、Lxx / Sxx numbering、basic GAP marker 以
 
 ### WP-EM-08 — Electrical Model Interaction Stabilization
 
-**状态：Implementation In Progress；Slice A Closed / Accepted；Slice B Requirements Frozen / Implementation Not Started；Slice C Requirements Refined / Characterization Pending**
+**状态：Implementation In Progress；Slice A Closed / Accepted / Implemented / Windows Verified / Professionally Accepted；Slice B Closed / Accepted / Implemented / Windows Verified / Professionally Accepted；Slice C Requirements Frozen / Implementation Pending**
 
-Implementation Audit & Scope Revalidation 已在 baseline `c4f61653f923f985bcd8835d9735c68decee783e` 通过。WP-EM-08 Scope Amendment 已完成；Slice A 已完成 implementation、Windows automated verification 与 professional acceptance 并闭环，整体 WP 仍因 Slice B / Slice C 未完成而保持 Implementation In Progress。
+Implementation Audit & Scope Revalidation 已在 baseline `c4f61653f923f985bcd8835d9735c68decee783e` 通过。WP-EM-08 Scope Amendment 已完成；Slice A 与 Slice B 已完成 implementation、Windows automated verification 与 professional acceptance 并闭环；Slice C requirements 已冻结，整体 WP 仍因 Slice C implementation 未完成而保持 Implementation In Progress。
 
 WP-EM-08 始终是一个 Work Package，并在一个 Codex Thread 中推进。下述三个 Implementation Slice 是该 Work Package 内部、可独立评审的增量，不产生额外 Work Package，也不要求单独 Codex Thread。
 
@@ -963,13 +963,27 @@ Drag preview、Layout mutation、scene rebuild 和 command recording 必须形�
 
 #### WP-EM-08 route continuity contract
 
-当前不存在正式 `RouteFamily` enum、previous route-family state、cross-frame route cache 或 hysteresis；每次 scene rebuild 都重新选择 route candidate。WP-EM-08 Slice C 应处理连续、小幅度、合法拖动中因评分临界点导致的无必要 HV / VH / channel / fallback route突然翻转，但不得在 characterization 前冻结 hysteresis threshold。
+Characterization 已确认当前 `OrthogonalRouter` 在每次 scene rebuild 中独立选择最佳候选，ranking 不包含 previous route family、continuity preference、switching penalty 或 hysteresis。最小可复现 fixture 为 start `(0, 50)` / `Right`、end `(100, y)` / `Left`、obstacle `(40, 35, 20, 30)`、`ObstacleClearance = 4`、`PortStubLength = 8`；`y = 49.9` 选择 upper route，`y = 50.1` 选择 lower route，极小合法位移产生约 38 mm waypoint jump。多障碍 characterization 也复现了 HV / VH、bypass side、channel source 与 waypoint topology 的不必要切换。
 
-WP-EM-08 Slice C 必须先建立 reproducible route-flip characterization，再决定 switching policy与margin。若证明确有需要，可以引入 internal typed transient `RouteFamilyKey` 或架构等价 identity，最小语义可覆盖 direct、HV、VH、preferred-guide、X-channel、Y-channel、obstacle-path 与 fallback。具体 enum / shape 留待该 Slice design。
+Slice C 冻结 internal typed transient `RouteFamilyKey` 为 REQUIRED。它表达 routing topology identity，而不是精确 waypoint geometry；至少区分 direct / simple elbow / multi-elbow、horizontal-first / vertical-first、upper / lower、left / right、endpoint approach、ordered segment orientation、required-waypoint pass order / leg direction、obstacle bypass identity与 materially different channel family。同一 family 允许 waypoint坐标、segment length与clearance下的位置连续变化，key不得包含精确坐标。Planner candidate内部名称可以作为internal classifier输入，但不得成为Domain或public persistence contract。
 
-该 continuity state 按 `ConnectionId` 保存于 runtime/session transient context；mouse-up 后可以继续保持当前 session continuity；project close / reload 时清空；Connection endpoint、topology 或 route constraint materially changes 时重新验证或失效。Command、Undo / Redo 不持有 route-family business fact。该状态不得持久化。
+Continuity state按`ConnectionId`独立保存于一次drag transaction专用的shared routing/runtime context。每条connection至少保留last accepted family和route-score comparison snapshot；不得以单个global family控制整组线路。只有candidate完成Layout mutation、正式validity与完整scene build后，才以two-phase方式publish accepted continuity snapshot。Expected-invalid candidate不得污染state；rollback必须使Layout、Scene、`LastValid`与continuity snapshot保持一致；release、NoChange、Cancel及unexpected failure均清除state，不得跨gesture保留family memory。
 
-Transformer / CustomerStation presentation bounds 当前不属于 routing obstacle。线路穿越其 glyph 是 Presentation-undesirable candidate，不是 electrical invalidity。是否保持当前 obstacle set，或将两类 body 加入 presentation routing obstacle，是 WP-EM-08 Slice C characterization decision point；必须比较 short OHL、Transformer grounding / GAP、CustomerStation single / dual feeder、Cable route与route-family continuity后决定。Slice A、Slice B 不得提前加入该规则。
+Candidate selection先执行既有hard legality与routing validity并淘汰全部illegal candidate，再比较overall best与current-family best。Current family不可行或新正式约束要求切换时立即切换；alternative在正式routing quality上明显更优时允许切换；current family仍合法且competing family仅近似等价时保持current family。Hysteresis / switching margin为REQUIRED，但本freeze不拍定数值；implementation必须以characterization、automated tests与Windows visual verification在document-space / routing-score units中校准并保护。
+
+Switching margin不得保留obstacle-invalid route，不得违反required waypoint、required stub或no-backtracking，不得压过explicit guide、明显更优的higher-priority routing quality，且不得引入generic collision legality。既有ranking维度与优先级继续保持：`ObstacleIntersections`、`HorizontalGuideDeviation`、`OverlapLength`、`Crossings`、`Bends`、`Length`、`Priority`、coordinate deterministic tie-break。实现可以重构score representation，但不得改变该正式priority contract。
+
+Unrelated Transformer与CustomerStation正式加入hard routing obstacle。Transformer使用`TransformerProfessionalGeometry`对应的professional body envelope；CustomerStation使用覆盖设备主体专业外形的station professional body envelope。两者均不包含label、hit-test / selection padding或其它pure UI extent。Connection endpoint owner必须按stable owner identity排除自身obstacle，不得以anchor point是否落在bounds内作为排除规则；overlapping unrelated obstacle不得因此被误排除。
+
+Characterization baseline中的现有hard obstacles为RingCabinet bounds、PTInterval presentation extent、Pole professional bounds、PoleAttachment professional logical bounds及IntermediateTerminal / JointLayout。Transformer、CustomerStation、labels、grounding symbols、GAP marker与connection segments本身当时不是hard obstacles；connection segments继续只参与overlap / crossing ranking，不升级为generic hard obstacle。
+
+Obstacle routing不等于generic drag collision invalidity。Candidate先由router尝试绕行；routing成功则仍为legal，正式routing无解才通过既有typed routing failure进入Slice B expected-invalid path。本Slice不新增body collision rejection、overlap legality、canvas bounds、Pole screen-order、glyph crossing或其它generic collision规则。
+
+Continuity classification、selection policy与state representation进入shared routing/runtime layer。`DeviceDragController`、`GroundingPointDragController`与`CableRouteDragController`可以提供gesture lifecycle hook，但不得复制三套family / hysteresis算法。Group move为每个affected `ConnectionId`维护独立state；candidate scene失败时Layout、Scene及所有continuity snapshots all-or-none rollback。
+
+Undo / Redo不恢复transient route-family history，只从formal geometry、guide与obstacles确定性重建route；Command history不保存continuity cache。Save / Open同样不保存continuity state。Persistence impact为NONE，FormatVersion保持V7。
+
+Slice C不得重新定义Slice B的`Before → Candidate → LastValid`合同。Expected-invalid仍rollback到`LastValid`并保持gesture active；invalid release提交`LastValid`；无accepted legal movement为NoChange；Cancel始终恢复`Before`；expected-invalid使用non-modal feedback，unexpected invariant failure保留modal/error boundary。Real OHL + GAP characterization已确认保留`RequiredRouteWaypoint`，且`span < required capacity`精确抛出`RoutingConstraintException`；`GroundingAccessPoint`、required stub与no-backtracking合同必须保持。
 
 WP-EM-05 已接受的 RingCabinet cable-side GroundingPoint above-terminal visual interference 继续保持 Accepted Known Limitation，明确排除出 WP-EM-08，且不得重定义为 routing invalidity。未来如处理，必须另行完成独立 requirement decision。
 
@@ -1080,7 +1094,7 @@ Moving either object changes only the existing `TransformerLayout.Position` or `
 
 Windows automated verification is **PASS**, including Rendering.Wpf runtime tests and relevant Desktop / solution verification. Fix-1 corrected test-only GroundingPoint multi-hit-entry and Transformer label hit-priority assumptions; Fix-2 corrected the test-only Transformer body hit fixture so production `HitTest` selects `SelectionTargetKind.Device` rather than a CableSegment-covered connection point. No runtime-blocked state remains. Windows professional acceptance is **PASS** for direct drags, route rebuild, naming, short OHL / GAP / grounding, group move, Cancel, Undo / Redo, selection, and unsupported Switch / GAP drag behavior.
 
-Regression boundaries remain WP-EM-05 grounding layout / accepted limitation, WP-EM-06 Transformer topology, WP-EM-07 CustomerStation aggregate, WP-EM-07A GAP / short OHL / Transformer-side grounding, WP-EM-07B naming, Clipboard, Save / Open, Undo / Redo, selection identity, and existing Pole / RingCabinet / CableTermination behavior. Slice B Requirements are frozen; Slice C remains Requirements Refined / Characterization Pending.
+Regression boundaries remain WP-EM-05 grounding layout / accepted limitation, WP-EM-06 Transformer topology, WP-EM-07 CustomerStation aggregate, WP-EM-07A GAP / short OHL / Transformer-side grounding, WP-EM-07B naming, Clipboard, Save / Open, Undo / Redo, selection identity, and existing Pole / RingCabinet / CableTermination behavior. Slice B is Closed / Accepted; Slice C is Requirements Frozen / Implementation Pending.
 
 #### WP-EM-08 Implementation Slice B — Transactional Drag Stabilization
 
@@ -1170,32 +1184,48 @@ Windows automated verification = **PASS**；`Rendering.Wpf`、Desktop 与 full s
 
 Persistence impact为NONE。不得持久化`Before`、`Candidate`、`LastValid`、validity、feedback、failure reason或transaction state，不新增DTO / schema；FormatVersion保持V7。
 
-Slice B禁止实现route-family hysteresis、`RouteFamilyKey`、route switching margin、route continuity cache、Transformer / CustomerStation obstacle policy、generic routing rewrite、waypoint editor、manual routing editor、generic collision engine、device overlap legality、canvas bounds legality、Pole visual-order legality、new electrical device、new topology model或new persistence schema。Transformer / CustomerStation obstacle participation保持当前行为，其decision point仅属于Slice C characterization。
+Slice B禁止实现route-family hysteresis、`RouteFamilyKey`、route switching margin、route continuity cache、Transformer / CustomerStation obstacle policy、generic routing rewrite、waypoint editor、manual route editor、generic collision engine、device overlap legality、canvas bounds legality、Pole visual-order legality、new electrical device、new topology model或new persistence schema。Slice B实施期间Transformer / CustomerStation obstacle participation保持原行为；其后续规则现已由Slice C Requirements Freeze独立确定。
 
 #### WP-EM-08 Implementation Slice C — Route Continuity Stabilization
 
-**状态：Requirements Refined / Characterization Pending**
+**状态：Requirements Frozen / Implementation Pending**
 
-本 Slice 必须按以下顺序推进：
+##### Slice C implementation sequence
 
-1. characterization tests；
-2. reproduce route flips；
-3. 如确有需要，定义 typed transient route-family identity；
-4. freeze switching policy / margin；
-5. implement transient continuity context；
-6. connection / cache invalidation；
-7. grounding / GAP / short-OHL regression；
-8. Windows cross-device acceptance。
+以下步骤都是WP-EM-08 Slice C内部implementation steps，不产生独立Work Package或Codex Thread：
 
-Transformer / CustomerStation 是否加入 routing obstacle set 在本 Slice characterization 后决定。本 Slice不得建立 generic waypoint editor、manual route editor、persistent route family或generic diagram routing rewrite。
+1. **Route candidate / family characterization API**：routing layer识别candidate `RouteFamily`并暴露足够的结构化score，同时保持既有legality与ranking contract。
+2. **Transient `RouteContinuityContext`**：按`ConnectionId`独立持有state，支持two-phase publish及与`LastValid`一致的snapshot / restore。
+3. **Continuity selection + hysteresis**：比较current-family best与overall best，落实已冻结switching policy，并以characterization、tests和Windows verification校准document-space / routing-score margin。
+4. **Transformer / CustomerStation obstacles**：加入unrelated professional body envelope，并按stable endpoint-owner identity排除own obstacle。
+5. **Drag integration + regression closure**：共享覆盖`DeviceDragController`、`GroundingPointDragController`、`CableRouteDragController`、group move、Slice B sequences与real OHL + GAP。
 
-#### WP-EM-08 persistence and remaining decision
+##### Slice C automated verification matrix
 
-WP-EM-08 persistence schema impact 预期为 none，FormatVersion 保持 V7。`LastValid`、invalid candidate、drag feedback、`RouteFamilyKey`、hysteresis cache与drag transaction state均不得持久化。已有合法 persisted Layout facts继续保留，包括object positions、attachment layouts、Transformer orientation、`CableRouteGuide`与GroundingPoint symbol offset；不得将 `CableRouteGuide` 泛化为generic waypoint system。
+至少覆盖：
 
-Refinement 后唯一延后到 WP-EM-08 Slice C characterization 的presentation policy决定，是Transformer / CustomerStation是否加入routing obstacle set。该问题不阻止已冻结的Slice B进入implementation review sequence。
+- single obstacle小幅合法移动抑制无必要family flip；
+- symmetry line在margin内不反复切换，超过正式switching condition后允许一次明确切换；
+- return path deterministic且无frame-by-frame oscillation；
+- multi-obstacle可区分bypass side、topology与channel family；
+- current family非法时立即切换到legal family，clearly superior alternative允许切换；
+- unrelated Transformer与CustomerStation body绕行；endpoint owner排除own body；overlapping unrelated obstacle不被误排除；
+- real OHL + GAP保留`GroundingAccessPoint`、`RequiredRouteWaypoint`、required stub、no-backtracking及typed `RoutingConstraintException`；
+- Slice B `valid → invalid → valid`、invalid release → `LastValid`、NoChange、Cancel → `Before`保持不变；
+- group per-connection state与Layout / Scene / continuity all-or-none rollback；
+- 三种drag controller使用shared mechanism；release、Cancel及unexpected failure清理transient state；
+- Undo / Redo由formal facts deterministic rebuild，Save / Open不保存continuity state；
+- existing crossing、overlap、explicit guide与coordinate deterministic tie-break regressions。
 
-该 WP 不包含 waypoint editor、manual route editor、generic diagram routing engine rewrite、Annotation、Energization、new Electrical Device、arbitrary layout framework、WP-EM-07A business model changes或WP-EM-07B naming model changes。
+##### Slice C Windows professional acceptance
+
+Windows手工验收至少包括：慢速拖过single obstacle对称线与multi-obstacle近等价区域，margin内无明显线路闪跳；family真正不可行时立即单次换侧；明显更优route允许切换；Transformer与CustomerStation周围正常绕行且endpoint owner正常出线；分别验证Device、GroundingPoint、CableRoute与group drag；expected-invalid非模态、invalid → valid continuation、invalid release → `LastValid`、Cancel → `Before`；Undo / Redo、Save / Open及OHL + GAP；不得扩大RingCabinet accepted exclusion。
+
+##### Slice C persistence and exclusions
+
+WP-EM-08 persistence schema impact为NONE，FormatVersion保持V7。`LastValid`、invalid candidate、drag feedback、`RouteFamilyKey`、continuity snapshot、hysteresis与drag transaction state均不得持久化。已有合法persisted Layout facts继续保留，包括object positions、attachment layouts、Transformer orientation、`CableRouteGuide`与GroundingPoint symbol offset；不得将`CableRouteGuide`泛化为generic waypoint system。
+
+Slice C不包含generic overlap legality、canvas bounds legality、Pole screen-order legality、generic collision / glyph crossing legality、Domain或persisted route family、persisted hysteresis、router full rewrite、waypoint editor、manual route editor、DTU、Annotation、Energization、new Electrical Device、arbitrary layout framework、WP-EM-09 integration、WP-EM-07A business model changes、WP-EM-07B naming model changes或RingCabinet above-terminal grounding limitation fix。
 
 ### WP-EM-09 — Electrical Model Closure Integration
 
@@ -1233,5 +1263,5 @@ WP-EM-09 保持 Integration-only，不得承担 Transformer drag、CustomerStati
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，整体为 Implementation In Progress，并在同一个 Work Package 与 Codex Thread 内划分为三个内部 implementation slices：Slice A 为 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted，Slice B 为 Requirements Frozen / Implementation Not Started，Slice C 为 Requirements Refined / Characterization Pending；下一步为 Slice B implementation review sequence；WP-EM-09 为 Planned / Integration-only；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，整体为 Implementation In Progress，并在同一个 Work Package 与 Codex Thread 内划分为三个内部 implementation slices：Slice A 与 Slice B 均为 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted，Slice C 为 Requirements Frozen / Implementation Pending；下一步是在 Requirements Freeze review 后进入 Slice C implementation；WP-EM-09 为 Planned / Integration-only；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
