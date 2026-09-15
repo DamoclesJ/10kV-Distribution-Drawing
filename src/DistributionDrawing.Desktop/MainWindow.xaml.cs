@@ -951,16 +951,12 @@ public partial class MainWindow : Window
 
         try
         {
-            ICommand? command = CommitActiveDrag();
+            DragPreviewTransactionCoordinator.CommitAndPublishRelease(
+                CommitActiveDrag,
+                ExecuteDragCommand,
+                RefreshDrawingScene,
+                _sceneBuilder.RouteContinuity);
             DrawingSurface.ReleaseMouseCapture();
-            if (command is not null)
-            {
-                ExecuteDragCommand(command);
-            }
-            else
-            {
-                RefreshDrawingScene();
-            }
             ClearDragInvalidFeedback();
             return true;
         }
@@ -1122,6 +1118,7 @@ public partial class MainWindow : Window
         bool layoutChanged = _deviceDrag.Cancel();
         layoutChanged |= _cableRouteDrag.Cancel();
         layoutChanged |= _groundingPointDrag.Cancel();
+        _sceneBuilder.RouteContinuity.EndGesture();
         if (layoutChanged && _workspace.CurrentSession is { } session)
         {
             session.RebuildScene();
@@ -1203,6 +1200,7 @@ public partial class MainWindow : Window
         _deviceDrag.Cancel();
         _cableRouteDrag.Cancel();
         _groundingPointDrag.Cancel();
+        _sceneBuilder.RouteContinuity.EndGesture();
         EndCanvasPan();
         _drawingTools.Cancel();
         DrawingSurface.ReleaseMouseCapture();
@@ -1595,6 +1593,7 @@ public partial class MainWindow : Window
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
         changed |= _groundingPointDrag.Cancel();
+        _sceneBuilder.RouteContinuity.EndGesture();
         ClearDragInvalidFeedback();
         bool selectionRectangleCanceled = _selectionRectangle.Cancel();
         if (changed)
@@ -1617,6 +1616,7 @@ public partial class MainWindow : Window
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
         changed |= _groundingPointDrag.Cancel();
+        _sceneBuilder.RouteContinuity.EndGesture();
         ClearDragInvalidFeedback();
         if (!changed)
         {
@@ -2395,11 +2395,13 @@ public partial class MainWindow : Window
 
         if (dragStarted)
         {
+            _sceneBuilder.RouteContinuity.BeginGesture(_currentScene?.Routes ?? []);
             if (!DrawingSurface.CaptureMouse())
             {
                 _deviceDrag.Cancel();
                 _cableRouteDrag.Cancel();
                 _groundingPointDrag.Cancel();
+                _sceneBuilder.RouteContinuity.EndGesture();
             }
         }
 
@@ -2497,7 +2499,8 @@ public partial class MainWindow : Window
             ShowDragInvalidFeedback,
             ClearDragInvalidFeedback,
             CancelDeviceDrag,
-            exception => ShowCommandError("拖动预览失败", exception.Message));
+            exception => ShowCommandError("拖动预览失败", exception.Message),
+            _sceneBuilder.RouteContinuity);
         e.Handled = true;
     }
 
@@ -2536,16 +2539,12 @@ public partial class MainWindow : Window
 
         try
         {
-            ICommand? command = CommitActiveDrag();
+            DragPreviewTransactionCoordinator.CommitAndPublishRelease(
+                CommitActiveDrag,
+                ExecuteDragCommand,
+                RefreshDrawingScene,
+                _sceneBuilder.RouteContinuity);
             DrawingSurface.ReleaseMouseCapture();
-            if (command is not null)
-            {
-                ExecuteDragCommand(command);
-            }
-            else
-            {
-                RefreshDrawingScene();
-            }
         }
         catch (Exception exception) when (
             exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
@@ -2567,6 +2566,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            _sceneBuilder.RouteContinuity.EndGesture();
             ClearDragInvalidFeedback();
         }
 

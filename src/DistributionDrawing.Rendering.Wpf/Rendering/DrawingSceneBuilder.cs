@@ -32,8 +32,11 @@ public sealed class DrawingSceneBuilder
     private readonly DrawingMetrics _metrics;
     private readonly TransformerRenderer _transformerRenderer;
     private readonly CustomerStationRenderer _customerStationRenderer;
+    private readonly RouteContinuityContext _routeContinuity;
 
-    public DrawingSceneBuilder(SymbolLibrary? symbolLibrary = null)
+    public DrawingSceneBuilder(
+        SymbolLibrary? symbolLibrary = null,
+        RouteContinuityContext? routeContinuity = null)
     {
         _symbolLibrary = symbolLibrary ?? new SymbolLibrary();
         _ringCabinetRenderer = new RingCabinetRenderer(_symbolLibrary);
@@ -42,13 +45,19 @@ public sealed class DrawingSceneBuilder
         _jointRenderer = new JointRenderer(_symbolLibrary);
         _professionalSceneBuilder = new ProfessionalSceneBuilder(_symbolLibrary);
         _metrics = DrawingMetrics.Default;
-        _routePlanner = new OrthogonalRoutePlanner(new OrthogonalRouter(_metrics));
+        _routeContinuity = routeContinuity ?? new RouteContinuityContext();
+        _routePlanner = new OrthogonalRoutePlanner(
+            new OrthogonalRouter(_metrics, _routeContinuity),
+            _routeContinuity,
+            _metrics);
         _obstacleBuilder = new RoutingObstacleBuilder(_metrics);
         _crossingDetector = new RouteCrossingDetector(_metrics);
         _lineJumpDecorator = new LineJumpDecorator(_metrics);
         _transformerRenderer = new TransformerRenderer(_metrics);
         _customerStationRenderer = new CustomerStationRenderer(_metrics);
     }
+
+    public RouteContinuityContext RouteContinuity => _routeContinuity;
 
     public DrawingScene Build(
         RingCabinet cabinet,
@@ -144,7 +153,9 @@ public sealed class DrawingSceneBuilder
             terminalAnchors,
             layout.RingCabinetLayouts,
             layout.CableRouteGuides,
-            document.GroundingAccessPoints);
+            document.GroundingAccessPoints,
+            layout.TransformerLayouts,
+            layout.CustomerStationLayouts);
 
         var elements = baseScene.Elements.ToList();
         var hitTestEntries = baseScene.HitTestIndex.Entries.ToList();
@@ -291,7 +302,9 @@ public sealed class DrawingSceneBuilder
             terminalAnchors: null,
             ringCabinetLayouts: null,
             cableRouteGuides: null,
-            groundingAccessPoints: null);
+            groundingAccessPoints: null,
+            transformerLayouts: null,
+            customerStationLayouts: null);
     }
 
     public DrawingScene Build(
@@ -316,7 +329,9 @@ public sealed class DrawingSceneBuilder
             terminalAnchors: null,
             ringCabinetLayouts: null,
             cableRouteGuides: null,
-            groundingAccessPoints: null);
+            groundingAccessPoints: null,
+            transformerLayouts: null,
+            customerStationLayouts: null);
     }
 
     private DrawingScene BuildCore(
@@ -331,19 +346,34 @@ public sealed class DrawingSceneBuilder
         TerminalAnchorIndex? terminalAnchors,
         IReadOnlyDictionary<Guid, RingCabinetLayout>? ringCabinetLayouts,
         IReadOnlyDictionary<Guid, CableRouteGuide>? cableRouteGuides,
-        IReadOnlyCollection<GroundingAccessPoint>? groundingAccessPoints)
+        IReadOnlyCollection<GroundingAccessPoint>? groundingAccessPoints,
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts,
+        IReadOnlyDictionary<Guid, CustomerStationLayout>? customerStationLayouts)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(poles);
         ArgumentNullException.ThrowIfNull(attachments);
         ArgumentNullException.ThrowIfNull(devices);
         ArgumentNullException.ThrowIfNull(overheadLines);
+        _routeContinuity.BeginProvisionalBuild();
 
         var elements = new List<SceneElement>();
         var hitTestEntries = new List<SelectionHitTestEntry>();
         var poleById = poles.ToDictionary(pole => pole.Id);
         PoleAttachment[] poleAttachments = attachments.ToArray();
         var deviceById = devices.ToDictionary(device => device.Id);
+        var endpointObstacleOwnerByTerminalId = new Dictionary<Guid, Guid>();
+        foreach (Transformer transformer in deviceById.Values.OfType<Transformer>())
+        {
+            endpointObstacleOwnerByTerminalId[transformer.HvTerminalId] = transformer.Id;
+        }
+        foreach (CustomerStation station in deviceById.Values.OfType<CustomerStation>())
+        {
+            foreach (IncomingFeeder feeder in station.IncomingFeeders)
+            {
+                endpointObstacleOwnerByTerminalId[feeder.CableTerminalId] = station.Id;
+            }
+        }
         OverheadLine[] overheadLinesArray = overheadLines.ToArray();
         CableSegment[] cableSegmentsArray = cableSegments?.ToArray() ?? [];
         IntermediateTerminal[] intermediateTerminalsArray =
@@ -441,7 +471,11 @@ public sealed class DrawingSceneBuilder
                 == true
                 ? guide!.HorizontalYMillimeters
                 : null;
-            routeRequests.Add(CreateRouteRequest(connection, terminalAnchorById, preferredY));
+            routeRequests.Add(CreateRouteRequest(
+                connection,
+                terminalAnchorById,
+                preferredY,
+                endpointObstacleOwnerByTerminalId: endpointObstacleOwnerByTerminalId));
             cableByConnectionId.Add(cableSegment.ConnectionId, cableSegment);
         }
 
@@ -564,7 +598,8 @@ public sealed class DrawingSceneBuilder
                                 AllowStartEndpointSubstitution: allowStartSubstitution,
                                 AllowEndEndpointSubstitution: allowEndSubstitution);
                         }).ToArray(),
-                        groundingAccessPoints: groundingAccessPoints));
+                        groundingAccessPoints: groundingAccessPoints,
+                        endpointObstacleOwnerByTerminalId: endpointObstacleOwnerByTerminalId));
                 }
             }
 
@@ -577,7 +612,9 @@ public sealed class DrawingSceneBuilder
             layout,
             ringCabinetLayouts,
             jointInputs.Select(input => input.Layout),
-            connectionById?.Values);
+            connectionById?.Values,
+            transformerLayouts,
+            customerStationLayouts);
         IReadOnlyList<OrthogonalRoute> routes = _routePlanner.Plan(routeRequests, obstacles);
         IReadOnlyList<RouteIntersection> intersections = _crossingDetector.Detect(routes);
         var cableInputs = new List<(CableSegment CableSegment, CableLayout Layout)>();
@@ -865,7 +902,8 @@ public sealed class DrawingSceneBuilder
         IReadOnlyDictionary<Guid, TerminalAnchor> anchors,
         double? preferredHorizontalY = null,
         IReadOnlyList<RequiredRouteWaypoint>? requiredWaypoints = null,
-        IEnumerable<GroundingAccessPoint>? groundingAccessPoints = null)
+        IEnumerable<GroundingAccessPoint>? groundingAccessPoints = null,
+        IReadOnlyDictionary<Guid, Guid>? endpointObstacleOwnerByTerminalId = null)
     {
         if (!anchors.TryGetValue(connection.StartTerminalId, out TerminalAnchor start) ||
             !anchors.TryGetValue(connection.EndTerminalId, out TerminalAnchor end))
@@ -897,6 +935,20 @@ public sealed class DrawingSceneBuilder
             };
         }
 
+        var excludedObstacleSourceIds = new HashSet<Guid>();
+        if (endpointObstacleOwnerByTerminalId?.TryGetValue(
+                connection.StartTerminalId,
+                out Guid startOwnerId) == true)
+        {
+            excludedObstacleSourceIds.Add(startOwnerId);
+        }
+        if (endpointObstacleOwnerByTerminalId?.TryGetValue(
+                connection.EndTerminalId,
+                out Guid endOwnerId) == true)
+        {
+            excludedObstacleSourceIds.Add(endOwnerId);
+        }
+
         return new ConnectionRouteRequest(
             connection.Id,
             connection.Type,
@@ -905,7 +957,8 @@ public sealed class DrawingSceneBuilder
             start,
             end,
             preferredHorizontalY,
-            requiredWaypoints);
+            requiredWaypoints,
+            ExcludedObstacleSourceIds: excludedObstacleSourceIds);
     }
 
     private static DocumentRect ExpandBounds(DocumentRect bounds, double paddingMillimeters)

@@ -20,7 +20,8 @@ internal static class DragPreviewTransactionCoordinator
         ITransactionalDragPreview drag,
         Action rebuildAndPublish,
         Action<string> showFeedback,
-        Action clearFeedback)
+        Action clearFeedback,
+        RouteContinuityContext? routeContinuity = null)
     {
         ArgumentNullException.ThrowIfNull(drag);
         ArgumentNullException.ThrowIfNull(rebuildAndPublish);
@@ -32,7 +33,37 @@ internal static class DragPreviewTransactionCoordinator
             () => true,
             rebuildAndPublish,
             showFeedback,
-            clearFeedback);
+            clearFeedback,
+            routeContinuity);
+    }
+
+    public static void CommitAndPublishRelease(
+        Func<ICommand?> commit,
+        Action<ICommand> executeCommand,
+        Action rebuildAndPublish,
+        RouteContinuityContext routeContinuity)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        ArgumentNullException.ThrowIfNull(executeCommand);
+        ArgumentNullException.ThrowIfNull(rebuildAndPublish);
+        ArgumentNullException.ThrowIfNull(routeContinuity);
+
+        try
+        {
+            ICommand? command = commit();
+            if (command is null)
+            {
+                rebuildAndPublish();
+            }
+            else
+            {
+                executeCommand(command);
+            }
+        }
+        finally
+        {
+            routeContinuity.EndGesture();
+        }
     }
 
     public static DragPreviewOutcome ProcessPointerUpdate(
@@ -42,7 +73,8 @@ internal static class DragPreviewTransactionCoordinator
         Action<string> showFeedback,
         Action clearFeedback,
         Action cancelDrag,
-        Action<Exception> showUnexpectedError)
+        Action<Exception> showUnexpectedError,
+        RouteContinuityContext? routeContinuity = null)
     {
         ArgumentNullException.ThrowIfNull(cancelDrag);
         ArgumentNullException.ThrowIfNull(showUnexpectedError);
@@ -53,11 +85,13 @@ internal static class DragPreviewTransactionCoordinator
                 updatePreview,
                 rebuildAndPublish,
                 showFeedback,
-                clearFeedback);
+                clearFeedback,
+                routeContinuity);
         }
         catch (Exception exception) when (
             exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
         {
+            routeContinuity?.EndGesture();
             cancelDrag();
             showUnexpectedError(exception);
             return DragPreviewOutcome.UnexpectedFailure;
@@ -69,7 +103,8 @@ internal static class DragPreviewTransactionCoordinator
         Func<bool> updatePreview,
         Action rebuildAndPublish,
         Action<string> showFeedback,
-        Action clearFeedback)
+        Action clearFeedback,
+        RouteContinuityContext? routeContinuity = null)
     {
         ArgumentNullException.ThrowIfNull(drag);
         ArgumentNullException.ThrowIfNull(updatePreview);
@@ -81,20 +116,24 @@ internal static class DragPreviewTransactionCoordinator
         {
             if (!updatePreview())
             {
+                routeContinuity?.DiscardProvisional();
                 clearFeedback();
                 return DragPreviewOutcome.Unchanged;
             }
 
             rebuildAndPublish();
             drag.AcceptCurrentPreview();
+            routeContinuity?.AcceptProvisional();
             clearFeedback();
             return DragPreviewOutcome.Accepted;
         }
         catch (Exception exception) when (exception is
             RoutingConstraintException or DragCandidateConstraintException)
         {
+            routeContinuity?.DiscardProvisional();
             drag.RollbackToLastValid();
             rebuildAndPublish();
+            routeContinuity?.DiscardProvisional();
             showFeedback(InvalidCandidateFeedback);
             return DragPreviewOutcome.Rejected;
         }

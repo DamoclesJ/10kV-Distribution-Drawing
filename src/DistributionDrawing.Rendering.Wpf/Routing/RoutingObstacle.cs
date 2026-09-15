@@ -7,7 +7,9 @@ public enum RoutingObstacleKind
     RingCabinet,
     Pole,
     PoleAttachment,
-    IntermediateTerminal
+    IntermediateTerminal,
+    Transformer,
+    CustomerStation
 }
 
 public sealed record RoutingObstacle(

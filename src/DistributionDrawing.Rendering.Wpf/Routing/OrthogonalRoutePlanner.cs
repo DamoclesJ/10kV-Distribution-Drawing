@@ -1,15 +1,23 @@
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 
 namespace DistributionDrawing.Rendering.Wpf.Routing;
 
 public sealed class OrthogonalRoutePlanner
 {
     private readonly OrthogonalRouter _router;
+    private readonly RouteContinuityContext? _continuity;
+    private readonly DrawingMetrics _metrics;
 
-    public OrthogonalRoutePlanner(OrthogonalRouter? router = null)
+    public OrthogonalRoutePlanner(
+        OrthogonalRouter? router = null,
+        RouteContinuityContext? continuity = null,
+        DrawingMetrics? metrics = null)
     {
-        _router = router ?? new OrthogonalRouter();
+        _metrics = metrics ?? DrawingMetrics.Default;
+        _continuity = continuity;
+        _router = router ?? new OrthogonalRouter(_metrics, continuity);
     }
 
     public IReadOnlyList<OrthogonalRoute> Plan(
@@ -24,7 +32,34 @@ public sealed class OrthogonalRoutePlanner
         var planned = new List<OrthogonalRoute>();
         foreach (ConnectionRouteRequest request in requests.OrderBy(request => request.ConnectionId))
         {
-            planned.Add(RouteRequest(request, obstacleArray, planned));
+            OrthogonalRoute route = RouteRequest(request, obstacleArray, planned);
+            if (route.ContinuityFamily is null || route.ContinuityScore is null)
+            {
+                HashSet<Guid> excluded = request.ExcludedObstacleSourceIds?.ToHashSet() ?? [];
+                RoutingObstacle[] activeObstacles = obstacleArray
+                    .Where(obstacle => !excluded.Contains(obstacle.SourceId))
+                    .Select(obstacle => obstacle.Expand(_metrics.Routing.ObstacleClearance))
+                    .ToArray();
+                RouteFamilyKey family = RouteFamilyClassifier.Classify(
+                    request,
+                    route,
+                    activeObstacles,
+                    _metrics);
+                var score = new RouteCandidateScore(
+                    0,
+                    0,
+                    0,
+                    0,
+                    Math.Max(0, route.Points.Count - 2),
+                    route.Length,
+                    int.MaxValue,
+                    string.Join(";", route.Points.Select(point =>
+                        $"{point.XMillimeters:R},{point.YMillimeters:R}")));
+                route.ContinuityFamily = family;
+                route.ContinuityScore = score;
+                _continuity?.Stage(request.ConnectionId, family, score);
+            }
+            planned.Add(route);
         }
 
         return planned;
@@ -118,7 +153,7 @@ public sealed class OrthogonalRoutePlanner
                     (index == 0 && substituteStart) ||
                     (index == passagePoints.Length - 2 && substituteEnd)
             };
-            OrthogonalRoute leg = _router.Route(legRequest, routeObstacles, planned);
+            OrthogonalRoute leg = _router.RouteWithoutContinuity(legRequest, routeObstacles, planned);
             points.AddRange(index == 0 ? leg.Points : leg.Points.Skip(1));
         }
 

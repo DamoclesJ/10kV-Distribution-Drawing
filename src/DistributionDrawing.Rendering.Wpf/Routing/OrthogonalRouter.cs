@@ -6,11 +6,18 @@ namespace DistributionDrawing.Rendering.Wpf.Routing;
 
 public sealed class OrthogonalRouter
 {
+    // One formal port-stub length is large enough to suppress the 0.2 mm
+    // symmetry flip, but small enough to permit an intentional route change.
+    internal const double RouteFamilySwitchingMargin = 8;
     private readonly DrawingMetrics _metrics;
+    private readonly RouteContinuityContext? _continuity;
 
-    public OrthogonalRouter(DrawingMetrics? metrics = null)
+    public OrthogonalRouter(
+        DrawingMetrics? metrics = null,
+        RouteContinuityContext? continuity = null)
     {
         _metrics = metrics ?? DrawingMetrics.Default;
+        _continuity = continuity;
     }
 
     public OrthogonalRoute Route(
@@ -18,10 +25,29 @@ public sealed class OrthogonalRouter
         IEnumerable<RoutingObstacle> obstacles,
         IEnumerable<OrthogonalRoute>? plannedRoutes = null)
     {
+        return RouteCore(request, obstacles, plannedRoutes, useContinuity: true);
+    }
+
+    internal OrthogonalRoute RouteWithoutContinuity(
+        ConnectionRouteRequest request,
+        IEnumerable<RoutingObstacle> obstacles,
+        IEnumerable<OrthogonalRoute>? plannedRoutes = null)
+    {
+        return RouteCore(request, obstacles, plannedRoutes, useContinuity: false);
+    }
+
+    private OrthogonalRoute RouteCore(
+        ConnectionRouteRequest request,
+        IEnumerable<RoutingObstacle> obstacles,
+        IEnumerable<OrthogonalRoute>? plannedRoutes,
+        bool useContinuity)
+    {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(obstacles);
 
+        HashSet<Guid> excludedSourceIds = request.ExcludedObstacleSourceIds?.ToHashSet() ?? [];
         RoutingObstacle[] expandedObstacles = obstacles
+            .Where(obstacle => !excludedSourceIds.Contains(obstacle.SourceId))
             .OrderBy(obstacle => obstacle.SourceId)
             .Select(obstacle => obstacle.Expand(_metrics.Routing.ObstacleClearance))
             .ToArray();
@@ -30,6 +56,7 @@ public sealed class OrthogonalRouter
             .ToArray() ?? [];
         RoutingObstacle[] pathfindingObstacles = expandedObstacles
             .Where(obstacle =>
+                RequiresStableOwnerExclusion(obstacle) ||
                 !obstacle.Contains(request.Start.Position) &&
                 !obstacle.Contains(request.End.Position))
             .ToArray();
@@ -57,13 +84,17 @@ public sealed class OrthogonalRouter
             Math.Max(
                 _metrics.Routing.PortStubLength,
                 request.End.MinimumStubLength));
+        RouteContinuityPreference? continuityPreference = useContinuity
+            ? _continuity?.GetAccepted(request.ConnectionId)
+            : null;
 
         Candidate[] candidates = CreateCandidates(
                 startStub,
                 endStub,
                 expandedObstacles,
                 pathfindingObstacles,
-                request.PreferredHorizontalY)
+                request.PreferredHorizontalY,
+                includeContinuityAlternatives: continuityPreference is not null)
             .Select((core, priority) => CreateCandidate(
                 request,
                 request.Start.Position,
@@ -92,7 +123,7 @@ public sealed class OrthogonalRouter
 
         if (candidates.Length == 0)
         {
-            return CreateFallbackRoute(
+            OrthogonalRoute fallback = CreateFallbackRoute(
                 request,
                 request.Start.Position,
                 startStub,
@@ -101,6 +132,13 @@ public sealed class OrthogonalRouter
                 startDirection,
                 endOutwardDirection,
                 pathfindingObstacles);
+            return CompleteSelection(
+                request,
+                fallback,
+                Score(fallback, int.MaxValue, expandedObstacles, priorRoutes,
+                    request.PreferredHorizontalY),
+                expandedObstacles,
+                useContinuity);
         }
 
         Candidate[] scoredCandidates = candidates
@@ -111,14 +149,19 @@ public sealed class OrthogonalRouter
                     candidate.Priority,
                     expandedObstacles,
                     priorRoutes,
-                    request.PreferredHorizontalY)
+                    request.PreferredHorizontalY),
+                Family = RouteFamilyClassifier.Classify(
+                    request,
+                    candidate.Route,
+                    expandedObstacles,
+                    _metrics)
             })
             .Where(candidate => candidate.Score.ObstacleIntersections == 0)
             .ToArray();
 
         if (scoredCandidates.Length == 0)
         {
-            return CreateFallbackRoute(
+            OrthogonalRoute fallback = CreateFallbackRoute(
                 request,
                 request.Start.Position,
                 startStub,
@@ -127,9 +170,16 @@ public sealed class OrthogonalRouter
                 startDirection,
                 endOutwardDirection,
                 pathfindingObstacles);
+            return CompleteSelection(
+                request,
+                fallback,
+                Score(fallback, int.MaxValue, expandedObstacles, priorRoutes,
+                    request.PreferredHorizontalY),
+                expandedObstacles,
+                useContinuity);
         }
 
-        return scoredCandidates
+        Candidate[] ranked = scoredCandidates
             .OrderBy(candidate => candidate.Score.ObstacleIntersections)
             .ThenBy(candidate => candidate.Score.HorizontalGuideDeviation)
             .ThenBy(candidate => candidate.Score.OverlapLength)
@@ -138,8 +188,54 @@ public sealed class OrthogonalRouter
             .ThenBy(candidate => candidate.Score.Length)
             .ThenBy(candidate => candidate.Priority)
             .ThenBy(candidate => candidate.Key, StringComparer.Ordinal)
-            .Select(candidate => candidate.Route)
-            .First();
+            .ToArray();
+        Candidate selected = ranked[0];
+        if (continuityPreference is { } preference)
+        {
+            Candidate? currentFamily = ranked.FirstOrDefault(candidate =>
+                candidate.Family == preference.Family);
+            if (currentFamily is not null &&
+                IsWithinSwitchingMargin(currentFamily.Score, selected.Score))
+            {
+                selected = currentFamily;
+            }
+        }
+
+        return CompleteSelection(
+            request,
+            selected.Route,
+            selected.Score,
+            expandedObstacles,
+            useContinuity);
+    }
+
+    private OrthogonalRoute CompleteSelection(
+        ConnectionRouteRequest request,
+        OrthogonalRoute route,
+        RouteCandidateScore score,
+        IReadOnlyList<RoutingObstacle> obstacles,
+        bool stage)
+    {
+        RouteFamilyKey family = RouteFamilyClassifier.Classify(request, route, obstacles, _metrics);
+        route.ContinuityFamily = family;
+        route.ContinuityScore = score;
+        if (stage)
+        {
+            _continuity?.Stage(request.ConnectionId, family, score);
+        }
+        return route;
+    }
+
+    private static bool IsWithinSwitchingMargin(
+        RouteCandidateScore current,
+        RouteCandidateScore overall)
+    {
+        return current.ObstacleIntersections == overall.ObstacleIntersections &&
+               current.HorizontalGuideDeviation == overall.HorizontalGuideDeviation &&
+               current.OverlapLength == overall.OverlapLength &&
+               current.Crossings == overall.Crossings &&
+               current.Bends == overall.Bends &&
+               current.Length <= overall.Length + RouteFamilySwitchingMargin;
     }
 
     private static bool HasBacktracking(OrthogonalRoute route)
@@ -357,7 +453,8 @@ public sealed class OrthogonalRouter
         DocumentPoint end,
         IReadOnlyList<RoutingObstacle> obstacles,
         IReadOnlyList<RoutingObstacle> pathfindingObstacles,
-        double? preferredHorizontalY)
+        double? preferredHorizontalY,
+        bool includeContinuityAlternatives)
     {
         if (start.XMillimeters == end.XMillimeters ||
             start.YMillimeters == end.YMillimeters)
@@ -437,6 +534,47 @@ public sealed class OrthogonalRouter
         if (obstacleAvoiding is not null)
         {
             yield return obstacleAvoiding;
+        }
+
+        if (!includeContinuityAlternatives)
+        {
+            yield break;
+        }
+
+        // Keep the non-winning side of an obstacle available for continuity.
+        // These candidates follow the existing shortest-path candidate, so they
+        // do not change the formal winner when no continuity preference exists.
+        foreach (RoutingObstacle obstacle in obstacles)
+        {
+            foreach (double x in new[]
+                     {
+                         obstacle.Bounds.XMillimeters,
+                         obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters
+                     })
+            {
+                yield return
+                [
+                    start,
+                    new DocumentPoint(x, start.YMillimeters),
+                    new DocumentPoint(x, end.YMillimeters),
+                    end
+                ];
+            }
+
+            foreach (double y in new[]
+                     {
+                         obstacle.Bounds.YMillimeters,
+                         obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters
+                     })
+            {
+                yield return
+                [
+                    start,
+                    new DocumentPoint(start.XMillimeters, y),
+                    new DocumentPoint(end.XMillimeters, y),
+                    end
+                ];
+            }
         }
     }
 
@@ -599,7 +737,7 @@ public sealed class OrthogonalRouter
         return new Candidate(route, priority, key, default);
     }
 
-    private RouteScore Score(
+    private RouteCandidateScore Score(
         OrthogonalRoute route,
         int priority,
         IReadOnlyList<RoutingObstacle> obstacles,
@@ -611,8 +749,10 @@ public sealed class OrthogonalRouter
         {
             foreach (RoutingObstacle obstacle in obstacles)
             {
-                bool sourceObstacle = obstacle.Contains(route.Points[0]);
-                bool targetObstacle = obstacle.Contains(route.Points[^1]);
+                bool sourceObstacle = !RequiresStableOwnerExclusion(obstacle) &&
+                    obstacle.Contains(route.Points[0]);
+                bool targetObstacle = !RequiresStableOwnerExclusion(obstacle) &&
+                    obstacle.Contains(route.Points[^1]);
                 if (sourceObstacle && obstacle.Contains(segment.Start) ||
                     targetObstacle && obstacle.Contains(segment.End))
                 {
@@ -643,10 +783,8 @@ public sealed class OrthogonalRouter
             }
         }
 
-        return new RouteScore(
+        return new RouteCandidateScore(
             obstacleIntersections,
-            overlap,
-            crossings,
             preferredHorizontalY is double guideY
                 ? route.Segments
                     .Where(segment => segment.IsHorizontal)
@@ -654,9 +792,13 @@ public sealed class OrthogonalRouter
                     .DefaultIfEmpty(double.MaxValue)
                     .Min()
                 : 0,
+            overlap,
+            crossings,
             Math.Max(0, route.Points.Count - 2),
             route.Length,
-            priority);
+            priority,
+            string.Join(";", route.Points.Select(point =>
+                $"{point.XMillimeters:R},{point.YMillimeters:R}")));
     }
 
     internal static bool HasInteriorCrossing(
@@ -735,6 +877,10 @@ public sealed class OrthogonalRouter
                    bounds.YMillimeters + bounds.HeightMillimeters);
     }
 
+    private static bool RequiresStableOwnerExclusion(RoutingObstacle obstacle) =>
+        obstacle.Kind is RoutingObstacleKind.Transformer or
+            RoutingObstacleKind.CustomerStation;
+
     private static TerminalAnchorDirection ResolveDirection(
         TerminalAnchorDirection direction,
         DocumentPoint from,
@@ -800,14 +946,8 @@ public sealed class OrthogonalRouter
         OrthogonalRoute Route,
         int Priority,
         string Key,
-        RouteScore Score);
-
-    private readonly record struct RouteScore(
-        int ObstacleIntersections,
-        double OverlapLength,
-        int Crossings,
-        double HorizontalGuideDeviation,
-        int Bends,
-        double Length,
-        int Priority);
+        RouteCandidateScore Score)
+    {
+        public RouteFamilyKey Family { get; init; }
+    }
 }

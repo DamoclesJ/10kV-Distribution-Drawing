@@ -8,6 +8,7 @@ using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -611,12 +612,360 @@ public sealed class DragPreviewTransactionCoordinatorTests
         Assert.Equal(target, selection.Selected);
     }
 
+    [Fact]
+    public void ContinuityTwoPhase_GroupCandidatePublishesOrRollsBackAllConnections()
+    {
+        var continuity = new RouteContinuityContext();
+        continuity.BeginGesture([]);
+        var drag = new FakeDrag();
+        Guid firstConnectionId = Guid.NewGuid();
+        Guid secondConnectionId = Guid.NewGuid();
+
+        Assert.Equal(DragPreviewOutcome.Accepted,
+            DragPreviewTransactionCoordinator.ValidateAndPublish(
+                drag,
+                () => StageRoutes(
+                    continuity,
+                    (firstConnectionId, 49.9),
+                    (secondConnectionId, 50.1)),
+                _ => { },
+                () => { },
+                continuity));
+        Assert.Equal(2, continuity.AcceptedEntryCount);
+
+        int invalidBuildCalls = 0;
+        Assert.Equal(DragPreviewOutcome.Rejected,
+            DragPreviewTransactionCoordinator.ValidateAndPublish(
+                drag,
+                () =>
+                {
+                    StageRoutes(
+                        continuity,
+                        (firstConnectionId, 45),
+                        (secondConnectionId, 55));
+                    if (invalidBuildCalls++ == 0)
+                    {
+                        throw new RoutingConstraintException("group candidate rejected");
+                    }
+                },
+                _ => { },
+                () => { },
+                continuity));
+        Assert.Equal(2, continuity.AcceptedEntryCount);
+        Assert.Equal(0, continuity.ProvisionalEntryCount);
+
+        Assert.Equal(DragPreviewOutcome.Accepted,
+            DragPreviewTransactionCoordinator.ValidateAndPublish(
+                drag,
+                () => StageRoutes(
+                    continuity,
+                    (firstConnectionId, 49.8),
+                    (secondConnectionId, 50.2)),
+                _ => { },
+                () => { },
+                continuity));
+        Assert.Equal(2, continuity.AcceptedEntryCount);
+    }
+
+    [Fact]
+    public void DeviceDrag_UsesSharedContinuityAndReleaseClearsSession()
+    {
+        TransformerFixture fixture = CreateTransformerFixture();
+        var controller = new DeviceDragController();
+        var target = new SelectionReference(
+            SelectionTargetKind.Device,
+            fixture.Command.Creation.Transformer.Id);
+        var continuity = new RouteContinuityContext();
+        continuity.BeginGesture([]);
+        Assert.True(controller.TryBeginDrag(
+            target,
+            fixture.Command.Creation.Layout.Position,
+            fixture.Layout,
+            document: fixture.Document));
+
+        Assert.Equal(DragPreviewOutcome.Accepted,
+            DragPreviewTransactionCoordinator.UpdateValidateAndPublish(
+                controller,
+                () => controller.UpdatePreview(new DocumentPoint(110, 130)),
+                () => StageRoutes(continuity, (Guid.NewGuid(), 49.9)),
+                _ => { },
+                () => { },
+                continuity));
+        Assert.Equal(1, continuity.AcceptedEntryCount);
+
+        _ = controller.Commit();
+        continuity.EndGesture();
+        AssertContinuityClean(continuity);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReleaseFinalPublish_KeepsAcceptedFamilyUntilGestureEnds(bool hasCommand)
+    {
+        Guid connectionId = Guid.Parse("61000000-0000-0000-0000-000000000001");
+        var continuity = new RouteContinuityContext();
+        var router = new OrthogonalRouter(continuity: continuity);
+        RoutingObstacle obstacle = SymmetricRoutingObstacle();
+        ConnectionRouteRequest initialRequest = ContinuityRequest(connectionId, 49.9);
+        OrthogonalRoute initial = router.Route(initialRequest, [obstacle]);
+        AssertUpperRoute(initial);
+        continuity.BeginGesture([initial]);
+
+        continuity.BeginProvisionalBuild();
+        OrthogonalRoute lastValid = router.Route(
+            ContinuityRequest(connectionId, 50.1),
+            [obstacle]);
+        AssertUpperRoute(lastValid);
+        continuity.AcceptProvisional();
+
+        OrthogonalRoute? releaseScene = null;
+        int executeCalls = 0;
+        int rebuildCalls = 0;
+        DragPreviewTransactionCoordinator.CommitAndPublishRelease(
+            () => hasCommand ? new NoOpCommand() : null,
+            command =>
+            {
+                executeCalls++;
+                Assert.True(continuity.IsActive);
+                command.Execute();
+                releaseScene = router.Route(
+                    ContinuityRequest(connectionId, 50.1),
+                    [obstacle]);
+            },
+            () =>
+            {
+                rebuildCalls++;
+                Assert.True(continuity.IsActive);
+                releaseScene = router.Route(
+                    ContinuityRequest(connectionId, 50.1),
+                    [obstacle]);
+            },
+            continuity);
+
+        Assert.Equal(hasCommand ? 1 : 0, executeCalls);
+        Assert.Equal(hasCommand ? 0 : 1, rebuildCalls);
+        AssertUpperRoute(Assert.IsType<OrthogonalRoute>(releaseScene));
+        AssertContinuityClean(continuity);
+
+        OrthogonalRoute independent = router.Route(
+            ContinuityRequest(connectionId, 50.1),
+            [obstacle]);
+        AssertLowerRoute(independent);
+    }
+
+    [Fact]
+    public void ReleaseFailure_ClearsContinuityBeforeRecovery()
+    {
+        var continuity = new RouteContinuityContext();
+        continuity.BeginGesture([]);
+        StageRoutes(continuity, (Guid.NewGuid(), 49.9));
+        continuity.AcceptProvisional();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            DragPreviewTransactionCoordinator.CommitAndPublishRelease(
+                () => null,
+                _ => { },
+                () => throw new InvalidOperationException("final rebuild failed"),
+                continuity));
+
+        AssertContinuityClean(continuity);
+    }
+
+    [Fact]
+    public void GroundingPointDrag_UsesSharedContinuityAndCancelClearsSession()
+    {
+        GroundingFixture fixture = CreateGroundingFixture();
+        var controller = new GroundingPointDragController();
+        var continuity = new RouteContinuityContext();
+        continuity.BeginGesture([]);
+        Assert.True(controller.TryBeginDrag(
+            fixture.Hit,
+            new DocumentPoint(0, 0),
+            fixture.Document,
+            fixture.Layout));
+
+        Assert.Equal(DragPreviewOutcome.Accepted,
+            DragPreviewTransactionCoordinator.UpdateValidateAndPublish(
+                controller,
+                () => controller.UpdatePreview(new DocumentPoint(10, 12)),
+                () => StageRoutes(continuity, (Guid.NewGuid(), 49.9)),
+                _ => { },
+                () => { },
+                continuity));
+        Assert.Equal(1, continuity.AcceptedEntryCount);
+
+        controller.Cancel();
+        continuity.EndGesture();
+        AssertContinuityClean(continuity);
+    }
+
+    [Fact]
+    public void CableRouteDrag_UsesGuideRoutingAndSharedContinuity()
+    {
+        Guid cableId = Guid.Parse("62000000-0000-0000-0000-000000000001");
+        RoutingObstacle obstacle = SymmetricRoutingObstacle();
+        var continuity = new RouteContinuityContext();
+        var router = new OrthogonalRouter(continuity: continuity);
+        ConnectionRouteRequest initialRequest = ContinuityRequest(cableId, 49.9);
+        OrthogonalRoute initial = router.Route(initialRequest, [obstacle]);
+        AssertUpperRoute(initial);
+        SelectionHitTestEntry[] segments = RouteSegments(initial);
+        SelectionHitTestEntry draggable = Assert.Single(segments.Skip(1).SkipLast(1),
+            segment => segment.SegmentStart!.Value.YMillimeters ==
+                       segment.SegmentEnd!.Value.YMillimeters);
+        RuntimeLayoutDocument layout = Runtime();
+        var controller = new CableRouteDragController();
+        continuity.BeginGesture([initial]);
+        Assert.True(controller.TryBeginDrag(draggable, segments, layout));
+
+        OrthogonalRoute? equalGuideRoute = null;
+        Assert.Equal(DragPreviewOutcome.Accepted,
+            DragPreviewTransactionCoordinator.UpdateValidateAndPublish(
+                controller,
+                () => controller.UpdatePreview(new DocumentPoint(40, 50)),
+                () => equalGuideRoute = router.Route(
+                    ContinuityRequest(cableId, 50.1) with
+                    {
+                        PreferredHorizontalY = layout.CableRouteGuides[cableId]
+                            .HorizontalYMillimeters
+                    },
+                    [obstacle]),
+                _ => { },
+                () => { },
+                continuity));
+        Assert.Equal(50, layout.CableRouteGuides[cableId].HorizontalYMillimeters);
+        AssertUpperRoute(Assert.IsType<OrthogonalRoute>(equalGuideRoute));
+
+        OrthogonalRoute? overridingGuideRoute = null;
+        Assert.Equal(DragPreviewOutcome.Accepted,
+            DragPreviewTransactionCoordinator.UpdateValidateAndPublish(
+                controller,
+                () => controller.UpdatePreview(new DocumentPoint(40, 69)),
+                () => overridingGuideRoute = router.Route(
+                    ContinuityRequest(cableId, 50.1) with
+                    {
+                        PreferredHorizontalY = layout.CableRouteGuides[cableId]
+                            .HorizontalYMillimeters
+                    },
+                    [obstacle]),
+                _ => { },
+                () => { },
+                continuity));
+        AssertLowerRoute(Assert.IsType<OrthogonalRoute>(overridingGuideRoute));
+
+        _ = controller.Commit();
+        continuity.EndGesture();
+        AssertContinuityClean(continuity);
+    }
+
+    [Fact]
+    public void UnexpectedFailure_CancelsDragAndClearsContinuitySession()
+    {
+        var continuity = new RouteContinuityContext();
+        continuity.BeginGesture([]);
+        StageRoutes(continuity, (Guid.NewGuid(), 49.9));
+        continuity.AcceptProvisional();
+        var drag = new FakeDrag();
+
+        DragPreviewOutcome outcome = DragPreviewTransactionCoordinator.ProcessPointerUpdate(
+            drag,
+            () => throw new InvalidOperationException("invariant"),
+            () => { },
+            _ => { },
+            () => { },
+            () => { },
+            _ => { },
+            continuity);
+
+        Assert.Equal(DragPreviewOutcome.UnexpectedFailure, outcome);
+        AssertContinuityClean(continuity);
+    }
+
     private static GroupScene CurrentGroupScene(
         RuntimeLayoutDocument layout,
         Guid poleId,
         Guid transformerId) => new(
         layout.DrawingLayout.Poles[poleId].Position,
         layout.TransformerLayouts[transformerId].Position);
+
+    private static void StageRoutes(
+        RouteContinuityContext continuity,
+        params (Guid ConnectionId, double EndY)[] routes)
+    {
+        continuity.BeginProvisionalBuild();
+        var router = new OrthogonalRouter(continuity: continuity);
+        var obstacle = new RoutingObstacle(
+            Guid.Parse("60000000-0000-0000-0000-000000000001"),
+            RoutingObstacleKind.Pole,
+            new DocumentRect(40, 35, 20, 30));
+        foreach ((Guid connectionId, double endY) in routes)
+        {
+            Guid startId = Guid.NewGuid();
+            Guid endId = Guid.NewGuid();
+            _ = router.Route(new ConnectionRouteRequest(
+                connectionId,
+                ConnectionType.Cable,
+                startId,
+                endId,
+                new TerminalAnchor(
+                    startId,
+                    new DocumentPoint(0, 50),
+                    TerminalAnchorDirection.Right),
+                new TerminalAnchor(
+                    endId,
+                    new DocumentPoint(100, endY),
+                    TerminalAnchorDirection.Left)),
+                [obstacle]);
+        }
+    }
+
+    private static ConnectionRouteRequest ContinuityRequest(
+        Guid connectionId,
+        double endY)
+    {
+        Guid startId = Guid.Parse("63000000-0000-0000-0000-000000000001");
+        Guid endId = Guid.Parse("63000000-0000-0000-0000-000000000002");
+        return new ConnectionRouteRequest(
+            connectionId,
+            ConnectionType.Cable,
+            startId,
+            endId,
+            new TerminalAnchor(
+                startId,
+                new DocumentPoint(0, 50),
+                TerminalAnchorDirection.Right),
+            new TerminalAnchor(
+                endId,
+                new DocumentPoint(100, endY),
+                TerminalAnchorDirection.Left));
+    }
+
+    private static RoutingObstacle SymmetricRoutingObstacle() => new(
+        Guid.Parse("63000000-0000-0000-0000-000000000010"),
+        RoutingObstacleKind.Pole,
+        new DocumentRect(40, 35, 20, 30));
+
+    private static SelectionHitTestEntry[] RouteSegments(OrthogonalRoute route)
+    {
+        SelectionReference target = new(SelectionTargetKind.CableSegment, route.ConnectionId);
+        return route.Segments
+            .Select(segment => Segment(target, segment.Start, segment.End))
+            .ToArray();
+    }
+
+    private static void AssertUpperRoute(OrthogonalRoute route) =>
+        Assert.Contains(route.Points, point => point.YMillimeters == 31);
+
+    private static void AssertLowerRoute(OrthogonalRoute route) =>
+        Assert.Contains(route.Points, point => point.YMillimeters == 69);
+
+    private static void AssertContinuityClean(RouteContinuityContext continuity)
+    {
+        Assert.False(continuity.IsActive);
+        Assert.Equal(0, continuity.AcceptedEntryCount);
+        Assert.Equal(0, continuity.ProvisionalEntryCount);
+    }
 
     private static DragPreviewOutcome Process(
         ITransactionalDragPreview controller,
@@ -742,6 +1091,21 @@ public sealed class DragPreviewTransactionCoordinatorTests
         {
             RollbackCount++;
             return true;
+        }
+    }
+
+    private sealed class NoOpCommand : ICommand
+    {
+        public void Execute()
+        {
+        }
+
+        public void Undo()
+        {
+        }
+
+        public void Redo()
+        {
         }
     }
 }

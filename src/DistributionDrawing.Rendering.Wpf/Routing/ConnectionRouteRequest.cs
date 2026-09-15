@@ -14,7 +14,8 @@ public sealed record ConnectionRouteRequest(
     double? PreferredHorizontalY = null,
     IReadOnlyList<RequiredRouteWaypoint>? RequiredWaypoints = null,
     bool EnforceRequiredStubConstraints = false,
-    bool DisallowBacktracking = false);
+    bool DisallowBacktracking = false,
+    IReadOnlySet<Guid>? ExcludedObstacleSourceIds = null);
 
 public readonly record struct RequiredRouteWaypoint(
     Guid SourceId,

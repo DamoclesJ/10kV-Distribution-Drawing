@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -24,7 +25,9 @@ public sealed class RoutingObstacleBuilder
         DrawingLayout drawingLayout,
         IReadOnlyDictionary<Guid, RingCabinetLayout>? ringCabinetLayouts = null,
         IEnumerable<JointLayout>? jointLayouts = null,
-        IEnumerable<Connection>? connections = null)
+        IEnumerable<Connection>? connections = null,
+        IReadOnlyDictionary<Guid, TransformerLayout>? transformerLayouts = null,
+        IReadOnlyDictionary<Guid, CustomerStationLayout>? customerStationLayouts = null)
     {
         ArgumentNullException.ThrowIfNull(devices);
         ArgumentNullException.ThrowIfNull(attachments);
@@ -110,6 +113,47 @@ public sealed class RoutingObstacleBuilder
             }
         }
 
+        foreach (Transformer transformer in deviceArray.OfType<Transformer>()
+                     .OrderBy(transformer => transformer.Id))
+        {
+            if (transformerLayouts is not null &&
+                transformerLayouts.TryGetValue(transformer.Id, out TransformerLayout? transformerLayout))
+            {
+                obstacles.Add(new RoutingObstacle(
+                    transformer.Id,
+                    RoutingObstacleKind.Transformer,
+                    TransformerProfessionalGeometry.Create(
+                        transformer,
+                        transformerLayout,
+                        _metrics.Transformer).Bounds));
+            }
+        }
+
+        foreach (CustomerStation station in deviceArray.OfType<CustomerStation>()
+                     .OrderBy(station => station.Id))
+        {
+            if (customerStationLayouts is not null &&
+                customerStationLayouts.TryGetValue(
+                    station.Id,
+                    out CustomerStationLayout? stationLayout))
+            {
+                CustomerStationProfessionalGeometry geometry =
+                    CustomerStationProfessionalGeometry.Create(
+                        station,
+                        stationLayout,
+                        _metrics.CustomerStation);
+                var bodyBounds = geometry.Units.Select(unit => unit.Body).ToList();
+                if (geometry.Roof.Count > 0)
+                {
+                    bodyBounds.Add(BoundsOf(geometry.Roof));
+                }
+                obstacles.Add(new RoutingObstacle(
+                    station.Id,
+                    RoutingObstacleKind.CustomerStation,
+                    Union(bodyBounds)));
+            }
+        }
+
         foreach (PoleAttachment attachment in attachmentArray.OrderBy(attachment => attachment.AttachmentId))
         {
             if (!drawingLayout.Attachments.TryGetValue(
@@ -150,5 +194,23 @@ public sealed class RoutingObstacleBuilder
         }
 
         return obstacles;
+    }
+
+    private static DocumentRect BoundsOf(IReadOnlyList<DocumentPoint> points)
+    {
+        double minX = points.Min(point => point.XMillimeters);
+        double minY = points.Min(point => point.YMillimeters);
+        double maxX = points.Max(point => point.XMillimeters);
+        double maxY = points.Max(point => point.YMillimeters);
+        return new DocumentRect(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    private static DocumentRect Union(IReadOnlyList<DocumentRect> bounds)
+    {
+        double minX = bounds.Min(item => item.XMillimeters);
+        double minY = bounds.Min(item => item.YMillimeters);
+        double maxX = bounds.Max(item => item.XMillimeters + item.WidthMillimeters);
+        double maxY = bounds.Max(item => item.YMillimeters + item.HeightMillimeters);
+        return new DocumentRect(minX, minY, maxX - minX, maxY - minY);
     }
 }

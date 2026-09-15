@@ -84,6 +84,10 @@ public sealed class OrthogonalRoute
 
     public DocumentPoint Midpoint { get; }
 
+    internal RouteFamilyKey? ContinuityFamily { get; set; }
+
+    internal RouteCandidateScore? ContinuityScore { get; set; }
+
     public bool SharesTerminalWith(OrthogonalRoute other)
     {
         ArgumentNullException.ThrowIfNull(other);
