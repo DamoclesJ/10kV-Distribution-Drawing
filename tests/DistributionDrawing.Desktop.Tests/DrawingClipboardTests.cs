@@ -13,7 +13,9 @@ using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
+using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Rendering;
+using DistributionDrawing.Rendering.Wpf.Routing;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using Xunit;
@@ -931,6 +933,52 @@ public sealed class DrawingClipboardTests : IDisposable
             source.GroundingAccessPointId));
         var clipboard = new DrawingClipboardService();
 
+        TransformerProfessionalGeometry originalGeometry =
+            TransformerProfessionalGeometry.Create(
+                transformer.Creation.Transformer,
+                transformer.Creation.Layout,
+                DrawingMetrics.Default.Transformer);
+        RoutingObstacle originalObstacle = Assert.Single(
+            new RoutingObstacleBuilder().Build(
+                session.PersistenceSession.Domain.Devices,
+                session.PersistenceSession.Domain.PoleAttachments,
+                session.Layout.DrawingLayout,
+                connections: session.PersistenceSession.Domain.Connections,
+                transformerLayouts: session.Layout.TransformerLayouts),
+            obstacle => obstacle.SourceId == transformer.Creation.Transformer.Id);
+        RoutingObstacle expandedOriginalObstacle = originalObstacle.Expand(
+            DrawingMetrics.Default.Routing.ObstacleClearance);
+        var defaultPasteLayout = new TransformerLayout(
+            transformer.Creation.Transformer.Id,
+            new DocumentPoint(100, 50),
+            transformer.Creation.Layout.Orientation,
+            transformer.Creation.Transformer.TransformerKind);
+        DocumentPoint defaultPasteHvAnchor = TransformerProfessionalGeometry.Create(
+            transformer.Creation.Transformer,
+            defaultPasteLayout,
+            DrawingMetrics.Default.Transformer).HvAnchor;
+        Assert.Equal(
+            new DocumentRect(78, 28, 24, 16 + Math.Sqrt(220)),
+            originalGeometry.Bounds);
+        Assert.Equal(originalGeometry.Bounds, originalObstacle.Bounds);
+        Assert.Equal(RoutingObstacleKind.Transformer, originalObstacle.Kind);
+        Assert.Equal(
+            new DocumentRect(74, 24, 32, 24 + Math.Sqrt(220)),
+            expandedOriginalObstacle.Bounds);
+        Assert.Equal(new DocumentPoint(100, 62), defaultPasteHvAnchor);
+        Assert.True(expandedOriginalObstacle.Contains(defaultPasteHvAnchor));
+
+        int deviceCountBefore = session.PersistenceSession.Domain.Devices.Count;
+        int terminalCountBefore = session.PersistenceSession.Domain.Terminals.Count;
+        int connectionCountBefore = session.PersistenceSession.Domain.Connections.Count;
+        int lineCountBefore = session.PersistenceSession.Domain.OverheadLines.Count;
+        int gapCountBefore = session.PersistenceSession.Domain.GroundingAccessPoints.Count;
+        int poleLayoutCountBefore = session.Layout.DrawingLayout.Poles.Count;
+        int attachmentLayoutCountBefore = session.Layout.DrawingLayout.Attachments.Count;
+        int lineLayoutCountBefore = session.Layout.DrawingLayout.OverheadLines.Count;
+        int transformerLayoutCountBefore = session.Layout.TransformerLayouts.Count;
+        int historyCountBefore = session.CommandStack.History.Count;
+
         Assert.True(clipboard.Copy(session).IsSuccess);
         Assert.True(clipboard.Paste(session).IsSuccess);
 
@@ -942,6 +990,34 @@ public sealed class DrawingClipboardTests : IDisposable
         Transformer copiedTransformer = Assert.Single(
             session.PersistenceSession.Domain.Transformers,
             item => item.Id != transformer.Creation.Transformer.Id);
+        TransformerLayout copiedTransformerLayout =
+            session.Layout.TransformerLayouts[copiedTransformer.Id];
+        Terminal copiedTransformerTerminal = Assert.Single(
+            session.PersistenceSession.Domain.Terminals,
+            terminal => terminal.OwnerId == copiedTransformer.Id);
+        Assert.Equal(copiedTransformer.HvTerminalId, copiedTransformerTerminal.Id);
+        Assert.Equal(new DocumentPoint(110, 60), copiedTransformerLayout.Position);
+        Assert.DoesNotContain(
+            session.Layout.TransformerLayouts.Values,
+            layout => layout.Position == new DocumentPoint(100, 50));
+        Assert.Equal(deviceCountBefore * 2, session.PersistenceSession.Domain.Devices.Count);
+        Assert.Equal(terminalCountBefore * 2, session.PersistenceSession.Domain.Terminals.Count);
+        Assert.Equal(connectionCountBefore * 2, session.PersistenceSession.Domain.Connections.Count);
+        Assert.Equal(lineCountBefore * 2, session.PersistenceSession.Domain.OverheadLines.Count);
+        Assert.Equal(gapCountBefore * 2, session.PersistenceSession.Domain.GroundingAccessPoints.Count);
+        Assert.Equal(poleLayoutCountBefore * 2, session.Layout.DrawingLayout.Poles.Count);
+        Assert.Equal(
+            attachmentLayoutCountBefore * 2,
+            session.Layout.DrawingLayout.Attachments.Count);
+        Assert.Equal(lineLayoutCountBefore * 2, session.Layout.DrawingLayout.OverheadLines.Count);
+        Assert.Equal(transformerLayoutCountBefore * 2, session.Layout.TransformerLayouts.Count);
+        Assert.Equal(historyCountBefore + 1, session.CommandStack.History.Count);
+        Assert.Equal(historyCountBefore + 1, session.CommandStack.CurrentIndex);
+        Assert.Equal(1, session.SelectionManager.SelectionCount);
+        Assert.Contains(
+            session.SelectionManager.SelectionSet.SelectedReferences,
+            selection => copied.Any(point =>
+                point.GroundingAccessPointId == selection.ObjectId));
         Assert.All(copied, point =>
         {
             Assert.Equal(GroundingAdjacentEndpointKind.Terminal, point.AdjacentEndpoint.Kind);
@@ -958,6 +1034,179 @@ public sealed class DrawingClipboardTests : IDisposable
                 GroundingAccessPlacementSide.AdjacentEndpointSide
             }.OrderBy(side => side),
             copied.Select(point => point.PlacementSide).OrderBy(side => side));
+        session.RebuildScene();
+
+        Guid copiedTransformerId = copiedTransformer.Id;
+        Guid copiedConnectionId = copied[0].ConnectionId;
+        Connection copiedConnection = session.PersistenceSession.Domain.Connections.Single(
+            item => item.Id == copiedConnectionId);
+        Assert.Contains(
+            copiedTransformer.HvTerminalId,
+            new[] { copiedConnection.StartTerminalId, copiedConnection.EndTerminalId });
+        Guid[] copiedGapIds = copied
+            .Select(point => point.GroundingAccessPointId)
+            .OrderBy(id => id)
+            .ToArray();
+        Assert.True(session.CommandStack.Undo(session.RebuildScene, session.RebuildScene));
+        Assert.Equal(deviceCountBefore, session.PersistenceSession.Domain.Devices.Count);
+        Assert.Equal(terminalCountBefore, session.PersistenceSession.Domain.Terminals.Count);
+        Assert.Equal(connectionCountBefore, session.PersistenceSession.Domain.Connections.Count);
+        Assert.Equal(lineCountBefore, session.PersistenceSession.Domain.OverheadLines.Count);
+        Assert.Equal(gapCountBefore, session.PersistenceSession.Domain.GroundingAccessPoints.Count);
+        Assert.DoesNotContain(
+            session.PersistenceSession.Domain.Transformers,
+            item => item.Id == copiedTransformerId);
+        Assert.DoesNotContain(
+            session.PersistenceSession.Domain.Connections,
+            item => item.Id == copiedConnectionId);
+        Assert.DoesNotContain(
+            session.PersistenceSession.Domain.GroundingAccessPoints,
+            item => copiedGapIds.Contains(item.GroundingAccessPointId));
+        Assert.Equal(historyCountBefore, session.CommandStack.CurrentIndex);
+        Assert.Equal(
+            source.GroundingAccessPointId,
+            session.SelectionManager.Selected?.ObjectId);
+
+        Assert.True(session.CommandStack.Redo(session.RebuildScene, session.RebuildScene));
+        Assert.Contains(
+            session.PersistenceSession.Domain.Transformers,
+            item => item.Id == copiedTransformerId);
+        Assert.Contains(
+            session.PersistenceSession.Domain.Connections,
+            item => item.Id == copiedConnectionId);
+        Assert.Equal(
+            copiedGapIds,
+            session.PersistenceSession.Domain.GroundingAccessPoints
+                .Where(item => copiedGapIds.Contains(item.GroundingAccessPointId))
+                .Select(item => item.GroundingAccessPointId)
+                .OrderBy(id => id)
+                .ToArray());
+        Assert.Equal(historyCountBefore + 1, session.CommandStack.CurrentIndex);
+        Assert.Equal(1, session.SelectionManager.SelectionCount);
+        Assert.Contains(
+            session.SelectionManager.SelectionSet.SelectedReferences,
+            selection => copiedGapIds.Contains(selection.ObjectId));
+        session.RebuildScene();
+    }
+
+    [Fact]
+    public void AutomaticPaste_AfterFallback_AdvancesBeyondLastSuccessfulDistance()
+    {
+        ProjectRuntimeSession session = CreateSession("自动粘贴连续偏移");
+        (DrawingClipboardService clipboard, Guid sourceTransformerId) =
+            CreateTransformerGapClipboardFixture(session);
+
+        Assert.True(clipboard.Paste(session).IsSuccess);
+        TransformerLayout first = Assert.Single(
+            session.Layout.TransformerLayouts.Values,
+            layout => layout.TransformerId != sourceTransformerId);
+        Assert.Equal(new DocumentPoint(110, 60), first.Position);
+
+        Assert.True(clipboard.Paste(session).IsSuccess);
+        TransformerLayout[] copied = session.Layout.TransformerLayouts.Values
+            .Where(layout => layout.TransformerId != sourceTransformerId)
+            .OrderBy(layout => layout.Position.XMillimeters)
+            .ToArray();
+
+        Assert.Equal(2, copied.Length);
+        Assert.Equal(new DocumentPoint(110, 60), copied[0].Position);
+        Assert.True(copied[1].Position.XMillimeters > copied[0].Position.XMillimeters);
+        Assert.True(copied[1].Position.YMillimeters > copied[0].Position.YMillimeters);
+        Assert.Equal(2, copied.Select(layout => layout.Position).Distinct().Count());
+        Assert.Equal(2, session.CommandStack.History.Count);
+        Assert.Equal(2, session.CommandStack.CurrentIndex);
+        session.RebuildScene();
+    }
+
+    [Fact]
+    public void AutomaticPaste_ThreeLevelFallback_ContinuesAfterThirtyMillimeters()
+    {
+        ProjectRuntimeSession session = CreateSession("自动粘贴三级回退");
+        (DrawingClipboardService clipboard, Guid sourceTransformerId) =
+            CreateTransformerGapClipboardFixture(session);
+        TransformerCreation blocker = new TransformerCreationFactory().Create(
+            TransformerKind.PublicPoleMounted,
+            new DocumentPoint(110, 50),
+            "无关障碍变压器");
+        new AddTransformerCommand(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            blocker).Execute();
+        session.RebuildScene();
+
+        Assert.True(clipboard.Paste(session).IsSuccess);
+        TransformerLayout first = Assert.Single(
+            session.Layout.TransformerLayouts.Values,
+            layout => layout.TransformerId != sourceTransformerId &&
+                      layout.TransformerId != blocker.Transformer.Id);
+        Assert.Equal(new DocumentPoint(120, 70), first.Position);
+
+        Assert.True(clipboard.Paste(session).IsSuccess);
+        TransformerLayout[] copied = session.Layout.TransformerLayouts.Values
+            .Where(layout => layout.TransformerId != sourceTransformerId &&
+                             layout.TransformerId != blocker.Transformer.Id)
+            .OrderBy(layout => layout.Position.XMillimeters)
+            .ToArray();
+
+        Assert.Equal(2, copied.Length);
+        Assert.DoesNotContain(copied, layout =>
+            layout.Position is { XMillimeters: 100, YMillimeters: 50 } or
+                { XMillimeters: 110, YMillimeters: 60 });
+        Assert.Equal(new DocumentPoint(120, 70), copied[0].Position);
+        Assert.True(copied[1].Position.XMillimeters > copied[0].Position.XMillimeters);
+        Assert.True(copied[1].Position.YMillimeters > copied[0].Position.YMillimeters);
+        Assert.Equal(2, session.CommandStack.History.Count);
+        Assert.Equal(2, session.CommandStack.CurrentIndex);
+        session.RebuildScene();
+    }
+
+    [Fact]
+    public void PasteAt_DoesNotMoveAutomaticPlacementBackward()
+    {
+        ProjectRuntimeSession session = CreateSession("指定位置不回退自动偏移");
+        (DrawingClipboardService clipboard, Guid sourceTransformerId) =
+            CreateTransformerGapClipboardFixture(session);
+
+        Assert.True(clipboard.Paste(session).IsSuccess);
+        Assert.True(clipboard.PasteAt(session, new DocumentPoint(300, 300)).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        TransformerLayout[] copied = session.Layout.TransformerLayouts.Values
+            .Where(layout => layout.TransformerId != sourceTransformerId)
+            .ToArray();
+        Assert.Equal(3, copied.Length);
+        Assert.Equal(3, copied.Select(layout => layout.Position).Distinct().Count());
+        Assert.Single(copied, layout => layout.Position == new DocumentPoint(110, 60));
+        Assert.Contains(copied, layout =>
+            layout.Position.XMillimeters > 110 && layout.Position.XMillimeters < 200 &&
+            layout.Position.YMillimeters > 60 && layout.Position.YMillimeters < 150);
+        Assert.Contains(copied, layout =>
+            layout.Position.XMillimeters > 200 && layout.Position.YMillimeters > 200);
+        Assert.Equal(3, session.CommandStack.History.Count);
+        Assert.Equal(3, session.CommandStack.CurrentIndex);
+        session.RebuildScene();
+    }
+
+    [Fact]
+    public void Copy_NewFragment_ResetsAutomaticPasteDistance()
+    {
+        ProjectRuntimeSession session = CreateSession("复制新内容重置自动偏移");
+        (DrawingClipboardService clipboard, _) = CreateTransformerGapClipboardFixture(session);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        AddPoleCommand newSource = AddPole(session, new DocumentPoint(300, 300));
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.Device,
+            newSource.Pole.Id));
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        Assert.Contains(
+            session.Layout.DrawingLayout.Poles.Values,
+            layout => layout.Position == new DocumentPoint(310, 310));
+        Assert.Equal(2, session.CommandStack.History.Count);
+        Assert.Equal(2, session.CommandStack.CurrentIndex);
+        session.RebuildScene();
     }
 
     [Fact]
@@ -1161,14 +1410,10 @@ public sealed class DrawingClipboardTests : IDisposable
             new SelectionReference(SelectionTargetKind.Device, transformer.Transformer.Id),
             new SelectionReference(SelectionTargetKind.CableSegment, cable.Id)
         ]);
-        CopyPlanResult plan = new SelectionCopyPlanner().Create(session);
-        Assert.True(plan.IsSuccess);
-        MaterializedPaste paste = new ClipboardFragmentMaterializer().Materialize(
-            plan.Fragment!,
-            session,
-            new DocumentPoint(10, 10));
-
-        paste.Command.Execute();
+        session.RebuildScene();
+        var clipboard = new DrawingClipboardService();
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
 
         CustomerStation pastedStation = Assert.Single(
             session.PersistenceSession.Domain.CustomerStations,
@@ -1185,6 +1430,8 @@ public sealed class DrawingClipboardTests : IDisposable
             pastedStation.IncomingFeeders[0].CableTerminalId,
             pastedConnection.StartTerminalId);
         Assert.Equal(pastedTransformer.HvTerminalId, pastedConnection.EndTerminalId);
+        Assert.Single(session.CommandStack.History);
+        session.RebuildScene();
     }
 
     [Fact]
@@ -1299,6 +1546,56 @@ public sealed class DrawingClipboardTests : IDisposable
         command.Execute();
         session.RebuildScene();
         return command;
+    }
+
+    private static (DrawingClipboardService Clipboard, Guid SourceTransformerId)
+        CreateTransformerGapClipboardFixture(ProjectRuntimeSession session)
+    {
+        AddPoleCommand pole = AddPole(session, new DocumentPoint(20, 40));
+        var factory = new DeviceCommandFactory();
+        AddPoleSwitchAttachmentCommand fuse = factory.CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            pole.Pole.Id,
+            SwitchKind.DropoutFuse,
+            new DocumentPoint(15, 0));
+        fuse.Execute();
+        AddTransformerCommand transformer = factory.CreateAddTransformer(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            TransformerKind.PublicPoleMounted,
+            new DocumentPoint(90, 40),
+            "测试变压器");
+        transformer.Execute();
+        AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
+            session.PersistenceSession.Domain,
+            session.Layout,
+            fuse.Creation.SecondTerminal.Id,
+            transformer.Creation.HvTerminal.Id,
+            new DocumentPoint(35, 40),
+            new DocumentPoint(90, 40));
+        line.Execute();
+        GroundingAccessPoint source = session.PersistenceSession.Domain.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            line.Connection.Id,
+            pole.Pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(transformer.Creation.HvTerminal.Id),
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.AdjacentEndpointSide);
+        session.PersistenceSession.Domain.CreateGroundingAccessPoint(
+            Guid.NewGuid(),
+            line.Connection.Id,
+            pole.Pole.Id,
+            GroundingAdjacentEndpoint.ForTerminal(transformer.Creation.HvTerminal.Id),
+            GroundingAccessLineSide.TransformerSide,
+            GroundingAccessPlacementSide.PoleSide);
+        session.RebuildScene();
+        session.SelectionManager.Select(new SelectionReference(
+            SelectionTargetKind.GroundingAccessPoint,
+            source.GroundingAccessPointId));
+        var clipboard = new DrawingClipboardService();
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        return (clipboard, transformer.Creation.Transformer.Id);
     }
 
     private static AddRingCabinetCommand AddRing(

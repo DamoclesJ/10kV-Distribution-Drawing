@@ -1,4 +1,5 @@
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Routing;
 
 namespace DistributionDrawing.Desktop.Clipboard;
 
@@ -17,10 +18,12 @@ public sealed record ClipboardActionResult(
 public sealed class DrawingClipboardService
 {
     private const double PasteOffsetMillimeters = 10;
+    private const int PastePlacementAttemptCount = 8;
     private readonly SelectionCopyPlanner _copyPlanner;
     private readonly ClipboardFragmentMaterializer _materializer;
     private ClipboardDrawingFragment? _fragment;
     private int _successfulPasteCount;
+    private double? _lastSuccessfulAutomaticPasteDistanceMillimeters;
 
     public DrawingClipboardService()
         : this(new SelectionCopyPlanner(), new ClipboardFragmentMaterializer())
@@ -55,6 +58,7 @@ public sealed class DrawingClipboardService
 
         _fragment = plan.Fragment;
         _successfulPasteCount = 0;
+        _lastSuccessfulAutomaticPasteDistanceMillimeters = null;
         ContentChanged?.Invoke(this, EventArgs.Empty);
         string message = plan.Warnings.Count == 0
             ? "已复制所选对象。"
@@ -74,14 +78,33 @@ public sealed class DrawingClipboardService
             return ClipboardActionResult.Failure("剪贴板中没有可粘贴的绘图对象。");
         }
 
-        double distance = PasteOffsetMillimeters * (_successfulPasteCount + 1);
-        MaterializedPaste paste = _materializer.Materialize(
-            _fragment,
-            target,
-            new DocumentPoint(distance, distance));
-        target.CommandStack.ExecuteCommand(paste.Command, target.RebuildScene);
-        _successfulPasteCount++;
-        return ClipboardActionResult.Success("已粘贴所选对象。");
+        double countBasedDistance = PasteOffsetMillimeters * (_successfulPasteCount + 1);
+        double initialDistance = Math.Max(
+            countBasedDistance,
+            (_lastSuccessfulAutomaticPasteDistanceMillimeters ?? 0) +
+            PasteOffsetMillimeters);
+        RoutingConstraintException? lastRoutingFailure = null;
+        for (var attempt = 0; attempt < PastePlacementAttemptCount; attempt++)
+        {
+            double distance = initialDistance + PasteOffsetMillimeters * attempt;
+            MaterializedPaste paste = _materializer.Materialize(
+                _fragment,
+                target,
+                new DocumentPoint(distance, distance));
+            try
+            {
+                target.CommandStack.ExecuteCommand(paste.Command, target.RebuildScene);
+                _successfulPasteCount++;
+                _lastSuccessfulAutomaticPasteDistanceMillimeters = distance;
+                return ClipboardActionResult.Success("已粘贴所选对象。");
+            }
+            catch (RoutingConstraintException exception)
+            {
+                lastRoutingFailure = exception;
+            }
+        }
+
+        throw lastRoutingFailure!;
     }
 
     public ClipboardActionResult PasteAt(
