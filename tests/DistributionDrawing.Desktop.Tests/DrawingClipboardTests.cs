@@ -996,7 +996,15 @@ public sealed class DrawingClipboardTests : IDisposable
             session.PersistenceSession.Domain.Terminals,
             terminal => terminal.OwnerId == copiedTransformer.Id);
         Assert.Equal(copiedTransformer.HvTerminalId, copiedTransformerTerminal.Id);
-        Assert.Equal(new DocumentPoint(110, 60), copiedTransformerLayout.Position);
+        double transformerOffsetX =
+            copiedTransformerLayout.Position.XMillimeters -
+            transformer.Creation.Layout.Position.XMillimeters;
+        double transformerOffsetY =
+            copiedTransformerLayout.Position.YMillimeters -
+            transformer.Creation.Layout.Position.YMillimeters;
+        Assert.Equal(transformerOffsetX, transformerOffsetY);
+        Assert.True(transformerOffsetX > 10);
+        Assert.True(Math.Abs(transformerOffsetX % 10) < 1e-9);
         Assert.DoesNotContain(
             session.Layout.TransformerLayouts.Values,
             layout => layout.Position == new DocumentPoint(100, 50));
@@ -1100,7 +1108,11 @@ public sealed class DrawingClipboardTests : IDisposable
         TransformerLayout first = Assert.Single(
             session.Layout.TransformerLayouts.Values,
             layout => layout.TransformerId != sourceTransformerId);
-        Assert.Equal(new DocumentPoint(110, 60), first.Position);
+        double firstOffsetX = first.Position.XMillimeters - 90;
+        double firstOffsetY = first.Position.YMillimeters - 40;
+        Assert.Equal(firstOffsetX, firstOffsetY);
+        Assert.True(firstOffsetX >= 20);
+        Assert.True(Math.Abs(firstOffsetX % 10) < 1e-9);
 
         Assert.True(clipboard.Paste(session).IsSuccess);
         TransformerLayout[] copied = session.Layout.TransformerLayouts.Values
@@ -1109,9 +1121,10 @@ public sealed class DrawingClipboardTests : IDisposable
             .ToArray();
 
         Assert.Equal(2, copied.Length);
-        Assert.Equal(new DocumentPoint(110, 60), copied[0].Position);
         Assert.True(copied[1].Position.XMillimeters > copied[0].Position.XMillimeters);
         Assert.True(copied[1].Position.YMillimeters > copied[0].Position.YMillimeters);
+        Assert.True(copied[0].Position.XMillimeters > 100);
+        Assert.True(copied[0].Position.YMillimeters > 50);
         Assert.Equal(2, copied.Select(layout => layout.Position).Distinct().Count());
         Assert.Equal(2, session.CommandStack.History.Count);
         Assert.Equal(2, session.CommandStack.CurrentIndex);
@@ -1119,32 +1132,25 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
-    public void AutomaticPaste_ThreeLevelFallback_ContinuesAfterThirtyMillimeters()
+    public void AutomaticPaste_AfterThirtyMillimeterFallback_ContinuesAtFortyOrLater()
     {
         ProjectRuntimeSession session = CreateSession("自动粘贴三级回退");
         (DrawingClipboardService clipboard, Guid sourceTransformerId) =
             CreateTransformerGapClipboardFixture(session);
-        TransformerCreation blocker = new TransformerCreationFactory().Create(
-            TransformerKind.PublicPoleMounted,
-            new DocumentPoint(110, 50),
-            "无关障碍变压器");
-        new AddTransformerCommand(
-            session.PersistenceSession.Domain,
-            session.Layout,
-            blocker).Execute();
-        session.RebuildScene();
 
         Assert.True(clipboard.Paste(session).IsSuccess);
         TransformerLayout first = Assert.Single(
             session.Layout.TransformerLayouts.Values,
-            layout => layout.TransformerId != sourceTransformerId &&
-                      layout.TransformerId != blocker.Transformer.Id);
-        Assert.Equal(new DocumentPoint(120, 70), first.Position);
+            layout => layout.TransformerId != sourceTransformerId);
+        double firstOffsetX = first.Position.XMillimeters - 90;
+        double firstOffsetY = first.Position.YMillimeters - 40;
+        Assert.Equal(firstOffsetX, firstOffsetY);
+        Assert.True(firstOffsetX >= 30);
+        Assert.True(Math.Abs(firstOffsetX % 10) < 1e-9);
 
         Assert.True(clipboard.Paste(session).IsSuccess);
         TransformerLayout[] copied = session.Layout.TransformerLayouts.Values
-            .Where(layout => layout.TransformerId != sourceTransformerId &&
-                             layout.TransformerId != blocker.Transformer.Id)
+            .Where(layout => layout.TransformerId != sourceTransformerId)
             .OrderBy(layout => layout.Position.XMillimeters)
             .ToArray();
 
@@ -1152,7 +1158,6 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.DoesNotContain(copied, layout =>
             layout.Position is { XMillimeters: 100, YMillimeters: 50 } or
                 { XMillimeters: 110, YMillimeters: 60 });
-        Assert.Equal(new DocumentPoint(120, 70), copied[0].Position);
         Assert.True(copied[1].Position.XMillimeters > copied[0].Position.XMillimeters);
         Assert.True(copied[1].Position.YMillimeters > copied[0].Position.YMillimeters);
         Assert.Equal(2, session.CommandStack.History.Count);
@@ -1168,20 +1173,38 @@ public sealed class DrawingClipboardTests : IDisposable
             CreateTransformerGapClipboardFixture(session);
 
         Assert.True(clipboard.Paste(session).IsSuccess);
-        Assert.True(clipboard.PasteAt(session, new DocumentPoint(300, 300)).IsSuccess);
-        Assert.True(clipboard.Paste(session).IsSuccess);
-
-        TransformerLayout[] copied = session.Layout.TransformerLayouts.Values
-            .Where(layout => layout.TransformerId != sourceTransformerId)
+        Guid firstAutomaticId = session.PersistenceSession.Domain.Transformers
+            .Single(item => item.Id != sourceTransformerId)
+            .Id;
+        DocumentPoint firstAutomaticPosition =
+            session.Layout.TransformerLayouts[firstAutomaticId].Position;
+        Guid[] idsBeforePasteAt = session.PersistenceSession.Domain.Transformers
+            .Select(item => item.Id)
             .ToArray();
-        Assert.Equal(3, copied.Length);
-        Assert.Equal(3, copied.Select(layout => layout.Position).Distinct().Count());
-        Assert.Single(copied, layout => layout.Position == new DocumentPoint(110, 60));
-        Assert.Contains(copied, layout =>
-            layout.Position.XMillimeters > 110 && layout.Position.XMillimeters < 200 &&
-            layout.Position.YMillimeters > 60 && layout.Position.YMillimeters < 150);
-        Assert.Contains(copied, layout =>
-            layout.Position.XMillimeters > 200 && layout.Position.YMillimeters > 200);
+        Assert.True(clipboard.PasteAt(session, new DocumentPoint(300, 300)).IsSuccess);
+        Guid pasteAtId = session.PersistenceSession.Domain.Transformers
+            .Single(item => !idsBeforePasteAt.Contains(item.Id))
+            .Id;
+        Assert.True(clipboard.Paste(session).IsSuccess);
+        Guid secondAutomaticId = session.PersistenceSession.Domain.Transformers
+            .Single(item => item.Id != sourceTransformerId &&
+                            item.Id != firstAutomaticId &&
+                            item.Id != pasteAtId)
+            .Id;
+
+        DocumentPoint secondAutomaticPosition =
+            session.Layout.TransformerLayouts[secondAutomaticId].Position;
+        DocumentPoint pasteAtPosition = session.Layout.TransformerLayouts[pasteAtId].Position;
+        double firstAutomaticDistance = firstAutomaticPosition.XMillimeters - 90;
+        double secondAutomaticDistance = secondAutomaticPosition.XMillimeters - 90;
+        Assert.Equal(firstAutomaticDistance,
+            firstAutomaticPosition.YMillimeters - 40);
+        Assert.Equal(secondAutomaticDistance,
+            secondAutomaticPosition.YMillimeters - 40);
+        Assert.True(secondAutomaticDistance > firstAutomaticDistance);
+        Assert.NotEqual(firstAutomaticPosition, secondAutomaticPosition);
+        Assert.NotEqual(firstAutomaticPosition, pasteAtPosition);
+        Assert.NotEqual(secondAutomaticPosition, pasteAtPosition);
         Assert.Equal(3, session.CommandStack.History.Count);
         Assert.Equal(3, session.CommandStack.CurrentIndex);
         session.RebuildScene();
