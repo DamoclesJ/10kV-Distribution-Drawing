@@ -5,9 +5,12 @@ using DistributionDrawing.Desktop.Placement;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Devices.CustomerStations;
+using DistributionDrawing.Domain.Professional;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Desktop.Selection;
@@ -242,6 +245,117 @@ public sealed class PlacementPreviewTests : IDisposable
         Assert.Equal("测试变压器", creation.Transformer.DisplayName);
         Assert.Same(creation.HvTerminal, Assert.Single(session.PersistenceSession.Domain.Terminals));
         Assert.Same(creation.Layout, session.Layout.TransformerLayouts[creation.Transformer.Id]);
+    }
+
+    [Fact]
+    public void UnifiedDeleteTransformer_WithCableAndGroundingDependencies_RollsBackAtomically()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        TransformerCreation target = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(30, 40),
+            "受保护变压器");
+        TransformerCreation peer = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(150, 40),
+            "对端变压器");
+        new AddTransformerCommand(session.PersistenceSession.Domain, session.Layout, target)
+            .Execute();
+        new AddTransformerCommand(session.PersistenceSession.Domain, session.Layout, peer)
+            .Execute();
+        Guid connectionId = Guid.NewGuid();
+        session.PersistenceSession.Domain.AddCableSegment(
+            new CableSegment(
+                Guid.NewGuid(),
+                "依赖电缆",
+                "YJV",
+                120,
+                "10kV",
+                connectionId,
+                target.HvTerminal.Id,
+                peer.HvTerminal.Id),
+            new Connection(
+                connectionId,
+                ConnectionType.Cable,
+                target.HvTerminal.Id,
+                peer.HvTerminal.Id,
+                "依赖电缆",
+                "10kV"));
+        GroundingPoint grounding = session.PersistenceSession.Domain.CreateGroundingPoint(
+            Guid.NewGuid(),
+            target.HvTerminal.Id,
+            "变压器高压侧",
+            "S01");
+        var selected = new SelectionReference(SelectionTargetKind.Device, target.Transformer.Id);
+        session.SelectionManager.Select(selected);
+        Guid[] devicesBefore = session.PersistenceSession.Domain.Devices
+            .Select(item => item.Id).OrderBy(id => id).ToArray();
+        Guid[] terminalsBefore = session.PersistenceSession.Domain.Terminals
+            .Select(item => item.Id).OrderBy(id => id).ToArray();
+        int historyBefore = session.CommandStack.History.Count;
+        int indexBefore = session.CommandStack.CurrentIndex;
+        ICommand command = new SelectionDeletePlanner().Create(
+            session,
+            session.SelectionManager.SelectionSet);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            session.CommandStack.ExecuteCommand(command, session.RebuildScene));
+
+        Assert.Equal(devicesBefore, session.PersistenceSession.Domain.Devices
+            .Select(item => item.Id).OrderBy(id => id).ToArray());
+        Assert.Equal(terminalsBefore, session.PersistenceSession.Domain.Terminals
+            .Select(item => item.Id).OrderBy(id => id).ToArray());
+        Assert.Contains(session.PersistenceSession.Domain.CableSegments,
+            item => item.ConnectionId == connectionId);
+        Assert.Contains(session.PersistenceSession.Domain.GroundingPoints,
+            item => item.GroundingPointId == grounding.GroundingPointId);
+        Assert.Same(target.Layout, session.Layout.TransformerLayouts[target.Transformer.Id]);
+        Assert.Equal(selected, session.SelectionManager.Selected);
+        Assert.Equal(historyBefore, session.CommandStack.History.Count);
+        Assert.Equal(indexBefore, session.CommandStack.CurrentIndex);
+    }
+
+    [Fact]
+    public void UnifiedDeleteTransformer_WithGroundingPointOnly_IsRejectedWithoutResidue()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        TransformerCreation creation = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(30, 40),
+            "接地依赖变压器");
+        new AddTransformerCommand(session.PersistenceSession.Domain, session.Layout, creation)
+            .Execute();
+        ICommand addGrounding = new ProfessionalCommandFactory().CreateAddGroundingPoint(
+            session.PersistenceSession.Domain,
+            creation.HvTerminal.Id,
+            "变压器高压侧",
+            "S01");
+        addGrounding.Execute();
+        GroundingPoint grounding = Assert.Single(
+            session.PersistenceSession.Domain.GroundingPoints);
+        var selected = new SelectionReference(
+            SelectionTargetKind.Device,
+            creation.Transformer.Id);
+        session.SelectionManager.Select(selected);
+        int historyBefore = session.CommandStack.History.Count;
+        int indexBefore = session.CommandStack.CurrentIndex;
+        ICommand remove = new SelectionDeletePlanner().Create(
+            session,
+            session.SelectionManager.SelectionSet);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            session.CommandStack.ExecuteCommand(remove, session.RebuildScene));
+
+        Assert.Same(creation.Transformer,
+            Assert.Single(session.PersistenceSession.Domain.Transformers));
+        Assert.Same(creation.HvTerminal,
+            Assert.Single(session.PersistenceSession.Domain.Terminals));
+        Assert.Same(creation.Layout,
+            session.Layout.TransformerLayouts[creation.Transformer.Id]);
+        Assert.Equal(GroundingTarget.ForTerminal(creation.HvTerminal.Id), grounding.Target);
+        Assert.Equal(selected, session.SelectionManager.Selected);
+        Assert.Equal(historyBefore, session.CommandStack.History.Count);
+        Assert.Equal(indexBefore, session.CommandStack.CurrentIndex);
     }
 
     [Theory]

@@ -641,6 +641,123 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.Equal(150, session.Layout.CableRouteGuides[copied.Id].HorizontalYMillimeters);
     }
 
+    [Theory]
+    [InlineData("Transformer", 0)]
+    [InlineData("BoxStation", 0)]
+    [InlineData("DualIndoorStation", 1)]
+    public void RingCabinetCableTarget_CopyPasteRemapsSelectedEndpointWithoutFeederCollapse(
+        string targetKind,
+        int feederIndex)
+    {
+        ProjectRuntimeSession session = CreateSession($"RC 电缆闭环 {targetKind}");
+        var factory = new DeviceCommandFactory();
+        AddRingCabinetCommand cabinet = AddRing(session, factory, "RC-CLOSURE", 20);
+        Guid startTerminalId = cabinet.Cabinet.Intervals[0].CableTerminalId!.Value;
+        Guid targetTerminalId;
+        Guid targetDeviceId;
+        TransformerCreation? transformer = null;
+        CustomerStation? station = null;
+        if (targetKind == "Transformer")
+        {
+            transformer = new TransformerCreationFactory().Create(
+                TransformerKind.PublicIndoor,
+                new DocumentPoint(300, 40),
+                "闭环变压器");
+            new AddTransformerCommand(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                transformer).Execute();
+            targetTerminalId = transformer.HvTerminal.Id;
+            targetDeviceId = transformer.Transformer.Id;
+        }
+        else
+        {
+            bool dual = targetKind == "DualIndoorStation";
+            station = AddCustomerStation(
+                session,
+                dual ? StationKind.IndoorStation : StationKind.BoxStation,
+                dual ? ["主供", "备供"] : ["主供"],
+                new DocumentPoint(300, 40),
+                dual ? [true, false] : [true]);
+            session.PersistenceSession.Domain.ChangeSwitchState(
+                station.IncomingFeeders[0].IsolationSwitch.Id,
+                SwitchState.Closed);
+            targetTerminalId = station.IncomingFeeders[feederIndex].CableTerminalId;
+            targetDeviceId = station.Id;
+        }
+        Guid connectionId = Guid.NewGuid();
+        var cable = new CableSegment(
+            Guid.NewGuid(),
+            "RC closure cable",
+            "YJV22",
+            280,
+            "10kV",
+            connectionId,
+            startTerminalId,
+            targetTerminalId);
+        session.PersistenceSession.Domain.AddCableSegment(
+            cable,
+            new Connection(
+                connectionId,
+                ConnectionType.Cable,
+                startTerminalId,
+                targetTerminalId,
+                "RC closure cable",
+                "10kV"));
+        session.Layout.SetCableRouteGuide(new CableRouteGuide(cable.Id, 140));
+        session.RebuildScene();
+        session.SelectionManager.Replace([
+            new SelectionReference(SelectionTargetKind.RingCabinet, cabinet.Cabinet.Id),
+            new SelectionReference(SelectionTargetKind.Device, targetDeviceId),
+            new SelectionReference(SelectionTargetKind.CableSegment, cable.Id)
+        ]);
+        var clipboard = new DrawingClipboardService();
+
+        Assert.True(clipboard.Copy(session).IsSuccess);
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        RingCabinet copiedCabinet = Assert.Single(
+            session.PersistenceSession.Domain.Devices.OfType<RingCabinet>(),
+            item => item.Id != cabinet.Cabinet.Id);
+        CableSegment copiedCable = Assert.Single(
+            session.PersistenceSession.Domain.CableSegments,
+            item => item.Id != cable.Id);
+        Assert.Equal(
+            copiedCabinet.Intervals[0].CableTerminalId,
+            copiedCable.StartTerminalId);
+        if (transformer is not null)
+        {
+            Transformer copiedTransformer = Assert.Single(
+                session.PersistenceSession.Domain.Transformers,
+                item => item.Id != transformer.Transformer.Id);
+            Assert.Equal(copiedTransformer.HvTerminalId, copiedCable.EndTerminalId);
+        }
+        else
+        {
+            CustomerStation copiedStation = Assert.Single(
+                session.PersistenceSession.Domain.CustomerStations,
+                item => item.Id != station!.Id);
+            Assert.Equal(station!.IncomingFeeders.Count, copiedStation.IncomingFeeders.Count);
+            Assert.Empty(station.IncomingFeeders.Select(feeder => feeder.IncomingFeederId)
+                .Intersect(copiedStation.IncomingFeeders.Select(feeder => feeder.IncomingFeederId)));
+            Assert.Equal(
+                copiedStation.IncomingFeeders[feederIndex].CableTerminalId,
+                copiedCable.EndTerminalId);
+            Assert.Equal(
+                station.IncomingFeeders.Select(feeder => feeder.IsolationSwitch.SwitchState),
+                copiedStation.IncomingFeeders.Select(feeder => feeder.IsolationSwitch.SwitchState));
+        }
+        Assert.NotEqual(startTerminalId, copiedCable.StartTerminalId);
+        Assert.NotEqual(targetTerminalId, copiedCable.EndTerminalId);
+        Assert.Contains(session.Scene.Routes, route => route.ConnectionId == copiedCable.ConnectionId);
+        Assert.True(session.CommandStack.Undo(session.RebuildScene, session.RebuildScene));
+        Assert.DoesNotContain(session.PersistenceSession.Domain.CableSegments,
+            item => item.Id == copiedCable.Id);
+        Assert.True(session.CommandStack.Redo(session.RebuildScene, session.RebuildScene));
+        Assert.Contains(session.PersistenceSession.Domain.CableSegments,
+            item => item.Id == copiedCable.Id);
+    }
+
     [Fact]
     public void RingCabinetCablePaste_CanImmediatelyGroupMoveCopiedCabinets()
     {
@@ -1163,6 +1280,183 @@ public sealed class DrawingClipboardTests : IDisposable
         Assert.Equal(2, session.CommandStack.History.Count);
         Assert.Equal(2, session.CommandStack.CurrentIndex);
         session.RebuildScene();
+    }
+
+    [Fact]
+    public void AutomaticPaste_FirstSevenCandidatesFailAndEighthSucceedsAtEightyMillimeters()
+    {
+        ProjectRuntimeSession session = CreateSession("自动粘贴第八候选成功");
+        (DrawingClipboardService clipboard, Guid sourceTransformerId) =
+            CreateTransformerGapClipboardFixture(session);
+        var factory = new DeviceCommandFactory();
+        AddTransformerCommand[] blockers = new[] { 20, 40, 50 }
+            .Select(distance => factory.CreateAddTransformer(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                TransformerKind.PublicIndoor,
+                new DocumentPoint(90 + distance, 40 + distance),
+                $"候选阻挡-{distance}"))
+            .ToArray();
+        foreach (AddTransformerCommand blocker in blockers) blocker.Execute();
+        HashSet<Guid> existingTransformerIds = session.PersistenceSession.Domain.Transformers
+            .Select(item => item.Id)
+            .ToHashSet();
+        int devicesBefore = session.PersistenceSession.Domain.Devices.Count;
+        int terminalsBefore = session.PersistenceSession.Domain.Terminals.Count;
+        int connectionsBefore = session.PersistenceSession.Domain.Connections.Count;
+        int linesBefore = session.PersistenceSession.Domain.OverheadLines.Count;
+        int gapsBefore = session.PersistenceSession.Domain.GroundingAccessPoints.Count;
+        int poleLayoutsBefore = session.Layout.DrawingLayout.Poles.Count;
+        int attachmentLayoutsBefore = session.Layout.DrawingLayout.Attachments.Count;
+        int lineLayoutsBefore = session.Layout.DrawingLayout.OverheadLines.Count;
+        int transformerLayoutsBefore = session.Layout.TransformerLayouts.Count;
+        int historyBefore = session.CommandStack.History.Count;
+        int indexBefore = session.CommandStack.CurrentIndex;
+
+        Assert.True(clipboard.Paste(session).IsSuccess);
+
+        Transformer pasted = Assert.Single(
+            session.PersistenceSession.Domain.Transformers,
+            item => !existingTransformerIds.Contains(item.Id));
+        TransformerLayout pastedLayout = session.Layout.TransformerLayouts[pasted.Id];
+        Assert.Equal(80, pastedLayout.Position.XMillimeters - 90);
+        Assert.Equal(80, pastedLayout.Position.YMillimeters - 40);
+        Assert.Equal(devicesBefore + 3, session.PersistenceSession.Domain.Devices.Count);
+        Assert.Equal(terminalsBefore + 4, session.PersistenceSession.Domain.Terminals.Count);
+        Assert.Equal(connectionsBefore + 1, session.PersistenceSession.Domain.Connections.Count);
+        Assert.Equal(linesBefore + 1, session.PersistenceSession.Domain.OverheadLines.Count);
+        Assert.Equal(gapsBefore + 2,
+            session.PersistenceSession.Domain.GroundingAccessPoints.Count);
+        Assert.Equal(poleLayoutsBefore + 1, session.Layout.DrawingLayout.Poles.Count);
+        Assert.Equal(attachmentLayoutsBefore + 1,
+            session.Layout.DrawingLayout.Attachments.Count);
+        Assert.Equal(lineLayoutsBefore + 1,
+            session.Layout.DrawingLayout.OverheadLines.Count);
+        Assert.Equal(transformerLayoutsBefore + 1, session.Layout.TransformerLayouts.Count);
+        Assert.Equal(historyBefore + 1, session.CommandStack.History.Count);
+        Assert.Equal(indexBefore + 1, session.CommandStack.CurrentIndex);
+        Assert.NotEqual(sourceTransformerId, pasted.Id);
+        session.RebuildScene();
+    }
+
+    [Fact]
+    public void AutomaticPaste_WhenAllEightCandidatesFail_RollsBackAndDoesNotAdvanceSequence()
+    {
+        ProjectRuntimeSession session = CreateSession("自动粘贴回退耗尽");
+        (DrawingClipboardService clipboard, Guid sourceTransformerId) =
+            CreateTransformerGapClipboardFixture(session);
+        var blockers = new List<AddTransformerCommand>();
+        var factory = new DeviceCommandFactory();
+        for (var attempt = 1; attempt <= 8; attempt++)
+        {
+            AddTransformerCommand blocker = factory.CreateAddTransformer(
+                session.PersistenceSession.Domain,
+                session.Layout,
+                TransformerKind.PublicIndoor,
+                new DocumentPoint(90 + attempt * 10, 40 + attempt * 10),
+                $"阻挡变压器-{attempt}");
+            blocker.Execute();
+            blockers.Add(blocker);
+        }
+        Guid[] deviceIdsBefore = session.PersistenceSession.Domain.Devices
+            .Select(item => item.Id).OrderBy(id => id).ToArray();
+        Guid[] terminalIdsBefore = session.PersistenceSession.Domain.Terminals
+            .Select(item => item.Id).OrderBy(id => id).ToArray();
+        Guid[] connectionIdsBefore = session.PersistenceSession.Domain.Connections
+            .Select(item => item.Id).OrderBy(id => id).ToArray();
+        Guid[] overheadLineIdsBefore = session.PersistenceSession.Domain.OverheadLines
+            .Select(item => item.ConnectionId).OrderBy(id => id).ToArray();
+        Guid[] gapIdsBefore = session.PersistenceSession.Domain.GroundingAccessPoints
+            .Select(item => item.GroundingAccessPointId).OrderBy(id => id).ToArray();
+        Guid[] cableIdsBefore = session.PersistenceSession.Domain.CableSegments
+            .Select(item => item.Id).OrderBy(id => id).ToArray();
+        PoleLayout[] poleLayoutsBefore = session.Layout.DrawingLayout.Poles.Values
+            .OrderBy(item => item.PoleId).ToArray();
+        AttachmentLayout[] attachmentLayoutsBefore = session.Layout.DrawingLayout.Attachments
+            .Values.OrderBy(item => item.AttachmentId).ToArray();
+        OverheadLineLayout[] overheadLineLayoutsBefore = session.Layout.DrawingLayout
+            .OverheadLines.Values.OrderBy(item => item.ConnectionId).ToArray();
+        TransformerLayout[] transformerLayoutsBefore = session.Layout.TransformerLayouts.Values
+            .OrderBy(item => item.TransformerId).ToArray();
+        CustomerStationLayout[] customerStationLayoutsBefore = session.Layout
+            .CustomerStationLayouts.Values.OrderBy(item => item.CustomerStationId).ToArray();
+        RingCabinetLayout[] ringCabinetLayoutsBefore = session.Layout.RingCabinetLayouts.Values
+            .OrderBy(item => item.CabinetId).ToArray();
+        CableRouteGuide[] cableRouteGuidesBefore = session.Layout.CableRouteGuides.Values
+            .OrderBy(item => item.CableSegmentId).ToArray();
+        GroundingPointLayout[] groundingPointLayoutsBefore = session.Layout
+            .GroundingPointLayouts.Values.OrderBy(item => item.GroundingPointId).ToArray();
+        SelectionReference[] selectionBefore = session.SelectionManager.SelectionSet
+            .SelectedReferences.ToArray();
+        SelectionReference? primarySelectionBefore = session.SelectionManager.SelectionSet
+            .PrimarySelection;
+        int historyBefore = session.CommandStack.History.Count;
+        int indexBefore = session.CommandStack.CurrentIndex;
+
+        Assert.Throws<RoutingConstraintException>(() => clipboard.Paste(session));
+
+        Assert.Equal(deviceIdsBefore, session.PersistenceSession.Domain.Devices
+            .Select(item => item.Id).OrderBy(id => id).ToArray());
+        Assert.Equal(terminalIdsBefore, session.PersistenceSession.Domain.Terminals
+            .Select(item => item.Id).OrderBy(id => id).ToArray());
+        Assert.Equal(connectionIdsBefore, session.PersistenceSession.Domain.Connections
+            .Select(item => item.Id).OrderBy(id => id).ToArray());
+        Assert.Equal(overheadLineIdsBefore, session.PersistenceSession.Domain.OverheadLines
+            .Select(item => item.ConnectionId).OrderBy(id => id).ToArray());
+        Assert.Equal(gapIdsBefore, session.PersistenceSession.Domain.GroundingAccessPoints
+            .Select(item => item.GroundingAccessPointId).OrderBy(id => id).ToArray());
+        Assert.Equal(cableIdsBefore, session.PersistenceSession.Domain.CableSegments
+            .Select(item => item.Id).OrderBy(id => id).ToArray());
+        Assert.Equal(poleLayoutsBefore, session.Layout.DrawingLayout.Poles.Values
+            .OrderBy(item => item.PoleId).ToArray());
+        Assert.Equal(attachmentLayoutsBefore, session.Layout.DrawingLayout.Attachments.Values
+            .OrderBy(item => item.AttachmentId).ToArray());
+        Assert.Equal(overheadLineLayoutsBefore, session.Layout.DrawingLayout.OverheadLines.Values
+            .OrderBy(item => item.ConnectionId).ToArray());
+        Assert.Equal(transformerLayoutsBefore, session.Layout.TransformerLayouts.Values
+            .OrderBy(item => item.TransformerId)
+            .ToArray());
+        Assert.Equal(customerStationLayoutsBefore, session.Layout.CustomerStationLayouts.Values
+            .OrderBy(item => item.CustomerStationId).ToArray());
+        Assert.Equal(ringCabinetLayoutsBefore, session.Layout.RingCabinetLayouts.Values
+            .OrderBy(item => item.CabinetId).ToArray());
+        Assert.Equal(cableRouteGuidesBefore, session.Layout.CableRouteGuides.Values
+            .OrderBy(item => item.CableSegmentId).ToArray());
+        Assert.Equal(groundingPointLayoutsBefore, session.Layout.GroundingPointLayouts.Values
+            .OrderBy(item => item.GroundingPointId).ToArray());
+        Assert.Equal(selectionBefore,
+            session.SelectionManager.SelectionSet.SelectedReferences.ToArray());
+        Assert.Equal(primarySelectionBefore,
+            session.SelectionManager.SelectionSet.PrimarySelection);
+        Assert.Equal(historyBefore, session.CommandStack.History.Count);
+        Assert.Equal(indexBefore, session.CommandStack.CurrentIndex);
+
+        foreach (AddTransformerCommand blocker in blockers.AsEnumerable().Reverse())
+        {
+            blocker.Undo();
+        }
+        session.RebuildScene();
+        Assert.True(clipboard.Paste(session).IsSuccess);
+        TransformerLayout actual = Assert.Single(
+            session.Layout.TransformerLayouts.Values,
+            item => item.TransformerId != sourceTransformerId);
+
+        ProjectRuntimeSession control = CreateSession("自动粘贴回退序列对照");
+        (DrawingClipboardService controlClipboard, Guid controlSourceTransformerId) =
+            CreateTransformerGapClipboardFixture(control);
+        Assert.True(controlClipboard.Paste(control).IsSuccess);
+        TransformerLayout expected = Assert.Single(
+            control.Layout.TransformerLayouts.Values,
+            item => item.TransformerId != controlSourceTransformerId);
+
+        Assert.Equal(
+            expected.Position.XMillimeters - 90,
+            actual.Position.XMillimeters - 90);
+        Assert.Equal(
+            expected.Position.YMillimeters - 40,
+            actual.Position.YMillimeters - 40);
+        Assert.Equal(historyBefore + 1, session.CommandStack.History.Count);
+        Assert.Equal(indexBefore + 1, session.CommandStack.CurrentIndex);
     }
 
     [Fact]

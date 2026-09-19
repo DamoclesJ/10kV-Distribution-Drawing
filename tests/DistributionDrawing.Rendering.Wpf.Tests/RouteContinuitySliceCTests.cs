@@ -187,6 +187,87 @@ public sealed class RouteContinuitySliceCTests
     }
 
     [Fact]
+    public void GuidedRoute_WithTransformerAndCustomerStationObstacles_RemainsLegalAndDeterministic()
+    {
+        TransformerCreation transformer = new TransformerCreationFactory().Create(
+            TransformerKind.PublicIndoor,
+            new DocumentPoint(50, 50),
+            "T-obstacle");
+        CustomerStationCreation station = new CustomerStationCreationFactory().Create(
+            StationKind.IndoorStation,
+            ["主供"],
+            new DocumentPoint(115, 50));
+        RoutingObstacle[] obstacles = new RoutingObstacleBuilder().Build(
+            [transformer.Transformer, station.CustomerStation],
+            [],
+            new DrawingLayout(),
+            transformerLayouts: new Dictionary<Guid, TransformerLayout>
+            {
+                [transformer.Transformer.Id] = transformer.Layout
+            },
+            customerStationLayouts: new Dictionary<Guid, CustomerStationLayout>
+            {
+                [station.CustomerStation.Id] = station.Layout
+            }).ToArray();
+        Assert.Contains(obstacles, obstacle => obstacle.Kind == RoutingObstacleKind.Transformer);
+        Assert.Contains(obstacles, obstacle => obstacle.Kind == RoutingObstacleKind.CustomerStation);
+        double guideY = obstacles.Min(obstacle => obstacle.Bounds.YMillimeters) - 12;
+        double startX = obstacles.Min(obstacle => obstacle.Bounds.XMillimeters) - 40;
+        double endX = obstacles.Max(obstacle =>
+            obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters) + 40;
+        var request = new ConnectionRouteRequest(
+            ConnectionId,
+            ConnectionType.Cable,
+            StartTerminalId,
+            EndTerminalId,
+            new TerminalAnchor(StartTerminalId, new DocumentPoint(startX, 50),
+                TerminalAnchorDirection.Right),
+            new TerminalAnchor(EndTerminalId, new DocumentPoint(endX, 49.9),
+                TerminalAnchorDirection.Left),
+            PreferredHorizontalY: guideY);
+        var continuity = new RouteContinuityContext();
+        var router = new OrthogonalRouter(DrawingMetrics.Default, continuity);
+        OrthogonalRoute initial = router.Route(request, obstacles);
+        continuity.BeginGesture([initial]);
+        continuity.BeginProvisionalBuild();
+
+        OrthogonalRoute moved = router.Route(request with
+        {
+            End = request.End with
+            {
+                Position = new DocumentPoint(endX, 50.1)
+            }
+        }, obstacles);
+
+        Assert.Equal(initial.ContinuityFamily, moved.ContinuityFamily);
+        Assert.Contains(moved.Segments, segment =>
+            segment.IsHorizontal && segment.Start.YMillimeters == guideY);
+        Assert.All(obstacles, obstacle => Assert.DoesNotContain(
+            moved.Segments,
+            segment => IntersectsInterior(segment, obstacle.Expand(
+                DrawingMetrics.Default.Routing.ObstacleClearance).Bounds)));
+        continuity.AcceptProvisional();
+        continuity.EndGesture();
+        OrthogonalRoute rebuilt = router.Route(request with
+        {
+            End = request.End with
+            {
+                Position = new DocumentPoint(endX, 50.1)
+            }
+        }, obstacles);
+        OrthogonalRoute independentlyRebuilt = new OrthogonalRouter().Route(request with
+        {
+            End = request.End with
+            {
+                Position = new DocumentPoint(endX, 50.1)
+            }
+        }, obstacles);
+
+        Assert.Equal(independentlyRebuilt.Points, rebuilt.Points);
+        Assert.False(continuity.IsActive);
+    }
+
+    [Fact]
     public void Context_PublishesAllConnectionsTogetherAndCleansEveryLifecycleEnd()
     {
         var continuity = new RouteContinuityContext();

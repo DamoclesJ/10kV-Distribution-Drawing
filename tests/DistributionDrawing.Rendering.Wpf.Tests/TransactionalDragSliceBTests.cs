@@ -1,5 +1,9 @@
 using DistributionDrawing.Application.Devices;
+using DistributionDrawing.Application.Templates.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
@@ -195,56 +199,123 @@ public sealed class TransactionalDragSliceBTests
     }
 
     [Fact]
-    public void MixedGroup_RollbackRestoresEveryRootAndGestureContinues()
+    public void MixedFourDeviceGroup_RollbackRestoresEveryRootAndGestureContinues()
     {
-        var document = new DrawingDocument(Guid.NewGuid(), "Group transaction");
-        RuntimeLayoutDocument layout = Runtime();
+        OhlFixture fixture = CreateOhlFixture();
+        DrawingDocument document = fixture.Document;
+        RuntimeLayoutDocument layout = fixture.Layout;
+        DrawingScene beforeScene = fixture.Builder.Build(document, layout);
         var factory = new DeviceCommandFactory();
-        AddPoleCommand pole = factory.CreateAddPole(document, layout, new DocumentPoint(10, 20));
-        pole.Execute();
-        AddTransformerCommand transformer = factory.CreateAddTransformer(
+        AddPoleCommand pole = factory.CreateAddPole(
             document,
             layout,
-            TransformerKind.PublicIndoor,
-            new DocumentPoint(100, 120),
-            "Group transformer");
-        transformer.Execute();
-        SelectionReference poleTarget = new(SelectionTargetKind.Device, pole.Pole.Id);
+            new DocumentPoint(500, 300));
+        pole.Execute();
+        CustomerStation station = new DistributionDrawing.Application.Devices.CustomerStations.CustomerStationCreationFactory().Create(
+            StationKind.BoxStation,
+            ["主供"]);
+        document.AddCustomerStation(station);
+        layout.AddCustomerStation(
+            new CustomerStationLayout(
+                station.Id,
+                new DocumentPoint(620, 300),
+                [new CustomerStationIncomingFeederLayout(
+                    station.IncomingFeeders[0].IncomingFeederId,
+                    true)]),
+            station);
+        AddRingCabinetCommand cabinet = factory.CreateAddRingCabinet(
+            document,
+            layout,
+            new RingCabinetCreationConfiguration(
+                "Group cabinet",
+                new RingCabinetCreationTemplateFactory().Create(
+                    RingCabinetTemplateType.Conventional,
+                    3)),
+            new DocumentPoint(760, 300));
+        cabinet.Execute();
+        SelectionReference transformerTarget = new(
+            SelectionTargetKind.Device,
+            fixture.Transformer.Creation.Transformer.Id);
         SelectionSet selection = SelectionSet.Create([
-            poleTarget,
+            new SelectionReference(SelectionTargetKind.Device, pole.Pole.Id),
             new SelectionReference(
                 SelectionTargetKind.Device,
-                transformer.Creation.Transformer.Id)
-        ]);
+                fixture.Transformer.Creation.Transformer.Id),
+            new SelectionReference(SelectionTargetKind.Device, station.Id),
+            new SelectionReference(SelectionTargetKind.RingCabinet, cabinet.Cabinet.Id)
+        ], transformerTarget);
         var controller = new DeviceDragController();
+        DocumentPoint poleBefore = pole.Layout.Position;
+        DocumentPoint transformerBefore = fixture.Transformer.Creation.Layout.Position;
+        DocumentPoint stationBefore = layout.CustomerStationLayouts[station.Id].Position;
+        DocumentPoint cabinetBefore = cabinet.Layout.Position;
 
         Assert.True(controller.TryBeginGroupDrag(
             selection,
-            poleTarget,
-            pole.Layout.Position,
+            transformerTarget,
+            transformerBefore,
             document,
             layout));
-        Assert.True(controller.UpdatePreview(new DocumentPoint(30, 45)));
+        DocumentPoint validA = new(185, 120);
+        Assert.True(controller.UpdatePreview(validA));
+        DrawingScene validAScene = fixture.Builder.Build(document, layout);
         controller.AcceptCurrentPreview();
         DocumentPoint poleLastValid = layout.DrawingLayout.Poles[pole.Pole.Id].Position;
         DocumentPoint transformerLastValid = layout.TransformerLayouts[
-            transformer.Creation.Transformer.Id].Position;
+            fixture.Transformer.Creation.Transformer.Id].Position;
+        DocumentPoint stationLastValid = layout.CustomerStationLayouts[station.Id].Position;
+        DocumentPoint cabinetLastValid = layout.RingCabinetLayouts[cabinet.Cabinet.Id].Position;
 
-        Assert.True(controller.UpdatePreview(new DocumentPoint(55, 70)));
+        ApplyRealRoutingInvalidTransformerCandidate(fixture, controller);
         Assert.True(controller.RollbackToLastValid());
         Assert.True(controller.IsActive);
         Assert.Equal(poleLastValid, layout.DrawingLayout.Poles[pole.Pole.Id].Position);
         Assert.Equal(transformerLastValid, layout.TransformerLayouts[
-            transformer.Creation.Transformer.Id].Position);
+            fixture.Transformer.Creation.Transformer.Id].Position);
+        Assert.Equal(stationLastValid, layout.CustomerStationLayouts[station.Id].Position);
+        Assert.Equal(cabinetLastValid, layout.RingCabinetLayouts[cabinet.Cabinet.Id].Position);
+        Assert.Equal(
+            Route(validAScene, fixture.Line.Connection.Id),
+            Route(fixture.Builder.Build(document, layout), fixture.Line.Connection.Id));
 
-        Assert.True(controller.UpdatePreview(new DocumentPoint(65, 80)));
+        DocumentPoint validC = new(210, 135);
+        Assert.True(controller.UpdatePreview(validC));
+        DrawingScene validCScene = fixture.Builder.Build(document, layout);
         controller.AcceptCurrentPreview();
+        DocumentPoint poleFinal = layout.DrawingLayout.Poles[pole.Pole.Id].Position;
+        DocumentPoint transformerFinal = layout.TransformerLayouts[
+            fixture.Transformer.Creation.Transformer.Id].Position;
+        DocumentPoint stationFinal = layout.CustomerStationLayouts[station.Id].Position;
+        DocumentPoint cabinetFinal = layout.RingCabinetLayouts[cabinet.Cabinet.Id].Position;
         GroupMoveCommand command = Assert.IsType<GroupMoveCommand>(controller.Commit());
         var stack = new CommandStack();
-        stack.ExecuteCommand(command);
-        Assert.True(stack.Undo());
-        Assert.Equal(pole.Layout.Position, layout.DrawingLayout.Poles[pole.Pole.Id].Position);
-        Assert.True(stack.Redo());
+        stack.ExecuteCommand(command, () => fixture.Builder.Build(document, layout));
+        Assert.Single(stack.History);
+        Assert.Equal(poleFinal, layout.DrawingLayout.Poles[pole.Pole.Id].Position);
+        Assert.Equal(transformerFinal, layout.TransformerLayouts[
+            fixture.Transformer.Creation.Transformer.Id].Position);
+        Assert.Equal(stationFinal, layout.CustomerStationLayouts[station.Id].Position);
+        Assert.Equal(cabinetFinal, layout.RingCabinetLayouts[cabinet.Cabinet.Id].Position);
+        Assert.Equal(Route(validCScene, fixture.Line.Connection.Id),
+            Route(fixture.Builder.Build(document, layout), fixture.Line.Connection.Id));
+
+        Assert.True(stack.Undo(() => fixture.Builder.Build(document, layout)));
+        Assert.Equal(poleBefore, layout.DrawingLayout.Poles[pole.Pole.Id].Position);
+        Assert.Equal(transformerBefore, layout.TransformerLayouts[
+            fixture.Transformer.Creation.Transformer.Id].Position);
+        Assert.Equal(stationBefore, layout.CustomerStationLayouts[station.Id].Position);
+        Assert.Equal(cabinetBefore, layout.RingCabinetLayouts[cabinet.Cabinet.Id].Position);
+        Assert.Equal(Route(beforeScene, fixture.Line.Connection.Id),
+            Route(fixture.Builder.Build(document, layout), fixture.Line.Connection.Id));
+
+        Assert.True(stack.Redo(() => fixture.Builder.Build(document, layout)));
+        Assert.Equal(poleFinal, layout.DrawingLayout.Poles[pole.Pole.Id].Position);
+        Assert.Equal(transformerFinal, layout.TransformerLayouts[
+            fixture.Transformer.Creation.Transformer.Id].Position);
+        Assert.Equal(stationFinal, layout.CustomerStationLayouts[station.Id].Position);
+        Assert.Equal(cabinetFinal, layout.RingCabinetLayouts[cabinet.Cabinet.Id].Position);
+        Assert.Equal(Route(validCScene, fixture.Line.Connection.Id),
+            Route(fixture.Builder.Build(document, layout), fixture.Line.Connection.Id));
     }
 
     [Fact]

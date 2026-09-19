@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.IO.Compression;
 using DistributionDrawing.Infrastructure.Persistence;
 using Xunit;
 
@@ -7,6 +9,39 @@ namespace DistributionDrawing.Infrastructure.Tests;
 public sealed class ProjectV7ContractTests : IDisposable
 {
     private readonly List<string> _paths = [];
+
+    [Fact]
+    public void SerializedPayload_DoesNotExposeTransientInteractionOrRoutingState()
+    {
+        string path = NextPath();
+        new ProjectService().CreateProject(path, "V7 transient-state contract");
+
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        using Stream payloadStream = archive.GetEntry(ProjectFileFormat.DocumentEntryName)!.Open();
+        JsonNode payload = JsonNode.Parse(payloadStream)!;
+        string[] forbiddenPropertyNames =
+        [
+            "lastValid",
+            "candidate",
+            "routeFamilyKey",
+            "routeContinuityContext",
+            "routeContinuityState",
+            "continuityContext",
+            "continuityState",
+            "hysteresis",
+            "hysteresisState",
+            "dragState",
+            "dragTransaction",
+            "dragTransactionState"
+        ];
+
+        string[] propertyNames = EnumeratePropertyNames(payload).ToArray();
+
+        Assert.All(forbiddenPropertyNames, forbidden =>
+            Assert.DoesNotContain(propertyNames, property =>
+                string.Equals(property, forbidden, StringComparison.OrdinalIgnoreCase)));
+    }
 
     [Fact]
     public void NewProject_WritesVersion7WithEmptyFoundationCollections()
@@ -25,6 +60,35 @@ public sealed class ProjectV7ContractTests : IDisposable
         Assert.Empty(session.Layout.TransformerLayouts);
         Assert.Empty(session.Layout.CustomerStationLayouts);
         Assert.Empty(session.Layout.GroundingPointLayouts);
+    }
+
+    private static IEnumerable<string> EnumeratePropertyNames(JsonNode node)
+    {
+        if (node is JsonObject jsonObject)
+        {
+            foreach ((string propertyName, JsonNode? child) in jsonObject)
+            {
+                yield return propertyName;
+                if (child is not null)
+                {
+                    foreach (string descendant in EnumeratePropertyNames(child))
+                    {
+                        yield return descendant;
+                    }
+                }
+            }
+        }
+        else if (node is JsonArray jsonArray)
+        {
+            foreach (JsonNode? child in jsonArray)
+            {
+                if (child is null) continue;
+                foreach (string descendant in EnumeratePropertyNames(child))
+                {
+                    yield return descendant;
+                }
+            }
+        }
     }
 
     [Fact]
