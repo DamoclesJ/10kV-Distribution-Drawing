@@ -44,6 +44,12 @@ public sealed class SelectionDeletePlanner
         HashSet<Guid> groundingAccessPointIds = [];
         HashSet<Guid> transformerIds = [];
         HashSet<Guid> customerStationIds = [];
+        HashSet<Guid> selectedCustomerStationIds = document.CustomerStations
+            .Where(station => selection.SelectedReferences.Any(reference =>
+                reference.Kind == SelectionTargetKind.Device &&
+                reference.ObjectId == station.Id))
+            .Select(station => station.Id)
+            .ToHashSet();
 
         foreach (SelectionReference reference in selection.SelectedReferences)
         {
@@ -56,8 +62,19 @@ public sealed class SelectionDeletePlanner
                     break;
                 case SelectionTargetKind.Device:
                     Device? device = document.Devices.SingleOrDefault(item => item.Id == reference.ObjectId);
-                    if (device is SwitchDevice { InstallationType: SwitchInstallationType.CustomerStationIncomingFeeder })
+                    if (device is SwitchDevice
+                        {
+                            InstallationType: SwitchInstallationType.CustomerStationIncomingFeeder
+                        } customerStationSwitch)
                     {
+                        CustomerStation? owner = FindCustomerStationOwner(
+                            document,
+                            customerStationSwitch);
+                        if (owner is not null && selectedCustomerStationIds.Contains(owner.Id))
+                        {
+                            break;
+                        }
+
                         throw new InvalidOperationException(
                             "用户站进线隔离开关属于用户站聚合，不能单独删除。");
                     }
@@ -200,6 +217,21 @@ public sealed class SelectionDeletePlanner
 
         if (commands.Count == 0) throw new InvalidOperationException("当前选择中没有可删除的对象。");
         return new CompositeDeleteCommand(commands);
+    }
+
+    private static CustomerStation? FindCustomerStationOwner(
+        DrawingDocument document,
+        SwitchDevice switchDevice)
+    {
+        if (switchDevice.ParentId is not Guid incomingFeederId)
+        {
+            return null;
+        }
+
+        return document.CustomerStations.SingleOrDefault(station =>
+            station.IncomingFeeders.Any(feeder =>
+                feeder.IncomingFeederId == incomingFeederId &&
+                feeder.IsolationSwitch.Id == switchDevice.Id));
     }
 }
 
