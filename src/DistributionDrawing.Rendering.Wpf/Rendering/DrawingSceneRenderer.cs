@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using DistributionDrawing.Rendering.Wpf.Diagnostics;
 using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -21,6 +22,8 @@ public sealed class DrawingSceneRenderer
 
     public DrawingVisual Render(DrawingScene scene, double pixelsPerDip)
     {
+        using DrawingPerformanceTrace.PhaseOperation visualBuild =
+            DrawingPerformanceTrace.Measure("DrawingVisualBuild");
         var visual = new DrawingVisual();
         using DrawingContext context = visual.RenderOpen();
         DrawingGroup drawing = RenderDrawing(scene, pixelsPerDip);
@@ -29,6 +32,7 @@ public sealed class DrawingSceneRenderer
             context.DrawDrawing(child);
         }
 
+        visualBuild.SetCounts(scene.Elements.Count, drawing.Children.Count);
         return visual;
     }
 

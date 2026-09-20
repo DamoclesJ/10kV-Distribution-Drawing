@@ -18,6 +18,7 @@ using DistributionDrawing.Desktop.DrawingTypography;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Diagnostics;
 using DistributionDrawing.Desktop.Workspace;
 using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Desktop.Placement;
@@ -1114,11 +1115,16 @@ public partial class MainWindow : Window
 
     private void CancelTransientInteraction()
     {
+        using DrawingPerformanceTrace.PhaseOperation cancel =
+            DrawingPerformanceTrace.Measure("GestureCancel");
         _intervalPreview.Cancel();
         bool layoutChanged = _deviceDrag.Cancel();
         layoutChanged |= _cableRouteDrag.Cancel();
         layoutChanged |= _groundingPointDrag.Cancel();
+        cancel.SetCounts(layoutChanged ? 1 : 0);
+        cancel.Dispose();
         _sceneBuilder.RouteContinuity.EndGesture();
+        DrawingPerformanceTrace.EndGesture("SessionChanged");
         if (layoutChanged && _workspace.CurrentSession is { } session)
         {
             session.RebuildScene();
@@ -1590,10 +1596,15 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseEventArgs e)
     {
+        using DrawingPerformanceTrace.PhaseOperation cancel =
+            DrawingPerformanceTrace.Measure("GestureCancel");
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
         changed |= _groundingPointDrag.Cancel();
+        cancel.SetCounts(changed ? 1 : 0);
+        cancel.Dispose();
         _sceneBuilder.RouteContinuity.EndGesture();
+        DrawingPerformanceTrace.EndGesture("LostMouseCapture");
         ClearDragInvalidFeedback();
         bool selectionRectangleCanceled = _selectionRectangle.Cancel();
         if (changed)
@@ -1613,10 +1624,15 @@ public partial class MainWindow : Window
 
     private void CancelDeviceDrag()
     {
+        using DrawingPerformanceTrace.PhaseOperation cancel =
+            DrawingPerformanceTrace.Measure("GestureCancel");
         bool changed = _deviceDrag.Cancel();
         changed |= _cableRouteDrag.Cancel();
         changed |= _groundingPointDrag.Cancel();
+        cancel.SetCounts(changed ? 1 : 0);
+        cancel.Dispose();
         _sceneBuilder.RouteContinuity.EndGesture();
+        DrawingPerformanceTrace.EndGesture("Canceled");
         ClearDragInvalidFeedback();
         if (!changed)
         {
@@ -1644,17 +1660,21 @@ public partial class MainWindow : Window
 
     private void ExecuteDragCommand(ICommand command)
     {
-        RefreshDrawingScene();
+        DrawingPerformanceTrace.RunBuildAttempt("CommitBefore", RefreshDrawingScene);
         _commandStack.ExecuteCommand(
             command,
-            RefreshDrawingScene,
+            () => DrawingPerformanceTrace.RunBuildAttempt(
+                "CommitAfter",
+                RefreshDrawingScene),
             failureStage =>
             {
                 if (failureStage == CommandTransactionFailureStage.Validation)
                 {
                     command.Undo();
                 }
-                RefreshDrawingScene();
+                DrawingPerformanceTrace.RunBuildAttempt(
+                    "CommitRecovery",
+                    RefreshDrawingScene);
             });
     }
 
@@ -2395,6 +2415,14 @@ public partial class MainWindow : Window
 
         if (dragStarted)
         {
+            DrawingPerformanceTrace.BeginGesture(
+                _cableRouteDrag.IsActive
+                    ? "CableRouteGuide"
+                    : _groundingPointDrag.IsActive
+                        ? "GroundingPoint"
+                        : _deviceDrag.IsGroupDrag
+                            ? "GroupDrag"
+                            : "DeviceDrag");
             _sceneBuilder.RouteContinuity.BeginGesture(_currentScene?.Routes ?? []);
             if (!DrawingSurface.CaptureMouse())
             {
@@ -2402,6 +2430,7 @@ public partial class MainWindow : Window
                 _cableRouteDrag.Cancel();
                 _groundingPointDrag.Cancel();
                 _sceneBuilder.RouteContinuity.EndGesture();
+                DrawingPerformanceTrace.EndGesture("CaptureFailed");
             }
         }
 
@@ -2485,22 +2514,31 @@ public partial class MainWindow : Window
         }
 
         DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
-        DragPreviewTransactionCoordinator.ProcessPointerUpdate(
-            ActiveDragPreview(),
-            () =>
-            {
-                return _groundingPointDrag.IsActive
-                    ? _groundingPointDrag.UpdatePreview(documentPoint)
-                    : _cableRouteDrag.IsActive
-                        ? _cableRouteDrag.UpdatePreview(documentPoint)
-                        : _deviceDrag.UpdatePreview(documentPoint);
-            },
-            RefreshDrawingScene,
-            ShowDragInvalidFeedback,
-            ClearDragInvalidFeedback,
-            CancelDeviceDrag,
-            exception => ShowCommandError("拖动预览失败", exception.Message),
-            _sceneBuilder.RouteContinuity);
+        using DrawingPerformanceTrace.UpdateOperation update =
+            DrawingPerformanceTrace.BeginUpdate();
+        using DrawingPerformanceTrace.PhaseOperation mouseMove =
+            DrawingPerformanceTrace.Measure("MouseMoveHandling");
+        DragPreviewOutcome outcome = DragPreviewTransactionCoordinator.ProcessPointerUpdate(
+                ActiveDragPreview(),
+                () =>
+                {
+                    using DrawingPerformanceTrace.PhaseOperation preview =
+                        DrawingPerformanceTrace.Measure("PreviewUpdate");
+                    bool changed = _groundingPointDrag.IsActive
+                        ? _groundingPointDrag.UpdatePreview(documentPoint)
+                        : _cableRouteDrag.IsActive
+                            ? _cableRouteDrag.UpdatePreview(documentPoint)
+                            : _deviceDrag.UpdatePreview(documentPoint);
+                    preview.SetCounts(changed ? 1 : 0);
+                    return changed;
+                },
+                RefreshDrawingScene,
+                ShowDragInvalidFeedback,
+                ClearDragInvalidFeedback,
+                CancelDeviceDrag,
+                exception => ShowCommandError("拖动预览失败", exception.Message),
+                _sceneBuilder.RouteContinuity);
+        update.Complete(outcome.ToString());
         e.Handled = true;
     }
 
@@ -2600,6 +2638,8 @@ public partial class MainWindow : Window
 
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
+        DrawingPerformanceTrace.PhaseOperation selectionRefresh =
+            DrawingPerformanceTrace.Measure("InspectorSelectionRefresh");
         if (_intervalPreview.TargetIntervalId != _selectionManager.Selected?.ObjectId)
         {
             _intervalPreview.Cancel();
@@ -2615,6 +2655,8 @@ public partial class MainWindow : Window
                     "批量属性编辑将在后续版本提供。",
                     []));
             CollapseSingleSelectionEditors();
+            selectionRefresh.SetCounts(_selectionManager.SelectionCount);
+            selectionRefresh.Dispose();
             RenderCurrentScene();
             return;
         }
@@ -2635,6 +2677,8 @@ public partial class MainWindow : Window
         UpdateGroundingPointEditor();
         UpdateGroundingAccessPointEditor();
         UpdateWorkScopeEditor();
+        selectionRefresh.SetCounts(_selectionManager.SelectionCount);
+        selectionRefresh.Dispose();
         RenderCurrentScene();
     }
 

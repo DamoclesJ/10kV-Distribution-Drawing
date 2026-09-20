@@ -46,4 +46,17 @@ WP-EM-08 has no persistence schema impact and keeps FormatVersion V7. `LastValid
 
 WP-EM-07A and WP-EM-07B are Post-EM-07 / Pre-EM-08 amendment Work Packages. They do not reopen WP-EM-06 or WP-EM-07. This ordering does not define a new release version. No V1.1, V1.2, or V2.0 release scope is defined; Annotation and Energization remain Post-V1 candidates and are outside the closed Electrical Model Closure stage.
 
+## Post-V1 Drawing Performance & PNG Export Stabilization
+
+**Status:** ACTIVE — DIAGNOSTIC BASELINE PREPARATION
+
+This stage follows, and does not reopen, the Closed / Accepted Post-V1 Electrical Model Closure stage or WP-EM-01 through WP-EM-09. Its baseline is closure commit `841ca66319948661f7a4aca9202247d479788d7b`; `FormatVersion` remains V7. It creates no WP-EM-10 and defines no V1.1, V1.2, or V2.0 release.
+
+The approved order and boundary are:
+
+1. **WP-PERF-01 — Drawing Interaction Performance.** WP-PERF-01A Characterization & Audit is Accepted. WP-PERF-01B Windows Diagnostic Baseline Preparation is In Progress and is limited to governance, opt-in diagnostic instrumentation, directly related tests, controlled-sample preparation, and Windows collection instructions. WP-PERF-01C optimization is not authorized; no incremental routing, incremental Scene/WPF update, mouse-event coalescing, or MouseUp optimization is in scope.
+2. **WP-PNG-01 — PNG Export Stabilization.** This is an independent Work Package planned after WP-PERF-01 baseline work. No production implementation has started. Minimum DPI, readability acceptance, and safe pixel/memory budgets remain unfrozen pending evidence.
+
+Approximately 60 FPS remains an interaction design target rather than a formal acceptance threshold. Formal performance limits must be based on repeatable Windows measurements. Annotation, Energization Analysis, and work-ticket assisted authoring are outside this stage.
+
 WP-EM-04 closed at implementation baseline `b15166c96bcf03a38acd2a27d98b597d04b60d4d` after implementation, review, automated validation, Windows runtime validation, and GUI acceptance. WP-EM-05 is now Closed after implementation, focused review, automated verification, and Windows GUI acceptance with one accepted, deferred RingCabinet above-terminal presentation limitation. WP-EM-06 is also Closed after implementation, review, Windows automated validation, and Windows professional GUI acceptance. WP-EM-07 is Closed after implementation, code review, Windows automated verification, and Windows professional visual acceptance. WP-EM-07A is Closed / Archived after implementation, targeted review, Windows automated verification, and Windows professional acceptance at `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06`; its additive V7 amendment introduces `GroundingAccessPlacementSide` and `TransformerSide` without V8. WP-EM-07B is Closed / Archived after implementation, Windows automated verification, and professional acceptance. Its single naming fact is required `Device.DisplayName`, shown as “变压器名称”; the additive document-level `TransformerNamingContractVersion` discriminator keeps `FormatVersion = V7` while separating legacy compatibility mode from current strict naming mode. Legacy incomplete state must be completed before Save / Save As. Generic drag and routing stabilization remains assigned to WP-EM-08, while final integration and regression remain assigned to WP-EM-09.

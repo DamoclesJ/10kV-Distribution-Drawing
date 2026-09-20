@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using DistributionDrawing.Rendering.Wpf.Diagnostics;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Canvas;
@@ -35,9 +36,12 @@ public sealed class DrawingVisualHost : FrameworkElement
     public void Show(DrawingVisual visual)
     {
         ArgumentNullException.ThrowIfNull(visual);
+        using DrawingPerformanceTrace.PhaseOperation publish =
+            DrawingPerformanceTrace.Measure("VisualCollectionPublish");
         visual.Transform = new MatrixTransform(_viewMatrix);
         _visuals.Clear();
         _visuals.Add(visual);
+        publish.SetCounts(_visuals.Count);
     }
 
     public void SetViewTransform(CanvasViewTransform transform)

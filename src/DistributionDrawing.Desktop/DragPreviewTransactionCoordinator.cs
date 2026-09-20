@@ -1,5 +1,6 @@
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Routing;
+using DistributionDrawing.Rendering.Wpf.Diagnostics;
 
 namespace DistributionDrawing.Desktop;
 
@@ -48,21 +49,32 @@ internal static class DragPreviewTransactionCoordinator
         ArgumentNullException.ThrowIfNull(rebuildAndPublish);
         ArgumentNullException.ThrowIfNull(routeContinuity);
 
+        DrawingPerformanceTrace.PhaseOperation commitPhase =
+            DrawingPerformanceTrace.Measure("MouseUpCommit");
+        string gestureOutcome = "Committed";
         try
         {
             ICommand? command = commit();
             if (command is null)
             {
-                rebuildAndPublish();
+                DrawingPerformanceTrace.RunBuildAttempt("CommitAfter", rebuildAndPublish);
             }
             else
             {
                 executeCommand(command);
             }
         }
+        catch
+        {
+            commitPhase.SetOutcome("Failed");
+            gestureOutcome = "CommitFailed";
+            throw;
+        }
         finally
         {
             routeContinuity.EndGesture();
+            commitPhase.Dispose();
+            DrawingPerformanceTrace.EndGesture(gestureOutcome);
         }
     }
 
@@ -121,7 +133,7 @@ internal static class DragPreviewTransactionCoordinator
                 return DragPreviewOutcome.Unchanged;
             }
 
-            rebuildAndPublish();
+            DrawingPerformanceTrace.RunBuildAttempt("Candidate", rebuildAndPublish);
             drag.AcceptCurrentPreview();
             routeContinuity?.AcceptProvisional();
             clearFeedback();
@@ -132,7 +144,7 @@ internal static class DragPreviewTransactionCoordinator
         {
             routeContinuity?.DiscardProvisional();
             drag.RollbackToLastValid();
-            rebuildAndPublish();
+            DrawingPerformanceTrace.RunBuildAttempt("Rollback", rebuildAndPublish);
             routeContinuity?.DiscardProvisional();
             showFeedback(InvalidCandidateFeedback);
             return DragPreviewOutcome.Rejected;

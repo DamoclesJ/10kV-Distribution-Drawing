@@ -1,6 +1,7 @@
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Rendering.Wpf.Metrics;
+using DistributionDrawing.Rendering.Wpf.Diagnostics;
 
 namespace DistributionDrawing.Rendering.Wpf.Routing;
 
@@ -32,6 +33,8 @@ public sealed class OrthogonalRoutePlanner
         var planned = new List<OrthogonalRoute>();
         foreach (ConnectionRouteRequest request in requests.OrderBy(request => request.ConnectionId))
         {
+            using DrawingPerformanceTrace.PhaseOperation connectionRoute =
+                DrawingPerformanceTrace.Measure("ConnectionRoute", request.ConnectionId);
             OrthogonalRoute route = RouteRequest(request, obstacleArray, planned);
             if (route.ContinuityFamily is null || route.ContinuityScore is null)
             {
@@ -60,6 +63,7 @@ public sealed class OrthogonalRoutePlanner
                 _continuity?.Stage(request.ConnectionId, family, score);
             }
             planned.Add(route);
+            connectionRoute.SetCounts(route.Segments.Count, obstacleArray.Length);
         }
 
         return planned;
