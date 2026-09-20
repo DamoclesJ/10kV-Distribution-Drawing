@@ -48,13 +48,13 @@ WP-EM-07A and WP-EM-07B are Post-EM-07 / Pre-EM-08 amendment Work Packages. They
 
 ## Post-V1 Drawing Performance & PNG Export Stabilization
 
-**Status:** ACTIVE — WP-PERF-01C-H2 PER-PLAN ROUTINGENVIRONMENT
+**Status:** ACTIVE — WP-PERF-01C-H3-1 PER-GRAPH AXIS INTERVAL INDEX
 
 This stage follows, and does not reopen, the Closed / Accepted Post-V1 Electrical Model Closure stage or WP-EM-01 through WP-EM-09. Its baseline is closure commit `841ca66319948661f7a4aca9202247d479788d7b`; `FormatVersion` remains V7. It creates no WP-EM-10 and defines no V1.1, V1.2, or V2.0 release.
 
 The approved order and boundary are:
 
-1. **WP-PERF-01 — Drawing Interaction Performance.** WP-PERF-01A and WP-PERF-01B are Accepted; Windows H1 differential verification and real-project measurements passed, so WP-PERF-01C-H1 is Accepted. WP-PERF-01C-H2 Per-Plan RoutingEnvironment is In Progress and limited to plan-lifetime immutable obstacle views and candidate/visibility axis bases. H3 and Incremental Routing, prefix reuse, complete visibility adjacency caching, incremental Scene/WPF update, mouse-event coalescing, and MouseUp optimization are not authorized.
+1. **WP-PERF-01 — Drawing Interaction Performance.** WP-PERF-01A and WP-PERF-01B are Accepted; Windows H1 differential verification and real-project measurements passed, so WP-PERF-01C-H1 is Accepted. WP-PERF-01C-H2 Per-Plan RoutingEnvironment is Accepted for correctness, with limited user-visible performance gain in comparable Windows measurements. WP-PERF-01C-H3 is In Progress; its current authorized slice is H3-1 Per-Graph Axis Interval Index, limited to strict-open interval lookup for node occupancy and visibility-edge validation within one `FindObstacleAvoidingPath` call. H3-2 and Incremental Routing, prefix reuse, complete visibility adjacency caching, incremental Scene/WPF update, mouse-event coalescing, and MouseUp optimization are not authorized.
 2. **WP-PNG-01 — PNG Export Stabilization.** This is an independent Work Package planned after WP-PERF-01 baseline work. No production implementation has started. Minimum DPI, readability acceptance, and safe pixel/memory budgets remain unfrozen pending evidence.
 
 Approximately 60 FPS remains an interaction design target rather than a formal acceptance threshold. Formal performance limits must be based on repeatable Windows measurements. Annotation, Energization Analysis, and work-ticket assisted authoring are outside this stage.

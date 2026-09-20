@@ -820,9 +820,13 @@ public sealed class OrthogonalRouter
         using (DrawingPerformanceTrace.PhaseOperation graph =
                DrawingPerformanceTrace.Measure("VisibilityGraphBuild", connectionId))
         {
+            var obstacleIndex = new VisibilityObstacleIndex(
+                xCoordinates,
+                yCoordinates,
+                obstacles);
             nodes = xCoordinates
                 .SelectMany(x => yCoordinates.Select(y => new DocumentPoint(x, y)))
-                .Where(point => !obstacles.Any(obstacle => ContainsInterior(obstacle.Bounds, point)))
+                .Where(point => !obstacleIndex.ContainsInterior(point))
                 .OrderBy(point => point.XMillimeters)
                 .ThenBy(point => point.YMillimeters)
                 .ToArray();
@@ -834,7 +838,7 @@ public sealed class OrthogonalRouter
                 edgeCount += ConnectVisibleNeighbors(
                     column.OrderBy(point => point.YMillimeters).ToArray(),
                     adjacency,
-                    obstacles,
+                    obstacleIndex,
                     diagnosticsEnabled);
             }
 
@@ -844,7 +848,7 @@ public sealed class OrthogonalRouter
                 edgeCount += ConnectVisibleNeighbors(
                     row.OrderBy(point => point.XMillimeters).ToArray(),
                     adjacency,
-                    obstacles,
+                    obstacleIndex,
                     diagnosticsEnabled);
             }
             graph.SetCounts(xCoordinates.Count, yCoordinates.Count, nodes.Length, edgeCount);
@@ -918,7 +922,7 @@ public sealed class OrthogonalRouter
     private static int ConnectVisibleNeighbors(
         IReadOnlyList<DocumentPoint> ordered,
         IDictionary<DocumentPoint, List<DocumentPoint>> adjacency,
-        IReadOnlyList<RoutingObstacle> obstacles,
+        VisibilityObstacleIndex obstacleIndex,
         bool countEdges)
     {
         int edgeCount = 0;
@@ -927,7 +931,7 @@ public sealed class OrthogonalRouter
             DocumentPoint previous = ordered[index - 1];
             DocumentPoint current = ordered[index];
             var segment = new OrthogonalRouteSegment(previous, current, 0);
-            if (obstacles.Any(obstacle => IntersectsInterior(segment, obstacle.Bounds)))
+            if (obstacleIndex.IntersectsInterior(segment))
             {
                 continue;
             }
@@ -942,12 +946,6 @@ public sealed class OrthogonalRouter
 
         return edgeCount;
     }
-
-    private static bool ContainsInterior(DocumentRect bounds, DocumentPoint point) =>
-        point.XMillimeters > bounds.XMillimeters &&
-        point.XMillimeters < bounds.XMillimeters + bounds.WidthMillimeters &&
-        point.YMillimeters > bounds.YMillimeters &&
-        point.YMillimeters < bounds.YMillimeters + bounds.HeightMillimeters;
 
     private static double ManhattanDistance(DocumentPoint first, DocumentPoint second) =>
         Math.Abs(first.XMillimeters - second.XMillimeters) +
