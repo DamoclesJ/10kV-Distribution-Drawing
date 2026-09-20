@@ -1,6 +1,6 @@
 # Post-V1 Electrical Model Closure
 
-> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-08 Slice C Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-09 Requirements Frozen / Implementation Pending / Integration-only / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
+> 状态：Scope Frozen / WP-EM-01 Closed / WP-EM-02 Closed / WP-EM-03 Closed / WP-EM-04 Closed / WP-EM-05 Closed / WP-EM-06 Closed / WP-EM-07 Closed / WP-EM-07A Closed / Archived / WP-EM-07B Closed / Archived / WP-EM-08 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-08 Slice A Closed / Accepted / WP-EM-08 Slice B Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-08 Slice C Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / WP-EM-09 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted / Grounding Scope Amendment Completed / Interaction Stabilization Amendment Completed / WP-EM-08 Scope Amendment Completed / Post-EM-07 Sequencing Amendment Completed
 >
 > 本文是 Post-V1 第一个已确认实施阶段的正式范围与执行顺序。它不定义 V1.1、V1.2 或 V2.0；已完成 Work Package 的实现事实仅以相应 Closure Evidence 记录为准。
 
@@ -1094,7 +1094,7 @@ Moving either object changes only the existing `TransformerLayout.Position` or `
 
 Windows automated verification is **PASS**, including Rendering.Wpf runtime tests and relevant Desktop / solution verification. Fix-1 corrected test-only GroundingPoint multi-hit-entry and Transformer label hit-priority assumptions; Fix-2 corrected the test-only Transformer body hit fixture so production `HitTest` selects `SelectionTargetKind.Device` rather than a CableSegment-covered connection point. No runtime-blocked state remains. Windows professional acceptance is **PASS** for direct drags, route rebuild, naming, short OHL / GAP / grounding, group move, Cancel, Undo / Redo, selection, and unsupported Switch / GAP drag behavior.
 
-Regression boundaries remain WP-EM-05 grounding layout / accepted limitation, WP-EM-06 Transformer topology, WP-EM-07 CustomerStation aggregate, WP-EM-07A GAP / short OHL / Transformer-side grounding, WP-EM-07B naming, Clipboard, Save / Open, Undo / Redo, selection identity, and existing Pole / RingCabinet / CableTermination behavior. Slice B is Closed / Accepted; Slice C is Requirements Frozen / Implementation Pending.
+Regression boundaries remain WP-EM-05 grounding layout / accepted limitation, WP-EM-06 Transformer topology, WP-EM-07 CustomerStation aggregate, WP-EM-07A GAP / short OHL / Transformer-side grounding, WP-EM-07B naming, Clipboard, Save / Open, Undo / Redo, selection identity, and existing Pole / RingCabinet / CableTermination behavior. Slice B and Slice C are Closed / Accepted / Implemented / Windows Verified / Professionally Accepted.
 
 #### WP-EM-08 Implementation Slice B — Transactional Drag Stabilization
 
@@ -1238,7 +1238,8 @@ Slice C不包含generic overlap legality、canvas bounds legality、Pole screen-
 
 ### WP-EM-09 — Electrical Model Closure Integration
 
-**状态：Requirements Frozen / Implementation Pending / Integration-only**
+**状态：Closed / Accepted / Implemented / Windows Verified / Professionally Accepted**
+**最终实现基线：** `bd8147956a0c4fba0acb0b47067c64f819d2507d`
 
 WP-EM-09 完成 Post-V1 Electrical Model Closure 的最终横向集成、cross-feature regression、组合 workflow、V7 Save / Open、Clipboard / Undo / Redo、dependency lifecycle、transient interaction / continuity facts non-persistence、Windows runtime validation 与 professional acceptance，并为整个阶段关闭做准备。
 
@@ -1278,7 +1279,7 @@ Persistence schema change = none expected；`FormatVersion = V7`。不得持久�
 
 不得第一次实现 new Device / topology、new grounding identity、Transformer / CustomerStation direct drag、`LastValid`、transactional drag framework、`RouteFamilyKey`、route hysteresis、route continuity cache、Transformer / CustomerStation obstacle policy、`GroundingAccessPoint`、optional RingCabinet `CableTerminal`、Clipboard fallback、generic collision legality、canvas bounds legality、arbitrary waypoint editor、generic routing rewrite、persistence schema extension、V8、new migration contract、Annotation / Work-ticket Presentation Layer 或 Energization Analysis。发现上述需求时，分类为 Out-of-Scope New Capability，停止并报告。
 
-#### WP-EM-09 closure gate and post-stage boundary
+#### WP-EM-09 frozen closure gate and post-stage boundary
 
 WP-EM-09 关闭前必须满足：P1 matrix disposition complete；required P2 disposition complete；Domain、Application、Infrastructure、Rendering.Wpf 与 Desktop tests 全部 PASS；Windows tests skipped = 0；Windows GUI / professional acceptance PASS；无 unresolved P0/P1 integration defect；FormatVersion remains V7；无 unauthorized new capability；governance closure complete。
 
@@ -1302,12 +1303,31 @@ WP-EM-09 关闭后，Post-V1 Electrical Model Closure 阶段结束，并返回�
 
 WP-EM-09 保持 Integration-only，不得承担 Transformer drag、CustomerStation drag、`LastValid`、hysteresis或其它新业务能力的首次实现。其范围仅限 V6 / V7 regression、save/open、clipboard、Undo / Redo、dependency deletion、electrical topology、grounding、Transformer、CustomerStation、WP-EM-07A、WP-EM-07B、WP-EM-08 regression、V6 → V7 upgrade、Windows final professional acceptance与integration defect fixes。
 
+#### WP-EM-09 final governance closure
+
+WP-EM-09 is **Closed / Accepted / Implemented / Windows Verified / Professionally Accepted** at final implementation baseline `bd8147956a0c4fba0acb0b47067c64f819d2507d`. The implementation mode was Option A — Test-only Integration Closure. A separately reviewed Option B — CustomerStation Selection Deletion Fix-1 was approved and included; this closes an existing integration defect and does not add a new electrical-model capability.
+
+P1-1 through P1-8 integration coverage disposition is complete. The integrated coverage includes RingCabinet optional terminal combinations; Transformer and CustomerStation; GroundingPoint / GAP; Cable / OHL connections; cross-feature routing and interaction; mixed-device group move; Clipboard bounded fallback; Undo / Redo; V6 → V7 compatibility; full Post-V1 document Save / Close / Open; transient interaction-state non-persistence; and dependency-deletion atomicity. P2-1 through P2-4 coverage disposition is complete. Windows automated verification passed, Windows GUI professional acceptance passed, and the user confirmed CustomerStation deletion GUI acceptance.
+
+P1-7 formal acceptance is limited to all eight bounded automatic-placement candidates being exhausted, final exception propagation, atomic state rollback, and no automatic placement sequence advance. “First seven candidates fail and the eighth succeeds” is not claimed as an acceptance fact.
+
+##### Option B — CustomerStation Selection Deletion Fix-1
+
+Professional acceptance identified that `SelectionDeletePlanner` treated a `CustomerStationIncomingFeeder`-owned `IsolationSwitch` as an independent deletion target and rejected it even when its parent CustomerStation was selected. The approved fix resolves the formal owner identity and folds the switch selection into deletion only when that exact parent is also selected. Standalone owned-switch deletion remains rejected; a switch owned by another unselected CustomerStation is not folded; external dependency guards remain active; and `CompositeDeleteCommand` preserves atomicity and stable-identity Undo / Redo. Commit: `bd8147956a0c4fba0acb0b47067c64f819d2507d`. This does not create bulk deletion or whole-document-clear capability.
+
+##### Known outstanding issues — deferred
+
+**Drag performance:** the user reports noticeable lag in both device drag and CableRoute drag at approximately three to four switchgear stations. Code audit confirmed that each valid drag candidate triggers a full-scene, all-Connection routing rebuild and WPF drawing rebuild. Windows phased performance timing, incremental routing of affected Connections, localized Scene / WPF updates, and performance acceptance remain outstanding. This issue was not fixed by WP-EM-09 and is not accepted as normal behavior. Disposition: deferred to project-level Post-V1 reassessment / dedicated performance scope.
+
+**PNG export:** the user reports PNG export failure at default resolution for a drawing with approximately four switchgear stations and four to five poles. The existing exporter uses a 300 DPI default and per-dimension / total-pixel budget guards. The actual project bounds and pixel count have not been obtained, so budget preflight versus memory exhaustion has not been conclusively determined. The follow-up direction is default automatic resolution adaptation that prioritizes readability, uses the highest safe available resolution, defines a minimum readability threshold, retains safe pixel / memory protection, and avoids routine manual DPI selection. This issue was not fixed by WP-EM-09 and is not accepted as a normal export limitation. Disposition: deferred to project-level reassessment / dedicated export-improvement scope.
+
+The Post-V1 Electrical Model Closure stage is **Closed / Accepted for its frozen scope only**. `FormatVersion` remains V7. Closure does not mean all software performance issues are solved, PNG automatic resolution adaptation is implemented, or a new product release is defined. Project control must conduct a new Post-V1 Requirement Reassessment / Planning and prioritize for discussion: (1) drawing interaction performance; (2) PNG automatic resolution adaptation and readability; and (3) the future Annotation / Work-ticket Presentation Layer. This ordering is a planning proposal, not an approved sequence or a newly created Work Package. Do not create WP-EM-10 or begin follow-up implementation as part of this closure.
+
 ## 9. 阶段执行状态
 
 当前执行状态：
 
-- Post-V1 Requirement Reassessment / Planning 结束；
-- Post-V1 Electrical Model Closure 成为当前开发目标；
+- Post-V1 Electrical Model Closure 已按冻结范围 Closed / Accepted；项目总控需启动新的 Post-V1 Requirement Reassessment / Planning；
 - WP-EM-01 Grounding Presentation Anchor Separation 已完成代码 Review、自动验证和 Windows 实机验证；
 - Post-V1 Grounding Scope Amendment 已完成并冻结；
 - WP-EM-02 V7 Format & Migration Foundation 已完成代码 Review、自动验证和 Windows 最终验证；
@@ -1316,5 +1336,5 @@ WP-EM-09 保持 Integration-only，不得承担 Transformer drag、CustomerStati
 - 当前生产实现和工程文件格式为 V7；`GroundingAccessPoint`、Transformer 与 CustomerStation vertical slice 均已完成并 Closed；
 - Interaction Stabilization Amendment 已将 grounding-specific presentation continuity 分流至 WP-EM-05，将 generic drag / routing stabilization 分流至 WP-EM-08，并将最终 Integration 顺延为 WP-EM-09；
 - WP-EM-05 已 Closed；Windows professional acceptance 为 Passed with Known Limitation；RingCabinet above-terminal visual interference 已记录为 Deferred；WP-EM-06 已 Closed，Windows professional acceptance = PASS；WP-EM-07 已 Closed，Windows automated verification 和 professional visual acceptance = PASS；
-- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，整体已 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted，并在同一个 Work Package 与 Codex Thread 内完成三个内部 implementation slices：Slice A、Slice B 与 Slice C 均为 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted；WP-EM-09 为 Requirements Frozen / Implementation Pending / Integration-only；
+- Post-EM-07 Sequencing Amendment 已插入两个独立 amendment Work Package，且不重新打开 WP-EM-06 或 WP-EM-07；WP-EM-07A 已完成 implementation、Code Review、Windows automated verification 与 Windows professional acceptance，并以 `c852d7a1f2477628664f8aeca8bfb23cf9ee3b06` Closed / Archived；WP-EM-07B 已完成 implementation、Windows automated verification、professional acceptance 与 Acceptance Fix-1，并以 `6861db3e8275f31636c744f57afb81f20d53e2e9` Closed / Archived；WP-EM-08 Implementation Audit & Scope Revalidation 已通过，Scope Amendment 已完成，整体已 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted，并在同一个 Work Package 与 Codex Thread 内完成三个内部 implementation slices：Slice A、Slice B 与 Slice C 均为 Closed / Accepted / Implemented / Windows Verified / Professionally Accepted；WP-EM-09 已以最终基线 `bd8147956a0c4fba0acb0b47067c64f819d2507d` Closed / Accepted / Implemented / Windows Verified / Professionally Accepted；
 - 后续 WP 必须按 WP-EM-01 → WP-EM-02 → WP-EM-03 → WP-EM-04 → WP-EM-05 → WP-EM-06 → WP-EM-07 → WP-EM-07A → WP-EM-07B → WP-EM-08 → WP-EM-09 顺序推进，任何范围变化需重新治理确认。
