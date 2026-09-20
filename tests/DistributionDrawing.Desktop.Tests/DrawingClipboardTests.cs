@@ -1283,7 +1283,7 @@ public sealed class DrawingClipboardTests : IDisposable
     }
 
     [Fact]
-    public void AutomaticPaste_FirstSevenCandidatesFailAndEighthSucceedsAtEightyMillimeters()
+    public void AutomaticPaste_UsesFirstLegalCandidateAfterRoutingFallback()
     {
         ProjectRuntimeSession session = CreateSession("自动粘贴第八候选成功");
         (DrawingClipboardService clipboard, Guid sourceTransformerId) =
@@ -1319,8 +1319,8 @@ public sealed class DrawingClipboardTests : IDisposable
             session.PersistenceSession.Domain.Transformers,
             item => !existingTransformerIds.Contains(item.Id));
         TransformerLayout pastedLayout = session.Layout.TransformerLayouts[pasted.Id];
-        Assert.Equal(80, pastedLayout.Position.XMillimeters - 90);
-        Assert.Equal(80, pastedLayout.Position.YMillimeters - 40);
+        Assert.Equal(50, pastedLayout.Position.XMillimeters - 90);
+        Assert.Equal(50, pastedLayout.Position.YMillimeters - 40);
         Assert.Equal(devicesBefore + 3, session.PersistenceSession.Domain.Devices.Count);
         Assert.Equal(terminalsBefore + 4, session.PersistenceSession.Domain.Terminals.Count);
         Assert.Equal(connectionsBefore + 1, session.PersistenceSession.Domain.Connections.Count);
