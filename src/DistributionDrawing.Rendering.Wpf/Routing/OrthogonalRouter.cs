@@ -14,6 +14,7 @@ public sealed class OrthogonalRouter
     private readonly RouteContinuityContext? _continuity;
     private readonly CandidateFamilyEvaluationMode _familyEvaluationMode;
     private readonly RoutingEvaluationStatistics? _evaluationStatistics;
+    internal DrawingMetrics Metrics => _metrics;
 
     public OrthogonalRouter(
         DrawingMetrics? metrics = null,
@@ -49,6 +50,19 @@ public sealed class OrthogonalRouter
 
     internal OrthogonalRoute RouteFromPlanner(
         ConnectionRouteRequest request,
+        RoutingEnvironment environment,
+        IReadOnlyList<OrthogonalRoute> plannedRoutes,
+        IEnumerable<Guid>? additionalExcludedSourceIds = null) => RouteCore(
+            request,
+            environment.SourceObstacles,
+            plannedRoutes,
+            useContinuity: true,
+            plannedRoutesAreSorted: true,
+            environment,
+            additionalExcludedSourceIds);
+
+    internal OrthogonalRoute RouteFromPlanner(
+        ConnectionRouteRequest request,
         IEnumerable<RoutingObstacle> obstacles,
         IReadOnlyList<OrthogonalRoute> plannedRoutes) => RouteCore(
             request,
@@ -59,29 +73,44 @@ public sealed class OrthogonalRouter
 
     internal OrthogonalRoute RouteWithoutContinuity(
         ConnectionRouteRequest request,
-        IEnumerable<RoutingObstacle> obstacles,
-        IReadOnlyList<OrthogonalRoute>? plannedRoutes = null)
+        RoutingEnvironment environment,
+        IReadOnlyList<OrthogonalRoute>? plannedRoutes = null,
+        IEnumerable<Guid>? additionalExcludedSourceIds = null)
     {
         return RouteCore(
+            request,
+            environment.SourceObstacles,
+            plannedRoutes,
+            useContinuity: false,
+            plannedRoutesAreSorted: true,
+            environment,
+            additionalExcludedSourceIds);
+    }
+
+    internal OrthogonalRoute RouteWithoutContinuity(
+        ConnectionRouteRequest request,
+        IEnumerable<RoutingObstacle> obstacles,
+        IReadOnlyList<OrthogonalRoute>? plannedRoutes = null) => RouteCore(
             request,
             obstacles,
             plannedRoutes,
             useContinuity: false,
             plannedRoutesAreSorted: true);
-    }
 
     private OrthogonalRoute RouteCore(
         ConnectionRouteRequest request,
         IEnumerable<RoutingObstacle> obstacles,
         IEnumerable<OrthogonalRoute>? plannedRoutes,
         bool useContinuity,
-        bool plannedRoutesAreSorted)
+        bool plannedRoutesAreSorted,
+        RoutingEnvironment? environment = null,
+        IEnumerable<Guid>? additionalExcludedSourceIds = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(obstacles);
         bool diagnosticsEnabled = DrawingPerformanceTrace.IsEnabled;
 
-        RoutingObstacle[] expandedObstacles;
+        IReadOnlyList<RoutingObstacle> expandedObstacles;
         IReadOnlyList<OrthogonalRoute> priorRoutes;
         RoutingObstacle[] pathfindingObstacles;
         TerminalAnchorDirection startDirection;
@@ -89,15 +118,31 @@ public sealed class OrthogonalRouter
         DocumentPoint startStub;
         DocumentPoint endStub;
         RouteContinuityPreference? continuityPreference;
+        EffectiveRoutingView? effectiveView = null;
+        VisibilityAxisBasis? visibilityAxisBasis = null;
         using (DrawingPerformanceTrace.PhaseOperation prepare =
                DrawingPerformanceTrace.Measure("RoutingPrepare", request.ConnectionId))
         {
-            HashSet<Guid> excludedSourceIds = request.ExcludedObstacleSourceIds?.ToHashSet() ?? [];
-            expandedObstacles = obstacles
-                .Where(obstacle => !excludedSourceIds.Contains(obstacle.SourceId))
-                .OrderBy(obstacle => obstacle.SourceId)
-                .Select(obstacle => obstacle.Expand(_metrics.Routing.ObstacleClearance))
-                .ToArray();
+            if (environment is not null)
+            {
+                IEnumerable<Guid> exclusions =
+                    (request.ExcludedObstacleSourceIds?.AsEnumerable() ?? Enumerable.Empty<Guid>())
+                    .Concat(additionalExcludedSourceIds ?? []);
+                effectiveView = environment.GetEffectiveView(
+                    exclusions,
+                    _metrics.Routing.ObstacleClearance,
+                    _metrics.Routing.ParallelSpacing);
+                expandedObstacles = effectiveView.Obstacles;
+            }
+            else
+            {
+                HashSet<Guid> excludedSourceIds = request.ExcludedObstacleSourceIds?.ToHashSet() ?? [];
+                expandedObstacles = obstacles
+                    .Where(obstacle => !excludedSourceIds.Contains(obstacle.SourceId))
+                    .OrderBy(obstacle => obstacle.SourceId)
+                    .Select(obstacle => obstacle.Expand(_metrics.Routing.ObstacleClearance))
+                    .ToArray();
+            }
             priorRoutes = plannedRoutesAreSorted && plannedRoutes is IReadOnlyList<OrthogonalRoute> sorted
                 ? sorted
                 : plannedRoutes?.OrderBy(route => route.ConnectionId).ToArray() ?? [];
@@ -107,6 +152,12 @@ public sealed class OrthogonalRouter
                     !obstacle.Contains(request.Start.Position) &&
                     !obstacle.Contains(request.End.Position))
                 .ToArray();
+            if (environment is not null && effectiveView is not null)
+            {
+                visibilityAxisBasis = environment.GetVisibilityAxisBasis(
+                    effectiveView,
+                    pathfindingObstacles);
+            }
 
             startDirection = ResolveDirection(
                 request.Start.Direction,
@@ -130,7 +181,7 @@ public sealed class OrthogonalRouter
                 ? _continuity?.GetAccepted(request.ConnectionId)
                 : null;
             prepare.SetCounts(
-                expandedObstacles.Length,
+                expandedObstacles.Count,
                 pathfindingObstacles.Length,
                 priorRoutes.Count,
                 diagnosticsEnabled ? priorRoutes.Sum(route => route.Segments.Count) : 0);
@@ -148,7 +199,9 @@ public sealed class OrthogonalRouter
                     expandedObstacles,
                     pathfindingObstacles,
                     request.PreferredHorizontalY,
-                    includeContinuityAlternatives: continuityPreference is not null)
+                    includeContinuityAlternatives: continuityPreference is not null,
+                    effectiveView?.CandidateAxes,
+                    visibilityAxisBasis)
                 .Select((core, priority) =>
                 {
                     if (diagnosticsEnabled)
@@ -180,7 +233,7 @@ public sealed class OrthogonalRouter
             materialization.SetCounts(
                 rawCandidateCount,
                 candidates.Length,
-                expandedObstacles.Length,
+                expandedObstacles.Count,
                 continuityPreference is null ? 0 : 1);
         }
 
@@ -200,7 +253,7 @@ public sealed class OrthogonalRouter
                 fallback,
                 Score(fallback, int.MaxValue, expandedObstacles, priorRoutes,
                     request.PreferredHorizontalY, CoordinateKey(fallback)),
-                Classify(request, fallback, expandedObstacles),
+                Classify(request, fallback, expandedObstacles, environment),
                 useContinuity);
         }
 
@@ -219,7 +272,7 @@ public sealed class OrthogonalRouter
                         request.PreferredHorizontalY,
                         candidate.Key),
                     Family = _familyEvaluationMode == CandidateFamilyEvaluationMode.EagerReference
-                        ? Classify(request, candidate.Route, expandedObstacles)
+                        ? Classify(request, candidate.Route, expandedObstacles, environment)
                         : null
                 })
                 .Where(candidate => candidate.Score.ObstacleIntersections == 0)
@@ -247,7 +300,7 @@ public sealed class OrthogonalRouter
                 fallback,
                 Score(fallback, int.MaxValue, expandedObstacles, priorRoutes,
                     request.PreferredHorizontalY, CoordinateKey(fallback)),
-                Classify(request, fallback, expandedObstacles),
+                Classify(request, fallback, expandedObstacles, environment),
                 useContinuity);
         }
 
@@ -284,7 +337,7 @@ public sealed class OrthogonalRouter
                     selected = currentFamily;
                 }
 
-                selectedFamily = Classify(request, selected.Route, expandedObstacles);
+                selectedFamily = Classify(request, selected.Route, expandedObstacles, environment);
                 classificationCount = candidates.Length + 1;
             }
             else if (continuityPreference is { } preference)
@@ -295,7 +348,7 @@ public sealed class OrthogonalRouter
                 for (int index = 0; index < ranked.Length; index++)
                 {
                     Candidate candidate = ranked[index];
-                    RouteFamilyKey family = Classify(request, candidate.Route, expandedObstacles);
+                    RouteFamilyKey family = Classify(request, candidate.Route, expandedObstacles, environment);
                     classificationCount++;
                     if (index == 0)
                     {
@@ -324,7 +377,7 @@ public sealed class OrthogonalRouter
             }
             else
             {
-                selectedFamily = Classify(request, selected.Route, expandedObstacles);
+                selectedFamily = Classify(request, selected.Route, expandedObstacles, environment);
                 classificationCount = 1;
             }
 
@@ -358,10 +411,16 @@ public sealed class OrthogonalRouter
     private RouteFamilyKey Classify(
         ConnectionRouteRequest request,
         OrthogonalRoute route,
-        IReadOnlyList<RoutingObstacle> obstacles)
+        IReadOnlyList<RoutingObstacle> obstacles,
+        RoutingEnvironment? environment)
     {
         _evaluationStatistics?.RecordFamilyClassification();
-        return RouteFamilyClassifier.Classify(request, route, obstacles, _metrics);
+        return RouteFamilyClassifier.ClassifySorted(
+            request,
+            route,
+            obstacles,
+            _metrics,
+            environment?.SourceIdText);
     }
 
     private static bool IsWithinSwitchingMargin(
@@ -593,7 +652,9 @@ public sealed class OrthogonalRouter
         IReadOnlyList<RoutingObstacle> obstacles,
         IReadOnlyList<RoutingObstacle> pathfindingObstacles,
         double? preferredHorizontalY,
-        bool includeContinuityAlternatives)
+        bool includeContinuityAlternatives,
+        CandidateAxisBasis? candidateAxisBasis,
+        VisibilityAxisBasis? visibilityAxisBasis)
     {
         if (start.XMillimeters == end.XMillimeters ||
             start.YMillimeters == end.YMillimeters)
@@ -632,16 +693,24 @@ public sealed class OrthogonalRouter
             end.YMillimeters + _metrics.Routing.MinimumDoglegLength
         };
 
-        foreach (RoutingObstacle obstacle in obstacles)
+        if (candidateAxisBasis is null)
         {
-            xChannels.Add(obstacle.Bounds.XMillimeters - _metrics.Routing.ParallelSpacing);
-            xChannels.Add(
-                obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters +
-                _metrics.Routing.ParallelSpacing);
-            yChannels.Add(obstacle.Bounds.YMillimeters - _metrics.Routing.ParallelSpacing);
-            yChannels.Add(
-                obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters +
-                _metrics.Routing.ParallelSpacing);
+            foreach (RoutingObstacle obstacle in obstacles)
+            {
+                xChannels.Add(obstacle.Bounds.XMillimeters - _metrics.Routing.ParallelSpacing);
+                xChannels.Add(
+                    obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters +
+                    _metrics.Routing.ParallelSpacing);
+                yChannels.Add(obstacle.Bounds.YMillimeters - _metrics.Routing.ParallelSpacing);
+                yChannels.Add(
+                    obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters +
+                    _metrics.Routing.ParallelSpacing);
+            }
+        }
+        else
+        {
+            xChannels.UnionWith(candidateAxisBasis.XCoordinates);
+            yChannels.UnionWith(candidateAxisBasis.YCoordinates);
         }
 
         foreach (double x in xChannels)
@@ -670,7 +739,8 @@ public sealed class OrthogonalRouter
             connectionId,
             start,
             end,
-            pathfindingObstacles);
+            pathfindingObstacles,
+            visibilityAxisBasis);
         if (obstacleAvoiding is not null)
         {
             yield return obstacleAvoiding;
@@ -722,25 +792,25 @@ public sealed class OrthogonalRouter
         Guid connectionId,
         DocumentPoint start,
         DocumentPoint end,
-        IReadOnlyList<RoutingObstacle> obstacles)
+        IReadOnlyList<RoutingObstacle> obstacles,
+        VisibilityAxisBasis? axisBasis)
     {
-        var xCoordinates = new SortedSet<double>
+        var xCoordinates = new SortedSet<double> { start.XMillimeters, end.XMillimeters };
+        var yCoordinates = new SortedSet<double> { start.YMillimeters, end.YMillimeters };
+        if (axisBasis is null)
         {
-            start.XMillimeters,
-            end.XMillimeters
-        };
-        var yCoordinates = new SortedSet<double>
+            foreach (RoutingObstacle obstacle in obstacles)
+            {
+                xCoordinates.Add(obstacle.Bounds.XMillimeters);
+                xCoordinates.Add(obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters);
+                yCoordinates.Add(obstacle.Bounds.YMillimeters);
+                yCoordinates.Add(obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters);
+            }
+        }
+        else
         {
-            start.YMillimeters,
-            end.YMillimeters
-        };
-
-        foreach (RoutingObstacle obstacle in obstacles)
-        {
-            xCoordinates.Add(obstacle.Bounds.XMillimeters);
-            xCoordinates.Add(obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters);
-            yCoordinates.Add(obstacle.Bounds.YMillimeters);
-            yCoordinates.Add(obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters);
+            xCoordinates.UnionWith(axisBasis.XCoordinates);
+            yCoordinates.UnionWith(axisBasis.YCoordinates);
         }
 
         DocumentPoint[] nodes;

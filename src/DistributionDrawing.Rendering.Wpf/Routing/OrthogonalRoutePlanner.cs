@@ -10,15 +10,29 @@ public sealed class OrthogonalRoutePlanner
     private readonly OrthogonalRouter _router;
     private readonly RouteContinuityContext? _continuity;
     private readonly DrawingMetrics _metrics;
+    private readonly RoutingEnvironmentCounters? _environmentCounters;
+    private readonly bool _useRoutingEnvironment;
 
     public OrthogonalRoutePlanner(
         OrthogonalRouter? router = null,
         RouteContinuityContext? continuity = null,
         DrawingMetrics? metrics = null)
+        : this(router, continuity, metrics, null, true)
+    {
+    }
+
+    internal OrthogonalRoutePlanner(
+        OrthogonalRouter? router,
+        RouteContinuityContext? continuity,
+        DrawingMetrics? metrics,
+        RoutingEnvironmentCounters? environmentCounters,
+        bool useRoutingEnvironment = true)
     {
         _metrics = metrics ?? DrawingMetrics.Default;
         _continuity = continuity;
         _router = router ?? new OrthogonalRouter(_metrics, continuity);
+        _environmentCounters = environmentCounters;
+        _useRoutingEnvironment = useRoutingEnvironment;
     }
 
     public IReadOnlyList<OrthogonalRoute> Plan(
@@ -27,27 +41,33 @@ public sealed class OrthogonalRoutePlanner
     {
         ArgumentNullException.ThrowIfNull(requests);
         ArgumentNullException.ThrowIfNull(obstacles);
-        RoutingObstacle[] obstacleArray = obstacles
-            .OrderBy(obstacle => obstacle.SourceId)
-            .ToArray();
+        RoutingEnvironment? environment = _useRoutingEnvironment
+            ? new RoutingEnvironment(obstacles, _router.Metrics, _environmentCounters)
+            : null;
+        IReadOnlyList<RoutingObstacle> obstacleArray = environment?.SourceObstacles ??
+            obstacles.OrderBy(obstacle => obstacle.SourceId).ToArray();
         var planned = new List<OrthogonalRoute>();
         foreach (ConnectionRouteRequest request in requests.OrderBy(request => request.ConnectionId))
         {
             using DrawingPerformanceTrace.PhaseOperation connectionRoute =
-                DrawingPerformanceTrace.Measure("ConnectionRoute", request.ConnectionId);
-            OrthogonalRoute route = RouteRequest(request, obstacleArray, planned);
+               DrawingPerformanceTrace.Measure("ConnectionRoute", request.ConnectionId);
+            OrthogonalRoute route = RouteRequest(request, obstacleArray, environment, planned);
             if (route.ContinuityFamily is null || route.ContinuityScore is null)
             {
                 HashSet<Guid> excluded = request.ExcludedObstacleSourceIds?.ToHashSet() ?? [];
-                RoutingObstacle[] activeObstacles = obstacleArray
+                IReadOnlyList<RoutingObstacle> expandedObstacles = environment is null
+                    ? obstacleArray.Select(obstacle => obstacle.Expand(
+                        _metrics.Routing.ObstacleClearance)).ToArray()
+                    : environment.GetExpandedObstacles(_metrics.Routing.ObstacleClearance);
+                IReadOnlyList<RoutingObstacle> activeObstacles = expandedObstacles
                     .Where(obstacle => !excluded.Contains(obstacle.SourceId))
-                    .Select(obstacle => obstacle.Expand(_metrics.Routing.ObstacleClearance))
                     .ToArray();
-                RouteFamilyKey family = RouteFamilyClassifier.Classify(
+                RouteFamilyKey family = RouteFamilyClassifier.ClassifySorted(
                     request,
                     route,
                     activeObstacles,
-                    _metrics);
+                    _metrics,
+                    environment?.SourceIdText);
                 var score = new RouteCandidateScore(
                     0,
                     0,
@@ -63,7 +83,7 @@ public sealed class OrthogonalRoutePlanner
                 _continuity?.Stage(request.ConnectionId, family, score);
             }
             planned.Add(route);
-            connectionRoute.SetCounts(route.Segments.Count, obstacleArray.Length);
+            connectionRoute.SetCounts(route.Segments.Count, obstacleArray.Count);
         }
 
         return planned;
@@ -72,19 +92,22 @@ public sealed class OrthogonalRoutePlanner
     private OrthogonalRoute RouteRequest(
         ConnectionRouteRequest request,
         IReadOnlyList<RoutingObstacle> obstacles,
+        RoutingEnvironment? environment,
         IReadOnlyList<OrthogonalRoute> planned)
     {
         RequiredRouteWaypoint[] allWaypoints = request.RequiredWaypoints?.ToArray() ?? [];
         if (allWaypoints.Length == 0)
         {
-            return _router.RouteFromPlanner(request, obstacles, planned);
+            return environment is null
+                ? _router.RouteFromPlanner(request, obstacles, planned)
+                : _router.RouteFromPlanner(request, environment, planned);
         }
 
         HashSet<Guid> requiredSourceIds = allWaypoints.Select(item => item.SourceId).ToHashSet();
         requiredSourceIds.UnionWith(allWaypoints.SelectMany(item => item.CompositeSourceIds ?? []));
-        RoutingObstacle[] routeObstacles = obstacles
-            .Where(obstacle => !requiredSourceIds.Contains(obstacle.SourceId))
-            .ToArray();
+        IReadOnlyList<RoutingObstacle> routeObstacles = environment is null
+            ? obstacles.Where(obstacle => !requiredSourceIds.Contains(obstacle.SourceId)).ToArray()
+            : obstacles;
         bool substituteStart = allWaypoints.Length > 0 &&
             allWaypoints[0].AllowStartEndpointSubstitution;
         bool substituteEnd = allWaypoints.Length > 0 &&
@@ -114,14 +137,21 @@ public sealed class OrthogonalRoutePlanner
         };
         if (waypoints.Length == 0)
         {
-            return _router.RouteFromPlanner(request with
+            ConnectionRouteRequest routedRequest = request with
             {
                 Start = requestStart,
                 End = requestEnd,
                 RequiredWaypoints = null,
                 EnforceRequiredStubConstraints = startTransferredStub > 0 || endTransferredStub > 0,
                 DisallowBacktracking = request.DisallowBacktracking || substituteStart || substituteEnd
-            }, routeObstacles, planned);
+            };
+            return environment is null
+                ? _router.RouteFromPlanner(routedRequest, routeObstacles, planned)
+                : _router.RouteFromPlanner(
+                    routedRequest,
+                    environment,
+                    planned,
+                    requiredSourceIds);
         }
         DocumentPoint[] passagePoints =
             [requestStart.Position, .. waypoints.Select(item => item.Position), requestEnd.Position];
@@ -157,7 +187,13 @@ public sealed class OrthogonalRoutePlanner
                     (index == 0 && substituteStart) ||
                     (index == passagePoints.Length - 2 && substituteEnd)
             };
-            OrthogonalRoute leg = _router.RouteWithoutContinuity(legRequest, routeObstacles, planned);
+            OrthogonalRoute leg = environment is null
+                ? _router.RouteWithoutContinuity(legRequest, routeObstacles, planned)
+                : _router.RouteWithoutContinuity(
+                    legRequest,
+                    environment,
+                    planned,
+                    requiredSourceIds);
             points.AddRange(index == 0 ? leg.Points : leg.Points.Skip(1));
         }
 

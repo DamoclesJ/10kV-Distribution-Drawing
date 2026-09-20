@@ -128,7 +128,31 @@ internal static class RouteFamilyClassifier
         ConnectionRouteRequest request,
         OrthogonalRoute route,
         IReadOnlyList<RoutingObstacle> obstacles,
-        DrawingMetrics metrics)
+        DrawingMetrics metrics) => ClassifyCore(
+            request,
+            route,
+            obstacles.OrderBy(obstacle => obstacle.SourceId).ToArray(),
+            metrics,
+            null);
+
+    internal static RouteFamilyKey ClassifySorted(
+        ConnectionRouteRequest request,
+        OrthogonalRoute route,
+        IReadOnlyList<RoutingObstacle> obstacles,
+        DrawingMetrics metrics,
+        IReadOnlyDictionary<Guid, string>? sourceIdText) => ClassifyCore(
+            request,
+            route,
+            obstacles,
+            metrics,
+            sourceIdText);
+
+    private static RouteFamilyKey ClassifyCore(
+        ConnectionRouteRequest request,
+        OrthogonalRoute route,
+        IReadOnlyList<RoutingObstacle> obstacles,
+        DrawingMetrics metrics,
+        IReadOnlyDictionary<Guid, string>? sourceIdText)
     {
         RouteTopologyKind topology = route.Segments.Count switch
         {
@@ -144,17 +168,20 @@ internal static class RouteFamilyClassifier
         string waypointPasses = string.Join(",", (request.RequiredWaypoints ?? [])
             .Select(waypoint => WaypointPass(route, waypoint)));
         var obstacleClassifications = obstacles
-            .OrderBy(obstacle => obstacle.SourceId)
             .Select(obstacle => (
                 Obstacle: obstacle,
+                SourceIdText: sourceIdText is not null &&
+                    sourceIdText.TryGetValue(obstacle.SourceId, out string? formatted)
+                    ? formatted
+                    : obstacle.SourceId.ToString("N"),
                 Pass: ObstaclePass(route, obstacle)))
             .ToArray();
         string obstaclePasses = string.Join(",", obstacleClassifications.Select(item =>
-            $"{item.Obstacle.SourceId:N}:{item.Pass.Side}"));
+            $"{item.SourceIdText}:{item.Pass.Side}"));
         string channels = string.Join(",", obstacleClassifications
             .Where(item => item.Pass.Segment is not null)
             .Select(item =>
-                $"{item.Obstacle.SourceId:N}:" + ChannelFamily(
+                $"{item.SourceIdText}:" + ChannelFamily(
                     request,
                     item.Pass.Segment!.Value,
                     item.Obstacle,
