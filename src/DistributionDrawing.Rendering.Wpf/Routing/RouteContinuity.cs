@@ -103,6 +103,11 @@ public sealed class RouteContinuityContext
             ? value
             : null;
 
+    internal RouteContinuityPreference? GetProvisional(Guid connectionId) =>
+        IsActive && _provisional.TryGetValue(connectionId, out RouteContinuityPreference value)
+            ? value
+            : null;
+
     internal void Stage(
         Guid connectionId,
         RouteFamilyKey family,

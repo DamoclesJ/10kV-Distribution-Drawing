@@ -77,7 +77,7 @@ public sealed class OrthogonalRoutePlanner
         RequiredRouteWaypoint[] allWaypoints = request.RequiredWaypoints?.ToArray() ?? [];
         if (allWaypoints.Length == 0)
         {
-            return _router.Route(request, obstacles, planned);
+            return _router.RouteFromPlanner(request, obstacles, planned);
         }
 
         HashSet<Guid> requiredSourceIds = allWaypoints.Select(item => item.SourceId).ToHashSet();
@@ -114,7 +114,7 @@ public sealed class OrthogonalRoutePlanner
         };
         if (waypoints.Length == 0)
         {
-            return _router.Route(request with
+            return _router.RouteFromPlanner(request with
             {
                 Start = requestStart,
                 End = requestEnd,

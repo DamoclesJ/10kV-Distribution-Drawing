@@ -1,6 +1,7 @@
 using DistributionDrawing.Rendering.Wpf.Metrics;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Scene;
+using DistributionDrawing.Rendering.Wpf.Diagnostics;
 
 namespace DistributionDrawing.Rendering.Wpf.Routing;
 
@@ -11,13 +12,26 @@ public sealed class OrthogonalRouter
     internal const double RouteFamilySwitchingMargin = 8;
     private readonly DrawingMetrics _metrics;
     private readonly RouteContinuityContext? _continuity;
+    private readonly CandidateFamilyEvaluationMode _familyEvaluationMode;
+    private readonly RoutingEvaluationStatistics? _evaluationStatistics;
 
     public OrthogonalRouter(
         DrawingMetrics? metrics = null,
         RouteContinuityContext? continuity = null)
+        : this(metrics, continuity, CandidateFamilyEvaluationMode.Lazy, null)
+    {
+    }
+
+    internal OrthogonalRouter(
+        DrawingMetrics? metrics,
+        RouteContinuityContext? continuity,
+        CandidateFamilyEvaluationMode familyEvaluationMode,
+        RoutingEvaluationStatistics? evaluationStatistics = null)
     {
         _metrics = metrics ?? DrawingMetrics.Default;
         _continuity = continuity;
+        _familyEvaluationMode = familyEvaluationMode;
+        _evaluationStatistics = evaluationStatistics;
     }
 
     public OrthogonalRoute Route(
@@ -25,101 +39,150 @@ public sealed class OrthogonalRouter
         IEnumerable<RoutingObstacle> obstacles,
         IEnumerable<OrthogonalRoute>? plannedRoutes = null)
     {
-        return RouteCore(request, obstacles, plannedRoutes, useContinuity: true);
+        return RouteCore(
+            request,
+            obstacles,
+            plannedRoutes,
+            useContinuity: true,
+            plannedRoutesAreSorted: false);
     }
+
+    internal OrthogonalRoute RouteFromPlanner(
+        ConnectionRouteRequest request,
+        IEnumerable<RoutingObstacle> obstacles,
+        IReadOnlyList<OrthogonalRoute> plannedRoutes) => RouteCore(
+            request,
+            obstacles,
+            plannedRoutes,
+            useContinuity: true,
+            plannedRoutesAreSorted: true);
 
     internal OrthogonalRoute RouteWithoutContinuity(
         ConnectionRouteRequest request,
         IEnumerable<RoutingObstacle> obstacles,
-        IEnumerable<OrthogonalRoute>? plannedRoutes = null)
+        IReadOnlyList<OrthogonalRoute>? plannedRoutes = null)
     {
-        return RouteCore(request, obstacles, plannedRoutes, useContinuity: false);
+        return RouteCore(
+            request,
+            obstacles,
+            plannedRoutes,
+            useContinuity: false,
+            plannedRoutesAreSorted: true);
     }
 
     private OrthogonalRoute RouteCore(
         ConnectionRouteRequest request,
         IEnumerable<RoutingObstacle> obstacles,
         IEnumerable<OrthogonalRoute>? plannedRoutes,
-        bool useContinuity)
+        bool useContinuity,
+        bool plannedRoutesAreSorted)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(obstacles);
+        bool diagnosticsEnabled = DrawingPerformanceTrace.IsEnabled;
 
-        HashSet<Guid> excludedSourceIds = request.ExcludedObstacleSourceIds?.ToHashSet() ?? [];
-        RoutingObstacle[] expandedObstacles = obstacles
-            .Where(obstacle => !excludedSourceIds.Contains(obstacle.SourceId))
-            .OrderBy(obstacle => obstacle.SourceId)
-            .Select(obstacle => obstacle.Expand(_metrics.Routing.ObstacleClearance))
-            .ToArray();
-        OrthogonalRoute[] priorRoutes = plannedRoutes?
-            .OrderBy(route => route.ConnectionId)
-            .ToArray() ?? [];
-        RoutingObstacle[] pathfindingObstacles = expandedObstacles
-            .Where(obstacle =>
-                RequiresStableOwnerExclusion(obstacle) ||
-                !obstacle.Contains(request.Start.Position) &&
-                !obstacle.Contains(request.End.Position))
-            .ToArray();
+        RoutingObstacle[] expandedObstacles;
+        IReadOnlyList<OrthogonalRoute> priorRoutes;
+        RoutingObstacle[] pathfindingObstacles;
+        TerminalAnchorDirection startDirection;
+        TerminalAnchorDirection endOutwardDirection;
+        DocumentPoint startStub;
+        DocumentPoint endStub;
+        RouteContinuityPreference? continuityPreference;
+        using (DrawingPerformanceTrace.PhaseOperation prepare =
+               DrawingPerformanceTrace.Measure("RoutingPrepare", request.ConnectionId))
+        {
+            HashSet<Guid> excludedSourceIds = request.ExcludedObstacleSourceIds?.ToHashSet() ?? [];
+            expandedObstacles = obstacles
+                .Where(obstacle => !excludedSourceIds.Contains(obstacle.SourceId))
+                .OrderBy(obstacle => obstacle.SourceId)
+                .Select(obstacle => obstacle.Expand(_metrics.Routing.ObstacleClearance))
+                .ToArray();
+            priorRoutes = plannedRoutesAreSorted && plannedRoutes is IReadOnlyList<OrthogonalRoute> sorted
+                ? sorted
+                : plannedRoutes?.OrderBy(route => route.ConnectionId).ToArray() ?? [];
+            pathfindingObstacles = expandedObstacles
+                .Where(obstacle =>
+                    RequiresStableOwnerExclusion(obstacle) ||
+                    !obstacle.Contains(request.Start.Position) &&
+                    !obstacle.Contains(request.End.Position))
+                .ToArray();
 
-        TerminalAnchorDirection startDirection = ResolveDirection(
-            request.Start.Direction,
-            request.Start.Position,
-            request.End.Position);
-        TerminalAnchorDirection endOutwardDirection = request.End.Direction ==
-            TerminalAnchorDirection.Auto
-            ? Opposite(ResolveDirection(
-                TerminalAnchorDirection.Auto,
+            startDirection = ResolveDirection(
+                request.Start.Direction,
                 request.Start.Position,
-                request.End.Position))
-            : request.End.Direction;
-        DocumentPoint startStub = Move(
-            request.Start.Position,
-            startDirection,
-            Math.Max(
-                _metrics.Routing.PortStubLength,
-                request.Start.MinimumStubLength));
-        DocumentPoint endStub = Move(
-            request.End.Position,
-            endOutwardDirection,
-            Math.Max(
-                _metrics.Routing.PortStubLength,
-                request.End.MinimumStubLength));
-        RouteContinuityPreference? continuityPreference = useContinuity
-            ? _continuity?.GetAccepted(request.ConnectionId)
-            : null;
-
-        Candidate[] candidates = CreateCandidates(
-                startStub,
-                endStub,
-                expandedObstacles,
-                pathfindingObstacles,
-                request.PreferredHorizontalY,
-                includeContinuityAlternatives: continuityPreference is not null)
-            .Select((core, priority) => CreateCandidate(
-                request,
-                request.Start.Position,
-                startStub,
-                core,
-                endStub,
-                request.End.Position,
-                priority))
-            .Where(candidate => HasTerminalStubs(
-                candidate.Route,
+                request.End.Position);
+            endOutwardDirection = request.End.Direction == TerminalAnchorDirection.Auto
+                ? Opposite(ResolveDirection(
+                    TerminalAnchorDirection.Auto,
+                    request.Start.Position,
+                    request.End.Position))
+                : request.End.Direction;
+            startStub = Move(
                 request.Start.Position,
                 startDirection,
-                request.Start.MinimumStubLength,
+                Math.Max(_metrics.Routing.PortStubLength, request.Start.MinimumStubLength));
+            endStub = Move(
                 request.End.Position,
                 endOutwardDirection,
-                request.End.MinimumStubLength))
-            .Where(candidate => !request.DisallowBacktracking ||
-                !HasBacktracking(candidate.Route))
-            .GroupBy(candidate => string.Join(
-                ";",
-                candidate.Route.Points.Select(point =>
-                    $"{point.XMillimeters:R},{point.YMillimeters:R}")),
-                StringComparer.Ordinal)
-            .Select(group => group.First())
-            .ToArray();
+                Math.Max(_metrics.Routing.PortStubLength, request.End.MinimumStubLength));
+            continuityPreference = useContinuity
+                ? _continuity?.GetAccepted(request.ConnectionId)
+                : null;
+            prepare.SetCounts(
+                expandedObstacles.Length,
+                pathfindingObstacles.Length,
+                priorRoutes.Count,
+                diagnosticsEnabled ? priorRoutes.Sum(route => route.Segments.Count) : 0);
+        }
+
+        int rawCandidateCount = 0;
+        Candidate[] candidates;
+        using (DrawingPerformanceTrace.PhaseOperation materialization =
+               DrawingPerformanceTrace.Measure("CandidateMaterialization", request.ConnectionId))
+        {
+            candidates = CreateCandidates(
+                    request.ConnectionId,
+                    startStub,
+                    endStub,
+                    expandedObstacles,
+                    pathfindingObstacles,
+                    request.PreferredHorizontalY,
+                    includeContinuityAlternatives: continuityPreference is not null)
+                .Select((core, priority) =>
+                {
+                    if (diagnosticsEnabled)
+                    {
+                        rawCandidateCount++;
+                    }
+                    return CreateCandidate(
+                        request,
+                        request.Start.Position,
+                        startStub,
+                        core,
+                        endStub,
+                        request.End.Position,
+                        priority);
+                })
+                .Where(candidate => HasTerminalStubs(
+                    candidate.Route,
+                    request.Start.Position,
+                    startDirection,
+                    request.Start.MinimumStubLength,
+                    request.End.Position,
+                    endOutwardDirection,
+                    request.End.MinimumStubLength))
+                .Where(candidate => !request.DisallowBacktracking ||
+                    !HasBacktracking(candidate.Route))
+                .GroupBy(candidate => candidate.Key, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToArray();
+            materialization.SetCounts(
+                rawCandidateCount,
+                candidates.Length,
+                expandedObstacles.Length,
+                continuityPreference is null ? 0 : 1);
+        }
 
         if (candidates.Length == 0)
         {
@@ -136,28 +199,37 @@ public sealed class OrthogonalRouter
                 request,
                 fallback,
                 Score(fallback, int.MaxValue, expandedObstacles, priorRoutes,
-                    request.PreferredHorizontalY),
-                expandedObstacles,
+                    request.PreferredHorizontalY, CoordinateKey(fallback)),
+                Classify(request, fallback, expandedObstacles),
                 useContinuity);
         }
 
-        Candidate[] scoredCandidates = candidates
-            .Select(candidate => candidate with
-            {
-                Score = Score(
-                    candidate.Route,
-                    candidate.Priority,
-                    expandedObstacles,
-                    priorRoutes,
-                    request.PreferredHorizontalY),
-                Family = RouteFamilyClassifier.Classify(
-                    request,
-                    candidate.Route,
-                    expandedObstacles,
-                    _metrics)
-            })
-            .Where(candidate => candidate.Score.ObstacleIntersections == 0)
-            .ToArray();
+        Candidate[] scoredCandidates;
+        using (DrawingPerformanceTrace.PhaseOperation scoring =
+               DrawingPerformanceTrace.Measure("CandidateScoring", request.ConnectionId))
+        {
+            scoredCandidates = candidates
+                .Select(candidate => candidate with
+                {
+                    Score = Score(
+                        candidate.Route,
+                        candidate.Priority,
+                        expandedObstacles,
+                        priorRoutes,
+                        request.PreferredHorizontalY,
+                        candidate.Key),
+                    Family = _familyEvaluationMode == CandidateFamilyEvaluationMode.EagerReference
+                        ? Classify(request, candidate.Route, expandedObstacles)
+                        : null
+                })
+                .Where(candidate => candidate.Score.ObstacleIntersections == 0)
+                .ToArray();
+            scoring.SetCounts(
+                scoredCandidates.Length,
+                candidates.Length,
+                priorRoutes.Count,
+                diagnosticsEnabled ? priorRoutes.Sum(route => route.Segments.Count) : 0);
+        }
 
         if (scoredCandidates.Length == 0)
         {
@@ -174,38 +246,96 @@ public sealed class OrthogonalRouter
                 request,
                 fallback,
                 Score(fallback, int.MaxValue, expandedObstacles, priorRoutes,
-                    request.PreferredHorizontalY),
-                expandedObstacles,
+                    request.PreferredHorizontalY, CoordinateKey(fallback)),
+                Classify(request, fallback, expandedObstacles),
                 useContinuity);
         }
 
-        Candidate[] ranked = scoredCandidates
-            .OrderBy(candidate => candidate.Score.ObstacleIntersections)
-            .ThenBy(candidate => candidate.Score.HorizontalGuideDeviation)
-            .ThenBy(candidate => candidate.Score.OverlapLength)
-            .ThenBy(candidate => candidate.Score.Crossings)
-            .ThenBy(candidate => candidate.Score.Bends)
-            .ThenBy(candidate => candidate.Score.Length)
-            .ThenBy(candidate => candidate.Priority)
-            .ThenBy(candidate => candidate.Key, StringComparer.Ordinal)
-            .ToArray();
-        Candidate selected = ranked[0];
-        if (continuityPreference is { } preference)
+        Candidate[] ranked;
+        using (DrawingPerformanceTrace.PhaseOperation ranking =
+               DrawingPerformanceTrace.Measure("CandidateRanking", request.ConnectionId))
         {
-            Candidate? currentFamily = ranked.FirstOrDefault(candidate =>
-                candidate.Family == preference.Family);
-            if (currentFamily is not null &&
-                IsWithinSwitchingMargin(currentFamily.Score, selected.Score))
+            ranked = scoredCandidates
+                .OrderBy(candidate => candidate.Score.ObstacleIntersections)
+                .ThenBy(candidate => candidate.Score.HorizontalGuideDeviation)
+                .ThenBy(candidate => candidate.Score.OverlapLength)
+                .ThenBy(candidate => candidate.Score.Crossings)
+                .ThenBy(candidate => candidate.Score.Bends)
+                .ThenBy(candidate => candidate.Score.Length)
+                .ThenBy(candidate => candidate.Priority)
+                .ThenBy(candidate => candidate.Key, StringComparer.Ordinal)
+                .ToArray();
+            ranking.SetCounts(ranked.Length);
+        }
+        Candidate selected = ranked[0];
+        RouteFamilyKey selectedFamily;
+        int classificationCount = 0;
+        using (DrawingPerformanceTrace.PhaseOperation classification =
+               DrawingPerformanceTrace.Measure("RouteFamilyClassification", request.ConnectionId))
+        {
+            if (_familyEvaluationMode == CandidateFamilyEvaluationMode.EagerReference)
             {
-                selected = currentFamily;
+                Candidate? currentFamily = continuityPreference is { } preference
+                    ? ranked.FirstOrDefault(candidate => candidate.Family == preference.Family)
+                    : null;
+                if (currentFamily is not null &&
+                    IsWithinSwitchingMargin(currentFamily.Score, selected.Score))
+                {
+                    selected = currentFamily;
+                }
+
+                selectedFamily = Classify(request, selected.Route, expandedObstacles);
+                classificationCount = candidates.Length + 1;
             }
+            else if (continuityPreference is { } preference)
+            {
+                RouteFamilyKey? overallFamily = null;
+                RouteFamilyKey? matchingFamily = null;
+                Candidate? currentFamily = null;
+                for (int index = 0; index < ranked.Length; index++)
+                {
+                    Candidate candidate = ranked[index];
+                    RouteFamilyKey family = Classify(request, candidate.Route, expandedObstacles);
+                    classificationCount++;
+                    if (index == 0)
+                    {
+                        overallFamily = family;
+                    }
+                    if (family != preference.Family)
+                    {
+                        continue;
+                    }
+
+                    currentFamily = candidate;
+                    matchingFamily = family;
+                    break;
+                }
+
+                if (currentFamily is not null &&
+                    IsWithinSwitchingMargin(currentFamily.Score, selected.Score))
+                {
+                    selected = currentFamily;
+                    selectedFamily = matchingFamily!.Value;
+                }
+                else
+                {
+                    selectedFamily = overallFamily!.Value;
+                }
+            }
+            else
+            {
+                selectedFamily = Classify(request, selected.Route, expandedObstacles);
+                classificationCount = 1;
+            }
+
+            classification.SetCounts(classificationCount, ranked.Length);
         }
 
         return CompleteSelection(
             request,
             selected.Route,
             selected.Score,
-            expandedObstacles,
+            selectedFamily,
             useContinuity);
     }
 
@@ -213,10 +343,9 @@ public sealed class OrthogonalRouter
         ConnectionRouteRequest request,
         OrthogonalRoute route,
         RouteCandidateScore score,
-        IReadOnlyList<RoutingObstacle> obstacles,
+        RouteFamilyKey family,
         bool stage)
     {
-        RouteFamilyKey family = RouteFamilyClassifier.Classify(request, route, obstacles, _metrics);
         route.ContinuityFamily = family;
         route.ContinuityScore = score;
         if (stage)
@@ -224,6 +353,15 @@ public sealed class OrthogonalRouter
             _continuity?.Stage(request.ConnectionId, family, score);
         }
         return route;
+    }
+
+    private RouteFamilyKey Classify(
+        ConnectionRouteRequest request,
+        OrthogonalRoute route,
+        IReadOnlyList<RoutingObstacle> obstacles)
+    {
+        _evaluationStatistics?.RecordFamilyClassification();
+        return RouteFamilyClassifier.Classify(request, route, obstacles, _metrics);
     }
 
     private static bool IsWithinSwitchingMargin(
@@ -449,6 +587,7 @@ public sealed class OrthogonalRouter
     }
 
     private IEnumerable<IReadOnlyList<DocumentPoint>> CreateCandidates(
+        Guid connectionId,
         DocumentPoint start,
         DocumentPoint end,
         IReadOnlyList<RoutingObstacle> obstacles,
@@ -528,6 +667,7 @@ public sealed class OrthogonalRouter
         }
 
         IReadOnlyList<DocumentPoint>? obstacleAvoiding = FindObstacleAvoidingPath(
+            connectionId,
             start,
             end,
             pathfindingObstacles);
@@ -579,6 +719,7 @@ public sealed class OrthogonalRouter
     }
 
     private IReadOnlyList<DocumentPoint>? FindObstacleAvoidingPath(
+        Guid connectionId,
         DocumentPoint start,
         DocumentPoint end,
         IReadOnlyList<RoutingObstacle> obstacles)
@@ -602,28 +743,41 @@ public sealed class OrthogonalRouter
             yCoordinates.Add(obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters);
         }
 
-        DocumentPoint[] nodes = xCoordinates
-            .SelectMany(x => yCoordinates.Select(y => new DocumentPoint(x, y)))
-            .Where(point => !obstacles.Any(obstacle => ContainsInterior(obstacle.Bounds, point)))
-            .OrderBy(point => point.XMillimeters)
-            .ThenBy(point => point.YMillimeters)
-            .ToArray();
-        var adjacency = nodes.ToDictionary(point => point, _ => new List<DocumentPoint>());
-
-        foreach (IGrouping<double, DocumentPoint> column in nodes.GroupBy(point => point.XMillimeters))
+        DocumentPoint[] nodes;
+        Dictionary<DocumentPoint, List<DocumentPoint>> adjacency;
+        int edgeCount = 0;
+        bool diagnosticsEnabled = DrawingPerformanceTrace.IsEnabled;
+        using (DrawingPerformanceTrace.PhaseOperation graph =
+               DrawingPerformanceTrace.Measure("VisibilityGraphBuild", connectionId))
         {
-            ConnectVisibleNeighbors(
-                column.OrderBy(point => point.YMillimeters).ToArray(),
-                adjacency,
-                obstacles);
-        }
+            nodes = xCoordinates
+                .SelectMany(x => yCoordinates.Select(y => new DocumentPoint(x, y)))
+                .Where(point => !obstacles.Any(obstacle => ContainsInterior(obstacle.Bounds, point)))
+                .OrderBy(point => point.XMillimeters)
+                .ThenBy(point => point.YMillimeters)
+                .ToArray();
+            adjacency = nodes.ToDictionary(point => point, _ => new List<DocumentPoint>());
 
-        foreach (IGrouping<double, DocumentPoint> row in nodes.GroupBy(point => point.YMillimeters))
-        {
-            ConnectVisibleNeighbors(
-                row.OrderBy(point => point.XMillimeters).ToArray(),
-                adjacency,
-                obstacles);
+            foreach (IGrouping<double, DocumentPoint> column in
+                     nodes.GroupBy(point => point.XMillimeters))
+            {
+                edgeCount += ConnectVisibleNeighbors(
+                    column.OrderBy(point => point.YMillimeters).ToArray(),
+                    adjacency,
+                    obstacles,
+                    diagnosticsEnabled);
+            }
+
+            foreach (IGrouping<double, DocumentPoint> row in
+                     nodes.GroupBy(point => point.YMillimeters))
+            {
+                edgeCount += ConnectVisibleNeighbors(
+                    row.OrderBy(point => point.XMillimeters).ToArray(),
+                    adjacency,
+                    obstacles,
+                    diagnosticsEnabled);
+            }
+            graph.SetCounts(xCoordinates.Count, yCoordinates.Count, nodes.Length, edgeCount);
         }
 
         if (!adjacency.ContainsKey(start) || !adjacency.ContainsKey(end))
@@ -631,14 +785,21 @@ public sealed class OrthogonalRouter
             return null;
         }
 
+        using DrawingPerformanceTrace.PhaseOperation dijkstra =
+            DrawingPerformanceTrace.Measure("VisibilityDijkstra", connectionId);
         var distances = nodes.ToDictionary(point => point, _ => double.PositiveInfinity);
         var previous = new Dictionary<DocumentPoint, DocumentPoint>();
         var queue = new PriorityQueue<DocumentPoint, (double Distance, double X, double Y)>();
         distances[start] = 0;
         queue.Enqueue(start, (0, start.XMillimeters, start.YMillimeters));
+        int dequeuedCount = 0;
 
         while (queue.TryDequeue(out DocumentPoint current, out var priority))
         {
+            if (diagnosticsEnabled)
+            {
+                dequeuedCount++;
+            }
             if (priority.Distance > distances[current])
             {
                 continue;
@@ -669,6 +830,7 @@ public sealed class OrthogonalRouter
 
         if (!previous.ContainsKey(end))
         {
+            dijkstra.SetCounts(nodes.Length, edgeCount, dequeuedCount);
             return null;
         }
 
@@ -679,14 +841,17 @@ public sealed class OrthogonalRouter
         }
 
         path.Reverse();
+        dijkstra.SetCounts(nodes.Length, edgeCount, dequeuedCount, path.Count);
         return NormalizePreview(path);
     }
 
-    private static void ConnectVisibleNeighbors(
+    private static int ConnectVisibleNeighbors(
         IReadOnlyList<DocumentPoint> ordered,
         IDictionary<DocumentPoint, List<DocumentPoint>> adjacency,
-        IReadOnlyList<RoutingObstacle> obstacles)
+        IReadOnlyList<RoutingObstacle> obstacles,
+        bool countEdges)
     {
+        int edgeCount = 0;
         for (int index = 1; index < ordered.Count; index++)
         {
             DocumentPoint previous = ordered[index - 1];
@@ -699,7 +864,13 @@ public sealed class OrthogonalRouter
 
             adjacency[previous].Add(current);
             adjacency[current].Add(previous);
+            if (countEdges)
+            {
+                edgeCount++;
+            }
         }
+
+        return edgeCount;
     }
 
     private static bool ContainsInterior(DocumentRect bounds, DocumentPoint point) =>
@@ -742,7 +913,8 @@ public sealed class OrthogonalRouter
         int priority,
         IReadOnlyList<RoutingObstacle> obstacles,
         IReadOnlyList<OrthogonalRoute> priorRoutes,
-        double? preferredHorizontalY)
+        double? preferredHorizontalY,
+        string coordinateKey)
     {
         int obstacleIntersections = 0;
         foreach (OrthogonalRouteSegment segment in route.Segments)
@@ -797,9 +969,12 @@ public sealed class OrthogonalRouter
             Math.Max(0, route.Points.Count - 2),
             route.Length,
             priority,
-            string.Join(";", route.Points.Select(point =>
-                $"{point.XMillimeters:R},{point.YMillimeters:R}")));
+            coordinateKey);
     }
+
+    private static string CoordinateKey(OrthogonalRoute route) => string.Join(
+        ";",
+        route.Points.Select(point => $"{point.XMillimeters:R},{point.YMillimeters:R}"));
 
     internal static bool HasInteriorCrossing(
         OrthogonalRouteSegment first,
@@ -948,6 +1123,19 @@ public sealed class OrthogonalRouter
         string Key,
         RouteCandidateScore Score)
     {
-        public RouteFamilyKey Family { get; init; }
+        public RouteFamilyKey? Family { get; init; }
     }
+}
+
+internal enum CandidateFamilyEvaluationMode
+{
+    Lazy,
+    EagerReference
+}
+
+internal sealed class RoutingEvaluationStatistics
+{
+    public int FamilyClassificationCount { get; private set; }
+
+    public void RecordFamilyClassification() => FamilyClassificationCount++;
 }

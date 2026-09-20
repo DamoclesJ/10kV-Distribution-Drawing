@@ -48,13 +48,13 @@ WP-EM-07A and WP-EM-07B are Post-EM-07 / Pre-EM-08 amendment Work Packages. They
 
 ## Post-V1 Drawing Performance & PNG Export Stabilization
 
-**Status:** ACTIVE — DIAGNOSTIC BASELINE PREPARATION
+**Status:** ACTIVE — WP-PERF-01C-H1 LOSSLESS CANDIDATE EVALUATION CLEANUP
 
 This stage follows, and does not reopen, the Closed / Accepted Post-V1 Electrical Model Closure stage or WP-EM-01 through WP-EM-09. Its baseline is closure commit `841ca66319948661f7a4aca9202247d479788d7b`; `FormatVersion` remains V7. It creates no WP-EM-10 and defines no V1.1, V1.2, or V2.0 release.
 
 The approved order and boundary are:
 
-1. **WP-PERF-01 — Drawing Interaction Performance.** WP-PERF-01A Characterization & Audit is Accepted. WP-PERF-01B Windows Diagnostic Baseline Preparation is In Progress and is limited to governance, opt-in diagnostic instrumentation, directly related tests, controlled-sample preparation, and Windows collection instructions. WP-PERF-01C optimization is not authorized; no incremental routing, incremental Scene/WPF update, mouse-event coalescing, or MouseUp optimization is in scope.
+1. **WP-PERF-01 — Drawing Interaction Performance.** WP-PERF-01A Characterization & Audit is Accepted and WP-PERF-01B Windows baseline evidence has been obtained. WP-PERF-01C is In Progress with only H1 Lossless Candidate Evaluation Cleanup + Router Subphase Diagnostics authorized. H1 must preserve the complete candidate set, scoring, ordering, visibility/pathfinding, continuity/hysteresis, and final route output exactly. H2 RoutingEnvironment, incremental routing, incremental Scene/WPF update, mouse-event coalescing, and MouseUp optimization are not authorized.
 2. **WP-PNG-01 — PNG Export Stabilization.** This is an independent Work Package planned after WP-PERF-01 baseline work. No production implementation has started. Minimum DPI, readability acceptance, and safe pixel/memory budgets remain unfrozen pending evidence.
 
 Approximately 60 FPS remains an interaction design target rather than a formal acceptance threshold. Formal performance limits must be based on repeatable Windows measurements. Annotation, Energization Analysis, and work-ticket assisted authoring are outside this stage.

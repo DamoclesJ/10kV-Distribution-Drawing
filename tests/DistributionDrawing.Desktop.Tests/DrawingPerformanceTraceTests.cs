@@ -42,9 +42,11 @@ public sealed class DrawingPerformanceTraceTests
                 acceptedDrag,
                 () =>
                 {
-                    BuildMeasuredScene();
+                    using DrawingPerformanceTrace.PhaseOperation scene =
+                        DrawingPerformanceTrace.BeginSceneBuild();
                     tracedRoute = Assert.Single(
                         new OrthogonalRoutePlanner().Plan([routeRequest], []));
+                    scene.SetCounts(1, 1);
                 },
                 _ => { },
                 () => { });
@@ -129,6 +131,40 @@ public sealed class DrawingPerformanceTraceTests
         Assert.NotEmpty(acceptedRoutes);
         Assert.All(acceptedRoutes, item =>
             Assert.NotEqual(string.Empty, item.String("connectionId")));
+        string[] routerSubphases =
+        [
+            "RoutingPrepare",
+            "CandidateMaterialization",
+            "VisibilityGraphBuild",
+            "VisibilityDijkstra",
+            "CandidateScoring",
+            "RouteFamilyClassification",
+            "CandidateRanking"
+        ];
+        foreach (string phaseName in routerSubphases)
+        {
+            DiagnosticEvent subphase = phases.Single(item =>
+                item.String("gestureId") == acceptedGesture &&
+                item.String("phaseName") == phaseName);
+            Assert.Equal(acceptedScene.Int64("updateId"), subphase.Int64("updateId"));
+            Assert.Equal(acceptedScene.Int64("buildAttemptId"), subphase.Int64("buildAttemptId"));
+            Assert.Equal(acceptedScene.Int64("sceneBuildId"), subphase.Int64("sceneBuildId"));
+            Assert.NotEqual(string.Empty, subphase.String("connectionId"));
+            Assert.True(subphase.Int32("itemCount") >= 0);
+            Assert.True(subphase.Int32("secondaryCount") >= 0);
+            Assert.True(subphase.Int32("tertiaryCount") >= 0);
+            Assert.True(subphase.Int32("quaternaryCount") >= 0);
+        }
+        DiagnosticEvent visibility = phases.Single(item =>
+            item.String("gestureId") == acceptedGesture &&
+            item.String("phaseName") == "VisibilityGraphBuild");
+        Assert.True(visibility.Int32("itemCount") > 0);
+        Assert.True(visibility.Int32("secondaryCount") > 0);
+        Assert.True(visibility.Int32("tertiaryCount") > 0);
+        DiagnosticEvent family = phases.Single(item =>
+            item.String("gestureId") == acceptedGesture &&
+            item.String("phaseName") == "RouteFamilyClassification");
+        Assert.Equal(1, family.Int32("itemCount"));
 
         string rejectedGesture = starts.Single(item =>
             item.String("gestureKind") == "CableRouteGuide").String("gestureId");

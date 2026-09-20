@@ -224,6 +224,8 @@ public static class DrawingPerformanceTrace
         private readonly long _startTimestamp;
         private int _itemCount;
         private int _secondaryCount;
+        private int _tertiaryCount;
+        private int _quaternaryCount;
         private string _outcome = "Completed";
         private bool _disposed;
 
@@ -243,10 +245,16 @@ public static class DrawingPerformanceTrace
             _startTimestamp = Stopwatch.GetTimestamp();
         }
 
-        public void SetCounts(int itemCount, int secondaryCount = 0)
+        public void SetCounts(
+            int itemCount,
+            int secondaryCount = 0,
+            int tertiaryCount = 0,
+            int quaternaryCount = 0)
         {
             _itemCount = itemCount;
             _secondaryCount = secondaryCount;
+            _tertiaryCount = tertiaryCount;
+            _quaternaryCount = quaternaryCount;
         }
 
         public void SetOutcome(string outcome)
@@ -275,6 +283,8 @@ public static class DrawingPerformanceTrace
                 now - _startTimestamp,
                 _itemCount,
                 _secondaryCount,
+                _tertiaryCount,
+                _quaternaryCount,
                 _outcome);
             if (_restoreContext is not null)
             {
@@ -378,8 +388,10 @@ internal sealed class DrawingPerformanceEventSource : EventSource
         long durationTicks,
         int itemCount,
         int secondaryCount,
+        int tertiaryCount,
+        int quaternaryCount,
         string outcome) =>
         WriteEvent(4, phaseName, gestureId, updateId, buildAttemptId, sceneBuildId,
             connectionId, attemptKind, timestamp, durationTicks, itemCount,
-            secondaryCount, outcome);
+            secondaryCount, tertiaryCount, quaternaryCount, outcome);
 }
