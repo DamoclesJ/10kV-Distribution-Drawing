@@ -197,6 +197,8 @@ public sealed class OrthogonalRoutingHotPathDifferentialTests
     {
         MaterializationFixture fixture = MaterializationFixtures()
             .Single(candidate => candidate.Name == "rejected-and-duplicate-sequence");
+        LegacyMaterializationResult reference = LegacyMaterialize(
+            new OrthogonalRouter(), fixture);
         var trace = new List<CandidateMaterializationTrace>();
         OrthogonalRouter.Candidate[] candidates = new OrthogonalRouter().MaterializeCandidates(
             fixture.Request,
@@ -213,17 +215,58 @@ public sealed class OrthogonalRoutingHotPathDifferentialTests
         Assert.Equal(fixture.RawCandidates.Count, rawCount);
         Assert.Equal(Enumerable.Range(0, rawCount),
             trace.Select(item => item.Candidate.Priority));
-        Assert.Equal(
-            [
-                CandidateMaterializationOutcome.Accepted,
-                CandidateMaterializationOutcome.DuplicateKeyRejected,
-                CandidateMaterializationOutcome.StubRejected,
-                CandidateMaterializationOutcome.BacktrackingRejected,
-                CandidateMaterializationOutcome.Accepted
-            ],
+        Assert.Equal(reference.Trace.Select(item => item.Outcome),
             trace.Select(item => item.Outcome));
         Assert.Equal([0, 4], candidates.Select(candidate => candidate.Priority));
         Assert.Equal(trace[0].Candidate.Key, candidates[0].Key);
+    }
+
+    [Fact]
+    public void H3_2B_ProductionAndLegacyCoverEveryMaterializationOutcome()
+    {
+        var referenceOutcomes = new HashSet<CandidateMaterializationOutcome>();
+        var productionOutcomes = new HashSet<CandidateMaterializationOutcome>();
+
+        foreach (MaterializationFixture fixture in MaterializationFixtures())
+        {
+            var router = new OrthogonalRouter();
+            LegacyMaterializationResult reference = LegacyMaterialize(router, fixture);
+            var productionTrace = new List<CandidateMaterializationTrace>();
+            router.MaterializeCandidates(
+                fixture.Request,
+                fixture.Start,
+                fixture.StartStub,
+                fixture.RawCandidates,
+                fixture.EndStub,
+                fixture.End,
+                fixture.StartDirection,
+                fixture.EndOutwardDirection,
+                out _,
+                productionTrace);
+
+            Assert.Equal(reference.Trace.Select(item => item.Outcome),
+                productionTrace.Select(item => item.Outcome));
+            if (fixture.Name == "stub-invalid-short-start")
+            {
+                CandidateMaterializationTrace referenceStub = Assert.Single(reference.Trace);
+                CandidateMaterializationTrace productionStub = Assert.Single(productionTrace);
+                Assert.Equal(CandidateMaterializationOutcome.StubRejected,
+                    referenceStub.Outcome);
+                Assert.Equal(CandidateMaterializationOutcome.StubRejected,
+                    productionStub.Outcome);
+                Assert.False(referenceStub.TerminalStubValid);
+                Assert.False(productionStub.TerminalStubValid);
+                Assert.Null(referenceStub.BacktrackingValid);
+                Assert.Null(productionStub.BacktrackingValid);
+            }
+            referenceOutcomes.UnionWith(reference.Trace.Select(item => item.Outcome));
+            productionOutcomes.UnionWith(productionTrace.Select(item => item.Outcome));
+        }
+
+        CandidateMaterializationOutcome[] expected =
+            Enum.GetValues<CandidateMaterializationOutcome>();
+        Assert.Equal(expected.Order(), referenceOutcomes.Order());
+        Assert.Equal(expected.Order(), productionOutcomes.Order());
     }
 
     [Fact]
@@ -256,6 +299,7 @@ public sealed class OrthogonalRoutingHotPathDifferentialTests
     {
         var start = new DocumentPoint(0, 0);
         var startStub = new DocumentPoint(8, 0);
+        var shortStartStub = new DocumentPoint(4, 0);
         var endStub = new DocumentPoint(92, 0);
         var end = new DocumentPoint(100, 0);
         ConnectionRouteRequest request = new(
@@ -300,6 +344,11 @@ public sealed class OrthogonalRoutingHotPathDifferentialTests
             TerminalAnchorDirection.Right, TerminalAnchorDirection.Left);
         yield return new MaterializationFixture(
             "single-candidate", request, start, startStub, [direct], endStub, end,
+            TerminalAnchorDirection.Right, TerminalAnchorDirection.Left);
+        yield return new MaterializationFixture(
+            "stub-invalid-short-start", request, start, shortStartStub,
+            [[shortStartStub, new DocumentPoint(4, 20),
+                new DocumentPoint(92, 20), endStub]], endStub, end,
             TerminalAnchorDirection.Right, TerminalAnchorDirection.Left);
         yield return new MaterializationFixture(
             "rejected-and-duplicate-sequence", request, start, startStub,
