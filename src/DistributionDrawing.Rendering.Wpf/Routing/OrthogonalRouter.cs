@@ -187,12 +187,16 @@ public sealed class OrthogonalRouter
                 diagnosticsEnabled ? priorRoutes.Sum(route => route.Segments.Count) : 0);
         }
 
-        int rawCandidateCount = 0;
+        int rawCandidateCount;
         Candidate[] candidates;
         using (DrawingPerformanceTrace.PhaseOperation materialization =
                DrawingPerformanceTrace.Measure("CandidateMaterialization", request.ConnectionId))
         {
-            candidates = CreateCandidates(
+            candidates = MaterializeCandidates(
+                request,
+                request.Start.Position,
+                startStub,
+                CreateCandidates(
                     request.ConnectionId,
                     startStub,
                     endStub,
@@ -201,35 +205,12 @@ public sealed class OrthogonalRouter
                     request.PreferredHorizontalY,
                     includeContinuityAlternatives: continuityPreference is not null,
                     effectiveView?.CandidateAxes,
-                    visibilityAxisBasis)
-                .Select((core, priority) =>
-                {
-                    if (diagnosticsEnabled)
-                    {
-                        rawCandidateCount++;
-                    }
-                    return CreateCandidate(
-                        request,
-                        request.Start.Position,
-                        startStub,
-                        core,
-                        endStub,
-                        request.End.Position,
-                        priority);
-                })
-                .Where(candidate => HasTerminalStubs(
-                    candidate.Route,
-                    request.Start.Position,
-                    startDirection,
-                    request.Start.MinimumStubLength,
-                    request.End.Position,
-                    endOutwardDirection,
-                    request.End.MinimumStubLength))
-                .Where(candidate => !request.DisallowBacktracking ||
-                    !HasBacktracking(candidate.Route))
-                .GroupBy(candidate => candidate.Key, StringComparer.Ordinal)
-                .Select(group => group.First())
-                .ToArray();
+                    visibilityAxisBasis),
+                endStub,
+                request.End.Position,
+                startDirection,
+                endOutwardDirection,
+                out rawCandidateCount);
             materialization.SetCounts(
                 rawCandidateCount,
                 candidates.Length,
@@ -435,7 +416,7 @@ public sealed class OrthogonalRouter
                current.Length <= overall.Length + RouteFamilySwitchingMargin;
     }
 
-    private static bool HasBacktracking(OrthogonalRoute route)
+    internal static bool HasBacktracking(OrthogonalRoute route)
     {
         for (int firstIndex = 0; firstIndex < route.Segments.Count; firstIndex++)
         {
@@ -534,7 +515,7 @@ public sealed class OrthogonalRouter
         };
     }
 
-    private bool HasTerminalStubs(
+    internal bool HasTerminalStubs(
         OrthogonalRoute route,
         DocumentPoint start,
         TerminalAnchorDirection startDirection,
@@ -1015,6 +996,88 @@ public sealed class OrthogonalRouter
         Math.Abs(first.XMillimeters - second.XMillimeters) +
         Math.Abs(first.YMillimeters - second.YMillimeters);
 
+    internal Candidate[] MaterializeCandidates(
+        ConnectionRouteRequest request,
+        DocumentPoint start,
+        DocumentPoint startStub,
+        IEnumerable<IReadOnlyList<DocumentPoint>> rawCandidates,
+        DocumentPoint endStub,
+        DocumentPoint end,
+        TerminalAnchorDirection startDirection,
+        TerminalAnchorDirection endOutwardDirection,
+        out int rawCandidateCount,
+        ICollection<CandidateMaterializationTrace>? trace = null)
+    {
+        var candidates = new List<Candidate>();
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        rawCandidateCount = 0;
+
+        foreach (IReadOnlyList<DocumentPoint> core in rawCandidates)
+        {
+            int priority = rawCandidateCount++;
+            Candidate candidate = CreateCandidate(
+                request,
+                start,
+                startStub,
+                core,
+                endStub,
+                end,
+                priority);
+            bool terminalStubValid = HasTerminalStubs(
+                candidate.Route,
+                start,
+                startDirection,
+                request.Start.MinimumStubLength,
+                end,
+                endOutwardDirection,
+                request.End.MinimumStubLength);
+            if (!terminalStubValid)
+            {
+                trace?.Add(new CandidateMaterializationTrace(
+                    core,
+                    candidate,
+                    terminalStubValid,
+                    null,
+                    CandidateMaterializationOutcome.StubRejected));
+                continue;
+            }
+
+            bool backtrackingValid = !request.DisallowBacktracking ||
+                !HasBacktracking(candidate.Route);
+            if (!backtrackingValid)
+            {
+                trace?.Add(new CandidateMaterializationTrace(
+                    core,
+                    candidate,
+                    terminalStubValid,
+                    backtrackingValid,
+                    CandidateMaterializationOutcome.BacktrackingRejected));
+                continue;
+            }
+
+            if (!keys.Add(candidate.Key))
+            {
+                trace?.Add(new CandidateMaterializationTrace(
+                    core,
+                    candidate,
+                    terminalStubValid,
+                    backtrackingValid,
+                    CandidateMaterializationOutcome.DuplicateKeyRejected));
+                continue;
+            }
+
+            candidates.Add(candidate);
+            trace?.Add(new CandidateMaterializationTrace(
+                core,
+                candidate,
+                terminalStubValid,
+                backtrackingValid,
+                CandidateMaterializationOutcome.Accepted));
+        }
+
+        return candidates.ToArray();
+    }
+
     private static Candidate CreateCandidate(
         ConnectionRouteRequest request,
         DocumentPoint start,
@@ -1025,7 +1088,10 @@ public sealed class OrthogonalRouter
         int priority)
     {
         var points = new List<DocumentPoint> { start, startStub };
-        points.AddRange(core.Skip(1).SkipLast(1));
+        for (int index = 1; index < core.Count - 1; index++)
+        {
+            points.Add(core[index]);
+        }
         points.Add(endStub);
         points.Add(end);
         var route = new OrthogonalRoute(
@@ -1249,7 +1315,7 @@ public sealed class OrthogonalRouter
         return result;
     }
 
-    private sealed record Candidate(
+    internal sealed record Candidate(
         OrthogonalRoute Route,
         int Priority,
         string Key,
@@ -1258,6 +1324,21 @@ public sealed class OrthogonalRouter
         public RouteFamilyKey? Family { get; init; }
     }
 }
+
+internal enum CandidateMaterializationOutcome
+{
+    StubRejected,
+    BacktrackingRejected,
+    DuplicateKeyRejected,
+    Accepted
+}
+
+internal readonly record struct CandidateMaterializationTrace(
+    IReadOnlyList<DocumentPoint> RawCandidate,
+    OrthogonalRouter.Candidate Candidate,
+    bool TerminalStubValid,
+    bool? BacktrackingValid,
+    CandidateMaterializationOutcome Outcome);
 
 internal enum CandidateFamilyEvaluationMode
 {

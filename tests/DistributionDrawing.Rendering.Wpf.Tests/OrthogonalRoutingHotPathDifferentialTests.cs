@@ -148,6 +148,289 @@ public sealed class OrthogonalRoutingHotPathDifferentialTests
         Assert.Equal(reference.GetType(), h1.GetType());
     }
 
+    [Fact]
+    public void H3_2B_ProductionMaterializerMatchesLegacyPipeline()
+    {
+        foreach (MaterializationFixture fixture in MaterializationFixtures())
+        {
+            var router = new OrthogonalRouter();
+            var productionTrace = new List<CandidateMaterializationTrace>();
+            OrthogonalRouter.Candidate[] production = router.MaterializeCandidates(
+                fixture.Request,
+                fixture.Start,
+                fixture.StartStub,
+                fixture.RawCandidates,
+                fixture.EndStub,
+                fixture.End,
+                fixture.StartDirection,
+                fixture.EndOutwardDirection,
+                out int productionRawCount,
+                productionTrace);
+            LegacyMaterializationResult reference = LegacyMaterialize(router, fixture);
+
+            Assert.Equal(reference.RawCandidateCount, productionRawCount);
+            Assert.Equal(reference.Trace.Count, productionTrace.Count);
+            for (int index = 0; index < reference.Trace.Count; index++)
+            {
+                CandidateMaterializationTrace expected = reference.Trace[index];
+                CandidateMaterializationTrace actual = productionTrace[index];
+                Assert.True(expected.RawCandidate.SequenceEqual(actual.RawCandidate), fixture.Name);
+                AssertCandidateEqual(fixture.Name, expected.Candidate, actual.Candidate);
+                Assert.Equal(expected.TerminalStubValid, actual.TerminalStubValid);
+                Assert.Equal(expected.BacktrackingValid, actual.BacktrackingValid);
+                Assert.Equal(expected.Outcome, actual.Outcome);
+            }
+
+            Assert.Equal(reference.Candidates.Length, production.Length);
+            for (int index = 0; index < reference.Candidates.Length; index++)
+            {
+                AssertCandidateEqual(
+                    fixture.Name,
+                    reference.Candidates[index],
+                    production[index]);
+            }
+        }
+    }
+
+    [Fact]
+    public void H3_2B_RejectedCandidatesRetainRawPriorityAndFirstKeyWins()
+    {
+        MaterializationFixture fixture = MaterializationFixtures()
+            .Single(candidate => candidate.Name == "rejected-and-duplicate-sequence");
+        var trace = new List<CandidateMaterializationTrace>();
+        OrthogonalRouter.Candidate[] candidates = new OrthogonalRouter().MaterializeCandidates(
+            fixture.Request,
+            fixture.Start,
+            fixture.StartStub,
+            fixture.RawCandidates,
+            fixture.EndStub,
+            fixture.End,
+            fixture.StartDirection,
+            fixture.EndOutwardDirection,
+            out int rawCount,
+            trace);
+
+        Assert.Equal(fixture.RawCandidates.Count, rawCount);
+        Assert.Equal(Enumerable.Range(0, rawCount),
+            trace.Select(item => item.Candidate.Priority));
+        Assert.Equal(
+            [
+                CandidateMaterializationOutcome.Accepted,
+                CandidateMaterializationOutcome.DuplicateKeyRejected,
+                CandidateMaterializationOutcome.StubRejected,
+                CandidateMaterializationOutcome.BacktrackingRejected,
+                CandidateMaterializationOutcome.Accepted
+            ],
+            trace.Select(item => item.Outcome));
+        Assert.Equal([0, 4], candidates.Select(candidate => candidate.Priority));
+        Assert.Equal(trace[0].Candidate.Key, candidates[0].Key);
+    }
+
+    [Fact]
+    public void H3_2B_ProductionMaterializerMatchesLegacyExceptionType()
+    {
+        MaterializationFixture fixture = MaterializationFixtures()
+            .Single(candidate => candidate.Name == "single-candidate");
+        fixture = fixture with
+        {
+            Request = fixture.Request with { EndTerminalId = fixture.Request.StartTerminalId }
+        };
+        var router = new OrthogonalRouter();
+
+        Exception reference = Assert.ThrowsAny<Exception>(() => LegacyMaterialize(router, fixture));
+        Exception production = Assert.ThrowsAny<Exception>(() => router.MaterializeCandidates(
+            fixture.Request,
+            fixture.Start,
+            fixture.StartStub,
+            fixture.RawCandidates,
+            fixture.EndStub,
+            fixture.End,
+            fixture.StartDirection,
+            fixture.EndOutwardDirection,
+            out _));
+
+        Assert.Equal(reference.GetType(), production.GetType());
+    }
+
+    private static IEnumerable<MaterializationFixture> MaterializationFixtures()
+    {
+        var start = new DocumentPoint(0, 0);
+        var startStub = new DocumentPoint(8, 0);
+        var endStub = new DocumentPoint(92, 0);
+        var end = new DocumentPoint(100, 0);
+        ConnectionRouteRequest request = new(
+            Connection1,
+            ConnectionType.Cable,
+            Start1,
+            End1,
+            new TerminalAnchor(Start1, start, TerminalAnchorDirection.Right),
+            new TerminalAnchor(End1, end, TerminalAnchorDirection.Left),
+            DisallowBacktracking: true);
+        IReadOnlyList<DocumentPoint> direct = [startStub, endStub];
+        IReadOnlyList<DocumentPoint> alternate =
+        [
+            startStub,
+            new DocumentPoint(8, 20),
+            new DocumentPoint(92, 20),
+            endStub
+        ];
+        IReadOnlyList<DocumentPoint> stubInvalid =
+        [
+            startStub,
+            new DocumentPoint(-5, 0),
+            new DocumentPoint(-5, 10),
+            new DocumentPoint(92, 10),
+            endStub
+        ];
+        IReadOnlyList<DocumentPoint> backtrackingInvalid =
+        [
+            startStub,
+            new DocumentPoint(20, 0),
+            new DocumentPoint(20, 10),
+            new DocumentPoint(10, 10),
+            new DocumentPoint(10, 0),
+            new DocumentPoint(5, 0),
+            new DocumentPoint(5, 20),
+            new DocumentPoint(92, 20),
+            endStub
+        ];
+
+        yield return new MaterializationFixture(
+            "zero-candidates", request, start, startStub, [], endStub, end,
+            TerminalAnchorDirection.Right, TerminalAnchorDirection.Left);
+        yield return new MaterializationFixture(
+            "single-candidate", request, start, startStub, [direct], endStub, end,
+            TerminalAnchorDirection.Right, TerminalAnchorDirection.Left);
+        yield return new MaterializationFixture(
+            "rejected-and-duplicate-sequence", request, start, startStub,
+            [direct, direct, stubInvalid, backtrackingInvalid, alternate], endStub, end,
+            TerminalAnchorDirection.Right, TerminalAnchorDirection.Left);
+        yield return new MaterializationFixture(
+            "guide-obstacle-visibility-and-continuity-candidates", request, start, startStub,
+            [
+                alternate,
+                [startStub, new DocumentPoint(8, 25), new DocumentPoint(92, 25), endStub],
+                [startStub, new DocumentPoint(30, 0), new DocumentPoint(30, 35),
+                    new DocumentPoint(92, 35), endStub],
+                [startStub, new DocumentPoint(8, -20), new DocumentPoint(55, -20),
+                    new DocumentPoint(55, 30), new DocumentPoint(92, 30), endStub],
+                alternate,
+                direct,
+                direct
+            ], endStub, end, TerminalAnchorDirection.Right, TerminalAnchorDirection.Left);
+    }
+
+    private static LegacyMaterializationResult LegacyMaterialize(
+        OrthogonalRouter router,
+        MaterializationFixture fixture)
+    {
+        var entries = new List<LegacyMaterializationEntry>();
+        LegacyMaterializationEntry[] valid = fixture.RawCandidates
+            .Select((core, priority) =>
+            {
+                var entry = new LegacyMaterializationEntry(
+                    core,
+                    CreateLegacyCandidate(
+                        fixture.Request,
+                        fixture.Start,
+                        fixture.StartStub,
+                        core,
+                        fixture.EndStub,
+                        fixture.End,
+                        priority));
+                entries.Add(entry);
+                return entry;
+            })
+            .Where(entry =>
+            {
+                entry.TerminalStubValid = router.HasTerminalStubs(
+                    entry.Candidate.Route,
+                    fixture.Start,
+                    fixture.StartDirection,
+                    fixture.Request.Start.MinimumStubLength,
+                    fixture.End,
+                    fixture.EndOutwardDirection,
+                    fixture.Request.End.MinimumStubLength);
+                entry.Outcome = entry.TerminalStubValid
+                    ? CandidateMaterializationOutcome.Accepted
+                    : CandidateMaterializationOutcome.StubRejected;
+                return entry.TerminalStubValid;
+            })
+            .Where(entry =>
+            {
+                entry.BacktrackingValid = !fixture.Request.DisallowBacktracking ||
+                    !OrthogonalRouter.HasBacktracking(entry.Candidate.Route);
+                entry.Outcome = entry.BacktrackingValid.Value
+                    ? CandidateMaterializationOutcome.Accepted
+                    : CandidateMaterializationOutcome.BacktrackingRejected;
+                return entry.BacktrackingValid.Value;
+            })
+            .ToArray();
+
+        OrthogonalRouter.Candidate[] candidates = valid
+            .GroupBy(entry => entry.Candidate.Key, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                LegacyMaterializationEntry[] grouped = group.ToArray();
+                for (int index = 1; index < grouped.Length; index++)
+                {
+                    grouped[index].Outcome = CandidateMaterializationOutcome.DuplicateKeyRejected;
+                }
+                return grouped[0].Candidate;
+            })
+            .ToArray();
+        CandidateMaterializationTrace[] trace = entries.Select(entry =>
+            new CandidateMaterializationTrace(
+                entry.RawCandidate,
+                entry.Candidate,
+                entry.TerminalStubValid,
+                entry.BacktrackingValid,
+                entry.Outcome)).ToArray();
+        return new LegacyMaterializationResult(fixture.RawCandidates.Count, candidates, trace);
+    }
+
+    private static OrthogonalRouter.Candidate CreateLegacyCandidate(
+        ConnectionRouteRequest request,
+        DocumentPoint start,
+        DocumentPoint startStub,
+        IReadOnlyList<DocumentPoint> core,
+        DocumentPoint endStub,
+        DocumentPoint end,
+        int priority)
+    {
+        var points = new List<DocumentPoint> { start, startStub };
+        points.AddRange(core.Skip(1).SkipLast(1));
+        points.Add(endStub);
+        points.Add(end);
+        var route = new OrthogonalRoute(
+            request.ConnectionId,
+            request.ConnectionType,
+            request.StartTerminalId,
+            request.EndTerminalId,
+            points);
+        string key = string.Join(
+            ";",
+            route.Points.Select(point => $"{point.XMillimeters:R},{point.YMillimeters:R}"));
+        return new OrthogonalRouter.Candidate(route, priority, key, default);
+    }
+
+    private static void AssertCandidateEqual(
+        string name,
+        OrthogonalRouter.Candidate expected,
+        OrthogonalRouter.Candidate actual)
+    {
+        Assert.Equal(expected.Priority, actual.Priority);
+        Assert.Equal(expected.Key, actual.Key);
+        Assert.True(expected.Route.Points.SequenceEqual(actual.Route.Points), name);
+        Assert.Equal(expected.Route.Segments, actual.Route.Segments);
+        Assert.Equal(expected.Route.StartTerminalId, actual.Route.StartTerminalId);
+        Assert.Equal(expected.Route.EndTerminalId, actual.Route.EndTerminalId);
+        Assert.Equal(expected.Route.Bounds, actual.Route.Bounds);
+        Assert.Equal(expected.Route.Length, actual.Route.Length);
+        Assert.Equal(expected.Route.Midpoint, actual.Route.Midpoint);
+        Assert.Equal(expected.Score, actual.Score);
+    }
+
     private static IEnumerable<Scenario> Scenarios()
     {
         yield return new Scenario(
@@ -368,6 +651,37 @@ public sealed class OrthogonalRoutingHotPathDifferentialTests
         string Name,
         ConnectionRouteRequest[] Requests,
         RoutingObstacle[] Obstacles);
+
+    private sealed record MaterializationFixture(
+        string Name,
+        ConnectionRouteRequest Request,
+        DocumentPoint Start,
+        DocumentPoint StartStub,
+        IReadOnlyList<IReadOnlyList<DocumentPoint>> RawCandidates,
+        DocumentPoint EndStub,
+        DocumentPoint End,
+        TerminalAnchorDirection StartDirection,
+        TerminalAnchorDirection EndOutwardDirection);
+
+    private sealed class LegacyMaterializationEntry(
+        IReadOnlyList<DocumentPoint> rawCandidate,
+        OrthogonalRouter.Candidate candidate)
+    {
+        public IReadOnlyList<DocumentPoint> RawCandidate { get; } = rawCandidate;
+
+        public OrthogonalRouter.Candidate Candidate { get; } = candidate;
+
+        public bool TerminalStubValid { get; set; }
+
+        public bool? BacktrackingValid { get; set; }
+
+        public CandidateMaterializationOutcome Outcome { get; set; }
+    }
+
+    private sealed record LegacyMaterializationResult(
+        int RawCandidateCount,
+        OrthogonalRouter.Candidate[] Candidates,
+        IReadOnlyList<CandidateMaterializationTrace> Trace);
 
     private sealed record RoutingRun(
         IReadOnlyList<OrthogonalRoute> Routes,
