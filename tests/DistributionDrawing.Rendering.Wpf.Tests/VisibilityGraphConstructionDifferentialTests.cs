@@ -11,7 +11,7 @@ public sealed class VisibilityGraphConstructionDifferentialTests
     {
         foreach (GraphFixture fixture in BoundaryFixtures())
         {
-            AssertEquivalent(fixture);
+            AssertObstacleIndexEquivalent(fixture);
         }
     }
 
@@ -44,7 +44,49 @@ public sealed class VisibilityGraphConstructionDifferentialTests
                 new DocumentPoint(-20, -15),
                 new DocumentPoint(105, 95),
                 obstacles);
-            AssertEquivalent(fixture);
+            AssertObstacleIndexEquivalent(fixture);
+        }
+    }
+
+    [Fact]
+    public void ImperativeGridConstruction_MatchesReferenceAcrossBoundaryMatrix()
+    {
+        foreach (GraphFixture fixture in BoundaryFixtures().Append(DelayedRowEncounterFixture()))
+        {
+            AssertGridConstructionEquivalent(fixture);
+        }
+    }
+
+    [Fact]
+    public void ImperativeGridConstruction_MatchesReferenceForFixedSeedRectangles()
+    {
+        const int seed = 512_743;
+        var random = new Random(seed);
+        for (int fixtureIndex = 0; fixtureIndex < 80; fixtureIndex++)
+        {
+            int obstacleCount = random.Next(0, 13);
+            var obstacles = new RoutingObstacle[obstacleCount];
+            for (int obstacleIndex = 0; obstacleIndex < obstacleCount; obstacleIndex++)
+            {
+                double left = random.Next(-10, 20) * 5;
+                double top = random.Next(-10, 20) * 5;
+                double width = random.Next(0, 9) * 5;
+                double height = random.Next(0, 9) * 5;
+                obstacles[obstacleIndex] = Obstacle(
+                    fixtureIndex * 100 + obstacleIndex + 1,
+                    left,
+                    top,
+                    width,
+                    height);
+            }
+
+            var fixture = new GraphFixture(
+                $"seed={seed}; fixture={fixtureIndex}; " +
+                $"start=(-25,-20); end=(115,105); obstacles={Format(obstacles)}",
+                new DocumentPoint(-25, -20),
+                new DocumentPoint(115, 105),
+                obstacles);
+            AssertGridConstructionEquivalent(fixture);
         }
     }
 
@@ -72,18 +114,44 @@ public sealed class VisibilityGraphConstructionDifferentialTests
         Assert.True(index.IntervalCount > 0);
     }
 
-    private static void AssertEquivalent(GraphFixture fixture)
+    private static void AssertObstacleIndexEquivalent(GraphFixture fixture) => AssertEquivalent(
+        fixture,
+        BuildLegacyReference(fixture, useIntervalIndex: false),
+        BuildLegacyReference(fixture, useIntervalIndex: true));
+
+    private static void AssertGridConstructionEquivalent(GraphFixture fixture) => AssertEquivalent(
+        fixture,
+        BuildLegacyReference(fixture, useIntervalIndex: true),
+        BuildProduction(fixture));
+
+    private static void AssertEquivalent(
+        GraphFixture fixture,
+        GraphResult legacy,
+        GraphResult indexed)
     {
-        GraphResult legacy = Build(fixture, useIntervalIndex: false);
-        GraphResult indexed = Build(fixture, useIntervalIndex: true);
         string context = fixture.Name;
 
         AssertSequence(legacy.XCoordinates, indexed.XCoordinates, context, "X axes");
         AssertSequence(legacy.YCoordinates, indexed.YCoordinates, context, "Y axes");
         AssertSequence(legacy.Nodes, indexed.Nodes, context, "ordered nodes");
+        AssertSequence(
+            legacy.ColumnEncounterOrder,
+            indexed.ColumnEncounterOrder,
+            context,
+            "column encounter order");
+        AssertSequence(
+            legacy.RowEncounterOrder,
+            indexed.RowEncounterOrder,
+            context,
+            "row encounter order");
         AssertSequence(legacy.PotentialPairs, indexed.PotentialPairs, context, "potential pairs");
         AssertSequence(legacy.AcceptedEdges, indexed.AcceptedEdges, context, "accepted edges");
         Assert.Equal(legacy.Nodes.Length, indexed.Nodes.Length);
+        AssertSequence(
+            legacy.Adjacency.Keys,
+            indexed.Adjacency.Keys,
+            context,
+            "adjacency keys");
         foreach (DocumentPoint node in legacy.Nodes)
         {
             AssertSequence(
@@ -102,54 +170,43 @@ public sealed class VisibilityGraphConstructionDifferentialTests
         AssertNullableSequence(legacy.NormalizedPath, indexed.NormalizedPath, context, "normalized path");
     }
 
-    private static GraphResult Build(GraphFixture fixture, bool useIntervalIndex)
+    private static GraphResult BuildLegacyReference(
+        GraphFixture fixture,
+        bool useIntervalIndex)
     {
-        var xCoordinates = new SortedSet<double>
-        {
-            fixture.Start.XMillimeters,
-            fixture.End.XMillimeters
-        };
-        var yCoordinates = new SortedSet<double>
-        {
-            fixture.Start.YMillimeters,
-            fixture.End.YMillimeters
-        };
-        RoutingObstacle[] pathfindingObstacles = fixture.Obstacles
-            .Where(obstacle =>
-                obstacle.Kind is RoutingObstacleKind.Transformer or
-                    RoutingObstacleKind.CustomerStation ||
-                !obstacle.Contains(fixture.Start) && !obstacle.Contains(fixture.End))
-            .ToArray();
-        foreach (RoutingObstacle obstacle in pathfindingObstacles)
-        {
-            xCoordinates.Add(obstacle.Bounds.XMillimeters);
-            xCoordinates.Add(obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters);
-            yCoordinates.Add(obstacle.Bounds.YMillimeters);
-            yCoordinates.Add(obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters);
-        }
-
+        PreparedGraphInput input = PrepareInput(fixture);
         VisibilityObstacleIndex? index = useIntervalIndex
-            ? new VisibilityObstacleIndex(xCoordinates, yCoordinates, pathfindingObstacles)
+            ? new VisibilityObstacleIndex(
+                input.XCoordinates,
+                input.YCoordinates,
+                input.PathfindingObstacles)
             : null;
         bool PointBlocked(DocumentPoint point) => index is null
-            ? pathfindingObstacles.Any(obstacle => ContainsInterior(obstacle.Bounds, point))
+            ? input.PathfindingObstacles.Any(
+                obstacle => ContainsInterior(obstacle.Bounds, point))
             : index.ContainsInterior(point);
         bool EdgeBlocked(OrthogonalRouteSegment segment) => index is null
-            ? pathfindingObstacles.Any(obstacle => IntersectsInterior(segment, obstacle.Bounds))
+            ? input.PathfindingObstacles.Any(
+                obstacle => IntersectsInterior(segment, obstacle.Bounds))
             : index.IntersectsInterior(segment);
 
-        DocumentPoint[] nodes = xCoordinates
-            .SelectMany(x => yCoordinates.Select(y => new DocumentPoint(x, y)))
+        DocumentPoint[] nodes = input.XCoordinates
+            .SelectMany(x => input.YCoordinates.Select(y => new DocumentPoint(x, y)))
             .Where(point => !PointBlocked(point))
             .OrderBy(point => point.XMillimeters)
             .ThenBy(point => point.YMillimeters)
             .ToArray();
         var adjacency = nodes.ToDictionary(point => point, _ => new List<DocumentPoint>());
+        IGrouping<double, DocumentPoint>[] columns = nodes
+            .GroupBy(point => point.XMillimeters)
+            .ToArray();
+        IGrouping<double, DocumentPoint>[] rows = nodes
+            .GroupBy(point => point.YMillimeters)
+            .ToArray();
         var potentialPairs = new List<GraphEdge>();
         var acceptedEdges = new List<GraphEdge>();
 
-        foreach (IGrouping<double, DocumentPoint> column in
-                 nodes.GroupBy(point => point.XMillimeters))
+        foreach (IGrouping<double, DocumentPoint> column in columns)
         {
             Connect(
                 column.OrderBy(point => point.YMillimeters).ToArray(),
@@ -159,8 +216,7 @@ public sealed class VisibilityGraphConstructionDifferentialTests
                 EdgeBlocked);
         }
 
-        foreach (IGrouping<double, DocumentPoint> row in
-                 nodes.GroupBy(point => point.YMillimeters))
+        foreach (IGrouping<double, DocumentPoint> row in rows)
         {
             Connect(
                 row.OrderBy(point => point.XMillimeters).ToArray(),
@@ -170,6 +226,73 @@ public sealed class VisibilityGraphConstructionDifferentialTests
                 EdgeBlocked);
         }
 
+        return CreateResult(
+            fixture,
+            input.XCoordinates.ToArray(),
+            input.YCoordinates.ToArray(),
+            nodes,
+            columns.Select(column => column.Key).ToArray(),
+            rows.Select(row => row.Key).ToArray(),
+            potentialPairs,
+            acceptedEdges,
+            adjacency);
+    }
+
+    private static GraphResult BuildProduction(GraphFixture fixture)
+    {
+        PreparedGraphInput input = PrepareInput(fixture);
+        VisibilityGraphConstruction construction = OrthogonalRouter.ConstructVisibilityGraph(
+            input.XCoordinates,
+            input.YCoordinates,
+            input.PathfindingObstacles,
+            countEdges: false);
+        var potentialPairs = new List<GraphEdge>();
+        var acceptedEdges = new List<GraphEdge>();
+        foreach (List<DocumentPoint> column in construction.Columns)
+        {
+            RecordConstructedPairs(
+                column,
+                construction.Adjacency,
+                potentialPairs,
+                acceptedEdges);
+        }
+
+        foreach (int yIndex in construction.RowEncounterOrder)
+        {
+            RecordConstructedPairs(
+                construction.Rows[yIndex]!,
+                construction.Adjacency,
+                potentialPairs,
+                acceptedEdges);
+        }
+
+        return CreateResult(
+            fixture,
+            construction.XCoordinates,
+            construction.YCoordinates,
+            construction.Nodes,
+            construction.Columns
+                .Select(column => column[0].XMillimeters)
+                .ToArray(),
+            construction.RowEncounterOrder
+                .Select(yIndex => construction.YCoordinates[yIndex])
+                .ToArray(),
+            potentialPairs,
+            acceptedEdges,
+            construction.Adjacency);
+    }
+
+    private static GraphResult CreateResult(
+        GraphFixture fixture,
+        double[] xCoordinates,
+        double[] yCoordinates,
+        DocumentPoint[] nodes,
+        double[] columnEncounterOrder,
+        double[] rowEncounterOrder,
+        List<GraphEdge> potentialPairs,
+        List<GraphEdge> acceptedEdges,
+        Dictionary<DocumentPoint, List<DocumentPoint>> adjacency)
+    {
         var neighborOrder = adjacency.ToDictionary(
             item => item.Key,
             item => item.Value
@@ -178,15 +301,68 @@ public sealed class VisibilityGraphConstructionDifferentialTests
                 .ToArray());
         DocumentPoint[]? path = FindPath(fixture.Start, fixture.End, nodes, adjacency);
         return new GraphResult(
-            xCoordinates.ToArray(),
-            yCoordinates.ToArray(),
+            xCoordinates,
+            yCoordinates,
             nodes,
+            columnEncounterOrder,
+            rowEncounterOrder,
             potentialPairs.ToArray(),
             acceptedEdges.ToArray(),
             adjacency,
             neighborOrder,
             path,
             path is null ? null : Normalize(path).ToArray());
+    }
+
+    private static PreparedGraphInput PrepareInput(GraphFixture fixture)
+    {
+        var xCoordinates = new SortedSet<double>(fixture.XCoordinates ??
+        [
+            fixture.Start.XMillimeters,
+            fixture.End.XMillimeters
+        ]);
+        var yCoordinates = new SortedSet<double>(fixture.YCoordinates ??
+        [
+            fixture.Start.YMillimeters,
+            fixture.End.YMillimeters
+        ]);
+        RoutingObstacle[] pathfindingObstacles = fixture.Obstacles
+            .Where(obstacle =>
+                obstacle.Kind is RoutingObstacleKind.Transformer or
+                    RoutingObstacleKind.CustomerStation ||
+                !obstacle.Contains(fixture.Start) && !obstacle.Contains(fixture.End))
+            .ToArray();
+        if (fixture.IncludeObstacleAxes)
+        {
+            foreach (RoutingObstacle obstacle in pathfindingObstacles)
+            {
+                xCoordinates.Add(obstacle.Bounds.XMillimeters);
+                xCoordinates.Add(obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters);
+                yCoordinates.Add(obstacle.Bounds.YMillimeters);
+                yCoordinates.Add(obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters);
+            }
+        }
+
+        return new PreparedGraphInput(xCoordinates, yCoordinates, pathfindingObstacles);
+    }
+
+    private static void RecordConstructedPairs(
+        IReadOnlyList<DocumentPoint> ordered,
+        IReadOnlyDictionary<DocumentPoint, List<DocumentPoint>> adjacency,
+        ICollection<GraphEdge> potentialPairs,
+        ICollection<GraphEdge> acceptedEdges)
+    {
+        for (int index = 1; index < ordered.Count; index++)
+        {
+            DocumentPoint previous = ordered[index - 1];
+            DocumentPoint current = ordered[index];
+            var edge = new GraphEdge(previous, current);
+            potentialPairs.Add(edge);
+            if (adjacency[previous].Contains(current))
+            {
+                acceptedEdges.Add(edge);
+            }
+        }
     }
 
     private static void Connect(
@@ -303,6 +479,17 @@ public sealed class VisibilityGraphConstructionDifferentialTests
     private static IEnumerable<GraphFixture> BoundaryFixtures()
     {
         yield return Fixture("no obstacles", new(0, 0), new(100, 60));
+        yield return Fixture("sparse grid", new(-40, -30), new(140, 110),
+            Obstacle(1, 10, 10, 20, 20), Obstacle(2, 80, 60, 15, 15));
+        yield return Fixture("dense grid", new(-10, -10), new(110, 100),
+            Obstacle(1, 0, 0, 20, 20), Obstacle(2, 25, 10, 20, 25),
+            Obstacle(3, 50, 0, 15, 35), Obstacle(4, 70, 20, 20, 25),
+            Obstacle(5, 15, 50, 25, 20), Obstacle(6, 55, 55, 30, 20));
+        yield return Fixture("disconnected regions", new(0, 20), new(100, 20),
+            Obstacle(1, 40, -20, 20, 80));
+        yield return Fixture("narrow channel", new(-10, 25), new(110, 25),
+            Obstacle(1, 20, 0, 30, 20), Obstacle(2, 20, 30, 30, 20),
+            Obstacle(3, 60, 10, 25, 15), Obstacle(4, 60, 35, 25, 15));
         yield return Fixture("single obstacle", new(0, 20), new(100, 60),
             Obstacle(1, 35, 15, 20, 30));
         yield return Fixture("multiple obstacles", new(-10, 5), new(110, 75),
@@ -360,6 +547,15 @@ public sealed class VisibilityGraphConstructionDifferentialTests
         yield return Fixture("reversed obstacle input order", new(0, 0), new(80, 60),
             reversed.Reverse().ToArray());
     }
+
+    private static GraphFixture DelayedRowEncounterFixture() => new(
+        "row blocked in first X column and first encountered later",
+        new DocumentPoint(0, 0),
+        new DocumentPoint(20, 20),
+        [Obstacle(1, -5, 5, 20, 10, RoutingObstacleKind.Transformer)],
+        [0, 10, 20],
+        [0, 10, 20],
+        IncludeObstacleAxes: false);
 
     private static GraphFixture Fixture(
         string name,
@@ -448,7 +644,15 @@ public sealed class VisibilityGraphConstructionDifferentialTests
         string Name,
         DocumentPoint Start,
         DocumentPoint End,
-        RoutingObstacle[] Obstacles);
+        RoutingObstacle[] Obstacles,
+        double[]? XCoordinates = null,
+        double[]? YCoordinates = null,
+        bool IncludeObstacleAxes = true);
+
+    private sealed record PreparedGraphInput(
+        SortedSet<double> XCoordinates,
+        SortedSet<double> YCoordinates,
+        RoutingObstacle[] PathfindingObstacles);
 
     private readonly record struct GraphEdge(DocumentPoint Start, DocumentPoint End);
 
@@ -456,6 +660,8 @@ public sealed class VisibilityGraphConstructionDifferentialTests
         double[] XCoordinates,
         double[] YCoordinates,
         DocumentPoint[] Nodes,
+        double[] ColumnEncounterOrder,
+        double[] RowEncounterOrder,
         GraphEdge[] PotentialPairs,
         GraphEdge[] AcceptedEdges,
         IReadOnlyDictionary<DocumentPoint, List<DocumentPoint>> Adjacency,

@@ -813,47 +813,26 @@ public sealed class OrthogonalRouter
             yCoordinates.UnionWith(axisBasis.YCoordinates);
         }
 
-        DocumentPoint[] nodes;
-        Dictionary<DocumentPoint, List<DocumentPoint>> adjacency;
-        int edgeCount = 0;
+        VisibilityGraphConstruction construction;
         bool diagnosticsEnabled = DrawingPerformanceTrace.IsEnabled;
         using (DrawingPerformanceTrace.PhaseOperation graph =
                DrawingPerformanceTrace.Measure("VisibilityGraphBuild", connectionId))
         {
-            var obstacleIndex = new VisibilityObstacleIndex(
+            construction = ConstructVisibilityGraph(
                 xCoordinates,
                 yCoordinates,
-                obstacles);
-            nodes = xCoordinates
-                .SelectMany(x => yCoordinates.Select(y => new DocumentPoint(x, y)))
-                .Where(point => !obstacleIndex.ContainsInterior(point))
-                .OrderBy(point => point.XMillimeters)
-                .ThenBy(point => point.YMillimeters)
-                .ToArray();
-            adjacency = nodes.ToDictionary(point => point, _ => new List<DocumentPoint>());
-
-            foreach (IGrouping<double, DocumentPoint> column in
-                     nodes.GroupBy(point => point.XMillimeters))
-            {
-                edgeCount += ConnectVisibleNeighbors(
-                    column.OrderBy(point => point.YMillimeters).ToArray(),
-                    adjacency,
-                    obstacleIndex,
-                    diagnosticsEnabled);
-            }
-
-            foreach (IGrouping<double, DocumentPoint> row in
-                     nodes.GroupBy(point => point.YMillimeters))
-            {
-                edgeCount += ConnectVisibleNeighbors(
-                    row.OrderBy(point => point.XMillimeters).ToArray(),
-                    adjacency,
-                    obstacleIndex,
-                    diagnosticsEnabled);
-            }
-            graph.SetCounts(xCoordinates.Count, yCoordinates.Count, nodes.Length, edgeCount);
+                obstacles,
+                diagnosticsEnabled);
+            graph.SetCounts(
+                xCoordinates.Count,
+                yCoordinates.Count,
+                construction.Nodes.Length,
+                construction.EdgeCount);
         }
 
+        DocumentPoint[] nodes = construction.Nodes;
+        Dictionary<DocumentPoint, List<DocumentPoint>> adjacency = construction.Adjacency;
+        int edgeCount = construction.EdgeCount;
         if (!adjacency.ContainsKey(start) || !adjacency.ContainsKey(end))
         {
             return null;
@@ -917,6 +896,91 @@ public sealed class OrthogonalRouter
         path.Reverse();
         dijkstra.SetCounts(nodes.Length, edgeCount, dequeuedCount, path.Count);
         return NormalizePreview(path);
+    }
+
+    internal static VisibilityGraphConstruction ConstructVisibilityGraph(
+        IEnumerable<double> xCoordinates,
+        IEnumerable<double> yCoordinates,
+        IReadOnlyList<RoutingObstacle> obstacles,
+        bool countEdges)
+    {
+        var obstacleIndex = new VisibilityObstacleIndex(
+            xCoordinates,
+            yCoordinates,
+            obstacles);
+        double[] orderedXCoordinates = xCoordinates.ToArray();
+        double[] orderedYCoordinates = yCoordinates.ToArray();
+        var nodeList = new List<DocumentPoint>(
+            orderedXCoordinates.Length * orderedYCoordinates.Length);
+        var columns = new List<List<DocumentPoint>>(orderedXCoordinates.Length);
+        var rows = new List<DocumentPoint>?[orderedYCoordinates.Length];
+        var rowEncounterOrder = new List<int>(orderedYCoordinates.Length);
+
+        foreach (double x in orderedXCoordinates)
+        {
+            var column = new List<DocumentPoint>(orderedYCoordinates.Length);
+            for (int yIndex = 0; yIndex < orderedYCoordinates.Length; yIndex++)
+            {
+                var point = new DocumentPoint(x, orderedYCoordinates[yIndex]);
+                if (obstacleIndex.ContainsInterior(point))
+                {
+                    continue;
+                }
+
+                nodeList.Add(point);
+                column.Add(point);
+                List<DocumentPoint>? row = rows[yIndex];
+                if (row is null)
+                {
+                    row = new List<DocumentPoint>(orderedXCoordinates.Length);
+                    rows[yIndex] = row;
+                    rowEncounterOrder.Add(yIndex);
+                }
+
+                row.Add(point);
+            }
+
+            if (column.Count > 0)
+            {
+                columns.Add(column);
+            }
+        }
+
+        DocumentPoint[] nodes = nodeList.ToArray();
+        var adjacency = new Dictionary<DocumentPoint, List<DocumentPoint>>(nodes.Length);
+        foreach (DocumentPoint node in nodes)
+        {
+            adjacency.Add(node, new List<DocumentPoint>());
+        }
+
+        int edgeCount = 0;
+        foreach (List<DocumentPoint> column in columns)
+        {
+            edgeCount += ConnectVisibleNeighbors(
+                column,
+                adjacency,
+                obstacleIndex,
+                countEdges);
+        }
+
+        foreach (int yIndex in rowEncounterOrder)
+        {
+            edgeCount += ConnectVisibleNeighbors(
+                rows[yIndex]!,
+                adjacency,
+                obstacleIndex,
+                countEdges);
+        }
+
+        return new VisibilityGraphConstruction(
+            orderedXCoordinates,
+            orderedYCoordinates,
+            nodes,
+            adjacency,
+            columns,
+            rows,
+            rowEncounterOrder,
+            edgeCount);
     }
 
     private static int ConnectVisibleNeighbors(
@@ -1200,6 +1264,16 @@ internal enum CandidateFamilyEvaluationMode
     Lazy,
     EagerReference
 }
+
+internal readonly record struct VisibilityGraphConstruction(
+    double[] XCoordinates,
+    double[] YCoordinates,
+    DocumentPoint[] Nodes,
+    Dictionary<DocumentPoint, List<DocumentPoint>> Adjacency,
+    List<List<DocumentPoint>> Columns,
+    List<DocumentPoint>?[] Rows,
+    List<int> RowEncounterOrder,
+    int EdgeCount);
 
 internal sealed class RoutingEvaluationStatistics
 {
