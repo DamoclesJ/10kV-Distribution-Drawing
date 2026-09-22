@@ -229,27 +229,35 @@ public sealed class OrthogonalRouter
                 startDirection,
                 endOutwardDirection,
                 pathfindingObstacles);
+            CandidateScoringContext scoringContext = BuildScoringContext(
+                fallback,
+                expandedObstacles,
+                priorRoutes);
             return CompleteSelection(
                 request,
                 fallback,
-                Score(fallback, int.MaxValue, expandedObstacles, priorRoutes,
+                ScoreCandidate(fallback, int.MaxValue, scoringContext,
                     request.PreferredHorizontalY, CoordinateKey(fallback)),
                 Classify(request, fallback, expandedObstacles, environment),
                 useContinuity);
         }
 
         Candidate[] scoredCandidates;
+        CandidateScoringContext scoringContextForSelection;
         using (DrawingPerformanceTrace.PhaseOperation scoring =
                DrawingPerformanceTrace.Measure("CandidateScoring", request.ConnectionId))
         {
+            scoringContextForSelection = BuildScoringContext(
+                candidates[0].Route,
+                expandedObstacles,
+                priorRoutes);
             scoredCandidates = candidates
                 .Select(candidate => candidate with
                 {
-                    Score = Score(
+                    Score = ScoreCandidate(
                         candidate.Route,
                         candidate.Priority,
-                        expandedObstacles,
-                        priorRoutes,
+                        scoringContextForSelection,
                         request.PreferredHorizontalY,
                         candidate.Key),
                     Family = _familyEvaluationMode == CandidateFamilyEvaluationMode.EagerReference
@@ -279,8 +287,12 @@ public sealed class OrthogonalRouter
             return CompleteSelection(
                 request,
                 fallback,
-                Score(fallback, int.MaxValue, expandedObstacles, priorRoutes,
-                    request.PreferredHorizontalY, CoordinateKey(fallback)),
+                ScoreCandidate(
+                    fallback,
+                    int.MaxValue,
+                    scoringContextForSelection,
+                    request.PreferredHorizontalY,
+                    CoordinateKey(fallback)),
                 Classify(request, fallback, expandedObstacles, environment),
                 useContinuity);
         }
@@ -1106,30 +1118,69 @@ public sealed class OrthogonalRouter
         return new Candidate(route, priority, key, default);
     }
 
-    private RouteCandidateScore Score(
+    internal static CandidateScoringContext BuildScoringContext(
+        OrthogonalRoute route,
+        IReadOnlyList<RoutingObstacle> obstacles,
+        IReadOnlyList<OrthogonalRoute> priorRoutes)
+    {
+        ArgumentNullException.ThrowIfNull(route);
+        ArgumentNullException.ThrowIfNull(obstacles);
+        ArgumentNullException.ThrowIfNull(priorRoutes);
+
+        DocumentPoint source = route.Points[0];
+        DocumentPoint target = route.Points[^1];
+        var obstacleViews = new ScoringObstacleView[obstacles.Count];
+        for (int index = 0; index < obstacles.Count; index++)
+        {
+            RoutingObstacle obstacle = obstacles[index];
+            bool stableOwner = RequiresStableOwnerExclusion(obstacle);
+            obstacleViews[index] = new ScoringObstacleView(
+                obstacle,
+                obstacle.Bounds,
+                obstacle.Bounds.XMillimeters + obstacle.Bounds.WidthMillimeters,
+                obstacle.Bounds.YMillimeters + obstacle.Bounds.HeightMillimeters,
+                stableOwner,
+                !stableOwner && obstacle.Contains(source),
+                !stableOwner && obstacle.Contains(target));
+        }
+
+        var priorRouteViews = new PriorRouteScoringView[priorRoutes.Count];
+        for (int index = 0; index < priorRoutes.Count; index++)
+        {
+            priorRouteViews[index] = new PriorRouteScoringView(
+                priorRoutes[index],
+                BuildSegmentViews(priorRoutes[index].Segments));
+        }
+
+        return new CandidateScoringContext(obstacleViews, priorRouteViews);
+    }
+
+    internal static RouteCandidateScore ScoreCandidate(
         OrthogonalRoute route,
         int priority,
-        IReadOnlyList<RoutingObstacle> obstacles,
-        IReadOnlyList<OrthogonalRoute> priorRoutes,
+        CandidateScoringContext context,
         double? preferredHorizontalY,
         string coordinateKey)
     {
+        ArgumentNullException.ThrowIfNull(route);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(coordinateKey);
+
+        ScoringSegmentView[] candidateSegments = BuildSegmentViews(route.Segments);
         int obstacleIntersections = 0;
-        foreach (OrthogonalRouteSegment segment in route.Segments)
+        foreach (ScoringSegmentView segment in candidateSegments)
         {
-            foreach (RoutingObstacle obstacle in obstacles)
+            foreach (ScoringObstacleView obstacle in context.Obstacles)
             {
-                bool sourceObstacle = !RequiresStableOwnerExclusion(obstacle) &&
-                    obstacle.Contains(route.Points[0]);
-                bool targetObstacle = !RequiresStableOwnerExclusion(obstacle) &&
-                    obstacle.Contains(route.Points[^1]);
-                if (sourceObstacle && obstacle.Contains(segment.Start) ||
-                    targetObstacle && obstacle.Contains(segment.End))
+                if (obstacle.ContainsSourceEndpoint &&
+                    obstacle.Obstacle.Contains(segment.Segment.Start) ||
+                    obstacle.ContainsTargetEndpoint &&
+                    obstacle.Obstacle.Contains(segment.Segment.End))
                 {
                     continue;
                 }
 
-                if (IntersectsInterior(segment, obstacle.Bounds))
+                if (IntersectsInterior(segment, obstacle))
                 {
                     obstacleIntersections++;
                 }
@@ -1138,11 +1189,11 @@ public sealed class OrthogonalRouter
 
         double overlap = 0;
         int crossings = 0;
-        foreach (OrthogonalRoute prior in priorRoutes)
+        foreach (PriorRouteScoringView prior in context.PriorRoutes)
         {
-            foreach (OrthogonalRouteSegment current in route.Segments)
+            foreach (ScoringSegmentView current in candidateSegments)
             {
-                foreach (OrthogonalRouteSegment existing in prior.Segments)
+                foreach (ScoringSegmentView existing in prior.Segments)
                 {
                     overlap += CollinearOverlap(current, existing);
                     if (HasInteriorCrossing(current, existing))
@@ -1156,9 +1207,9 @@ public sealed class OrthogonalRouter
         return new RouteCandidateScore(
             obstacleIntersections,
             preferredHorizontalY is double guideY
-                ? route.Segments
+                ? candidateSegments
                     .Where(segment => segment.IsHorizontal)
-                    .Select(segment => Math.Abs(segment.Start.YMillimeters - guideY))
+                    .Select(segment => Math.Abs(segment.FixedY - guideY))
                     .DefaultIfEmpty(double.MaxValue)
                     .Min()
                 : 0,
@@ -1168,6 +1219,88 @@ public sealed class OrthogonalRouter
             route.Length,
             priority,
             coordinateKey);
+    }
+
+    private static ScoringSegmentView[] BuildSegmentViews(
+        IReadOnlyList<OrthogonalRouteSegment> segments)
+    {
+        var views = new ScoringSegmentView[segments.Count];
+        for (int index = 0; index < segments.Count; index++)
+        {
+            OrthogonalRouteSegment segment = segments[index];
+            views[index] = new ScoringSegmentView(
+                segment,
+                segment.IsHorizontal,
+                segment.IsVertical,
+                Math.Min(segment.Start.XMillimeters, segment.End.XMillimeters),
+                Math.Max(segment.Start.XMillimeters, segment.End.XMillimeters),
+                Math.Min(segment.Start.YMillimeters, segment.End.YMillimeters),
+                Math.Max(segment.Start.YMillimeters, segment.End.YMillimeters),
+                segment.Start.XMillimeters,
+                segment.Start.YMillimeters);
+        }
+
+        return views;
+    }
+
+    private static bool HasInteriorCrossing(
+        ScoringSegmentView first,
+        ScoringSegmentView second)
+    {
+        if (first.IsHorizontal == second.IsHorizontal)
+        {
+            return false;
+        }
+
+        ScoringSegmentView horizontal = first.IsHorizontal ? first : second;
+        ScoringSegmentView vertical = first.IsVertical ? first : second;
+        double x = vertical.FixedX;
+        double y = horizontal.FixedY;
+        return x > horizontal.MinX &&
+               x < horizontal.MaxX &&
+               y > vertical.MinY &&
+               y < vertical.MaxY;
+    }
+
+    private static double CollinearOverlap(
+        ScoringSegmentView first,
+        ScoringSegmentView second)
+    {
+        if (first.IsHorizontal && second.IsHorizontal &&
+            first.FixedY == second.FixedY)
+        {
+            return Math.Max(0, Math.Min(first.MaxX, second.MaxX) -
+                               Math.Max(first.MinX, second.MinX));
+        }
+
+        if (first.IsVertical && second.IsVertical &&
+            first.FixedX == second.FixedX)
+        {
+            return Math.Max(0, Math.Min(first.MaxY, second.MaxY) -
+                               Math.Max(first.MinY, second.MinY));
+        }
+
+        return 0;
+    }
+
+    private static bool IntersectsInterior(
+        ScoringSegmentView segment,
+        ScoringObstacleView obstacle)
+    {
+        if (segment.IsHorizontal)
+        {
+            double y = segment.FixedY;
+            return y > obstacle.Bounds.YMillimeters &&
+                   y < obstacle.Bottom &&
+                   Math.Max(segment.MinX, obstacle.Bounds.XMillimeters) <
+                   Math.Min(segment.MaxX, obstacle.Right);
+        }
+
+        double x = segment.FixedX;
+        return x > obstacle.Bounds.XMillimeters &&
+               x < obstacle.Right &&
+               Math.Max(segment.MinY, obstacle.Bounds.YMillimeters) <
+               Math.Min(segment.MaxY, obstacle.Bottom);
     }
 
     private static string CoordinateKey(OrthogonalRoute route) => string.Join(
@@ -1324,6 +1457,39 @@ public sealed class OrthogonalRouter
         public RouteFamilyKey? Family { get; init; }
     }
 }
+
+internal sealed class CandidateScoringContext(
+    ScoringObstacleView[] obstacles,
+    PriorRouteScoringView[] priorRoutes)
+{
+    internal IReadOnlyList<ScoringObstacleView> Obstacles { get; } = obstacles;
+
+    internal IReadOnlyList<PriorRouteScoringView> PriorRoutes { get; } = priorRoutes;
+}
+
+internal readonly record struct ScoringObstacleView(
+    RoutingObstacle Obstacle,
+    DocumentRect Bounds,
+    double Right,
+    double Bottom,
+    bool RequiresStableOwnerExclusion,
+    bool ContainsSourceEndpoint,
+    bool ContainsTargetEndpoint);
+
+internal readonly record struct PriorRouteScoringView(
+    OrthogonalRoute Route,
+    ScoringSegmentView[] Segments);
+
+internal readonly record struct ScoringSegmentView(
+    OrthogonalRouteSegment Segment,
+    bool IsHorizontal,
+    bool IsVertical,
+    double MinX,
+    double MaxX,
+    double MinY,
+    double MaxY,
+    double FixedX,
+    double FixedY);
 
 internal enum CandidateMaterializationOutcome
 {

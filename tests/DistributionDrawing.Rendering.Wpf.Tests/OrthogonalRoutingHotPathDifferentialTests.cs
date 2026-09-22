@@ -295,6 +295,423 @@ public sealed class OrthogonalRoutingHotPathDifferentialTests
         Assert.Equal(reference.GetType(), production.GetType());
     }
 
+    [Fact]
+    public void H3_2C_ProductionScoringMatchesLegacyAcrossCandidateMatrix()
+    {
+        foreach (ScoringFixture fixture in ScoringFixtures())
+        {
+            CandidateScoringContext context = OrthogonalRouter.BuildScoringContext(
+                fixture.Candidates[0].Route,
+                fixture.Obstacles,
+                fixture.PriorRoutes);
+            var reference = new List<ScoredInput>();
+            var production = new List<ScoredInput>();
+
+            for (int index = 0; index < fixture.Candidates.Count; index++)
+            {
+                ScoringInput input = fixture.Candidates[index];
+                reference.Add(new ScoredInput(index, input, LegacyScore(
+                    input.Route,
+                    input.Priority,
+                    fixture.Obstacles,
+                    fixture.PriorRoutes,
+                    fixture.PreferredHorizontalY,
+                    input.CoordinateKey)));
+                production.Add(new ScoredInput(index, input, OrthogonalRouter.ScoreCandidate(
+                    input.Route,
+                    input.Priority,
+                    context,
+                    fixture.PreferredHorizontalY,
+                    input.CoordinateKey)));
+            }
+
+            Assert.Equal(reference.Select(item => item.InputIndex),
+                production.Select(item => item.InputIndex));
+            for (int index = 0; index < reference.Count; index++)
+            {
+                AssertScoreEqual(fixture.Name, reference[index].Score, production[index].Score);
+            }
+
+            ScoredInput[] referenceLegal = reference
+                .Where(item => item.Score.ObstacleIntersections == 0)
+                .ToArray();
+            ScoredInput[] productionLegal = production
+                .Where(item => item.Score.ObstacleIntersections == 0)
+                .ToArray();
+            Assert.Equal(referenceLegal.Select(item => item.InputIndex),
+                productionLegal.Select(item => item.InputIndex));
+
+            ScoredInput[] referenceRanked = Rank(referenceLegal);
+            ScoredInput[] productionRanked = Rank(productionLegal);
+            Assert.Equal(referenceRanked.Select(item => item.InputIndex),
+                productionRanked.Select(item => item.InputIndex));
+            Assert.Equal(referenceRanked.FirstOrDefault()?.InputIndex,
+                productionRanked.FirstOrDefault()?.InputIndex);
+            AssertScoringFixtureCoverage(fixture, reference, referenceRanked);
+        }
+    }
+
+    private static void AssertScoringFixtureCoverage(
+        ScoringFixture fixture,
+        IReadOnlyList<ScoredInput> scores,
+        IReadOnlyList<ScoredInput> ranked)
+    {
+        switch (fixture.Name)
+        {
+            case "many-obstacles":
+                Assert.Contains(scores, item => item.Score.ObstacleIntersections > 1);
+                break;
+            case "endpoint-inside-ordinary-obstacle":
+                Assert.Equal(0, scores[0].Score.ObstacleIntersections);
+                break;
+            case "endpoint-inside-transformer-obstacle":
+            case "endpoint-inside-customer-station-obstacle":
+                Assert.True(scores[0].Score.ObstacleIntersections > 0);
+                break;
+            case "shared-endpoint-routes":
+                Assert.True(fixture.Candidates[0].Route.SharesTerminalWith(fixture.PriorRoutes[0]));
+                break;
+            case "horizontal-overlap":
+            case "vertical-overlap":
+            case "reverse-direction-collinear-overlap":
+            case "partial-overlap":
+                Assert.True(scores[0].Score.OverlapLength > 0);
+                break;
+            case "interior-crossing":
+                Assert.True(scores[0].Score.Crossings > 0);
+                break;
+            case "endpoint-only-touching":
+                Assert.Equal(0, scores[0].Score.Crossings);
+                break;
+            case "multiple-prior-routes":
+                Assert.Equal(3, fixture.PriorRoutes.Count);
+                Assert.True(scores[0].Score.OverlapLength > 0);
+                Assert.True(scores[0].Score.Crossings > 0);
+                break;
+            case "many-prior-segments":
+                Assert.True(fixture.PriorRoutes[0].Segments.Count >= 10);
+                break;
+            case "guide":
+                Assert.Contains(scores, item => item.Score.HorizontalGuideDeviation == 0.5);
+                break;
+            case "equal-score-tie":
+                Assert.Equal(scores[0].Score, scores[1].Score);
+                Assert.Equal(0, ranked[0].InputIndex);
+                break;
+            case "coordinate-key-tie-break":
+            case "priority-tie-break":
+                Assert.Equal(1, ranked[0].InputIndex);
+                break;
+            case "switching-margin-boundary":
+                Assert.Equal(OrthogonalRouter.RouteFamilySwitchingMargin,
+                    scores[1].Score.Length - scores[0].Score.Length);
+                break;
+            case "fixed-seed-randomized-orthogonal-routes":
+                Assert.Equal(24, scores.Count);
+                break;
+        }
+    }
+
+    private static IEnumerable<ScoringFixture> ScoringFixtures()
+    {
+        OrthogonalRoute direct = ScoringRoute(Connection1,
+            [new DocumentPoint(0, 0), new DocumentPoint(100, 0)]);
+        OrthogonalRoute upper = ScoringRoute(Connection1,
+            [new DocumentPoint(0, 0), new DocumentPoint(0, -20),
+                new DocumentPoint(100, -20), new DocumentPoint(100, 0)]);
+        OrthogonalRoute lower = ScoringRoute(Connection1,
+            [new DocumentPoint(0, 0), new DocumentPoint(0, 20),
+                new DocumentPoint(100, 20), new DocumentPoint(100, 0)]);
+        ScoringInput[] basic =
+        [
+            Input(direct, 0),
+            Input(upper, 1),
+            Input(lower, 2)
+        ];
+
+        yield return Fixture("no-obstacles", basic);
+        yield return Fixture("many-obstacles", basic,
+        [
+            Obstacle(401, RoutingObstacleKind.Pole, 15, -5, 10, 10),
+            Obstacle(402, RoutingObstacleKind.RingCabinet, 40, 10, 20, 20),
+            Obstacle(403, RoutingObstacleKind.PoleAttachment, 70, -25, 8, 10),
+            Obstacle(404, RoutingObstacleKind.IntermediateTerminal, 88, -4, 7, 8)
+        ]);
+        yield return Fixture("endpoint-inside-ordinary-obstacle", basic,
+            [Obstacle(405, RoutingObstacleKind.RingCabinet, -5, -5, 12, 12)]);
+        yield return Fixture("endpoint-inside-transformer-obstacle", basic,
+            [Obstacle(406, RoutingObstacleKind.Transformer, -5, -5, 12, 12)]);
+        yield return Fixture("endpoint-inside-customer-station-obstacle", basic,
+            [Obstacle(407, RoutingObstacleKind.CustomerStation, 93, -5, 12, 12)]);
+
+        OrthogonalRoute sharedEndpoint = ScoringRoute(Connection2,
+            [new DocumentPoint(0, 0), new DocumentPoint(0, 30),
+                new DocumentPoint(60, 30)], Start1, End2);
+        yield return Fixture("shared-endpoint-routes", basic, priorRoutes: [sharedEndpoint]);
+
+        OrthogonalRoute horizontalPrior = ScoringRoute(Connection2,
+            [new DocumentPoint(20, 0), new DocumentPoint(80, 0)], Start2, End2);
+        yield return Fixture("horizontal-overlap", basic, priorRoutes: [horizontalPrior]);
+
+        OrthogonalRoute verticalCandidate = ScoringRoute(Connection1,
+            [new DocumentPoint(0, 0), new DocumentPoint(0, 100),
+                new DocumentPoint(100, 100), new DocumentPoint(100, 0)]);
+        OrthogonalRoute verticalPrior = ScoringRoute(Connection2,
+            [new DocumentPoint(0, 20), new DocumentPoint(0, 80)], Start2, End2);
+        yield return Fixture("vertical-overlap", [Input(verticalCandidate, 0)],
+            priorRoutes: [verticalPrior]);
+
+        OrthogonalRoute reversePrior = ScoringRoute(Connection2,
+            [new DocumentPoint(80, 0), new DocumentPoint(20, 0)], Start2, End2);
+        yield return Fixture("reverse-direction-collinear-overlap", basic,
+            priorRoutes: [reversePrior]);
+
+        OrthogonalRoute partialPrior = ScoringRoute(Connection2,
+            [new DocumentPoint(75, 0), new DocumentPoint(125, 0)], Start2, End2);
+        yield return Fixture("partial-overlap", basic, priorRoutes: [partialPrior]);
+
+        OrthogonalRoute crossingPrior = ScoringRoute(Connection2,
+            [new DocumentPoint(50, -20), new DocumentPoint(50, 20)], Start2, End2);
+        yield return Fixture("interior-crossing", basic, priorRoutes: [crossingPrior]);
+
+        OrthogonalRoute touchingPrior = ScoringRoute(Connection2,
+            [new DocumentPoint(100, 0), new DocumentPoint(100, 30)], Start2, End2);
+        yield return Fixture("endpoint-only-touching", basic, priorRoutes: [touchingPrior]);
+
+        yield return Fixture("multiple-prior-routes", basic,
+            priorRoutes: [horizontalPrior, crossingPrior, sharedEndpoint]);
+
+        OrthogonalRoute manySegmentPrior = ScoringRoute(Connection3,
+        [
+            new DocumentPoint(10, -30), new DocumentPoint(10, 30),
+            new DocumentPoint(25, 30), new DocumentPoint(25, -30),
+            new DocumentPoint(40, -30), new DocumentPoint(40, 30),
+            new DocumentPoint(55, 30), new DocumentPoint(55, -30),
+            new DocumentPoint(70, -30), new DocumentPoint(70, 30),
+            new DocumentPoint(85, 30), new DocumentPoint(85, -30)
+        ], Id(107), Id(108));
+        yield return Fixture("many-prior-segments", basic, priorRoutes: [manySegmentPrior]);
+        yield return Fixture("guide", basic, preferredHorizontalY: -19.5);
+
+        yield return Fixture("equal-score-tie",
+            [Input(upper, 4, "same"), Input(upper, 4, "same")]);
+        yield return Fixture("coordinate-key-tie-break",
+            [Input(upper, 4, "b"), Input(upper, 4, "a")]);
+        yield return Fixture("priority-tie-break",
+            [Input(upper, 9, "same"), Input(upper, 3, "same")]);
+
+        OrthogonalRoute marginRoute = ScoringRoute(Connection1,
+            [new DocumentPoint(0, 0), new DocumentPoint(0, 4),
+                new DocumentPoint(100, 4), new DocumentPoint(100, 0)]);
+        yield return Fixture("switching-margin-boundary",
+            [Input(direct, 0), Input(marginRoute, 1)]);
+
+        yield return Fixture(
+            "fixed-seed-randomized-orthogonal-routes",
+            RandomScoringInputs(8675309),
+            [
+                Obstacle(420, RoutingObstacleKind.Pole, 15, -30, 6, 60),
+                Obstacle(421, RoutingObstacleKind.Transformer, 45, -18, 9, 36),
+                Obstacle(422, RoutingObstacleKind.CustomerStation, 75, -40, 11, 80)
+            ],
+            [horizontalPrior, crossingPrior, manySegmentPrior],
+            12.25);
+    }
+
+    private static ScoringFixture Fixture(
+        string name,
+        IReadOnlyList<ScoringInput> candidates,
+        IReadOnlyList<RoutingObstacle>? obstacles = null,
+        IReadOnlyList<OrthogonalRoute>? priorRoutes = null,
+        double? preferredHorizontalY = null) => new(
+            name,
+            candidates,
+            obstacles ?? [],
+            priorRoutes ?? [],
+            preferredHorizontalY);
+
+    private static RoutingObstacle Obstacle(
+        int id,
+        RoutingObstacleKind kind,
+        double x,
+        double y,
+        double width,
+        double height) => new(Id(id), kind, new DocumentRect(x, y, width, height));
+
+    private static ScoringInput Input(
+        OrthogonalRoute route,
+        int priority,
+        string? coordinateKey = null) => new(
+            route,
+            priority,
+            coordinateKey ?? CoordinateKey(route));
+
+    private static OrthogonalRoute ScoringRoute(
+        Guid connectionId,
+        IReadOnlyList<DocumentPoint> points,
+        Guid? startTerminalId = null,
+        Guid? endTerminalId = null) => new(
+            connectionId,
+            ConnectionType.Cable,
+            startTerminalId ?? Start1,
+            endTerminalId ?? End1,
+            points);
+
+    private static ScoringInput[] RandomScoringInputs(int seed)
+    {
+        var random = new Random(seed);
+        var inputs = new ScoringInput[24];
+        for (int index = 0; index < inputs.Length; index++)
+        {
+            double firstY = random.Next(-45, 46);
+            double secondX = random.Next(25, 76);
+            double secondY = random.Next(-45, 46);
+            OrthogonalRoute route = ScoringRoute(Connection1,
+            [
+                new DocumentPoint(0, 0),
+                new DocumentPoint(0, firstY),
+                new DocumentPoint(secondX, firstY),
+                new DocumentPoint(secondX, secondY),
+                new DocumentPoint(100, secondY),
+                new DocumentPoint(100, 0)
+            ]);
+            inputs[index] = Input(route, index);
+        }
+
+        return inputs;
+    }
+
+    private static RouteCandidateScore LegacyScore(
+        OrthogonalRoute route,
+        int priority,
+        IReadOnlyList<RoutingObstacle> obstacles,
+        IReadOnlyList<OrthogonalRoute> priorRoutes,
+        double? preferredHorizontalY,
+        string coordinateKey)
+    {
+        int obstacleIntersections = 0;
+        foreach (OrthogonalRouteSegment segment in route.Segments)
+        {
+            foreach (RoutingObstacle obstacle in obstacles)
+            {
+                bool sourceObstacle = !RequiresStableOwnerExclusion(obstacle) &&
+                    obstacle.Contains(route.Points[0]);
+                bool targetObstacle = !RequiresStableOwnerExclusion(obstacle) &&
+                    obstacle.Contains(route.Points[^1]);
+                if (sourceObstacle && obstacle.Contains(segment.Start) ||
+                    targetObstacle && obstacle.Contains(segment.End))
+                {
+                    continue;
+                }
+
+                if (LegacyIntersectsInterior(segment, obstacle.Bounds))
+                {
+                    obstacleIntersections++;
+                }
+            }
+        }
+
+        double overlap = 0;
+        int crossings = 0;
+        foreach (OrthogonalRoute prior in priorRoutes)
+        {
+            foreach (OrthogonalRouteSegment current in route.Segments)
+            {
+                foreach (OrthogonalRouteSegment existing in prior.Segments)
+                {
+                    overlap += OrthogonalRouter.CollinearOverlap(current, existing);
+                    if (OrthogonalRouter.HasInteriorCrossing(current, existing))
+                    {
+                        crossings++;
+                    }
+                }
+            }
+        }
+
+        return new RouteCandidateScore(
+            obstacleIntersections,
+            preferredHorizontalY is double guideY
+                ? route.Segments
+                    .Where(segment => segment.IsHorizontal)
+                    .Select(segment => Math.Abs(segment.Start.YMillimeters - guideY))
+                    .DefaultIfEmpty(double.MaxValue)
+                    .Min()
+                : 0,
+            overlap,
+            crossings,
+            Math.Max(0, route.Points.Count - 2),
+            route.Length,
+            priority,
+            coordinateKey);
+    }
+
+    private static bool RequiresStableOwnerExclusion(RoutingObstacle obstacle) =>
+        obstacle.Kind is RoutingObstacleKind.Transformer or
+            RoutingObstacleKind.CustomerStation;
+
+    private static bool LegacyIntersectsInterior(
+        OrthogonalRouteSegment segment,
+        DocumentRect bounds)
+    {
+        if (segment.IsHorizontal)
+        {
+            double y = segment.Start.YMillimeters;
+            return y > bounds.YMillimeters &&
+                   y < bounds.YMillimeters + bounds.HeightMillimeters &&
+                   Math.Max(Math.Min(segment.Start.XMillimeters, segment.End.XMillimeters),
+                       bounds.XMillimeters) <
+                   Math.Min(Math.Max(segment.Start.XMillimeters, segment.End.XMillimeters),
+                       bounds.XMillimeters + bounds.WidthMillimeters);
+        }
+
+        double x = segment.Start.XMillimeters;
+        return x > bounds.XMillimeters &&
+               x < bounds.XMillimeters + bounds.WidthMillimeters &&
+               Math.Max(Math.Min(segment.Start.YMillimeters, segment.End.YMillimeters),
+                   bounds.YMillimeters) <
+               Math.Min(Math.Max(segment.Start.YMillimeters, segment.End.YMillimeters),
+                   bounds.YMillimeters + bounds.HeightMillimeters);
+    }
+
+    private static ScoredInput[] Rank(IEnumerable<ScoredInput> inputs) => inputs
+        .OrderBy(item => item.Score.ObstacleIntersections)
+        .ThenBy(item => item.Score.HorizontalGuideDeviation)
+        .ThenBy(item => item.Score.OverlapLength)
+        .ThenBy(item => item.Score.Crossings)
+        .ThenBy(item => item.Score.Bends)
+        .ThenBy(item => item.Score.Length)
+        .ThenBy(item => item.Score.Priority)
+        .ThenBy(item => item.Score.CoordinateKey, StringComparer.Ordinal)
+        .ToArray();
+
+    private static void AssertScoreEqual(
+        string name,
+        RouteCandidateScore expected,
+        RouteCandidateScore actual)
+    {
+        Assert.True(expected.ObstacleIntersections == actual.ObstacleIntersections, name);
+        Assert.True(
+            BitConverter.DoubleToInt64Bits(expected.HorizontalGuideDeviation) ==
+            BitConverter.DoubleToInt64Bits(actual.HorizontalGuideDeviation),
+            name);
+        Assert.True(
+            BitConverter.DoubleToInt64Bits(expected.OverlapLength) ==
+            BitConverter.DoubleToInt64Bits(actual.OverlapLength),
+            name);
+        Assert.True(expected.Crossings == actual.Crossings, name);
+        Assert.True(expected.Bends == actual.Bends, name);
+        Assert.True(
+            BitConverter.DoubleToInt64Bits(expected.Length) ==
+            BitConverter.DoubleToInt64Bits(actual.Length),
+            name);
+        Assert.True(expected.Priority == actual.Priority, name);
+        Assert.True(expected.CoordinateKey == actual.CoordinateKey, name);
+    }
+
+    private static string CoordinateKey(OrthogonalRoute route) => string.Join(
+        ";",
+        route.Points.Select(point => $"{point.XMillimeters:R},{point.YMillimeters:R}"));
+
     private static IEnumerable<MaterializationFixture> MaterializationFixtures()
     {
         var start = new DocumentPoint(0, 0);
@@ -711,6 +1128,23 @@ public sealed class OrthogonalRoutingHotPathDifferentialTests
         DocumentPoint End,
         TerminalAnchorDirection StartDirection,
         TerminalAnchorDirection EndOutwardDirection);
+
+    private sealed record ScoringFixture(
+        string Name,
+        IReadOnlyList<ScoringInput> Candidates,
+        IReadOnlyList<RoutingObstacle> Obstacles,
+        IReadOnlyList<OrthogonalRoute> PriorRoutes,
+        double? PreferredHorizontalY);
+
+    private sealed record ScoringInput(
+        OrthogonalRoute Route,
+        int Priority,
+        string CoordinateKey);
+
+    private sealed record ScoredInput(
+        int InputIndex,
+        ScoringInput Input,
+        RouteCandidateScore Score);
 
     private sealed class LegacyMaterializationEntry(
         IReadOnlyList<DocumentPoint> rawCandidate,
