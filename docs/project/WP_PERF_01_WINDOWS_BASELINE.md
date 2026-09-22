@@ -5,7 +5,9 @@
 - WP-PERF-01A Characterization & Audit：Accepted。
 - WP-PERF-01B Windows Diagnostic Baseline Preparation：Accepted，基线证据已取得。
 - WP-PERF-01C-H1 Lossless Candidate Evaluation Cleanup：Accepted，Windows differential tests 已通过并完成真实工程复测。
-- WP-PERF-01C-H2 Per-Plan RoutingEnvironment：In Progress。
+- WP-PERF-01C-H2 Per-Plan RoutingEnvironment：Accepted。
+- WP-PERF-01C-H3-1、H3-2A、H3-2B、H3-2C-1：Accepted。
+- WP-PERF-01 Drawing Interaction Performance：Closed / Accepted。
 - `FormatVersion = V7`；诊断数据不写入 `.kvdrawing`。
 - 接近 60 FPS 是设计目标，不是冻结门槛。本文件不冻结 FPS、延迟、内存、PNG DPI、可读性或安全预算。
 
@@ -76,7 +78,7 @@ Get-FileHash .\path\real-sample.kvdrawing -Algorithm SHA256
 | `perf-normal-v7.kvdrawing` | 4 个 RingCabinet、5 个 Pole、2 个 Transformer、2 个 CustomerStation | 8 条 Cable、4 条 OHL、4 个 GroundingAccessPoint、4 个 GroundingPoint、3 个 CableRouteGuide；至少一个 GAP 位于真实 OHL/Transformer 场景 |
 | `perf-extended-v7.kvdrawing` | 6 个 RingCabinet、10 个 Pole、4 个 Transformer、3 个 CustomerStation | 16 条 Cable、8 条 OHL、6 个 GroundingAccessPoint、6 个 GroundingPoint、6 个 CableRouteGuide；包含多障碍绕行和多连接设备 |
 
-每个受控工程必须通过 V7 Save → Close → Open，重新构建 Scene 后无错误，并记录：SHA-256、文件大小、FormatVersion、各 Device 子类数量、Connection/Cable/OHL/GAP/GroundingPoint/Guide 数量、被测对象稳定 ID、每条被测 ConnectionId、Guide 对应 CableId，以及测试前截图。当前仓库未包含用户真实业务文件，也未在非 Windows 环境伪造上述两个 GUI 工程；因此其最终文件、指纹和实际对象清单属于本 WP 的 Windows 待采集项。
+每个受控工程必须通过 V7 Save → Close → Open，重新构建 Scene 后无错误，并记录：SHA-256、文件大小、FormatVersion、各 Device 子类数量、Connection/Cable/OHL/GAP/GroundingPoint/Guide 数量、被测对象稳定 ID、每条被测 ConnectionId、Guide 对应 CableId，以及测试前截图。用户真实业务文件和受控样本文件不提交到仓库；Windows validation 使用冻结的样本与轨迹记录，非 Windows 环境未伪造 GUI 工程或样本数据。
 
 ## 固定测试操作
 
@@ -137,10 +139,33 @@ gestureDurationMs,longestGapMs,workingSetStartMiB,workingSetPeakMiB,gcHeapPeakMi
 
 每次测试后保存必要截图或录屏，并核对 Electrical Model、Cable/OHL 合法性、GroundingPoint/GAP、Guide 优先级、route family continuity、group all-or-none、expected-invalid rollback、MouseUp `LastValid`、Undo/Redo 与 Save/Open。优化前后比较必须同时比较：工程指纹/前态、最终布局坐标、Connection endpoints、Guide 值、Scene route points / family（可获得时）、MouseUp 画面、Undo 后 Before、Redo 后 After。Rendering 不得创建或修改 Domain 事实。
 
-回传包应包含：环境模板、样本清单与 SHA-256、轨迹表、`.nettrace` 原始文件、从事件导出的表格、诊断开/关对照、WPR/Present 原始轨迹（若采集）、截图/录屏、完整测试输出和异常说明。不要回传未脱敏业务内容。WP-PERF-01B 的 Windows 基线采集已经通过并 Accepted；后续性能实现与验证状态以项目 STATUS / ROADMAP 中当前授权切片为准。
+回传包应包含：环境模板、样本清单与 SHA-256、轨迹表、`.nettrace` 原始文件、从事件导出的表格、诊断开/关对照、WPR/Present 原始轨迹（若采集）、截图/录屏、完整测试输出和异常说明。不要回传未脱敏业务内容。WP-PERF-01B 的 Windows 基线采集已经通过并 Accepted；最终实施与验证结论见下方 WP-PERF-01 Final Closure。
 
 ## H1 Windows Acceptance Evidence
 
 WP-PERF-01C-H1 passed Windows differential tests and was Accepted. The accepted real-project trace covered 15 Connections per Build. Device Drag recorded 42 Accepted and 3 Unchanged updates; Update P50/P95 were 35.33/45.64 ms, RoutingAll P50 27.89 ms, and SceneBuild P50 29.82 ms. CableRouteGuide Drag recorded 44 Accepted and 4 Unchanged updates; Update P50/P95 were 35.44/43.46 ms, RoutingAll P50 28.08 ms, and SceneBuild P50 30.14 ms.
 
 Typical H1 Candidate Builds classified a median of 15 RouteFamilies versus an estimated eager-reference count of approximately 930 for the same candidate volume (about 98.4% fewer). RouteFamilyClassification P50 was approximately 0.17 ms for Device Drag and 0.18 ms for Guide Drag. These measurements motivated H2 focus on repeated CandidateMaterialization and obstacle-derived preparation; they do not freeze a formal FPS or latency acceptance threshold.
+
+## WP-PERF-01 Final Closure
+
+Windows final validation passed for the H3-2C-1 checkpoint `23ada42ba076419421e49a8038c1ca7817d45689`: Release solution build passed, the complete Windows test suite passed, H3-2C-1 differential verification passed, and the final performance trace passed. The user also confirmed that actual Device Drag and CableRouteGuide operation are acceptable for work use. WP-PERF-01 and H3-2C-1 are therefore Closed / Accepted and Accepted respectively; H1, H2, H3-1, H3-2A, and H3-2B remain Accepted. No H3-2C-2 is created.
+
+The principal evolution measurements are:
+
+| Stage / sample | Update P50 | RoutingAll | VisibilityGraphBuild | CandidateScoring |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline true CableRouteGuide | ≈ 57.9 ms | ≈ 50.8 ms | — | — |
+| H1 CableRouteGuide | ≈ 35.4 ms | ≈ 28.1 ms | — | — |
+| H3-1 Comparable Guide | ≈ 32.0 ms | ≈ 24.7 ms | ≈ 8.8 ms | — |
+| H3-2A Comparable Guide | ≈ 29.1 ms | ≈ 21.7 ms | ≈ 4.7 ms | — |
+| H3-2B Comparable Guide | ≈ 26.9 ms | ≈ 19.5 ms | — | — |
+| H3-2C-1 Comparable Guide | ≈ 25.8 ms | ≈ 17.9 ms | — | ≈ 1.7 ms |
+| H3-2C-1 Pressure Device | ≈ 82.0 ms | ≈ 69.3 ms | — | ≈ 7.1 ms |
+| H3-2C-1 Pressure Guide | ≈ 79.4 ms | ≈ 68.8 ms | — | ≈ 6.8 ms |
+
+Relative to H3-2B, H3-2C-1 reduced CandidateScoring by approximately 51% for Comparable Guide, approximately 56% for Pressure Device, and approximately 56% for Pressure Guide. Comparable Device under its special route state also showed an approximately 58% CandidateScoring reduction. These are observed Windows results, not newly frozen performance thresholds. Approximately 60 FPS remains an interaction design target only.
+
+The formal closure stop condition is: preserve professional behavior completely while making actual drag and Guide adjustment on normal- and pressure-scale work drawings acceptable for day-to-day work. Closure confirms no change to Electrical Model correctness; Cable / Overhead legality; `LastValid`; expected-invalid rollback; `RouteFamilyKey`; continuity / hysteresis; CableRouteGuide priority; group move all-or-none; Undo / Redo; MouseUp no-jump; crossing / line-jump; GroundingPoint / GAP; fallback / `RoutingConstraintException` semantics; or `FormatVersion = V7`.
+
+Compact Adjacency, Incremental Routing, Scene partial rebuild, MouseMove throttle / debounce, and other deep Router restructuring remain Deferred / Not Authorized. Their current benefit-to-risk ratio does not justify extending WP-PERF-01 after the accepted practical-use stop condition. WP-PNG-01 remains Planned / Not Started and is the next Work Package in this stage; this closure does not start PNG implementation.
