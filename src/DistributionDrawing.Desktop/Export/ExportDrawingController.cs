@@ -11,6 +11,18 @@ public interface IExportDrawingDialog
     string? ChoosePngPath(string defaultFileName);
 }
 
+public enum ExportPngStatus
+{
+    Success,
+    Cancelled,
+    Failed
+}
+
+public sealed record ExportPngOperationResult(ExportPngStatus Status, int? SelectedDpi = null)
+{
+    public bool IsSuccess => Status == ExportPngStatus.Success && SelectedDpi.HasValue;
+}
+
 public sealed class WpfExportDrawingDialog : IExportDrawingDialog
 {
     private readonly Window _owner;
@@ -40,14 +52,14 @@ public sealed class ExportDrawingController
     private readonly Func<string> _activeDocumentName;
     private readonly IExportDrawingDialog _dialog;
     private readonly IDesktopMessageService _messages;
-    private readonly DrawingSceneBitmapRenderer _renderer;
+    private readonly IDrawingSceneBitmapRenderer _renderer;
 
     public ExportDrawingController(
         Func<ProjectRuntimeSession?> activeSession,
         Func<string> activeDocumentName,
         IExportDrawingDialog dialog,
         IDesktopMessageService messages,
-        DrawingSceneBitmapRenderer? renderer = null)
+        IDrawingSceneBitmapRenderer? renderer = null)
     {
         _activeSession = activeSession ?? throw new ArgumentNullException(nameof(activeSession));
         _activeDocumentName = activeDocumentName ?? throw new ArgumentNullException(nameof(activeDocumentName));
@@ -58,38 +70,53 @@ public sealed class ExportDrawingController
 
     public bool ExportPng()
     {
+        return ExportPngDetailed().IsSuccess;
+    }
+
+    public ExportPngOperationResult ExportPngDetailed()
+    {
         ProjectRuntimeSession? session = _activeSession();
         if (session is null)
         {
-            return false;
+            return new ExportPngOperationResult(ExportPngStatus.Failed);
         }
 
         string baseName = Path.GetFileNameWithoutExtension(_activeDocumentName());
         string? path = _dialog.ChoosePngPath($"{baseName}.png");
         if (path is null)
         {
-            return false;
+            return new ExportPngOperationResult(ExportPngStatus.Cancelled);
         }
 
         try
         {
-            ExportToTemporaryFile(session, path);
-            return true;
+            DrawingSceneBitmapResult result = ExportToTemporaryFile(session, path);
+            return new ExportPngOperationResult(ExportPngStatus.Success, result.SelectedDpi);
         }
-        catch (Exception exception) when (
-            exception is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (PngExportSizeException exception)
         {
             _messages.ShowError("导出 PNG 失败", exception.Message);
-            return false;
+            return new ExportPngOperationResult(ExportPngStatus.Failed);
         }
-        catch (OutOfMemoryException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            _messages.ShowError("导出 PNG 失败", "图纸范围过大，无法按当前分辨率导出。");
-            return false;
+            _messages.ShowError("导出 PNG 失败", $"无法写入 PNG 文件：{exception.Message}");
+            return new ExportPngOperationResult(ExportPngStatus.Failed);
+        }
+        catch (Exception exception) when (exception is PngExportRenderException or OutOfMemoryException)
+        {
+            _messages.ShowError("导出 PNG 失败", $"PNG 渲染或编码失败：{exception.Message}");
+            return new ExportPngOperationResult(ExportPngStatus.Failed);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or InvalidOperationException)
+        {
+            _messages.ShowError("导出 PNG 失败", exception.Message);
+            return new ExportPngOperationResult(ExportPngStatus.Failed);
         }
     }
 
-    private void ExportToTemporaryFile(ProjectRuntimeSession session, string path)
+    private DrawingSceneBitmapResult ExportToTemporaryFile(ProjectRuntimeSession session, string path)
     {
         if (session.Scene.Diagnostics.Count > 0)
         {
@@ -104,16 +131,18 @@ public sealed class ExportDrawingController
             $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
         try
         {
+            DrawingSceneBitmapResult renderResult;
             using (var stream = new FileStream(
                        temporaryPath,
                        FileMode.CreateNew,
                        FileAccess.Write,
                        FileShare.None))
             {
-                _renderer.RenderPng(session.Scene, stream);
+                renderResult = _renderer.RenderPng(session.Scene, stream);
             }
 
             File.Move(temporaryPath, fullPath, overwrite: true);
+            return renderResult;
         }
         finally
         {

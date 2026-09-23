@@ -37,6 +37,36 @@ public sealed class DrawingSceneBitmapRendererTests
     }
 
     [Fact]
+    public void RenderPng_AutomaticallyUsesHighestSafeDpiAndWritesMatchingMetadata()
+    {
+        RunOnSta(() =>
+        {
+            var scene = new DrawingScene(
+            [
+                new SceneRectangle(new DocumentRect(0, 0, 25.4, 25.4), Colors.Black, 0.5)
+            ]);
+            using var stream = new MemoryStream();
+
+            DrawingSceneBitmapResult result = new DrawingSceneBitmapRenderer().RenderPng(
+                scene,
+                stream,
+                new DrawingSceneBitmapOptions(MaximumDimensionPixels: 400));
+            stream.Position = 0;
+            BitmapFrame frame = BitmapFrame.Create(
+                stream,
+                BitmapCreateOptions.PreservePixelFormat,
+                BitmapCacheOption.OnLoad);
+
+            Assert.InRange(result.SelectedDpi, 96, 299);
+            Assert.Equal(400, result.WidthPixels);
+            Assert.Equal(result.WidthPixels, frame.PixelWidth);
+            Assert.Equal(result.HeightPixels, frame.PixelHeight);
+            Assert.Equal(result.SelectedDpi, frame.DpiX, 1);
+            Assert.Equal(result.SelectedDpi, frame.DpiY, 1);
+        });
+    }
+
+    [Fact]
     public void RenderPng_UsesTheSameTransformerNameSceneTextAsCanvas()
     {
         RunOnSta(() =>
@@ -144,7 +174,7 @@ public sealed class DrawingSceneBitmapRendererTests
             [
                 new SceneLine(new DocumentPoint(0, 0), new DocumentPoint(1000, 0), Colors.Black, 1)
             ]);
-            Assert.Throws<InvalidOperationException>(() =>
+            Assert.Throws<PngExportSizeException>(() =>
             {
                 _ = renderer.RenderPng(
                     oversized,
@@ -234,6 +264,49 @@ public sealed class DrawingSceneBitmapRendererTests
             Assert.True(result.ContentBounds.XMillimeters <= -5);
             Assert.True(
                 result.ContentBounds.XMillimeters + result.ContentBounds.WidthMillimeters >= 26);
+        });
+    }
+
+    [Fact]
+    public void RenderPng_LongChineseTextNearBoundsKeepsWhiteExportMarginAndDoesNotMutateScene()
+    {
+        RunOnSta(() =>
+        {
+            var scene = new DrawingScene(
+            [
+                new SceneText(
+                    new DocumentPoint(0, 0),
+                    "一号开闭站至二号客户站超长线路名称边界验证",
+                    Colors.Black,
+                    3.5)
+            ]);
+            SceneElement[] elementsBefore = scene.Elements.ToArray();
+            using var output = new MemoryStream();
+
+            DrawingSceneBitmapResult result = new DrawingSceneBitmapRenderer().RenderPng(scene, output);
+            output.Position = 0;
+            BitmapFrame frame = BitmapFrame.Create(
+                output,
+                BitmapCreateOptions.PreservePixelFormat,
+                BitmapCacheOption.OnLoad);
+            int stride = checked(frame.PixelWidth * 4);
+            var lastRow = new byte[stride];
+            var lastColumn = new byte[checked(frame.PixelHeight * 4)];
+            frame.CopyPixels(
+                new System.Windows.Int32Rect(0, frame.PixelHeight - 1, frame.PixelWidth, 1),
+                lastRow,
+                stride,
+                0);
+            frame.CopyPixels(
+                new System.Windows.Int32Rect(frame.PixelWidth - 1, 0, 1, frame.PixelHeight),
+                lastColumn,
+                4,
+                0);
+
+            Assert.Equal(elementsBefore, scene.Elements);
+            Assert.Equal(result.WidthPixels, frame.PixelWidth);
+            Assert.All(lastRow, component => Assert.Equal(255, component));
+            Assert.All(lastColumn, component => Assert.Equal(255, component));
         });
     }
 

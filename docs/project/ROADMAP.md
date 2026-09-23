@@ -48,14 +48,14 @@ WP-EM-07A and WP-EM-07B are Post-EM-07 / Pre-EM-08 amendment Work Packages. They
 
 ## Post-V1 Drawing Performance & PNG Export Stabilization
 
-**Status:** ACTIVE — WP-PERF-01 CLOSED / ACCEPTED; WP-PNG-01 PLANNED / NOT STARTED
+**Status:** ACTIVE — WP-PERF-01 CLOSED / ACCEPTED; WP-PNG-01 IN PROGRESS
 
 This stage follows, and does not reopen, the Closed / Accepted Post-V1 Electrical Model Closure stage or WP-EM-01 through WP-EM-09. Its baseline is closure commit `841ca66319948661f7a4aca9202247d479788d7b`; `FormatVersion` remains V7. It creates no WP-EM-10 and defines no V1.1, V1.2, or V2.0 release.
 
 The approved order and boundary are:
 
 1. **WP-PERF-01 — Drawing Interaction Performance — Closed / Accepted.** WP-PERF-01A, WP-PERF-01B, WP-PERF-01C-H1, WP-PERF-01C-H2, WP-PERF-01C-H3-1, WP-PERF-01C-H3-2A, WP-PERF-01C-H3-2B, and WP-PERF-01C-H3-2C-1 are Accepted. Release solution build, the complete Windows test suite, H3-2C-1 differential verification, performance tracing, and actual Device / CableRouteGuide professional use passed. No H3-2C-2 is created. Compact Adjacency, Incremental Routing, Scene partial rebuild, MouseMove throttle / debounce, and other deep Router changes remain Deferred / Not Authorized. The accepted stop condition is preservation of professional behavior while normal- and pressure-scale work drawings reach a practical, acceptable interaction experience; further Router work currently has an insufficient benefit-to-risk ratio.
-2. **WP-PNG-01 — PNG Export Stabilization.** This is an independent Work Package planned after WP-PERF-01 baseline work. No production implementation has started. Minimum DPI, readability acceptance, and safe pixel/memory budgets remain unfrozen pending evidence.
+2. **WP-PNG-01 — PNG Export Stabilization — In Progress.** WP-PNG-01A Automatic Safe DPI & PNG Export Sizing is Implementation Complete / Windows Calibration Pending. It automatically selects the highest safe integer DPI up to 300 using fixed, deterministic pixel, stride, and estimated-working-memory budgets while preserving the existing millimeter bounds, 10 mm margin, white background, WPF rendering, PNG encoding, and temporary-file replacement path. The initial 96 DPI minimum-readable value and 32M-pixel / 384 MiB / 3× safety values are Windows calibration defaults, not frozen product thresholds. Windows validation may adjust them once; WP-PNG-01 remains open until readability and safety parameters are professionally accepted. No routine DPI selector, vector/tiled/multipage export, or asynchronous export rewrite is included.
 
 Approximately 60 FPS remains an interaction design target rather than a formal acceptance threshold and was not frozen by WP-PERF-01 closure. Annotation, Energization Analysis, and work-ticket assisted authoring are outside this stage.
 

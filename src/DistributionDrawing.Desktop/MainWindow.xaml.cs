@@ -654,9 +654,14 @@ public partial class MainWindow : Window
 
     private void ExecuteExportPngAction()
     {
-        if (_exportDrawing.ExportPng())
+        ExportPngOperationResult result = _exportDrawing.ExportPngDetailed();
+        if (result.IsSuccess)
         {
-            ShowTransientFeedback("PNG 已导出");
+            int selectedDpi = result.SelectedDpi!.Value;
+            string message = selectedDpi == 300
+                ? "PNG 已导出（300 DPI）"
+                : $"PNG 已导出（实际 {selectedDpi} DPI）";
+            ShowTransientFeedback(message);
         }
     }
 

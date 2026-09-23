@@ -3,33 +3,70 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using DistributionDrawing.Application.Export;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Rendering.Wpf.Rendering;
 
 public sealed record DrawingSceneBitmapOptions(
-    double Dpi = 300,
+    int Dpi = 300,
     double MarginMillimeters = 10,
     int MaximumDimensionPixels = 32768,
-    long MaximumPixelCount = 100_000_000,
-    long MaximumEstimatedBytes = 400_000_000);
+    long MaximumPixelCount = 32_000_000,
+    long MaximumEstimatedBytes = 384L * 1024 * 1024,
+    int MinimumReadableDpi = 96,
+    int BytesPerPixel = 4,
+    double PeakSurfaceFactor = 3.0,
+    long FixedHeadroomBytes = 64L * 1024 * 1024,
+    long MaximumStrideBytes = int.MaxValue);
 
 public sealed record DrawingSceneBitmapResult(
     int WidthPixels,
     int HeightPixels,
     double Dpi,
     DocumentRect ContentBounds,
-    DocumentRect ExportBounds);
+    DocumentRect ExportBounds)
+{
+    public int SelectedDpi => checked((int)Dpi);
+}
 
-public sealed class DrawingSceneBitmapRenderer
+public interface IDrawingSceneBitmapRenderer
+{
+    DrawingSceneBitmapResult RenderPng(
+        DrawingScene scene,
+        Stream output,
+        DrawingSceneBitmapOptions? options = null);
+}
+
+public sealed class PngExportSizeException : InvalidOperationException
+{
+    public PngExportSizeException()
+        : base("图纸范围过大，在最低可读分辨率下仍无法安全导出 PNG。")
+    {
+    }
+}
+
+public sealed class PngExportRenderException : InvalidOperationException
+{
+    public PngExportRenderException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+public sealed class DrawingSceneBitmapRenderer : IDrawingSceneBitmapRenderer
 {
     private const double MillimetersPerInch = 25.4;
     private const double DipsPerInch = 96;
     private readonly DrawingSceneRenderer _sceneRenderer;
+    private readonly PngExportSizingCalculator _sizingCalculator;
 
-    public DrawingSceneBitmapRenderer(DrawingSceneRenderer? sceneRenderer = null)
+    public DrawingSceneBitmapRenderer(
+        DrawingSceneRenderer? sceneRenderer = null,
+        PngExportSizingCalculator? sizingCalculator = null)
     {
         _sceneRenderer = sceneRenderer ?? new DrawingSceneRenderer();
+        _sizingCalculator = sizingCalculator ?? new PngExportSizingCalculator();
     }
 
     public DrawingSceneBitmapResult RenderPng(
@@ -53,12 +90,28 @@ public sealed class DrawingSceneBitmapRenderer
         }
 
         DocumentRect exportBounds = Expand(contentBounds, settings.MarginMillimeters);
-        int widthPixels = ToPixels(exportBounds.WidthMillimeters, settings.Dpi);
-        int heightPixels = ToPixels(exportBounds.HeightMillimeters, settings.Dpi);
-        ValidatePixelBudget(widthPixels, heightPixels, settings);
+        PngExportSizingDecision sizing = _sizingCalculator.Calculate(
+            exportBounds.WidthMillimeters,
+            exportBounds.HeightMillimeters,
+            CreateSizingPolicy(settings));
+        if (sizing.Failure is PngExportSizingFailure.InvalidDrawingSize or
+            PngExportSizingFailure.InvalidPolicy)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options));
+        }
 
-        double widthDips = widthPixels * DipsPerInch / settings.Dpi;
-        double heightDips = heightPixels * DipsPerInch / settings.Dpi;
+        if (!sizing.IsSuccess)
+        {
+            throw new PngExportSizeException();
+        }
+
+        PngExportSizingResult selected = sizing.Result!;
+        int widthPixels = selected.PixelWidth;
+        int heightPixels = selected.PixelHeight;
+        int selectedDpi = selected.SelectedDpi;
+
+        double widthDips = widthPixels * DipsPerInch / selectedDpi;
+        double heightDips = heightPixels * DipsPerInch / selectedDpi;
         double offsetXDips = -exportBounds.XMillimeters * DipsPerInch / MillimetersPerInch;
         double offsetYDips = -exportBounds.YMillimeters * DipsPerInch / MillimetersPerInch;
         if (!IsPositiveFinite(widthDips) ||
@@ -66,40 +119,46 @@ public sealed class DrawingSceneBitmapRenderer
             !IsFinite(offsetXDips) ||
             !IsFinite(offsetYDips))
         {
-            throw TooLarge();
+            throw new PngExportSizeException();
         }
 
-        var exportVisual = new DrawingVisual();
-        using (DrawingContext context = exportVisual.RenderOpen())
-        {
-            context.DrawRectangle(Brushes.White, null, new Rect(0, 0, widthDips, heightDips));
-            context.PushTransform(new TranslateTransform(offsetXDips, offsetYDips));
-            context.DrawDrawing(_sceneRenderer.RenderDrawing(scene, settings.Dpi / DipsPerInch));
-            context.Pop();
-        }
-
-        var bitmap = new RenderTargetBitmap(
-            widthPixels,
-            heightPixels,
-            settings.Dpi,
-            settings.Dpi,
-            PixelFormats.Pbgra32);
-        bitmap.Render(exportVisual);
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(bitmap));
         try
         {
+            var exportVisual = new DrawingVisual();
+            using (DrawingContext context = exportVisual.RenderOpen())
+            {
+                context.DrawRectangle(Brushes.White, null, new Rect(0, 0, widthDips, heightDips));
+                context.PushTransform(new TranslateTransform(offsetXDips, offsetYDips));
+                context.DrawDrawing(_sceneRenderer.RenderDrawing(scene, selectedDpi / DipsPerInch));
+                context.Pop();
+            }
+
+            var bitmap = new RenderTargetBitmap(
+                widthPixels,
+                heightPixels,
+                selectedDpi,
+                selectedDpi,
+                PixelFormats.Pbgra32);
+            bitmap.Render(exportVisual);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
             encoder.Save(output);
         }
         catch (InvalidOperationException exception) when (IsOutputWriteFailure(exception))
         {
             throw new IOException("无法写入 PNG 输出流。", exception);
         }
+        catch (Exception exception) when (
+            exception is OutOfMemoryException or COMException or
+                InvalidOperationException or ArgumentException or NotSupportedException)
+        {
+            throw new PngExportRenderException("PNG 渲染或编码失败。", exception);
+        }
 
         return new DrawingSceneBitmapResult(
             widthPixels,
             heightPixels,
-            settings.Dpi,
+            selectedDpi,
             contentBounds,
             exportBounds);
     }
@@ -120,13 +179,18 @@ public sealed class DrawingSceneBitmapRenderer
 
     private static void ValidateOptions(DrawingSceneBitmapOptions options)
     {
-        if (!IsPositiveFinite(options.Dpi) ||
+        if (options.Dpi <= 0 ||
             options.MarginMillimeters < 0 ||
             double.IsNaN(options.MarginMillimeters) ||
             double.IsInfinity(options.MarginMillimeters) ||
             options.MaximumDimensionPixels <= 0 ||
             options.MaximumPixelCount <= 0 ||
-            options.MaximumEstimatedBytes <= 0)
+            options.MaximumEstimatedBytes <= 0 ||
+            options.MinimumReadableDpi <= 0 ||
+            options.BytesPerPixel <= 0 ||
+            !IsPositiveFinite(options.PeakSurfaceFactor) ||
+            options.FixedHeadroomBytes < 0 ||
+            options.MaximumStrideBytes <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options));
         }
@@ -182,47 +246,17 @@ public sealed class DrawingSceneBitmapRenderer
             Math.Max(0, bounds.HeightMillimeters) + margin * 2);
     }
 
-    private static int ToPixels(double millimeters, double dpi)
-    {
-        double pixels = Math.Ceiling(millimeters / MillimetersPerInch * dpi);
-        if (!IsPositiveFinite(pixels) || pixels > int.MaxValue)
-        {
-            throw TooLarge();
-        }
-
-        return (int)pixels;
-    }
-
-    private static void ValidatePixelBudget(
-        int widthPixels,
-        int heightPixels,
-        DrawingSceneBitmapOptions options)
-    {
-        if (widthPixels > options.MaximumDimensionPixels ||
-            heightPixels > options.MaximumDimensionPixels)
-        {
-            throw TooLarge();
-        }
-
-        long pixelCount;
-        try
-        {
-            pixelCount = checked((long)widthPixels * heightPixels);
-        }
-        catch (OverflowException)
-        {
-            throw TooLarge();
-        }
-
-        if (pixelCount > options.MaximumPixelCount ||
-            pixelCount > options.MaximumEstimatedBytes / 4)
-        {
-            throw TooLarge();
-        }
-    }
-
-    private static InvalidOperationException TooLarge() =>
-        new("图纸范围过大，无法按当前分辨率导出。");
+    private static PngExportSizingPolicy CreateSizingPolicy(DrawingSceneBitmapOptions options) =>
+        new(
+            MaxRequestedDpi: options.Dpi,
+            MinimumReadableDpi: options.MinimumReadableDpi,
+            MaxDimensionPixels: options.MaximumDimensionPixels,
+            MaxPixels: options.MaximumPixelCount,
+            BytesPerPixel: options.BytesPerPixel,
+            PeakSurfaceFactor: options.PeakSurfaceFactor,
+            FixedHeadroomBytes: options.FixedHeadroomBytes,
+            MaxExportWorkingBytes: options.MaximumEstimatedBytes,
+            MaxStrideBytes: options.MaximumStrideBytes);
 
     private static bool IsPositiveFinite(double value) =>
         value > 0 && IsFinite(value);

@@ -40,13 +40,90 @@ public sealed class ExportDrawingControllerTests : IDisposable
                 dialog,
                 messages);
 
-            Assert.True(controller.ExportPng());
+            ExportPngOperationResult result = controller.ExportPngDetailed();
 
+            Assert.True(result.IsSuccess);
+            Assert.Equal(300, result.SelectedDpi);
             Assert.Equal("未命名 3.png", dialog.DefaultFileName);
             Assert.True(File.Exists(outputPath));
             Assert.Equal(dirtyBefore, session.IsDirty);
             Assert.Empty(messages.Errors);
         });
+    }
+
+    [Fact]
+    public void DetailedResultCarriesReducedDpiFromRenderer()
+    {
+        ProjectRuntimeSession session = CreateSession("降分辨率工程");
+        string outputPath = NextPath(".png");
+        var renderer = new TestRenderer((_, stream, _) =>
+        {
+            stream.WriteByte(1);
+            return Result(237);
+        });
+        var controller = new ExportDrawingController(
+            () => session,
+            () => "降分辨率工程",
+            new TestExportDialog(outputPath),
+            new TestMessages(),
+            renderer);
+
+        ExportPngOperationResult result = controller.ExportPngDetailed();
+
+        Assert.Equal(ExportPngStatus.Success, result.Status);
+        Assert.Equal(237, result.SelectedDpi);
+        Assert.True(File.Exists(outputPath));
+    }
+
+    [Fact]
+    public void CancelledDialogReturnsCancelledWithoutRenderingOrSuccess()
+    {
+        ProjectRuntimeSession session = CreateSession("取消导出");
+        var renderer = new TestRenderer((_, _, _) => throw new InvalidOperationException());
+        var controller = new ExportDrawingController(
+            () => session,
+            () => "取消导出",
+            new TestExportDialog(null),
+            new TestMessages(),
+            renderer);
+
+        ExportPngOperationResult result = controller.ExportPngDetailed();
+
+        Assert.Equal(ExportPngStatus.Cancelled, result.Status);
+        Assert.Null(result.SelectedDpi);
+        Assert.Equal(0, renderer.CallCount);
+    }
+
+    [Fact]
+    public void NoSafeReadableDpiReturnsFailureWithSizeMessage()
+    {
+        AssertCategorizedFailure(
+            new PngExportSizeException(),
+            "最低可读分辨率");
+    }
+
+    [Fact]
+    public void IoFailureReturnsFailureWithFileMessage()
+    {
+        AssertCategorizedFailure(
+            new IOException("disk full"),
+            "无法写入 PNG 文件");
+    }
+
+    [Fact]
+    public void UnauthorizedFailureReturnsFailureWithFileMessage()
+    {
+        AssertCategorizedFailure(
+            new UnauthorizedAccessException("denied"),
+            "无法写入 PNG 文件");
+    }
+
+    [Fact]
+    public void RenderFailureReturnsFailureWithRenderMessage()
+    {
+        AssertCategorizedFailure(
+            new PngExportRenderException("encoder failed", new InvalidOperationException()),
+            "PNG 渲染或编码失败");
     }
 
     [Fact]
@@ -137,6 +214,34 @@ public sealed class ExportDrawingControllerTests : IDisposable
         return path;
     }
 
+    private void AssertCategorizedFailure(Exception exception, string expectedMessage)
+    {
+        ProjectRuntimeSession session = CreateSession("失败分类");
+        string outputPath = NextPath(".png");
+        var messages = new TestMessages();
+        var controller = new ExportDrawingController(
+            () => session,
+            () => "失败分类",
+            new TestExportDialog(outputPath),
+            messages,
+            new TestRenderer((_, _, _) => throw exception));
+
+        ExportPngOperationResult result = controller.ExportPngDetailed();
+
+        Assert.Equal(ExportPngStatus.Failed, result.Status);
+        Assert.Null(result.SelectedDpi);
+        Assert.False(File.Exists(outputPath));
+        Assert.Single(messages.Errors);
+        Assert.Contains(expectedMessage, messages.Errors[0]);
+    }
+
+    private static DrawingSceneBitmapResult Result(int dpi) => new(
+        100,
+        80,
+        dpi,
+        new DocumentRect(0, 0, 10, 8),
+        new DocumentRect(-10, -10, 30, 28));
+
     public void Dispose()
     {
         foreach (string path in _paths.Where(File.Exists)) File.Delete(path);
@@ -156,13 +261,29 @@ public sealed class ExportDrawingControllerTests : IDisposable
         if (exception is not null) ExceptionDispatchInfo.Capture(exception).Throw();
     }
 
-    private sealed class TestExportDialog(string path) : IExportDrawingDialog
+    private sealed class TestExportDialog(string? path) : IExportDrawingDialog
     {
         public string? DefaultFileName { get; private set; }
         public string? ChoosePngPath(string defaultFileName)
         {
             DefaultFileName = defaultFileName;
             return path;
+        }
+    }
+
+    private sealed class TestRenderer(
+        Func<DrawingScene, Stream, DrawingSceneBitmapOptions?, DrawingSceneBitmapResult> render)
+        : IDrawingSceneBitmapRenderer
+    {
+        public int CallCount { get; private set; }
+
+        public DrawingSceneBitmapResult RenderPng(
+            DrawingScene scene,
+            Stream output,
+            DrawingSceneBitmapOptions? options = null)
+        {
+            CallCount++;
+            return render(scene, output, options);
         }
     }
 
