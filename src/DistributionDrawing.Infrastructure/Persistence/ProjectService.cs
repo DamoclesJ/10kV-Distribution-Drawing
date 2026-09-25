@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Application.WorkTickets;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
@@ -46,7 +47,8 @@ public sealed class ProjectService
             professional,
             isDirty: false,
             openedFormatVersion: ProjectFileFormat.CurrentVersion,
-            transformerNamingMode: TransformerNamingContractMode.Current);
+            transformerNamingMode: TransformerNamingContractMode.Current,
+            workTickets: RestoreWorkTickets(document, domain));
         Current = candidate;
         return candidate;
     }
@@ -54,14 +56,12 @@ public sealed class ProjectService
     public ProjectSession SaveProject()
     {
         ProjectSession current = RequireCurrent();
-        EnsureCanSaveInPlace(current);
         return SaveProject(current.FilePath, current.Layout);
     }
 
     public ProjectSession SaveProject(ProjectLayoutSnapshot layout)
     {
         ProjectSession current = RequireCurrent();
-        EnsureCanSaveInPlace(current);
         return SaveProject(current.FilePath, layout);
     }
 
@@ -69,15 +69,7 @@ public sealed class ProjectService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ProjectSession current = RequireCurrent();
-        string targetPath = Path.GetFullPath(filePath);
-        if (current.RequiresUpgradeSaveAs &&
-            StringComparer.OrdinalIgnoreCase.Equals(targetPath, current.FilePath))
-        {
-            throw new InvalidOperationException(
-                "从旧格式打开的工程必须另存为新的 V7 文件，不能覆盖原文件。");
-        }
-
-        return SaveProject(targetPath, layout);
+        return SaveProject(Path.GetFullPath(filePath), layout);
     }
 
     private ProjectSession SaveProject(string filePath, ProjectLayoutSnapshot layout)
@@ -93,7 +85,8 @@ public sealed class ProjectService
                 current.Metadata.Description),
             Domain = ProjectDomainMapper.ToDto(current.Domain),
             Layout = ProjectLayoutMapper.ToDto(current.Domain, layout),
-            Professional = ProjectProfessionalMapper.ToDto(current.Domain)
+            Professional = ProjectProfessionalMapper.ToDto(current.Domain),
+            WorkTicketData = ProjectWorkTicketMapper.ToDto(current.WorkTickets, current.Domain)
         };
         _container.Save(filePath, snapshot);
 
@@ -105,6 +98,7 @@ public sealed class ProjectService
             persistedDocument,
             persisted.TransformerNamingMode);
         _ = RestoreProfessional(persistedDocument, validationDomain);
+        _ = RestoreWorkTickets(persistedDocument, validationDomain);
         _ = RestoreLayout(persistedDocument, validationDomain);
         ProjectSession candidate = new(
             filePath,
@@ -114,7 +108,8 @@ public sealed class ProjectService
             new ProjectProfessionalSnapshot(ProjectProfessionalMapper.ToDto(current.Domain)),
             isDirty: false,
             openedFormatVersion: persisted.OpenedFormatVersion,
-            transformerNamingMode: persisted.TransformerNamingMode);
+            transformerNamingMode: persisted.TransformerNamingMode,
+            workTickets: current.WorkTickets);
 
         Current = candidate;
         return candidate;
@@ -138,7 +133,8 @@ public sealed class ProjectService
             professional,
             isDirty: false,
             openedFormatVersion: opened.OpenedFormatVersion,
-            transformerNamingMode: opened.TransformerNamingMode);
+            transformerNamingMode: opened.TransformerNamingMode,
+            workTickets: RestoreWorkTickets(document, domain));
         Current = candidate;
         return candidate;
     }
@@ -176,15 +172,6 @@ public sealed class ProjectService
             ?? throw new InvalidOperationException("No project is currently open.");
     }
 
-    private static void EnsureCanSaveInPlace(ProjectSession session)
-    {
-        if (session.RequiresUpgradeSaveAs)
-        {
-            throw new InvalidOperationException(
-                $"该工程从 V{session.OpenedFormatVersion} 打开，首次保存必须使用“另存为”创建新的 V7 文件。");
-        }
-    }
-
     private static DrawingDocument RestoreDomain(
         ProjectFileDocument document,
         TransformerNamingContractMode transformerNamingMode)
@@ -220,4 +207,7 @@ public sealed class ProjectService
     {
         return ProjectProfessionalMapper.ToSnapshot(domain, document.Professional);
     }
+
+    private static WorkTicketDataRoot RestoreWorkTickets(ProjectFileDocument document, DrawingDocument domain) =>
+        ProjectWorkTicketMapper.ToRoot(document.WorkTicketData, domain);
 }

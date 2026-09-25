@@ -26,7 +26,7 @@ public sealed class ProjectFileContainer
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Disallow,
         AllowTrailingCommas = false,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
     public ProjectFileDocument Create(
@@ -59,7 +59,9 @@ public sealed class ProjectFileContainer
                 FormatVersion = ProjectFileFormat.CurrentVersion
             },
             Professional = document.Professional ??
-                ProjectProfessionalDto.Empty(document.Manifest.ProjectId)
+                ProjectProfessionalDto.Empty(document.Manifest.ProjectId),
+            WorkTicketData = document.WorkTicketData ??
+                ProjectWorkTicketDto.Empty(document.Manifest.ProjectId)
         };
         ValidateDocument(normalizedDocument);
 
@@ -100,7 +102,8 @@ public sealed class ProjectFileContainer
                         savedDocument.Domain,
                         savedDocument.Layout,
                         savedDocument.Professional,
-                        TransformerNamingContractVersion: 1));
+                        TransformerNamingContractVersion: 1,
+                        WorkTicketData: savedDocument.WorkTicketData));
             }
 
             File.Move(temporaryPath, targetPath, overwrite: true);
@@ -138,11 +141,7 @@ public sealed class ProjectFileContainer
             ProjectFileFormat.ManifestEntryName);
         ValidateManifest(manifest);
 
-        JsonObject rawPayload = ReadJsonObjectEntry(archive, manifest.MainEntry);
-        JsonObject migratedPayload = ProjectFormatMigration.Migrate(
-            rawPayload,
-            manifest.FormatVersion,
-            manifest.ProjectId);
+        JsonObject migratedPayload = ReadJsonObjectEntry(archive, manifest.MainEntry);
         TransformerNamingContractMode transformerNamingMode =
             ReadTransformerNamingContractMode(migratedPayload);
         ProjectFilePayload payload = migratedPayload.Deserialize<ProjectFilePayload>(JsonOptions)
@@ -180,6 +179,9 @@ public sealed class ProjectFileContainer
                 "The current project format requires a Professional section.");
         }
 
+        if (payload.WorkTicketData is null)
+            throw new InvalidDataException("V8 project requires WorkTicketData.");
+
         ProjectProfessionalDto professional = payload.Professional;
         if (professional.DocumentId != manifest.ProjectId)
         {
@@ -198,7 +200,8 @@ public sealed class ProjectFileContainer
                 payload.Metadata,
                 payload.Domain,
                 payload.Layout,
-                professional),
+                professional,
+                payload.WorkTicketData),
             manifest.FormatVersion,
             transformerNamingMode);
     }
@@ -256,6 +259,12 @@ public sealed class ProjectFileContainer
         {
             throw new InvalidDataException(
                 "Professional document identity does not match the project manifest.");
+        }
+
+        if (document.WorkTicketData is not { } ticketData ||
+            ticketData.DocumentId != document.Manifest.ProjectId || ticketData.Tickets is null)
+        {
+            throw new InvalidDataException("Work ticket section identity does not match the project manifest.");
         }
 
         foreach (ProjectTransformerDto transformer in document.Domain?.Transformers ?? [])
@@ -364,5 +373,6 @@ public sealed class ProjectFileContainer
         ProjectDomainDto? Domain,
         ProjectLayoutDto? Layout,
         ProjectProfessionalDto? Professional = null,
-        int? TransformerNamingContractVersion = null);
+        int? TransformerNamingContractVersion = null,
+        ProjectWorkTicketDto? WorkTicketData = null);
 }

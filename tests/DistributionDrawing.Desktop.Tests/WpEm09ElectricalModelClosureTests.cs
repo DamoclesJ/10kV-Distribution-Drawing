@@ -318,96 +318,8 @@ public sealed class WpEm09ElectricalModelClosureTests : IDisposable
             Assert.Contains(start.Position, route.Points);
             Assert.Contains(end.Position, route.Points);
         }
-        Assert.Equal(ProjectFileFormat.Version7,
+        Assert.Equal(ProjectFileFormat.Version8,
             reopened.PersistenceSession.Manifest.FormatVersion);
-    }
-
-    [Fact]
-    public void Version6Upgrade_AddModernAggregatesAndGap_SaveOpenCoexistsWithLegacyFacts()
-    {
-        var sourceService = new ProjectService();
-        ProjectRuntimeSession source = ProjectRuntimeSession.CreateEmpty(
-            sourceService.CreateProject(_legacyPath, "V6 legacy with modern additions"));
-        AddRingCabinetCommand legacyCabinet = new DeviceCommandFactory().CreateAddRingCabinet(
-            source.PersistenceSession.Domain,
-            source.Layout,
-            new RingCabinetCreationConfiguration(
-                "Legacy RC",
-                new RingCabinetCreationTemplateFactory().Create(
-                    RingCabinetTemplateType.Conventional,
-                    3)),
-            new DocumentPoint(20, 20));
-        legacyCabinet.Execute();
-        sourceService.SaveProject(ProjectLayoutRuntimeMapper.ToSnapshot(
-            source.PersistenceSession.Domain,
-            source.Layout));
-        RewriteAsVersion6(_legacyPath);
-
-        var upgradeService = new ProjectService();
-        ProjectRuntimeSession upgraded = ProjectRuntimeSession.Create(
-            upgradeService.LoadProject(_legacyPath));
-        Assert.True(upgraded.PersistenceSession.RequiresUpgradeSaveAs);
-        var devices = new DeviceCommandFactory();
-        AddPoleCommand pole = devices.CreateAddPole(
-            upgraded.PersistenceSession.Domain,
-            upgraded.Layout,
-            new DocumentPoint(20, 220));
-        pole.Execute();
-        AddTransformerCommand transformer = devices.CreateAddTransformer(
-            upgraded.PersistenceSession.Domain,
-            upgraded.Layout,
-            TransformerKind.PublicPoleMounted,
-            new DocumentPoint(250, 220),
-            "升级后变压器");
-        transformer.Execute();
-        AddOverheadLineCommand line = new OverheadLineCommandFactory().CreateAdd(
-            upgraded.PersistenceSession.Domain,
-            upgraded.Layout,
-            pole.Terminal.Id,
-            transformer.Creation.HvTerminal.Id,
-            pole.Layout.Position,
-            transformer.Creation.Layout.Position);
-        line.Execute();
-        GroundingAccessPoint gap = upgraded.PersistenceSession.Domain.CreateGroundingAccessPoint(
-            Guid.NewGuid(),
-            line.Connection.Id,
-            pole.Pole.Id,
-            GroundingAdjacentEndpoint.ForTerminal(transformer.Creation.HvTerminal.Id),
-            GroundingAccessLineSide.TransformerSide,
-            GroundingAccessPlacementSide.PoleSide);
-        AddCustomerStationWithLayoutCommand station = devices.CreateAddCustomerStation(
-            upgraded.PersistenceSession.Domain,
-            upgraded.Layout,
-            StationKind.BoxStation,
-            ["升级后主供"],
-            new DocumentPoint(250, 360));
-        station.Execute();
-        upgraded.RebuildScene();
-
-        ProjectSession saved = upgradeService.SaveProjectAs(
-            _path,
-            ProjectLayoutRuntimeMapper.ToSnapshot(
-                upgraded.PersistenceSession.Domain,
-                upgraded.Layout));
-        ProjectRuntimeSession reopened = ProjectRuntimeSession.Load(
-            new ProjectService(),
-            saved.FilePath);
-
-        Assert.Equal(ProjectFileFormat.Version7,
-            reopened.PersistenceSession.Manifest.FormatVersion);
-        Assert.False(reopened.PersistenceSession.RequiresUpgradeSaveAs);
-        Assert.Contains(reopened.PersistenceSession.Domain.Devices.OfType<RingCabinet>(),
-            cabinet => cabinet.Id == legacyCabinet.Cabinet.Id &&
-                       cabinet.DisplayName == "Legacy RC");
-        Assert.Contains(reopened.PersistenceSession.Domain.Transformers,
-            item => item.Id == transformer.Creation.Transformer.Id &&
-                    item.DisplayName == "升级后变压器");
-        Assert.Contains(reopened.PersistenceSession.Domain.CustomerStations,
-            item => item.Id == station.Creation.CustomerStation.Id);
-        Assert.Contains(reopened.PersistenceSession.Domain.GroundingAccessPoints,
-            item => item.GroundingAccessPointId == gap.GroundingAccessPointId &&
-                    item.ConnectionId == line.Connection.Id);
-        Assert.Single(reopened.Scene.Routes);
     }
 
     private static CableSegment AddCable(
@@ -436,27 +348,6 @@ public sealed class WpEm09ElectricalModelClosureTests : IDisposable
                 name,
                 "10kV"));
         return cable;
-    }
-
-    private static void RewriteAsVersion6(string path)
-    {
-        using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.ReadWrite,
-            FileShare.None);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: false);
-        JsonObject manifest = ReadJson(archive, ProjectFileFormat.ManifestEntryName);
-        JsonObject payload = ReadJson(archive, ProjectFileFormat.DocumentEntryName);
-        manifest["formatVersion"] = ProjectFileFormat.Version6;
-        Assert.IsType<JsonObject>(payload["domain"]).Remove("transformers");
-        Assert.IsType<JsonObject>(payload["domain"]).Remove("customerStations");
-        Assert.IsType<JsonObject>(payload["professional"]).Remove("groundingAccessPoints");
-        Assert.IsType<JsonObject>(payload["layout"]).Remove("transformerLayouts");
-        Assert.IsType<JsonObject>(payload["layout"]).Remove("customerStationLayouts");
-        Assert.IsType<JsonObject>(payload["layout"]).Remove("groundingPointLayouts");
-        ReplaceJson(archive, ProjectFileFormat.ManifestEntryName, manifest);
-        ReplaceJson(archive, ProjectFileFormat.DocumentEntryName, payload);
     }
 
     private static JsonObject ReadJson(ZipArchive archive, string entryName)

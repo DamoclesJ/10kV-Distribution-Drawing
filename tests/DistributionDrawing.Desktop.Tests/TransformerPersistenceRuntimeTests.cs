@@ -57,7 +57,7 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
         TransformerLayout layout = Assert.Single(reopenedLayout.TransformerLayouts).Value;
         Assert.Equal(creation.Layout.Position, layout.Position);
         Assert.Equal(orientation, layout.Orientation);
-        Assert.Equal(ProjectFileFormat.Version7, reopened.Manifest.FormatVersion);
+        Assert.Equal(ProjectFileFormat.Version8, reopened.Manifest.FormatVersion);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public sealed class TransformerPersistenceRuntimeTests : IDisposable
         Assert.Equal(
             TransformerOrientation.Vertical,
             reopened.Layout.TransformerLayouts[restored.Id].Orientation);
-        Assert.Equal(ProjectFileFormat.Version7, reopened.PersistenceSession.Manifest.FormatVersion);
+        Assert.Equal(ProjectFileFormat.Version8, reopened.PersistenceSession.Manifest.FormatVersion);
     }
 
     [Fact]

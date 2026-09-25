@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:renderingCanvas="clr-namespace:DistributionDrawing.Rendering.Wpf.Canvas;assembly=DistributionDrawing.Rendering.Wpf"
+        xmlns:tickets="clr-namespace:DistributionDrawing.Desktop.WorkTickets"
         Title="10kV 配电工作票绘图"
         Icon="Assets/AppIcon.ico"
         Width="1200"
@@ -221,7 +222,16 @@
       </StatusBarItem>
     </StatusBar>
 
-    <Grid Background="{StaticResource ShellBackgroundBrush}">
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Background="{StaticResource PanelBackgroundBrush}">
+      <Button Content="图纸" Click="OnShowDrawingWorkspace" Padding="18,5" Margin="8,3,2,3" />
+      <Button Content="工作票" Click="OnShowTicketWorkspace" Padding="18,5" Margin="2,3" />
+      <Button Content="选中开关设为边界" Click="OnProposeTicketBoundary" Padding="12,5" Margin="8,3,2,3" />
+      <CheckBox x:Name="TicketOverlayToggle" Content="显示工作票图形状态" VerticalAlignment="Center"
+                Margin="16,0,0,0" Checked="OnTicketOverlayChanged" Unchecked="OnTicketOverlayChanged" />
+    </StackPanel>
+
+    <Grid>
+    <Grid x:Name="DrawingWorkspace" Background="{StaticResource ShellBackgroundBrush}">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition />
@@ -427,6 +437,21 @@
                                            PreviewMouseWheel="OnDrawingSurfaceMouseWheel"
                                            LostMouseCapture="OnDrawingSurfaceLostMouseCapture"
                                              SizeChanged="OnDrawingSurfaceSizeChanged" />
+            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Padding="8,5"
+                    Background="{StaticResource PanelBackgroundBrush}" BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1" Panel.ZIndex="5">
+              <Border.Style>
+                <Style TargetType="Border">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsChecked, ElementName=TicketOverlayToggle}" Value="True">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
+              <TextBlock Text="工作票图形状态：红=已确认带电  蓝=隔离边界  深蓝=工作接地点" />
+            </Border>
             <Border Padding="32"
                     Background="{StaticResource CanvasBackgroundBrush}"
                     Panel.ZIndex="10">
@@ -910,6 +935,8 @@
           </ScrollViewer>
         </DockPanel>
       </Border>
+    </Grid>
+      <tickets:WorkTicketWorkspace x:Name="TicketWorkspace" Visibility="Collapsed" />
     </Grid>
   </DockPanel>
 </Window>

@@ -5,7 +5,8 @@ public sealed record ProjectFileDocument(
     ProjectFileMetadata Metadata,
     ProjectDomainDto? Domain = null,
     ProjectLayoutDto? Layout = null,
-    ProjectProfessionalDto? Professional = null)
+    ProjectProfessionalDto? Professional = null,
+    ProjectWorkTicketDto? WorkTicketData = null)
 {
     public static ProjectFileDocument CreateEmpty(
         Guid projectId,
@@ -20,6 +21,7 @@ public sealed record ProjectFileDocument(
             metadata,
             ProjectDomainDto.Empty(projectId, metadata.Title),
             ProjectLayoutDto.Empty(projectId),
-            ProjectProfessionalDto.Empty(projectId));
+            ProjectProfessionalDto.Empty(projectId),
+            ProjectWorkTicketDto.Empty(projectId));
     }
 }

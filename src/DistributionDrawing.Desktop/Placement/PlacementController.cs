@@ -2,6 +2,7 @@ using System.Windows.Media;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Devices.CustomerStations;
+using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -384,7 +385,8 @@ public sealed class PlacementController
             session.PersistenceSession.Domain,
             session.Layout,
             selected.ObjectId);
-        session.CommandStack.ExecuteCommand(command);
+        session.CommandStack.ExecuteCommand(new WorkTicketGuardedDeleteCommand(command,
+            session.PersistenceSession.Domain, session.PersistenceSession.WorkTickets));
         session.SelectionManager.Clear();
         session.RebuildScene();
         SceneChanged?.Invoke(this, EventArgs.Empty);

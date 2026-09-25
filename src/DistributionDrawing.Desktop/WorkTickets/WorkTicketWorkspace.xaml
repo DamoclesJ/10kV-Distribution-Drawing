@@ -1,0 +1,125 @@
+<UserControl x:Class="DistributionDrawing.Desktop.WorkTickets.WorkTicketWorkspace"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#F5F6F8">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="20" MaxWidth="1050" HorizontalAlignment="Center">
+      <TextBlock Text="配电第一种工作票" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,6,0,16"/>
+      <DockPanel Margin="0,0,0,12">
+        <ComboBox x:Name="TicketList" DockPanel.Dock="Right" Width="230" DisplayMemberPath="Display" SelectionChanged="OnTicketSelectionChanged"/>
+        <Button Content="创建工作票" Click="OnCreate" Padding="14,6" Margin="0,0,8,0"/>
+        <Button Content="分析 / 重新分析" Click="OnAnalyze" Padding="14,6" Margin="0,0,8,0"/>
+        <Button Content="保存当前编辑" Click="OnSaveEdit" Padding="14,6" Margin="0,0,8,0"/>
+        <Button Content="复制六栏文字" Click="OnCopyAll" Padding="14,6"/>
+      </DockPanel>
+      <Border BorderBrush="#C6CBD2" BorderThickness="1" Padding="12" Margin="0,0,0,12" Background="White">
+        <StackPanel>
+          <TextBlock Text="工作票准备" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,8"/>
+          <TextBlock Text="工作内容"/>
+          <TextBox x:Name="TaskContent" Margin="0,2,0,8"/>
+          <TextBlock Text="工作对象 / 地点"/>
+          <TextBox x:Name="TaskObject" Margin="0,2,0,8"/>
+          <TextBlock Text="停电 / 隔离边界（逐项选择设备和电气侧）"/>
+          <StackPanel Orientation="Horizontal" Margin="0,3,0,4">
+            <ComboBox x:Name="BoundaryDevice" Width="280" DisplayMemberPath="Display" Margin="0,0,8,0"
+                      SelectionChanged="OnBoundaryDeviceChanged"/>
+            <ComboBox x:Name="BoundaryTerminal" Width="180" DisplayMemberPath="Display" Margin="0,0,8,0"/>
+            <ComboBox x:Name="BoundarySide" Width="150" Margin="0,0,8,0"/>
+            <Button Content="增加边界" Click="OnAddBoundary" Padding="8,3"/>
+          </StackPanel>
+          <ListBox x:Name="BoundaryList" Height="66" DisplayMemberPath="Display"/>
+          <Button Content="移除选中边界" Click="OnRemoveBoundary" HorizontalAlignment="Left" Margin="0,4,0,10"/>
+          <TextBlock Text="实际工作范围（选择图纸中已有工作范围）"/>
+          <ListBox x:Name="ScopeList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,10"/>
+          <TextBlock Text="工作接地点（选择图纸中已有 GroundingPoint；不自动创建）"/>
+          <ListBox x:Name="GroundList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,8"/>
+          <TextBlock Text="人工现场事实（不得由拓扑推测）" Margin="0,2,0,4"/>
+          <StackPanel Orientation="Horizontal">
+            <ComboBox x:Name="FactKind" Width="170" Margin="0,0,8,0"/>
+            <TextBox x:Name="FactText" Width="450" Margin="0,0,8,0"/>
+            <CheckBox x:Name="FactConfirmed" Content="已现场确认" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <Button Content="添加" Click="OnAddFact" Padding="8,3"/>
+          </StackPanel>
+          <TextBox x:Name="FactRestorationText" Margin="0,4,0,0"
+                   ToolTip="可恢复措施填写对应的现场恢复文字；其他类别留空" />
+          <ListBox x:Name="FactList" Height="55" DisplayMemberPath="Display" Margin="0,5,0,3"/>
+          <Button Content="移除选中事实" Click="OnRemoveFact" HorizontalAlignment="Left"/>
+        </StackPanel>
+      </Border>
+      <Border BorderBrush="#C6CBD2" BorderThickness="1" Padding="12" Margin="0,0,0,12" Background="White">
+        <StackPanel>
+          <TextBlock Text="问题 / 完成状态" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+          <TextBlock x:Name="IssueSummary" TextWrapping="Wrap"/>
+          <ListBox x:Name="SectionList" Height="76" DisplayMemberPath="Display"
+                   SelectionChanged="OnSectionSelectionChanged" Margin="0,8,0,4"/>
+          <ListBox x:Name="DraftItemList" Height="92" DisplayMemberPath="Display" Margin="0,8,0,4"/>
+          <Button Content="定位选中措施对应图形" Click="OnLocateItem" HorizontalAlignment="Left"/>
+        </StackPanel>
+      </Border>
+      <Border BorderBrush="#707780" BorderThickness="1" Padding="18" Background="White">
+        <StackPanel>
+          <TextBlock Text="单位 ________________________________     编号 __________________________________"/>
+          <TextBlock Text="1. 工作负责人（监护人） __________________     班组 __________________" Margin="0,12,0,8"/>
+          <TextBlock Text="2. 工作班人员（不包括工作负责人） ____________________________ 共 ____ 人" Margin="0,0,0,8"/>
+          <TextBlock Text="3. 停电线路名称（多回线路应注明双重称号） __________________________" Margin="0,0,0,8"/>
+          <TextBlock Text="4. 工作任务" FontWeight="SemiBold"/>
+          <TextBlock x:Name="TaskPreview" TextWrapping="Wrap" Margin="12,4,0,12"/>
+          <TextBlock Text="5. 计划工作时间   自____年__月__日__时__分  至____年__月__日__时__分" Margin="0,0,0,10"/>
+          <TextBlock Text="6. 安全措施" FontWeight="SemiBold" FontSize="17" Margin="0,0,0,8"/>
+          <TextBlock Text="以下各栏仅生成拟采取的措施；执行人、操作时间和已执行记录留待现场如实填写。" Foreground="#855C00" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <TextBlock x:Name="Status61" FontWeight="SemiBold"/>
+          <TextBlock Text="调控或运维人员（变配电站、发电厂）应采取的安全措施（含装设操作接地线）" TextWrapping="Wrap"/>
+          <TextBlock Text="执行人 __________    已执行 __________（现场填写）" Foreground="#6A6F76"/>
+          <TextBox x:Name="Text61" MinHeight="90" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0,4,0,3"/>
+          <Button Content="复制 6.1" Tag="6.1" Click="OnCopySection" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+          <Button Content="确认 6.1" Tag="6.1" Click="OnConfirmSection" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+          <TextBlock x:Name="Status62" FontWeight="SemiBold"/>
+          <TextBlock Text="配合停电线路应采取的安全措施（含装设操作接地线）" TextWrapping="Wrap"/>
+          <TextBlock Text="执行人 __________    已执行 __________（现场填写）" Foreground="#6A6F76"/>
+          <TextBox x:Name="Text62" MinHeight="60" AcceptsReturn="True" TextWrapping="Wrap" Margin="0,4,0,3"/>
+          <Button Content="复制 6.2" Tag="6.2" Click="OnCopySection" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+          <Button Content="确认 6.2" Tag="6.2" Click="OnConfirmSection" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+          <TextBlock x:Name="Status63" FontWeight="SemiBold"/>
+          <TextBlock Text="工作班完成的安全措施（按操作顺序填写，含装设工作接地线）" TextWrapping="Wrap"/>
+          <TextBlock Text="操作时间 __________    执行人 __________    已执行 __________（现场填写）" Foreground="#6A6F76"/>
+          <TextBox x:Name="Text63" MinHeight="100" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0,4,0,3"/>
+          <Button Content="复制 6.3" Tag="6.3" Click="OnCopySection" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+          <Button Content="确认 6.3" Tag="6.3" Click="OnConfirmSection" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+          <Button Content="恢复 6.3 自动生成内容" Click="OnRestoreGenerated63" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+          <TextBlock x:Name="Status64" FontWeight="SemiBold"/>
+          <TextBlock Text="保留或邻近的带电线路、设备（请人工补充现场关系）" TextWrapping="Wrap" Foreground="#A22323"/>
+          <TextBox x:Name="Text64" MinHeight="75" AcceptsReturn="True" TextWrapping="Wrap" Margin="0,4,0,3"/>
+          <Button Content="复制 6.4" Tag="6.4" Click="OnCopySection" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+          <Button Content="确认 6.4" Tag="6.4" Click="OnConfirmSection" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+          <TextBlock x:Name="Status65" FontWeight="SemiBold"/>
+          <TextBlock Text="其他安全措施、危险点预控措施和注意事项（由工作负责人或工作票签发人填写）" TextWrapping="Wrap"/>
+          <TextBox x:Name="Text65" MinHeight="75" AcceptsReturn="True" TextWrapping="Wrap" Margin="0,4,0,3"/>
+          <Button Content="复制 6.5" Tag="6.5" Click="OnCopySection" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+          <Button Content="确认 6.5" Tag="6.5" Click="OnConfirmSection" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+          <TextBlock Text="外来施工企业工作票签发人签名 ____________   设备运维单位工作票签发人签名 ____________" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <TextBlock Text="工作负责人签名 ____________" Margin="0,0,0,8"/>
+          <TextBlock Text="6.6 其他安全措施、危险点预控措施和注意事项补充（由工作负责人或工作许可人填写）" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <TextBlock Text="7. 工作许可       许可内容 / 许可方式 / 工作许可人 / 工作负责人 / 工作许可时间" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <TextBlock Text="8. 现场交底及工作班成员确认签名 ______________________________" Margin="0,0,0,8"/>
+          <TextBlock Text="9. 工作开始时间 __________________ 工作负责人签名 ______________" Margin="0,0,0,8"/>
+          <TextBlock Text="10. 工作任务单工作许可登记" Margin="0,0,0,8"/>
+          <TextBlock Text="11. 人员变更   11.1 工作负责人变动情况   11.2 工作人员变动情况" Margin="0,0,0,8"/>
+          <TextBlock Text="12. 工作票延期" Margin="0,0,0,8"/>
+          <TextBlock Text="13. 每日开工和收工记录" Margin="0,0,0,8"/>
+          <TextBlock Text="14. 工作任务单工作结束报告登记" Margin="0,0,0,8"/>
+          <TextBlock Text="15. 工作完工时间 __________________ 工作负责人签名 ______________" Margin="0,0,0,8"/>
+          <TextBlock Text="16. 工作终结" FontWeight="SemiBold" FontSize="17" Margin="0,0,0,8"/>
+          <TextBlock x:Name="Status161" FontWeight="SemiBold"/>
+          <TextBlock Text="现场恢复（工作班所做安全措施，按操作顺序填写，含拆除工作接地线）" TextWrapping="Wrap"/>
+          <TextBlock Text="操作时间 __________    执行人 __________    已执行 __________（现场填写）" Foreground="#6A6F76"/>
+          <TextBox x:Name="Text161" MinHeight="90" AcceptsReturn="True" TextWrapping="Wrap" Margin="0,4,0,3"/>
+          <Button Content="复制 16.1" Tag="16.1" Click="OnCopySection" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+          <Button Content="确认 16.1" Tag="16.1" Click="OnConfirmSection" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+          <TextBlock Text="16.2 工作班现场所装设接地线共 ____ 组、个人保安线共 ____ 组已全部拆除" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <TextBlock Text="16.3 工作终结报告" Margin="0,0,0,8"/>
+          <TextBlock Text="17. 备注   17.1 指定专责监护人   17.2 其他事项" Margin="0,0,0,8"/>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

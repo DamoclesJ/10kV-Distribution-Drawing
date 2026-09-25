@@ -88,7 +88,7 @@ public sealed class CustomerStationPersistenceRuntimeTests : IDisposable
         Assert.False(query.IsConnected(
             restored.IncomingFeeders[0].CableTerminalId,
             restored.IncomingFeeders[1].CableTerminalId));
-        Assert.Equal(ProjectFileFormat.Version7,
+        Assert.Equal(ProjectFileFormat.Version8,
             reopened.PersistenceSession.Manifest.FormatVersion);
         Assert.NotNull(reopened.Scene.HitTestIndex.Find(new SelectionReference(
             SelectionTargetKind.Device,

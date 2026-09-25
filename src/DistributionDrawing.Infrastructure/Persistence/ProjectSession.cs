@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Application.WorkTickets;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
@@ -50,7 +51,8 @@ public sealed record ProjectSession
         ProjectProfessionalSnapshot professional,
         bool isDirty,
         int openedFormatVersion = ProjectFileFormat.CurrentVersion,
-        TransformerNamingContractMode transformerNamingMode = TransformerNamingContractMode.Current)
+        TransformerNamingContractMode transformerNamingMode = TransformerNamingContractMode.Current,
+        WorkTicketDataRoot? workTickets = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(document);
@@ -70,6 +72,7 @@ public sealed record ProjectSession
         IsDirty = isDirty;
         OpenedFormatVersion = openedFormatVersion;
         TransformerNamingMode = transformerNamingMode;
+        WorkTickets = workTickets ?? new WorkTicketDataRoot(domain.Id);
     }
 
     public string FilePath { get; }
@@ -81,6 +84,8 @@ public sealed record ProjectSession
     public ProjectLayoutSnapshot Layout { get; init; }
 
     public ProjectProfessionalSnapshot Professional { get; init; }
+
+    public WorkTicketDataRoot WorkTickets { get; init; }
 
     public ProjectFileManifest Manifest => Document.Manifest;
 
@@ -94,6 +99,4 @@ public sealed record ProjectSession
 
     public TransformerNamingContractMode TransformerNamingMode { get; }
 
-    public bool RequiresUpgradeSaveAs =>
-        OpenedFormatVersion < ProjectFileFormat.CurrentVersion;
 }

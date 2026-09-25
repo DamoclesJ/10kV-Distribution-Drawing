@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Desktop.Selection;
+using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -93,9 +94,11 @@ public sealed class CableTerminationAttachmentController
                 session.Layout,
                 attachment.AttachmentId);
 
-        session.CommandStack.ExecuteCommand(command);
+        ICommand guarded = new WorkTicketGuardedDeleteCommand(command,
+            session.PersistenceSession.Domain, session.PersistenceSession.WorkTickets);
+        session.CommandStack.ExecuteCommand(guarded);
         session.SelectionTransitions.RecordExecuted(
-            command,
+            guarded,
             SelectionTransition.ForRemove(beforeSelection));
         session.SelectionTransitions.Prune(session.CommandStack.History);
         session.SelectionManager.Clear();

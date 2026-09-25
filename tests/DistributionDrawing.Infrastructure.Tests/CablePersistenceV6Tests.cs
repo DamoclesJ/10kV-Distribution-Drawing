@@ -149,8 +149,8 @@ public sealed class CablePersistenceV6Tests
                 restored.Layout!.CableRouteGuides!);
             Assert.Equal(cable.CableSegment.Id, guide.CableSegmentId);
             Assert.Equal(125, guide.HorizontalYMillimeters);
-            Assert.Equal(ProjectFileFormat.Version7, restored.Manifest.FormatVersion);
-            Assert.Equal(ProjectFileFormat.Version7, ProjectFileFormat.CurrentVersion);
+            Assert.Equal(ProjectFileFormat.Version8, restored.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version8, ProjectFileFormat.CurrentVersion);
         }
         finally
         {

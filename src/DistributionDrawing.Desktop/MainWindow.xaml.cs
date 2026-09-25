@@ -9,6 +9,7 @@ using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
@@ -42,6 +43,7 @@ using DistributionDrawing.Desktop.SwitchOperation;
 using DistributionDrawing.Desktop.Actions;
 using DistributionDrawing.Desktop.Export;
 using DistributionDrawing.Desktop.WorkScopeCreation;
+using DistributionDrawing.Desktop.WorkTickets;
 using System.Windows.Threading;
 
 namespace DistributionDrawing.Desktop;
@@ -91,6 +93,10 @@ public partial class MainWindow : Window
     private bool _gridVisible;
     private bool _updatingIntervalEditor;
     private DrawingScene? _currentScene;
+    private long? _ticketOverlayCachedStateId;
+    private Guid? _ticketOverlayCachedTicketId;
+    private DrawingDocument? _ticketOverlayCachedDomain;
+    private bool _ticketOverlayCachedStale;
     private PropertyInspectionSource? _activeSource;
     private bool _groundingPointPickMode;
     private GroundingTarget? _pendingGroundingTarget;
@@ -109,6 +115,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        TicketWorkspace.LocateRequested += OnTicketLocateRequested;
+        TicketWorkspace.SelectionChanged += RenderCurrentScene;
         _messageService = new DesktopMessageService(this);
         _propertyEditor = new(_selectionResolver, _commandStack);
         _selectionRectangle = new SelectionRectangleController(_selectionManager);
@@ -901,6 +909,7 @@ public partial class MainWindow : Window
 
     private bool EnsureTransientEditsCommitted()
     {
+        TicketWorkspace.CommitPendingEdits();
         EndCanvasPan();
 
         if (_overheadLineConnection.IsActive)
@@ -987,6 +996,59 @@ public partial class MainWindow : Window
         UpdateWindowTitle();
     }
 
+    private void OnShowDrawingWorkspace(object sender, RoutedEventArgs e)
+    {
+        TicketWorkspace.CommitPendingEdits();
+        DrawingWorkspace.Visibility = Visibility.Visible;
+        TicketWorkspace.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnShowTicketWorkspace(object sender, RoutedEventArgs e)
+    {
+        TicketWorkspace.CommitPendingEdits();
+        DrawingWorkspace.Visibility = Visibility.Collapsed;
+        TicketWorkspace.Visibility = Visibility.Visible;
+        TicketWorkspace.Refresh();
+    }
+
+    private void OnTicketOverlayChanged(object sender, RoutedEventArgs e)
+    {
+        TicketWorkspace?.CommitPendingEdits();
+        RenderCurrentScene();
+    }
+
+    private void OnProposeTicketBoundary(object sender, RoutedEventArgs e)
+    {
+        if (_workspace.CurrentSession is not { } session ||
+            _selectionManager.Selected is not { } selected ||
+            !session.PersistenceSession.Domain.Devices.OfType<SwitchDevice>()
+                .Any(device => device.Id == selected.ObjectId))
+        {
+            MessageBox.Show(this, "请先在图纸中选中一个开关设备。", "工作票边界",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        OnShowTicketWorkspace(sender, e);
+        TicketWorkspace.ProposeBoundary(selected.ObjectId);
+    }
+
+    private void OnTicketLocateRequested(TicketReference reference)
+    {
+        if (_currentScene is null || WorkTicketOverlayBuilder.ToSelection(reference) is not { } selected)
+            return;
+        SelectionHitTestEntry? entry = _currentScene.HitTestIndex.FindAll(selected).FirstOrDefault();
+        if (entry is null) return;
+        OnShowDrawingWorkspace(this, new RoutedEventArgs());
+        _selectionManager.Select(selected);
+        DocumentRect bounds = entry.Bounds;
+        var center = new DocumentPoint(bounds.XMillimeters + bounds.WidthMillimeters / 2,
+            bounds.YMillimeters + bounds.HeightMillimeters / 2);
+        Point viewPoint = _viewport.Transform.DocumentToView(center);
+        _viewport.Transform.Pan(new Vector(DrawingSurface.ActualWidth / 2 - viewPoint.X,
+            DrawingSurface.ActualHeight / 2 - viewPoint.Y));
+        RenderCurrentScene();
+    }
+
     private void OnWorkspaceSessionsChanged(object? sender, EventArgs e) =>
         RefreshDocumentTabs();
 
@@ -1048,6 +1110,7 @@ public partial class MainWindow : Window
         object? sender,
         ActiveDocumentSessionChangedEventArgs e)
     {
+        TicketWorkspace.CommitPendingEdits();
         CancelTransientInteraction();
         if (e.Previous is not null &&
             ReferenceEquals(_boundDocumentSession, e.Previous))
@@ -1066,6 +1129,7 @@ public partial class MainWindow : Window
             _activeSource = current.InspectionSource;
             _selectionResolver.SetSource(_activeSource);
             OnSelectionChanged(this, EventArgs.Empty);
+            TicketWorkspace.Bind(current);
             return;
         }
 
@@ -1090,6 +1154,7 @@ public partial class MainWindow : Window
             _viewport.Reset();
             OnClearDrawing(this, new RoutedEventArgs());
             _shellViewModel.RefreshCommandStates();
+            TicketWorkspace.Bind(null);
             return;
         }
 
@@ -1108,10 +1173,14 @@ public partial class MainWindow : Window
         PropertyInspectorPanel.DataContext = _propertyInspector;
         _viewport.RestoreState(documentSession.ViewState);
         OnSelectionChanged(this, EventArgs.Empty);
+        TicketWorkspace.Bind(session);
     }
 
-    private void OnBoundDocumentSessionStateChanged(object? sender, EventArgs e) =>
+    private void OnBoundDocumentSessionStateChanged(object? sender, EventArgs e)
+    {
         RefreshBoundSessionState();
+        if (TicketOverlayToggle.IsChecked == true) RenderCurrentScene();
+    }
 
     private void RefreshBoundSessionState()
     {
@@ -2173,7 +2242,7 @@ public partial class MainWindow : Window
             ICommand command = _professionalCommandFactory.CreateRemoveWorkScope(
                 _activeSource.Document,
                 workScopeId);
-            _commandStack.ExecuteCommand(command);
+            _commandStack.ExecuteCommand(GuardTicketDeletion(command));
             _selectionManager.Clear();
             RefreshDrawingScene();
         }
@@ -3017,7 +3086,7 @@ public partial class MainWindow : Window
                 _activeSource.Document,
                 _workspace.CurrentSession!.Layout,
                 groundingPointId);
-            _commandStack.ExecuteCommand(command);
+            _commandStack.ExecuteCommand(GuardTicketDeletion(command));
             _selectionManager.Clear();
             RefreshDrawingScene();
         }
@@ -3074,7 +3143,7 @@ public partial class MainWindow : Window
             ICommand command = _professionalCommandFactory.CreateRemoveGroundingAccessPoint(
                 document,
                 accessPointId);
-            _commandStack.ExecuteCommand(command);
+            _commandStack.ExecuteCommand(GuardTicketDeletion(command));
             _selectionManager.Clear();
             RefreshDrawingScene();
         }
@@ -3823,6 +3892,14 @@ public partial class MainWindow : Window
         MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
+    private ICommand GuardTicketDeletion(ICommand command)
+    {
+        ProjectRuntimeSession session = _workspace.CurrentSession
+            ?? throw new InvalidOperationException("没有打开的工程。");
+        return new WorkTicketGuardedDeleteCommand(command, session.PersistenceSession.Domain,
+            session.PersistenceSession.WorkTickets);
+    }
+
     private void RenderCurrentScene()
     {
         if (_currentScene is null)
@@ -3838,6 +3915,24 @@ public partial class MainWindow : Window
         elements.AddRange(_drawingTools.CreateTransientElements());
         elements.AddRange(_groundingTargetPicker.CreateAffordance(
             _hoveredGroundingTarget));
+        if (TicketOverlayToggle.IsChecked == true && _workspace.CurrentSession is { } ticketSession)
+        {
+            WorkTicketSession? ticket = TicketWorkspace.SelectedTicket;
+            if (ticket is not null &&
+                (_ticketOverlayCachedStateId != ticketSession.CommandStack.CurrentStateId ||
+                 _ticketOverlayCachedTicketId != ticket.Id ||
+                 !ReferenceEquals(_ticketOverlayCachedDomain, ticketSession.PersistenceSession.Domain)))
+            {
+                _ticketOverlayCachedStale = new WorkTicketAnalyzer().IsStale(
+                    ticketSession.PersistenceSession.Domain, ticket);
+                _ticketOverlayCachedStateId = ticketSession.CommandStack.CurrentStateId;
+                _ticketOverlayCachedTicketId = ticket.Id;
+                _ticketOverlayCachedDomain = ticketSession.PersistenceSession.Domain;
+            }
+            if (ticket is not null && _ticketOverlayCachedStale)
+                ticket = ticket with { Analysis = null };
+            elements.AddRange(WorkTicketOverlayBuilder.Build(_currentScene.HitTestIndex, ticket));
+        }
         elements.AddRange(
             SelectionOverlayBuilder.CreateElements(
                 _currentScene.HitTestIndex,

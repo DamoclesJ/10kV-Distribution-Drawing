@@ -2,6 +2,7 @@ using System.Windows.Media;
 using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Metrics;
@@ -197,7 +198,8 @@ public sealed class CableConnectionController
             session.Layout);
         try
         {
-            session.CommandStack.ExecuteCommand(command);
+            session.CommandStack.ExecuteCommand(new WorkTicketGuardedDeleteCommand(command,
+                document, session.PersistenceSession.WorkTickets));
             session.SelectionManager.Clear();
             session.RebuildScene();
             LastOutcome = CableConnectionToolOutcome.Committed;

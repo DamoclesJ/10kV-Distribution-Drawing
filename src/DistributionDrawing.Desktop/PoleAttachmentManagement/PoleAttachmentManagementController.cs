@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
@@ -58,7 +59,8 @@ public sealed class PoleAttachmentManagementController
                 attachmentId),
             _ => throw new InvalidOperationException("当前杆塔安装设备不支持删除。")
         };
-        session.CommandStack.ExecuteCommand(command, session.RebuildScene);
+        session.CommandStack.ExecuteCommand(new WorkTicketGuardedDeleteCommand(command,
+            session.PersistenceSession.Domain, session.PersistenceSession.WorkTickets), session.RebuildScene);
         session.SelectionManager.Clear();
         SceneChanged?.Invoke(this, EventArgs.Empty);
     }

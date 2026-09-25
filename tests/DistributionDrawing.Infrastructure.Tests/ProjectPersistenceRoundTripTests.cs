@@ -40,7 +40,7 @@ public sealed class ProjectPersistenceRoundTripTests
             DrawingDocument restoredDocument = ProjectDomainMapper.ToDomain(opened.Domain!);
             RingCabinet restored = GetCabinet(restoredDocument);
 
-            Assert.Equal(ProjectFileFormat.Version7, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version8, opened.Manifest.FormatVersion);
             Assert.Equal(
                 original.Intervals.Select(x => x.Sequence),
                 restored.Intervals.Select(x => x.Sequence));
@@ -78,7 +78,7 @@ public sealed class ProjectPersistenceRoundTripTests
             RingCabinetInterval restoredTarget = restored.Intervals.Single(interval =>
                 interval.IntervalId == target.IntervalId);
 
-            Assert.Equal(ProjectFileFormat.Version7, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version8, opened.Manifest.FormatVersion);
             Assert.Null(Assert.Single(opened.Domain!.RingCabinets).Intervals
                 .Single(interval => interval.IntervalId == target.IntervalId).CableTerminalId);
             Assert.Null(restoredTarget.CableTerminalId);
@@ -117,7 +117,7 @@ public sealed class ProjectPersistenceRoundTripTests
             RingCabinet restored = GetCabinet(
                 ProjectDomainMapper.ToDomain(opened.Domain!));
 
-            Assert.Equal(ProjectFileFormat.Version7, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version8, opened.Manifest.FormatVersion);
             Assert.Equal(string.Empty, restored.LineName);
             AssertStableIds(original, restored);
         }
@@ -127,227 +127,10 @@ public sealed class ProjectPersistenceRoundTripTests
         }
     }
 
-    [Theory]
-    [InlineData(ProjectFileFormat.Version1)]
-    [InlineData(ProjectFileFormat.Version2)]
-    [InlineData(ProjectFileFormat.Version3)]
-    [InlineData(ProjectFileFormat.Version4)]
-    public void LegacyArchive_MigratesToVersion7WithoutChangingStableIds(int sourceVersion)
-    {
-        DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
-        RingCabinet original = GetCabinet(originalDocument);
-        string filePath = CreateTemporaryPath($"legacy-v{sourceVersion}");
-
-        try
-        {
-            var container = new ProjectFileContainer();
-            container.Save(filePath, CreateFileDocument(originalDocument));
-            SetArchiveVersion(filePath, sourceVersion);
-
-            ProjectFileDocument opened = container.Open(filePath);
-            RingCabinet restored = GetCabinet(
-                ProjectDomainMapper.ToDomain(opened.Domain!));
-
-            Assert.Equal(ProjectFileFormat.Version7, opened.Manifest.FormatVersion);
-            if (sourceVersion <= ProjectFileFormat.Version2)
-            {
-                Assert.Equal(
-                    original.Intervals.Select(x => x.Sequence),
-                    restored.Intervals.Select(x => x.BayIndex));
-            }
-            else
-            {
-                Assert.Equal(
-                    original.Intervals.Select(x => x.BayIndex),
-                    restored.Intervals.Select(x => x.BayIndex));
-            }
-            AssertStableIds(original, restored);
-        }
-        finally
-        {
-            DeleteIfExists(filePath);
-        }
-    }
-
     [Fact]
-    public void RepresentativeVersion6Archive_MigratesToV7WithoutChangingFacts()
+    public void V8Archive_RejectsUnknownIntervalField()
     {
         DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
-        RingCabinet originalCabinet = GetCabinet(originalDocument);
-        Guid groundingPointId = Guid.NewGuid();
-        Guid workScopeId = Guid.NewGuid();
-        Guid groundingTerminalId = originalCabinet.Intervals[0].CableTerminalId!.Value;
-        Guid otherBoundaryTerminalId = originalCabinet.Intervals[1].CableTerminalId!.Value;
-        originalDocument.CreateGroundingPoint(
-            groundingPointId,
-            groundingTerminalId,
-            "原位置",
-            "L07",
-            "原备注");
-        originalDocument.CreateWorkScope(
-            workScopeId,
-            new BoundaryPoint(originalCabinet.Id, groundingTerminalId, "start"),
-            new BoundaryPoint(originalCabinet.Id, otherBoundaryTerminalId, "end"),
-            "原工作范围",
-            [groundingPointId]);
-        string filePath = CreateTemporaryPath("representative-v6-to-v7");
-
-        try
-        {
-            var container = new ProjectFileContainer();
-            container.Save(filePath, CreateFileDocument(originalDocument));
-            MutateArchive(filePath, (manifest, payload) =>
-            {
-                manifest["formatVersion"] = ProjectFileFormat.Version6;
-                JsonObject domain = Assert.IsType<JsonObject>(payload["domain"]);
-                domain.Remove("transformers");
-                domain.Remove("customerStations");
-                foreach (JsonObject interval in GetIntervals(payload))
-                {
-                    interval["externalTerminalId"] = interval["cableTerminalId"]!.DeepClone();
-                    interval.Remove("cableTerminalId");
-                    foreach (JsonNode? switchNode in Assert.IsType<JsonArray>(interval["switches"]))
-                    {
-                        Assert.IsType<JsonObject>(switchNode).Remove("owner");
-                    }
-                }
-
-                JsonObject professional = Assert.IsType<JsonObject>(payload["professional"]);
-                professional.Remove("groundingAccessPoints");
-                foreach (JsonNode? groundingNode in
-                         Assert.IsType<JsonArray>(professional["groundingPoints"]))
-                {
-                    JsonObject grounding = Assert.IsType<JsonObject>(groundingNode);
-                    JsonObject target = Assert.IsType<JsonObject>(grounding["groundingTarget"]);
-                    grounding["terminalId"] = target["targetId"]!.DeepClone();
-                    grounding.Remove("groundingTarget");
-                }
-
-                JsonObject layout = Assert.IsType<JsonObject>(payload["layout"]);
-                layout.Remove("transformerLayouts");
-                layout.Remove("customerStationLayouts");
-                layout.Remove("groundingPointLayouts");
-            });
-
-            ProjectFileOpenResult opened = container.OpenWithSource(filePath);
-            DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Document.Domain!);
-            ProjectProfessionalSnapshot professional = ProjectProfessionalMapper.ToSnapshot(
-                restored,
-                opened.Document.Professional);
-
-            Assert.Equal(ProjectFileFormat.Version6, opened.OpenedFormatVersion);
-            Assert.Equal(ProjectFileFormat.Version7, opened.Document.Manifest.FormatVersion);
-            AssertStableIds(originalCabinet, GetCabinet(restored));
-            Assert.All(
-                Assert.Single(opened.Document.Domain!.RingCabinets).Intervals,
-                interval => Assert.NotNull(interval.CableTerminalId));
-            Assert.All(
-                Assert.Single(opened.Document.Domain.RingCabinets).Intervals
-                    .SelectMany(interval => interval.Switches),
-                switchDto => Assert.Equal(
-                    ProjectSwitchOwnerKind.RingCabinetInterval,
-                    switchDto.Owner!.OwnerKind));
-            ProjectGroundingPointDto grounding = Assert.Single(professional.GroundingPoints);
-            Assert.Equal(groundingPointId, grounding.GroundingPointId);
-            Assert.Equal(ProjectGroundingTargetKind.Terminal, grounding.GroundingTarget.Kind);
-            Assert.Equal(groundingTerminalId, grounding.GroundingTarget.TargetId);
-            Assert.Equal("原位置", grounding.Location);
-            Assert.Equal("L07", grounding.Number);
-            Assert.Equal("原备注", grounding.Note);
-            Assert.Equal(
-                [groundingPointId],
-                Assert.Single(professional.WorkScopes).GroundingPointIds);
-            Assert.Empty(opened.Document.Domain.Transformers!);
-            Assert.Empty(opened.Document.Domain.CustomerStations!);
-            Assert.Empty(professional.GroundingAccessPoints);
-            Assert.Empty(opened.Document.Layout!.GroundingPointLayouts!);
-        }
-        finally
-        {
-            DeleteIfExists(filePath);
-        }
-    }
-
-    [Theory]
-    [InlineData("\"unknown\"")]
-    [InlineData("\"incoming\"")]
-    [InlineData("\"outgoing\"")]
-    [InlineData("\"tie\"")]
-    [InlineData("\"pt\"")]
-    [InlineData("\"metering\"")]
-    [InlineData("\"reserve\"")]
-    [InlineData("\"arbitrary-legacy-value\"")]
-    [InlineData("123")]
-    [InlineData("null")]
-    public void Version3Archive_DiscardsAnyLegacyFunctionAndPreservesStableIds(
-        string legacyJson)
-    {
-        DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
-        RingCabinet original = GetCabinet(originalDocument);
-        string filePath = CreateTemporaryPath("v3-legacy-function");
-
-        try
-        {
-            var container = new ProjectFileContainer();
-            container.Save(filePath, CreateFileDocument(originalDocument));
-            MutateArchive(filePath, (manifest, payload) =>
-            {
-                manifest["formatVersion"] = ProjectFileFormat.Version3;
-                foreach (JsonObject interval in GetIntervals(payload))
-                {
-                    interval["function"] = JsonNode.Parse(legacyJson);
-                }
-            });
-
-            ProjectFileDocument opened = container.Open(filePath);
-            RingCabinet restored = GetCabinet(
-                ProjectDomainMapper.ToDomain(opened.Domain!));
-
-            AssertStableIds(original, restored);
-        }
-        finally
-        {
-            DeleteIfExists(filePath);
-        }
-    }
-
-    [Fact]
-    public void Version3Archive_AllowsMissingFunction()
-    {
-        DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
-        RingCabinet original = GetCabinet(originalDocument);
-        string filePath = CreateTemporaryPath("v3-missing-function");
-
-        try
-        {
-            var container = new ProjectFileContainer();
-            container.Save(filePath, CreateFileDocument(originalDocument));
-            MutateArchive(filePath, (manifest, payload) =>
-            {
-                manifest["formatVersion"] = ProjectFileFormat.Version3;
-                foreach (JsonObject interval in GetIntervals(payload))
-                {
-                    interval.Remove("function");
-                }
-            });
-
-            ProjectFileDocument opened = container.Open(filePath);
-            RingCabinet restored = GetCabinet(
-                ProjectDomainMapper.ToDomain(opened.Domain!));
-
-            AssertStableIds(original, restored);
-        }
-        finally
-        {
-            DeleteIfExists(filePath);
-        }
-    }
-
-    [Fact]
-    public void Version4Archive_IgnoresExtraLegacyFunctionAndDoesNotWriteItBack()
-    {
-        DrawingDocument originalDocument = CreateDocumentWithRingCabinet();
-        RingCabinet original = GetCabinet(originalDocument);
         string filePath = CreateTemporaryPath("v4-extra-function");
 
         try
@@ -362,17 +145,7 @@ public sealed class ProjectPersistenceRoundTripTests
                 }
             });
 
-            ProjectFileDocument opened = container.Open(filePath);
-            RingCabinet restored = GetCabinet(
-                ProjectDomainMapper.ToDomain(opened.Domain!));
-            AssertStableIds(original, restored);
-
-            container.Save(filePath, opened);
-            JsonObject resavedPayload = ReadArchiveJsonObject(
-                filePath,
-                ProjectFileFormat.DocumentEntryName);
-            Assert.All(GetIntervals(resavedPayload), interval =>
-                Assert.False(interval.ContainsKey("function")));
+            Assert.Throws<JsonException>(() => container.Open(filePath));
         }
         finally
         {
@@ -445,7 +218,7 @@ public sealed class ProjectPersistenceRoundTripTests
             SwitchDevice restoredSwitch = Assert.Single(
                 restored.Devices.OfType<SwitchDevice>());
 
-            Assert.Equal(ProjectFileFormat.Version7, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version8, opened.Manifest.FormatVersion);
             Assert.Equal(originalPole.Id, restoredPole.Id);
             Assert.Equal(originalSwitch.Id, restoredSwitch.Id);
             Assert.Equal(originalSwitch.SwitchKind, restoredSwitch.SwitchKind);

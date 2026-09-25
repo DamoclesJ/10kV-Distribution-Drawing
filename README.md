@@ -36,7 +36,7 @@ V1.0 不包含 Annotation、Energization、PDF/JPG 导出或安装程序。
 
 ## 工程文件格式
 
-当前 `FormatVersion = V6`，工程文件扩展名为 `.kvdrawing`。
+当前开发基线 `FormatVersion = V8`，工程文件扩展名为 `.kvdrawing`。V8 必须包含 `WorkTicketData`；旧测试项目不提供迁移，低于或高于 V8 的版本均拒绝打开。已发布 V1.0 的历史格式为 V7。
 
 ## Windows 分发
 

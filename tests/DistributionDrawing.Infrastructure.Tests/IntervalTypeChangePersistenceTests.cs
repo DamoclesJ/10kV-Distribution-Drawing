@@ -21,7 +21,7 @@ public sealed class IntervalTypeChangePersistenceTests
         {
             RingCabinet restored = RoundTrip(document, filePath);
 
-            Assert.Equal(ProjectFileFormat.Version7, GetSavedVersion(filePath));
+            Assert.Equal(ProjectFileFormat.Version8, GetSavedVersion(filePath));
             Assert.Equal("NK1991", restored.DisplayName);
             Assert.Equal("10kV 奥东783线路", restored.LineName);
         }
@@ -47,7 +47,7 @@ public sealed class IntervalTypeChangePersistenceTests
             RingCabinet restored = RoundTrip(document, filePath);
             RingCabinetInterval actual = GetInterval(restored, 3);
 
-            Assert.Equal(ProjectFileFormat.Version7, GetSavedVersion(filePath));
+            Assert.Equal(ProjectFileFormat.Version8, GetSavedVersion(filePath));
             Assert.Equal(cabinet.Id, restored.Id);
             AssertIntervalIdentity(expected, actual);
             Assert.Equal(IntervalKind.PTInterval, actual.IntervalKind);

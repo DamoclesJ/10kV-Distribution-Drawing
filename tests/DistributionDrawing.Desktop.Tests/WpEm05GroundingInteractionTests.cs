@@ -55,8 +55,8 @@ public sealed class WpEm05GroundingInteractionTests : IDisposable
         var reopenedService = new ProjectService();
         ProjectRuntimeSession reopened = ProjectRuntimeSession.Load(reopenedService, path);
 
-        Assert.Equal(ProjectFileFormat.Version7, reopened.PersistenceSession.OpenedFormatVersion);
-        Assert.Equal(ProjectFileFormat.Version7, ProjectFileFormat.CurrentVersion);
+        Assert.Equal(ProjectFileFormat.Version8, reopened.PersistenceSession.OpenedFormatVersion);
+        Assert.Equal(ProjectFileFormat.Version8, ProjectFileFormat.CurrentVersion);
         Assert.Equal(
             expected,
             reopened.Layout.GroundingPointLayouts[point.GroundingPointId]);

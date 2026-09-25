@@ -1,5 +1,9 @@
 # Roadmap
 
+## Current development baseline
+
+WP-WTA-01 is Implementation Complete / Code Review Passed / Awaiting Windows Acceptance on the `wp-wta-01` candidate branch. Its project persistence format is V8, with required `WorkTicketData`. New projects use V8; V8 Save/Load is supported. V7 and earlier test projects and versions above V8 are rejected. No migration, unknown-field preservation, or old-version write compatibility is planned. Automated verification is blocked on macOS because `Microsoft.WindowsDesktop.App` is unavailable. This format change does not reopen the closed Electrical Model work packages. WP-WTA-01 remains open until Windows acceptance.
+
 ## V1.0
 
 **Status:** RELEASED

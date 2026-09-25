@@ -98,8 +98,7 @@ public sealed class ProjectWorkspaceController : IDisposable
     public bool SaveProject()
     {
         if (ActiveDocumentSession is not { } documentSession) return false;
-        if (documentSession.IsUntitled ||
-            documentSession.RuntimeSession.PersistenceSession.RequiresUpgradeSaveAs)
+        if (documentSession.IsUntitled)
         {
             return SaveProjectAs();
         }

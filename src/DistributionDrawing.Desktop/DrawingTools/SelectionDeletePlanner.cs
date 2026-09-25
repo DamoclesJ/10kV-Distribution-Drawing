@@ -1,3 +1,4 @@
+using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Devices.CustomerStations;
@@ -216,7 +217,8 @@ public sealed class SelectionDeletePlanner
         }
 
         if (commands.Count == 0) throw new InvalidOperationException("当前选择中没有可删除的对象。");
-        return new CompositeDeleteCommand(commands);
+        return new CompositeDeleteCommand(commands, () => WorkTicketReferenceGuard.Validate(
+            document, session.PersistenceSession.WorkTickets));
     }
 
     private static CustomerStation? FindCustomerStationOwner(
@@ -238,10 +240,12 @@ public sealed class SelectionDeletePlanner
 internal sealed class CompositeDeleteCommand : ICommand
 {
     private readonly IReadOnlyList<ICommand> _commands;
+    private readonly Action? _validateAfter;
 
-    public CompositeDeleteCommand(IEnumerable<ICommand> commands)
+    public CompositeDeleteCommand(IEnumerable<ICommand> commands, Action? validateAfter = null)
     {
         _commands = commands?.ToArray() ?? throw new ArgumentNullException(nameof(commands));
+        _validateAfter = validateAfter;
         if (_commands.Count == 0) throw new ArgumentException("At least one delete command is required.", nameof(commands));
     }
 
@@ -255,6 +259,7 @@ internal sealed class CompositeDeleteCommand : ICommand
                 command.Execute();
                 executed++;
             }
+            _validateAfter?.Invoke();
         }
         catch
         {

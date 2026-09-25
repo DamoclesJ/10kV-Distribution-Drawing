@@ -1,5 +1,6 @@
 using System.IO;
 using DistributionDrawing.Desktop.PoleAttachmentManagement;
+using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction;
@@ -93,6 +94,40 @@ public sealed class PoleAttachmentP6Tests : IDisposable
             property => property.DisplayName == "机械状态");
         Assert.NotNull(resolved.PoleAttachment);
         Assert.NotNull(resolved.AttachmentLayout);
+    }
+
+    [Fact]
+    public void ReferencedPoleSwitchDirectRemovalRollsBackBeforeHistory()
+    {
+        ProjectRuntimeSession session = CreateSession();
+        var factory = new DeviceCommandFactory();
+        AddPoleCommand pole = factory.CreateAddPole(session.PersistenceSession.Domain,
+            session.Layout, new DocumentPoint(20, 30));
+        pole.Execute();
+        AddPoleSwitchAttachmentCommand addSwitch = factory.CreateAddPoleSwitchAttachment(
+            session.PersistenceSession.Domain, session.Layout, pole.Pole.Id,
+            SwitchKind.IsolationSwitch, new DocumentPoint(12, 0));
+        addSwitch.Execute();
+        session.RebuildScene();
+        Guid switchId = addSwitch.Creation.SwitchDevice.Id;
+        Guid attachmentId = addSwitch.Creation.Attachment.AttachmentId;
+        WorkTicketSession ticket = WorkTicketSession.Create() with
+        {
+            IsolationBoundaries = [new IsolationBoundary(switchId, BoundarySide.Unknown)]
+        };
+        session.PersistenceSession.WorkTickets.Add(ticket);
+        var controller = new PoleAttachmentManagementController(() => session);
+
+        Assert.Contains("正在被工作票", Assert.Throws<InvalidOperationException>(() =>
+            controller.Remove(attachmentId)).Message);
+        Assert.Contains(session.PersistenceSession.Domain.Devices, item => item.Id == switchId);
+        Assert.Empty(session.CommandStack.History);
+
+        session.PersistenceSession.WorkTickets.Remove(ticket.Id);
+        controller.Remove(attachmentId);
+        Assert.DoesNotContain(session.PersistenceSession.Domain.Devices, item => item.Id == switchId);
+        Assert.True(session.CommandStack.Undo());
+        Assert.Contains(session.PersistenceSession.Domain.Devices, item => item.Id == switchId);
     }
 
     private ProjectRuntimeSession CreateSession()

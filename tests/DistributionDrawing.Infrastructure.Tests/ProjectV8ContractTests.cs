@@ -6,7 +6,7 @@ using Xunit;
 
 namespace DistributionDrawing.Infrastructure.Tests;
 
-public sealed class ProjectV7ContractTests : IDisposable
+public sealed class ProjectV8ContractTests : IDisposable
 {
     private readonly List<string> _paths = [];
 
@@ -44,16 +44,15 @@ public sealed class ProjectV7ContractTests : IDisposable
     }
 
     [Fact]
-    public void NewProject_WritesVersion7WithEmptyFoundationCollections()
+    public void NewProject_WritesVersion8WithEmptyFoundationCollections()
     {
         string path = NextPath();
         var service = new ProjectService();
 
         ProjectSession session = service.CreateProject(path, "V7 空工程");
 
-        Assert.Equal(ProjectFileFormat.Version7, session.Manifest.FormatVersion);
-        Assert.Equal(ProjectFileFormat.Version7, session.OpenedFormatVersion);
-        Assert.False(session.RequiresUpgradeSaveAs);
+        Assert.Equal(ProjectFileFormat.Version8, session.Manifest.FormatVersion);
+        Assert.Equal(ProjectFileFormat.Version8, session.OpenedFormatVersion);
         Assert.Empty(session.Document.Domain!.Transformers!);
         Assert.Empty(session.Document.Domain.CustomerStations!);
         Assert.Empty(session.Professional.GroundingAccessPoints);

@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Connections;
 using DistributionDrawing.Rendering.Wpf.Metrics;
@@ -156,7 +157,8 @@ public sealed class OverheadLineConnectionController
             session.PersistenceSession.Domain,
             session.Layout,
             selected.ObjectId);
-        session.CommandStack.ExecuteCommand(command);
+        session.CommandStack.ExecuteCommand(new WorkTicketGuardedDeleteCommand(command,
+            session.PersistenceSession.Domain, session.PersistenceSession.WorkTickets));
         session.SelectionManager.Clear();
         session.RebuildScene();
         VisualChanged?.Invoke(this, EventArgs.Empty);
