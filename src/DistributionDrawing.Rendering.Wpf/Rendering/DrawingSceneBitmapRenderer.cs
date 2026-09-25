@@ -14,7 +14,7 @@ public sealed record DrawingSceneBitmapOptions(
     int MaximumDimensionPixels = 32768,
     long MaximumPixelCount = 32_000_000,
     long MaximumEstimatedBytes = 384L * 1024 * 1024,
-    int MinimumReadableDpi = 96,
+    int MinimumReadableDpi = 100,
     int BytesPerPixel = 4,
     double PeakSurfaceFactor = 3.0,
     long FixedHeadroomBytes = 64L * 1024 * 1024,

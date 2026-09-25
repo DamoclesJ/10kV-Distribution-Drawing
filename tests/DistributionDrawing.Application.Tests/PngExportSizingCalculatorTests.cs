@@ -24,7 +24,7 @@ public sealed class PngExportSizingCalculatorTests
         PngExportSizingPolicy policy = LenientPolicy() with
         {
             MaxRequestedDpi = 300,
-            MinimumReadableDpi = 96,
+            MinimumReadableDpi = 100,
             MaxDimensionPixels = maxWidth
         };
 
@@ -241,14 +241,25 @@ public sealed class PngExportSizingCalculatorTests
         PngExportSizingPolicy policy = LenientPolicy() with
         {
             MaxRequestedDpi = 300,
-            MinimumReadableDpi = 96,
-            MaxDimensionPixels = 960
+            MinimumReadableDpi = 100,
+            MaxDimensionPixels = 1_000
         };
-        double width = MillimetersForPixels(960, 96);
+        double width = MillimetersForPixels(1_000, 100);
 
         PngExportSizingDecision decision = _calculator.Calculate(width, 1, policy);
 
-        Assert.Equal(96, decision.Result!.SelectedDpi);
+        Assert.Equal(100, decision.Result!.SelectedDpi);
+    }
+
+    [Fact]
+    public void Calculate_DefaultBinarySearchLowerBoundIsFrozenAt100Dpi()
+    {
+        double width = MillimetersForPixels(32_768, 100);
+
+        PngExportSizingDecision decision = _calculator.Calculate(width, 0.1);
+
+        Assert.True(decision.IsSuccess);
+        Assert.Equal(100, decision.Result!.SelectedDpi);
     }
 
     [Fact]
@@ -257,10 +268,10 @@ public sealed class PngExportSizingCalculatorTests
         PngExportSizingPolicy policy = LenientPolicy() with
         {
             MaxRequestedDpi = 300,
-            MinimumReadableDpi = 96,
-            MaxDimensionPixels = 959
+            MinimumReadableDpi = 100,
+            MaxDimensionPixels = 999
         };
-        double width = MillimetersForPixels(960, 96);
+        double width = MillimetersForPixels(1_000, 100);
 
         PngExportSizingDecision decision = _calculator.Calculate(width, 1, policy);
 
@@ -273,11 +284,11 @@ public sealed class PngExportSizingCalculatorTests
     {
         PngExportSizingPolicy baseline = LenientPolicy() with
         {
-            MinimumReadableDpi = 96,
+            MinimumReadableDpi = 100,
             MaxDimensionPixels = 2_000
         };
         bool unsafeSeen = false;
-        for (int dpi = 96; dpi <= 300; dpi++)
+        for (int dpi = 100; dpi <= 300; dpi++)
         {
             PngExportSizingDecision decision = _calculator.Calculate(
                 200,
@@ -295,7 +306,7 @@ public sealed class PngExportSizingCalculatorTests
         PngExportSizingPolicy policy = LenientPolicy() with
         {
             MaxRequestedDpi = 300,
-            MinimumReadableDpi = 96,
+            MinimumReadableDpi = 100,
             MaxDimensionPixels = 2_000
         };
 

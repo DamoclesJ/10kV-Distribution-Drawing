@@ -57,7 +57,7 @@ public sealed class DrawingSceneBitmapRendererTests
                 BitmapCreateOptions.PreservePixelFormat,
                 BitmapCacheOption.OnLoad);
 
-            Assert.InRange(result.SelectedDpi, 96, 299);
+            Assert.InRange(result.SelectedDpi, 100, 299);
             Assert.Equal(400, result.WidthPixels);
             Assert.Equal(result.WidthPixels, frame.PixelWidth);
             Assert.Equal(result.HeightPixels, frame.PixelHeight);

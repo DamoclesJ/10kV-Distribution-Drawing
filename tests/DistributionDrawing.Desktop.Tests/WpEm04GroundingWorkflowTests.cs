@@ -881,7 +881,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
             DrawingSceneBitmapResult result = new DrawingSceneBitmapRenderer().RenderPng(
                 scenario.Session.Scene,
                 stream,
-                new DrawingSceneBitmapOptions(Dpi: 96));
+                new DrawingSceneBitmapOptions(Dpi: 100));
 
             Assert.True(marker.Bounds.WidthMillimeters > 0);
             Assert.True(result.WidthPixels > 0);
@@ -988,7 +988,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
                 SceneText label = Assert.Single(scenario.Session.Scene.Elements.OfType<SceneText>(), text => text.TargetId == gp.GroundingPointId);
                 Assert.Equal(before + 2, label.FontSizeMillimeters);
                 using var stream = new MemoryStream();
-                new DrawingSceneBitmapRenderer().RenderPng(scenario.Session.Scene, stream, new DrawingSceneBitmapOptions(Dpi: 96));
+                new DrawingSceneBitmapRenderer().RenderPng(scenario.Session.Scene, stream, new DrawingSceneBitmapOptions(Dpi: 100));
                 Assert.True(stream.Length > 0);
                 Assert.Equal(before + 2, label.FontSizeMillimeters);
             }

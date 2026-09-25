@@ -661,7 +661,9 @@ public partial class MainWindow : Window
             string message = selectedDpi == 300
                 ? "PNG 已导出（300 DPI）"
                 : $"PNG 已导出（实际 {selectedDpi} DPI）";
-            ShowTransientFeedback(message);
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.Background,
+                new Action(() => ShowTransientFeedback(message)));
         }
     }
 

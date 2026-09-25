@@ -2,7 +2,7 @@ namespace DistributionDrawing.Application.Export;
 
 public sealed record PngExportSizingPolicy(
     int MaxRequestedDpi = 300,
-    int MinimumReadableDpi = 96,
+    int MinimumReadableDpi = 100,
     int MaxDimensionPixels = 32768,
     long MaxPixels = 32_000_000,
     int BytesPerPixel = 4,
