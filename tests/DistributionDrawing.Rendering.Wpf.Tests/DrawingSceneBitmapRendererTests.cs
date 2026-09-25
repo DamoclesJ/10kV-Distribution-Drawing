@@ -322,7 +322,7 @@ public sealed class DrawingSceneBitmapRendererTests
         ]);
         using var output = new MemoryStream();
 
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<PngExportSizeException>(() =>
         {
             _ = new DrawingSceneBitmapRenderer().RenderPng(
                 scene,
@@ -334,6 +334,7 @@ public sealed class DrawingSceneBitmapRendererTests
                     MaximumPixelCount: long.MaxValue,
                     MaximumEstimatedBytes: long.MaxValue));
         });
+        Assert.Equal(0, output.Length);
     }
 
     [Fact]
