@@ -39,6 +39,10 @@ public sealed class CustomerStationPresentationResourceTests
     {
         RunOnSta(() =>
         {
+            if (System.Windows.Application.Current is null)
+            {
+                _ = new System.Windows.Application();
+            }
             var resources = new ResourceDictionary
             {
                 Source = new Uri(
