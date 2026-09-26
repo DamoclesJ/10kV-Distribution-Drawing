@@ -332,7 +332,8 @@ public sealed class WorkTicketAnalyzer(
         ArgumentNullException.ThrowIfNull(ticket);
         if (string.IsNullOrWhiteSpace(ticket.Task.Content) || string.IsNullOrWhiteSpace(ticket.Task.WorkObject))
             throw new InvalidOperationException("先填写工作内容和工作对象。");
-        if (ticket.IsolationBoundaries.Count == 0 || ticket.WorkScopeIds.Count == 0)
+        if (ticket.IsolationBoundaries.Count == 0 ||
+            (ticket.WorkScopeIds.Count == 0 && ticket.WorkScopeItems.Count == 0))
             throw new InvalidOperationException("先设置停电/隔离边界及实际工作范围。");
         if (ticket.UserFacts.Any(item => item.Kind == "OtherReversible" && item.Confirmed &&
                 string.IsNullOrWhiteSpace(item.RestorationText)))
@@ -340,6 +341,21 @@ public sealed class WorkTicketAnalyzer(
         foreach (Guid scopeId in ticket.WorkScopeIds)
             if (!drawing.WorkScopes.Any(scope => scope.WorkScopeId == scopeId))
                 throw new InvalidOperationException($"工作范围 {scopeId} 已不存在。");
+        foreach (WorkScopeItem item in ticket.WorkScopeItems)
+        {
+            if (item.TargetId == Guid.Empty || !Enum.IsDefined(item.Kind))
+                throw new InvalidOperationException("实际工作范围引用无效。");
+            bool exists = item.Kind switch
+            {
+                WorkScopeItemKind.Equipment => drawing.Devices.Any(device => device.Id == item.TargetId),
+                WorkScopeItemKind.ElectricalRange => drawing.WorkScopes.Any(scope => scope.WorkScopeId == item.TargetId),
+                _ => false
+            };
+            if (!exists) throw new InvalidOperationException($"工作范围目标 {item.TargetId} 已不存在。");
+        }
+        foreach (Guid deviceId in ticket.EquipmentScopeIds)
+            if (!drawing.Devices.Any(device => device.Id == deviceId))
+                throw new InvalidOperationException($"工作设备 {deviceId} 已不存在。");
 
         MeasureFact[] switching = ticket.IsolationBoundaries
             .SelectMany(boundary => _rules.Switching(drawing, boundary)
@@ -478,6 +494,7 @@ public sealed class WorkTicketAnalyzer(
         value.Append(ticket.Task).Append('|');
         foreach (IsolationBoundary item in ticket.IsolationBoundaries) value.Append(item).Append('|');
         foreach (Guid id in ticket.WorkScopeIds) value.Append(id).Append('|');
+        foreach (WorkScopeItem item in ticket.WorkScopeItems) value.Append(item.Kind).Append(':').Append(item.TargetId).Append('|');
         foreach (Guid id in ticket.GroundingPointIds) value.Append(id).Append('|');
         foreach (UserTicketFact item in ticket.UserFacts)
         {

@@ -9,6 +9,9 @@ public static class WorkTicketReferenceGuard
     {
         foreach (WorkTicketSession ticket in tickets.Tickets)
         {
+            if (ticket.WorkScopeItems is null || ticket.WorkScopeItems.Any(item => item is null ||
+                    item.TargetId == Guid.Empty || !Enum.IsDefined(item.Kind)))
+                throw new InvalidOperationException($"工作票 {ticket.Id} 的实际工作范围引用无效。");
             IEnumerable<TicketReference> references = ticket.IsolationBoundaries.SelectMany(boundary =>
                 new[] { new TicketReference(TicketReferenceKind.Device, boundary.DeviceId) }
                     .Concat(boundary.TerminalId is Guid terminal ?
@@ -16,6 +19,10 @@ public static class WorkTicketReferenceGuard
                     .Concat(boundary.ConnectionId is Guid connection ?
                         [new TicketReference(TicketReferenceKind.Connection, connection)] : []))
                 .Concat(ticket.WorkScopeIds.Select(id => new TicketReference(TicketReferenceKind.WorkScope, id)))
+                .Concat(ticket.WorkScopeItems.Select(item => new TicketReference(
+                    item.Kind == WorkScopeItemKind.Equipment
+                        ? TicketReferenceKind.Device : TicketReferenceKind.WorkScope,
+                    item.TargetId)))
                 .Concat(ticket.GroundingPointIds.Select(id => new TicketReference(TicketReferenceKind.GroundingPoint, id)))
                 .Concat(ticket.UserFacts.SelectMany(fact => fact.References))
                 .Concat(ticket.Draft?.Sections.SelectMany(section => section.Items)

@@ -35,7 +35,7 @@ internal static class ProjectWorkTicketMapper
         foreach (WorkTicketSession ticket in dto.Tickets)
         {
             if (ticket.Task is null || ticket.IsolationBoundaries is null || ticket.WorkScopeIds is null ||
-                ticket.GroundingPointIds is null || ticket.UserFacts is null)
+                ticket.GroundingPointIds is null || ticket.UserFacts is null || ticket.WorkScopeItems is null)
                 throw new InvalidDataException($"Ticket {ticket.Id} has missing setup data.");
             if (ticket.WorkScopeIds.Distinct().Count() != ticket.WorkScopeIds.Count ||
                 ticket.GroundingPointIds.Distinct().Count() != ticket.GroundingPointIds.Count ||
@@ -53,6 +53,19 @@ internal static class ProjectWorkTicketMapper
             foreach (Guid id in ticket.WorkScopeIds)
                 if (!drawing.WorkScopes.Any(item => item.WorkScopeId == id))
                     throw new InvalidDataException($"Ticket {ticket.Id} refers to missing work scope {id}.");
+            if (ticket.WorkScopeItems.Any(item => item is null || !Enum.IsDefined(item.Kind) || item.TargetId == Guid.Empty) ||
+                ticket.WorkScopeItems.Distinct().Count() != ticket.WorkScopeItems.Count)
+                throw new InvalidDataException($"Ticket {ticket.Id} has invalid work scope items.");
+            foreach (WorkScopeItem item in ticket.WorkScopeItems)
+            {
+                bool exists = item.Kind switch
+                {
+                    WorkScopeItemKind.Equipment => drawing.Devices.Any(device => device.Id == item.TargetId),
+                    WorkScopeItemKind.ElectricalRange => drawing.WorkScopes.Any(scope => scope.WorkScopeId == item.TargetId),
+                    _ => false
+                };
+                if (!exists) throw new InvalidDataException($"Ticket {ticket.Id} refers to missing {item.Kind} {item.TargetId}.");
+            }
             foreach (Guid id in ticket.GroundingPointIds)
                 if (!drawing.GroundingPoints.Any(item => item.GroundingPointId == id))
                     throw new InvalidDataException($"Ticket {ticket.Id} refers to missing grounding point {id}.");

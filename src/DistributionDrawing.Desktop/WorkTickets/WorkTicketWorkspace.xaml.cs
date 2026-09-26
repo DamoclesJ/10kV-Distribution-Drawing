@@ -11,6 +11,8 @@ namespace DistributionDrawing.Desktop.WorkTickets;
 public partial class WorkTicketWorkspace : UserControl
 {
     private sealed record Choice(Guid Id, string Display);
+    private sealed record ScopeChoice(Guid Id, string Display);
+    private sealed record BoundarySideChoice(BoundarySide Side, string Display);
     private sealed record BoundaryChoice(IsolationBoundary Boundary, string Display);
     private sealed record FactKindChoice(string Code, string Display);
     private sealed record FactChoice(UserTicketFact Fact, string Display);
@@ -27,8 +29,19 @@ public partial class WorkTicketWorkspace : UserControl
     public WorkTicketWorkspace()
     {
         InitializeComponent();
-        BoundarySide.ItemsSource = Enum.GetValues<BoundarySide>();
-        BoundarySide.SelectedItem = DistributionDrawing.Application.WorkTickets.BoundarySide.Line;
+        BoundarySide.ItemsSource = new[]
+        {
+            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Bus, "母线侧"),
+            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Line, "线路侧"),
+            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.SmallerNumber, "小号侧"),
+            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.LargerNumber, "大号侧"),
+            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Source, "电源侧"),
+            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Load, "负荷侧"),
+            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Unknown, "待确认")
+        };
+        BoundarySide.DisplayMemberPath = "Display";
+        BoundarySide.SelectedItem = ((IEnumerable<BoundarySideChoice>)BoundarySide.ItemsSource)
+            .Single(item => item.Side == DistributionDrawing.Application.WorkTickets.BoundarySide.Line);
         FactKind.ItemsSource = new[]
         {
             new FactKindChoice("RetainedLive", "保留/邻近带电"),
@@ -82,7 +95,10 @@ public partial class WorkTicketWorkspace : UserControl
                 .OrderBy(device => device.DisplayName)
                 .Select(device => new Choice(device.Id, DescribeSwitch(drawing, device))).ToArray() ?? [];
             ScopeList.ItemsSource = drawing?.WorkScopes
-                .Select(scope => new Choice(scope.WorkScopeId, scope.Description)).ToArray() ?? [];
+                .Select(scope => new ScopeChoice(scope.WorkScopeId, scope.Description)).ToArray() ?? [];
+            EquipmentScopeList.ItemsSource = drawing?.Devices
+                .OrderBy(device => device.DisplayName)
+                .Select(device => new ScopeChoice(device.Id, $"设备：{DescribeSwitchOrDevice(drawing, device)}")).ToArray() ?? [];
             GroundList.ItemsSource = drawing?.GroundingPoints
                 .Select(point => new Choice(point.GroundingPointId,
                     $"{point.Number ?? "未编号"} — {point.Location} ({point.Target.Kind})")).ToArray() ?? [];
@@ -93,8 +109,10 @@ public partial class WorkTicketWorkspace : UserControl
             RefreshBoundaries();
             _facts = ticket?.UserFacts.ToList() ?? [];
             RefreshFacts();
-            foreach (Choice choice in ScopeList.Items)
+            foreach (ScopeChoice choice in ScopeList.Items)
                 if (ticket?.WorkScopeIds.Contains(choice.Id) == true) ScopeList.SelectedItems.Add(choice);
+            foreach (ScopeChoice choice in EquipmentScopeList.Items)
+                if (ticket?.EquipmentScopeIds.Contains(choice.Id) == true) EquipmentScopeList.SelectedItems.Add(choice);
             foreach (Choice choice in GroundList.Items)
                 if (ticket?.GroundingPointIds.Contains(choice.Id) == true) GroundList.SelectedItems.Add(choice);
             TaskPreview.Text = ticket is null ? "工作地点 / 设备：________    工作内容：________"
@@ -146,11 +164,40 @@ public partial class WorkTicketWorkspace : UserControl
 
     private static string DescribeSwitch(DrawingDocument drawing, SwitchDevice device)
     {
-        RingCabinetInterval? interval = drawing.Devices.OfType<RingCabinet>()
-            .SelectMany(cabinet => cabinet.Intervals)
+        RingCabinet? cabinet = drawing.Devices.OfType<RingCabinet>()
+            .SingleOrDefault(item => item.Intervals.Any(interval =>
+                interval.SwitchDevices.Any(sw => sw.Id == device.Id)));
+        RingCabinetInterval? interval = cabinet?.Intervals
             .SingleOrDefault(item => item.SwitchDevices.Any(sw => sw.Id == device.Id));
-        return interval is null ? $"{device.DisplayName} ({device.SwitchKind})"
-            : $"{interval.DisplayName} / {device.DisplayName} ({interval.IntervalKind}, {interval.GroundingStructureKind})";
+        string name = device.DisplayName ?? "开关设备";
+        if (interval is not null) return $"{cabinet!.DisplayName} {interval.DisplayName} / {name}";
+        PoleAttachment? attachment = drawing.PoleAttachments
+            .SingleOrDefault(item => item.AttachedDeviceId == device.Id);
+        Pole? pole = attachment is null ? null : drawing.Devices.OfType<Pole>()
+            .SingleOrDefault(item => item.Id == attachment.PoleId);
+        return pole is null ? name : $"{pole.PoleNumber}杆 {name}";
+    }
+
+    private static string DescribeSwitchOrDevice(DrawingDocument drawing, Device device) =>
+        device is SwitchDevice switchDevice ? DescribeSwitch(drawing, switchDevice) : device.DisplayName ?? "未命名设备";
+
+    public static string BoundarySideName(DistributionDrawing.Application.WorkTickets.BoundarySide side) => side switch
+    {
+        DistributionDrawing.Application.WorkTickets.BoundarySide.Bus => "母线侧",
+        DistributionDrawing.Application.WorkTickets.BoundarySide.Line => "线路侧",
+        DistributionDrawing.Application.WorkTickets.BoundarySide.SmallerNumber => "小号侧",
+        DistributionDrawing.Application.WorkTickets.BoundarySide.LargerNumber => "大号侧",
+        DistributionDrawing.Application.WorkTickets.BoundarySide.Source => "电源侧",
+        DistributionDrawing.Application.WorkTickets.BoundarySide.Load => "负荷侧",
+        _ => "待确认"
+    };
+
+    public static string FormatBoundaryDisplay(DrawingDocument? drawing, IsolationBoundary boundary)
+    {
+        string owner = drawing?.Devices.FirstOrDefault(device => device.Id == boundary.DeviceId) is { } device
+            ? DescribeSwitchOrDevice(drawing!, device)
+            : "设备";
+        return $"{owner} — {BoundarySideName(boundary.Side)}";
     }
 
     private WorkTicketSession? CurrentTicket() => _session?.PersistenceSession.WorkTickets.Selected(_ticketId);
@@ -190,9 +237,9 @@ public partial class WorkTicketWorkspace : UserControl
 
     private void OnAddBoundary(object sender, RoutedEventArgs e)
     {
-        if (BoundaryDevice.SelectedItem is not Choice device || BoundarySide.SelectedItem is not BoundarySide side)
+        if (BoundaryDevice.SelectedItem is not Choice device || BoundarySide.SelectedItem is not BoundarySideChoice side)
             return;
-        IsolationBoundary boundary = new(device.Id, side,
+        IsolationBoundary boundary = new(device.Id, side.Side,
             (BoundaryTerminal.SelectedItem as Choice)?.Id);
         if (!_boundaries.Contains(boundary)) _boundaries.Add(boundary);
         RefreshBoundaries();
@@ -228,8 +275,7 @@ public partial class WorkTicketWorkspace : UserControl
     {
         DrawingDocument? drawing = _session?.PersistenceSession.Domain;
         BoundaryList.ItemsSource = _boundaries.Select(item => new BoundaryChoice(item,
-            $"{drawing?.Devices.FirstOrDefault(device => device.Id == item.DeviceId)?.DisplayName} — {item.Side} 侧 / " +
-            $"{drawing?.Terminals.FirstOrDefault(terminal => terminal.Id == item.TerminalId)?.Role ?? "未指定端子"}"))
+            FormatBoundaryDisplay(drawing, item)))
             .ToArray();
     }
 
@@ -270,7 +316,9 @@ public partial class WorkTicketWorkspace : UserControl
     {
         Task = new WorkTask(TaskContent.Text.Trim(), TaskObject.Text.Trim()),
         IsolationBoundaries = _boundaries.ToArray(),
-        WorkScopeIds = ScopeList.SelectedItems.Cast<Choice>().Select(item => item.Id).ToArray(),
+        WorkScopeIds = ScopeList.SelectedItems.Cast<ScopeChoice>().Select(item => item.Id).ToArray(),
+        WorkScopeItems = EquipmentScopeList.SelectedItems.Cast<ScopeChoice>()
+            .Select(item => new WorkScopeItem(WorkScopeItemKind.Equipment, item.Id)).ToArray(),
         GroundingPointIds = GroundList.SelectedItems.Cast<Choice>().Select(item => item.Id).ToArray(),
         UserFacts = _facts.ToArray()
     };
@@ -282,6 +330,7 @@ public partial class WorkTicketWorkspace : UserControl
         bool setupChanged = before.Task != after.Task ||
             !before.IsolationBoundaries.SequenceEqual(after.IsolationBoundaries) ||
             !before.WorkScopeIds.SequenceEqual(after.WorkScopeIds) ||
+            !before.WorkScopeItems.SequenceEqual(after.WorkScopeItems) ||
             !before.GroundingPointIds.SequenceEqual(after.GroundingPointIds) ||
             !before.UserFacts.SequenceEqual(after.UserFacts);
         if (!setupChanged && ReferenceEquals(before.Draft, after.Draft)) return;

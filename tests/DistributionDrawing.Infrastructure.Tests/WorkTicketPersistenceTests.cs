@@ -1,4 +1,5 @@
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Infrastructure.Persistence;
 using System.IO.Compression;
 using System.Text.Json;
@@ -42,6 +43,33 @@ public sealed class WorkTicketPersistenceTests
             Assert.Equal(DraftOrigin.UserEdited, Assert.Single(restored.Draft.Section("6.5").Items).Origin);
             Assert.Equal(SectionCompletion.Stale, restored.EffectiveCompletion("6.1",
                 restored.AnalyzedFingerprint != WorkTicketAnalyzer.Fingerprint(opened.Domain, restored)));
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    public void V8RoundTripsEquipmentWorkScopeTargetIdentity()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"wta-equipment-{Guid.NewGuid():N}.kvdrawing");
+        try
+        {
+            var service = new ProjectService();
+            ProjectSession project = service.CreateProject(path, "设备工作范围");
+            SwitchDevice equipment = SwitchDevice.CreateForPole(Guid.NewGuid(), SwitchKind.LoadSwitch,
+                Guid.NewGuid(), Guid.NewGuid(), displayName: "验收测试环网柜");
+            project.Domain.AddDevice(equipment);
+            WorkTicketSession ticket = WorkTicketSession.Create() with
+            {
+                Task = new WorkTask("更换验收测试环网柜", "验收测试环网柜"),
+                WorkScopeItems = [new WorkScopeItem(WorkScopeItemKind.Equipment, equipment.Id)]
+            };
+            project.WorkTickets.Add(ticket);
+            service.SaveProject();
+
+            WorkTicketSession restored = Assert.Single(new ProjectService().LoadProject(path).WorkTickets.Tickets);
+            WorkScopeItem target = Assert.Single(restored.WorkScopeItems);
+            Assert.Equal(WorkScopeItemKind.Equipment, target.Kind);
+            Assert.Equal(equipment.Id, target.TargetId);
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

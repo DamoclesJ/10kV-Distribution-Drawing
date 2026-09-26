@@ -31,6 +31,8 @@
           <Button Content="移除选中边界" Click="OnRemoveBoundary" HorizontalAlignment="Left" Margin="0,4,0,10"/>
           <TextBlock Text="实际工作范围（选择图纸中已有工作范围）"/>
           <ListBox x:Name="ScopeList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,10"/>
+          <TextBlock Text="实际工作设备（可直接选择已有设备，无需创建虚拟线路）"/>
+          <ListBox x:Name="EquipmentScopeList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,10"/>
           <TextBlock Text="工作接地点（选择图纸中已有 GroundingPoint；不自动创建）"/>
           <ListBox x:Name="GroundList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,8"/>
           <TextBlock Text="人工现场事实（不得由拓扑推测）" Margin="0,2,0,4"/>

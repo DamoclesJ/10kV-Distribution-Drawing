@@ -4,6 +4,8 @@ namespace DistributionDrawing.Application.WorkTickets;
 
 public enum TicketReferenceKind { Device, Terminal, Connection, RingInterval, GroundingPoint, GroundingAccessPoint, WorkScope }
 public sealed record TicketReference(TicketReferenceKind Kind, Guid Id);
+public enum WorkScopeItemKind { ElectricalRange, Equipment }
+public sealed record WorkScopeItem(WorkScopeItemKind Kind, Guid TargetId);
 public enum BoundarySide { Unknown, Bus, Line, SmallerNumber, LargerNumber, Source, Load }
 public sealed record IsolationBoundary(Guid DeviceId, BoundarySide Side, Guid? TerminalId = null, Guid? ConnectionId = null);
 public sealed record IsolationScope(IReadOnlyList<IsolationBoundary> Boundaries);
@@ -64,6 +66,10 @@ public sealed record WorkTicketSession(
 {
     public string? RulePackVersion { get; init; }
     public string? PhraseLibraryVersion { get; init; }
+    // ElectricalRange items point to DrawingDocument.WorkScopes; Equipment items point to a Device.
+    public IReadOnlyList<WorkScopeItem> WorkScopeItems { get; init; } = [];
+    public IReadOnlyList<Guid> EquipmentScopeIds => WorkScopeItems
+        .Where(item => item.Kind == WorkScopeItemKind.Equipment).Select(item => item.TargetId).ToArray();
     private static readonly HashSet<string> ModelDependentSections = ["6.1", "6.2", "6.3", "6.4", "6.5", "16.1"];
 
     public static WorkTicketSession Create() => new(Guid.NewGuid(), new WorkTask("", ""), [], [], [], [], null, null, null);

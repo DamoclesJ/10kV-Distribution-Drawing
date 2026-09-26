@@ -254,6 +254,37 @@ public sealed class WorkTicketAnalyzerTests
     }
 
     [Fact]
+    public void EquipmentWorkScopeIsAValidTypedTargetAndChangesAnalysisFingerprint()
+    {
+        (DrawingDocument drawing, WorkTicketSession ticket) = ReadyTicket();
+        Guid equipmentId = drawing.Devices.First().Id;
+        WorkTicketSession scoped = ticket with
+        {
+            WorkScopeItems = [new WorkScopeItem(WorkScopeItemKind.Equipment, equipmentId)]
+        };
+
+        WorkTicketSession analyzed = new WorkTicketAnalyzer().Analyze(drawing, scoped);
+        Assert.Equal(equipmentId, Assert.Single(analyzed.WorkScopeItems).TargetId);
+        Assert.False(new WorkTicketAnalyzer().IsStale(drawing, analyzed));
+        Assert.True(new WorkTicketAnalyzer().IsStale(drawing, analyzed with { WorkScopeItems = [] }));
+
+        var root = new WorkTicketDataRoot(drawing.Id, [scoped]);
+        WorkTicketReferenceGuard.Validate(drawing, root);
+    }
+
+    [Fact]
+    public void EquipmentWorkScopeRejectsMissingEquipmentReference()
+    {
+        (DrawingDocument drawing, WorkTicketSession ticket) = ReadyTicket();
+        var root = new WorkTicketDataRoot(drawing.Id, [ticket with
+        {
+            WorkScopeItems = [new WorkScopeItem(WorkScopeItemKind.Equipment, Guid.NewGuid())]
+        }]);
+        Assert.Contains("Device", Assert.Throws<InvalidOperationException>(() =>
+            WorkTicketReferenceGuard.Validate(drawing, root)).Message);
+    }
+
+    [Fact]
     public void SelectedTicketResolvesTwoTicketsIndependently()
     {
         WorkTicketSession first = WorkTicketSession.Create();
@@ -266,6 +297,7 @@ public sealed class WorkTicketAnalyzerTests
 
     [Theory]
     [InlineData(TicketReferenceKind.Terminal)]
+    [InlineData(TicketReferenceKind.Device)]
     [InlineData(TicketReferenceKind.Connection)]
     [InlineData(TicketReferenceKind.RingInterval)]
     [InlineData(TicketReferenceKind.GroundingPoint)]
