@@ -52,17 +52,17 @@ public sealed class WorkRangeEntryAcceptanceTests
     [Fact]
     public void WorkRangePanelKeepsElectricalRangeInsideTheUnifiedSetup()
     {
-        XDocument mainWindow = LoadXaml("MainWindow.xaml");
-        XElement rangePanel = Assert.Single(mainWindow.Descendants(Presentation + "ScrollViewer"), element =>
+        XDocument mainWindowXaml = LoadXaml("MainWindow.xaml");
+        XElement rangePanel = Assert.Single(mainWindowXaml.Descendants(Presentation + "ScrollViewer"), element =>
             (string?)element.Attribute(Xaml + "Name") == "TicketRangePanel");
-        XDocument ticketWorkspace = LoadXaml("WorkTicketWorkspace.xaml");
+        XDocument workTicketWorkspaceXaml = LoadXaml("WorkTicketWorkspace.xaml");
 
         Assert.Contains("添加已有电气区段", rangePanel.ToString());
         Assert.Contains("新建电气区段", rangePanel.ToString());
         Assert.Contains(rangePanel.Descendants(Presentation + "Button"), button =>
             (string?)button.Attribute("Click") == "OnBeginAddWorkScope");
-        Assert.Contains(ticketWorkspace.ToString(), "返回图纸修改工作范围");
-        Assert.DoesNotContain("工作票范围", ticketWorkspace.ToString());
+        Assert.Contains("返回图纸修改工作范围", workTicketWorkspaceXaml.ToString());
+        Assert.DoesNotContain("工作票范围", workTicketWorkspaceXaml.ToString());
     }
 
     [Fact]
