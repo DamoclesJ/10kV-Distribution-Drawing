@@ -53,25 +53,26 @@ public sealed class WorkRangeEntryAcceptanceTests
     public void WorkRangePanelKeepsElectricalRangeInsideTheUnifiedSetup()
     {
         XDocument mainWindow = LoadXaml("MainWindow.xaml");
-        string ticketRangeCode = File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs"));
+        XElement rangePanel = Assert.Single(mainWindow.Descendants(Presentation + "ScrollViewer"), element =>
+            (string?)element.Attribute(Xaml + "Name") == "TicketRangePanel");
         XDocument ticketWorkspace = LoadXaml("WorkTicketWorkspace.xaml");
 
-        Assert.Contains(mainWindow.Descendants(Presentation + "ScrollViewer"), element =>
-            (string?)element.Attribute(Xaml + "Name") == "TicketRangePanel");
-        Assert.Contains(mainWindow.ToString(), "添加已有电气区段");
-        Assert.Contains(mainWindow.ToString(), "新建电气区段");
-        Assert.Contains(ticketRangeCode, "TicketRangePanel.Visibility = Visibility.Visible;");
+        Assert.Contains("添加已有电气区段", rangePanel.ToString());
+        Assert.Contains("新建电气区段", rangePanel.ToString());
+        Assert.Contains(rangePanel.Descendants(Presentation + "Button"), button =>
+            (string?)button.Attribute("Click") == "OnBeginAddWorkScope");
         Assert.Contains(ticketWorkspace.ToString(), "返回图纸修改工作范围");
         Assert.DoesNotContain("工作票范围", ticketWorkspace.ToString());
     }
 
     [Fact]
-    public void OpeningOrCancelingRangeSetupDoesNotCreateATicket()
+    public void OpenAndCancelHandlersAvoidTicketWriteCalls()
     {
-        string code = File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs"));
-        string openHandler = HandlerBody(code, "private void OnOpenTicketRange", "private void OnAddTicketBoundarySlot");
-        string cancelHandler = HandlerBody(code, "OnCancelTicketRange", "private void DiscardTicketRangeBuffer");
-        string electricalRangeHandler = HandlerBody(code, "OnBeginAddWorkScope", "OnDrawRingCabinetComposition");
+        string ticketRangeCode = File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs"));
+        string windowCode = File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs"));
+        string openHandler = HandlerBody(ticketRangeCode, "private void OnOpenTicketRange", "private void OnAddTicketBoundarySlot");
+        string cancelHandler = HandlerBody(ticketRangeCode, "OnCancelTicketRange", "private void DiscardTicketRangeBuffer");
+        string electricalRangeHandler = HandlerBody(windowCode, "private void OnBeginAddWorkScope", "private void OnDrawRingCabinetComposition");
 
         Assert.Contains("TicketRangePanel.Visibility = Visibility.Visible;", openHandler);
         Assert.DoesNotContain("OnShowDrawingWorkspace(", openHandler);
