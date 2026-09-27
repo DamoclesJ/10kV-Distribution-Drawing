@@ -53,5 +53,4 @@ public sealed class ToolboxViewModel : INotifyPropertyChanged
     public bool IsCableTerminationActive => SelectedMode == DesktopToolMode.AddCableTermination;
     public bool IsPoleSwitchActive => SelectedMode == DesktopToolMode.AddPoleSwitch;
     public bool IsGroundingPointActive => SelectedMode == DesktopToolMode.AddGroundingPoint;
-    public bool IsWorkScopeActive => SelectedMode == DesktopToolMode.AddWorkScope;
 }

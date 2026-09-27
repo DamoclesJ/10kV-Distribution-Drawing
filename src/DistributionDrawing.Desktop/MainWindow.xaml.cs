@@ -198,7 +198,6 @@ public partial class MainWindow : Window
                 AddCableTermination = () => OnAddCableTermination(this, new RoutedEventArgs()),
                 AddPoleSwitch = () => OnAddPoleSwitch(this, new RoutedEventArgs()),
                 AddGroundingPoint = () => OnBeginAddGroundingPoint(this, new RoutedEventArgs()),
-                AddWorkScope = () => OnBeginAddWorkScope(this, new RoutedEventArgs()),
                 ZoomIn = () => OnZoomIn(this, new RoutedEventArgs()),
                 ZoomOut = () => OnZoomOut(this, new RoutedEventArgs()),
                 FitDrawing = () => OnFitDrawing(this, new RoutedEventArgs()),
@@ -1010,10 +1009,15 @@ public partial class MainWindow : Window
         CancelTicketRangePicking();
         DiscardTicketRangeBuffer();
         TicketRangePanel.Visibility = Visibility.Collapsed;
-        TicketWorkspace.CommitPendingEdits();
+        if (TicketWorkspace.IsRangeEditActive)
+            TicketWorkspace.ReturnFromRangeEdit(_workTicketRangeNavigation);
+        else
+        {
+            TicketWorkspace.CommitPendingEdits();
+            TicketWorkspace.Refresh();
+        }
         DrawingWorkspace.Visibility = Visibility.Collapsed;
         TicketWorkspace.Visibility = Visibility.Visible;
-        TicketWorkspace.Refresh();
     }
 
     private void OnTicketOverlayChanged(object sender, RoutedEventArgs e)
@@ -1110,6 +1114,7 @@ public partial class MainWindow : Window
         object? sender,
         ActiveDocumentSessionChangedEventArgs e)
     {
+        _workTicketRangeNavigation.Reset();
         DiscardTicketRangeBuffer();
         TicketRangePanel.Visibility = Visibility.Collapsed;
         TicketWorkspace.CommitPendingEdits();
@@ -1392,10 +1397,10 @@ public partial class MainWindow : Window
                     _poleSwitchAttachment.StatusText,
                 _ when _groundingPointPickMode => "添加工作地线：请选择端子",
                 _ when _ticketRangePicker.Mode == TicketRangePickMode.ChoosingBoundarySide =>
-                    "工作票范围：请在右侧选择专业电气侧，Esc 取消",
+                    "工作范围：请在右侧选择专业电气侧，Esc 取消",
                 _ when _ticketRangePicker.Mode == TicketRangePickMode.PickingBoundaryDevice =>
-                    $"工作票范围：请选择 Boundary {WorkTicketRangeSetup.SlotName(_ticketRangePicker.BoundaryIndex!.Value)} 的设备，Esc 取消",
-                _ when _ticketRangePicker.Mode == TicketRangePickMode.PickingWorkScopeEquipment => "工作票范围：请选择实际工作设备，Esc 取消",
+                    $"工作范围：请选择 Boundary {WorkTicketRangeSetup.SlotName(_ticketRangePicker.BoundaryIndex!.Value)} 的设备，Esc 取消",
+                _ when _ticketRangePicker.Mode == TicketRangePickMode.PickingWorkScopeEquipment => "工作范围：请选择实际工作设备，Esc 取消",
                 _ when _workScopePickState is WorkScopePickState.PickingBoundaryA =>
                     "添加工作范围：请选择边界 A",
                 _ when _workScopePickState is WorkScopePickState.PickingBoundaryB =>
@@ -2069,8 +2074,6 @@ public partial class MainWindow : Window
         CancelDeviceDrag();
         _drawingTools.Cancel();
         CancelTicketRangePicking();
-        DiscardTicketRangeBuffer();
-        TicketRangePanel.Visibility = Visibility.Collapsed;
         _groundingPointPickMode = false;
         _pendingGroundingTarget = null;
         _hoveredGroundingTarget = null;
@@ -2233,6 +2236,15 @@ public partial class MainWindow : Window
             _commandStack.ExecuteCommand(addCommand);
             ResetWorkScopePick();
             RefreshDrawingScene();
+            if (TicketRangePanel.Visibility == Visibility.Visible)
+            {
+                _ticketScopeItems.Add(new WorkScopeItem(WorkScopeItemKind.ElectricalRange,
+                    addCommand.After.WorkScopeId));
+                TicketElectricalRangeChoice.ItemsSource = _activeSource.Document.WorkScopes
+                    .Select(scope => new TicketRangeChoice(scope.WorkScopeId, scope.Description)).ToArray();
+                RefreshTicketRangePanel();
+                TicketRangeStatus.Text = "电气区段已加入本次工作范围；确认后写入工作票。";
+            }
             _selectionManager.Select(
                 new SelectionReference(
                     SelectionTargetKind.WorkScope,

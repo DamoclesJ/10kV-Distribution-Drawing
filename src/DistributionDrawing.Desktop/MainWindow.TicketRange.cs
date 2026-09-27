@@ -16,17 +16,24 @@ public partial class MainWindow
     private readonly TicketBoundarySlotCollection _ticketBoundarySlots = new();
     private readonly List<WorkScopeItem> _ticketScopeItems = [];
     private readonly TicketRangePickerState _ticketRangePicker = new();
+    private readonly WorkTicketRangeNavigationState _workTicketRangeNavigation = new();
 
     private void OnOpenTicketRange(object sender, RoutedEventArgs e)
     {
         if (_workspace.CurrentSession is not { } session) return;
-        OnShowDrawingWorkspace(sender, e);
+        bool openedFromTicketWorkspace = TicketWorkspace.Visibility == Visibility.Visible;
+        if (openedFromTicketWorkspace)
+            _workTicketRangeNavigation.RangeOpenedFromTicketWorkspace();
+        TicketWorkspace.BeginRangeEdit();
+        DrawingWorkspace.Visibility = Visibility.Visible;
+        TicketWorkspace.Visibility = Visibility.Collapsed;
         _drawingTools.Cancel();
         CancelProfessionalPicking();
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
-        WorkTicketSession? ticket = TicketWorkspace.SelectedTicket;
-        TicketRangeTaskContent.Text = ticket?.Task.Content ?? "";
-        TicketRangeTaskObject.Text = ticket?.Task.WorkObject ?? "";
+        WorkTicketSession? ticket = TicketWorkspace.PendingSetup ?? TicketWorkspace.SelectedTicket;
+        WorkTask? task = ticket?.Task;
+        TicketRangeTaskContent.Text = task?.Content ?? "";
+        TicketRangeTaskObject.Text = task?.WorkObject ?? "";
         _ticketBoundarySlots.Load(ticket?.IsolationBoundaries ?? [], boundary =>
             WorkTicketRangeSetup.TryResolve(session.PersistenceSession.Domain,
                 boundary.DeviceId, boundary.Side, out IsolationBoundary? resolved, out _)
@@ -118,7 +125,7 @@ public partial class MainWindow
             WorkScopeItem item = _ticketScopeItems[index];
             string name = item.Kind == WorkScopeItemKind.Equipment
                 ? drawing?.Devices.FirstOrDefault(device => device.Id == item.TargetId)?.DisplayName ?? "设备已移除"
-                : drawing?.WorkScopes.FirstOrDefault(scope => scope.WorkScopeId == item.TargetId)?.Description ?? "线路范围已移除";
+                : drawing?.WorkScopes.FirstOrDefault(scope => scope.WorkScopeId == item.TargetId)?.Description ?? "电气区段已移除";
             var row = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
             row.Children.Add(new TextBlock { Text = name, Width = 205, TextWrapping = TextWrapping.Wrap });
             var remove = new Button { Content = "移除", Tag = index };
@@ -235,6 +242,8 @@ public partial class MainWindow
             TicketWorkspace.ApplyRange(_ticketBoundarySlots.Slots.Select(slot => slot.Resolved).ToArray(),
                 _ticketScopeItems.ToArray(),
                 new WorkTask(TicketRangeTaskContent.Text.Trim(), TicketRangeTaskObject.Text.Trim()));
+            _workTicketRangeNavigation.RangeConfirmed();
+            TicketWorkspace.CompleteRangeEdit();
             TicketRangeStatus.Text = string.IsNullOrWhiteSpace(TicketRangeTaskContent.Text) ||
                 string.IsNullOrWhiteSpace(TicketRangeTaskObject.Text)
                 ? "范围已确认；请补全工作内容和工作对象后分析。"

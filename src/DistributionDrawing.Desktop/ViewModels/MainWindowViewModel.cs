@@ -86,7 +86,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand AddCableTerminationCommand => Actions.AddCableTermination;
     public ICommand AddPoleSwitchCommand => Actions.AddPoleSwitch;
     public ICommand AddGroundingPointCommand => Actions.AddGroundingPoint;
-    public ICommand AddWorkScopeCommand => Actions.AddWorkScope;
     public ICommand ZoomInCommand => Actions.ZoomIn;
     public ICommand ZoomOutCommand => Actions.ZoomOut;
     public ICommand FitDrawingCommand => Actions.FitDrawing;

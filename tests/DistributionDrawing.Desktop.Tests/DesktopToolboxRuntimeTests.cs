@@ -60,10 +60,12 @@ public sealed class DesktopToolboxRuntimeTests
             toolbox.IsCableActive,
             toolbox.IsCableTerminationActive,
             toolbox.IsPoleSwitchActive,
-            toolbox.IsGroundingPointActive,
-            toolbox.IsWorkScopeActive
+            toolbox.IsGroundingPointActive
         ];
-        Assert.Single(states, active => active);
+        if (mode == DesktopToolMode.AddWorkScope)
+            Assert.DoesNotContain(true, states);
+        else
+            Assert.Single(states, active => active);
     }
 
     [Fact]

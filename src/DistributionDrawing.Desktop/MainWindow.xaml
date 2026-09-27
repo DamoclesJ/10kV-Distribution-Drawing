@@ -59,7 +59,6 @@
         <MenuItem Header="柱上开关" Command="{Binding AddPoleSwitchCommand}" />
         <MenuItem Header="验电接地环" Click="OnAddGroundingAccessPoint" />
         <MenuItem Header="工作地线" Command="{Binding AddGroundingPointCommand}" />
-        <MenuItem Header="创建线路范围" Command="{Binding AddWorkScopeCommand}" />
       </MenuItem>
       <MenuItem Header="操作">
         <MenuItem Header="开关分/合" Command="{Binding SwitchOperationCommand}" />
@@ -132,7 +131,7 @@
       </ToolBar>
     </ToolBarTray>
 
-    <Border DockPanel.Dock="Top"
+    <Border x:Name="TopToolPalette" DockPanel.Dock="Top"
             Padding="8,4"
             Background="{StaticResource PanelBackgroundBrush}"
             BorderBrush="{StaticResource BorderBrush}"
@@ -193,12 +192,7 @@
                         IsChecked="{Binding Toolbox.IsGroundingPointActive, Mode=OneWay}" Command="{Binding AddGroundingPointCommand}">
             <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.WorkGrounding}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="工作地线" /></StackPanel>
           </ToggleButton>
-          <ToggleButton Style="{StaticResource TopToolboxItemStyle}" ToolTip="创建已有线路范围（兼容）"
-                        IsChecked="{Binding Toolbox.IsWorkScopeActive, Mode=OneWay}" Command="{Binding AddWorkScopeCommand}">
-            <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.WorkScope}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="线路范围" /></StackPanel>
-          </ToggleButton>
-          <Button Content="工作票范围" ToolTip="设置隔离边界和实际工作设备"
-                  Click="OnOpenTicketRange" Padding="10,6" Margin="2,0" />
+          <Button Content="工作范围" Click="OnOpenTicketRange" Padding="10,6" Margin="2,0" />
         </StackPanel>
       </ScrollViewer>
     </Border>
@@ -239,7 +233,7 @@
         <ColumnDefinition Width="300" />
       </Grid.ColumnDefinitions>
 
-      <Border Grid.Column="0"
+      <Border x:Name="LeftToolPalette" Grid.Column="0"
               Width="180"
               Padding="10,8"
               BorderThickness="0,0,1,0">
@@ -368,16 +362,8 @@
                 <TextBlock VerticalAlignment="Center" Text="工作地线" />
               </StackPanel>
             </ToggleButton>
-            <ToggleButton Style="{StaticResource ToolboxItemStyle}"
-                          IsChecked="{Binding Toolbox.IsWorkScopeActive, Mode=OneWay}"
-                          Command="{Binding AddWorkScopeCommand}">
-              <StackPanel Orientation="Horizontal">
-                <Path Width="18" Height="18" Margin="0,0,10,0" Data="{StaticResource Icon.WorkScope}"
-                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                      StrokeThickness="1.7" StrokeLineJoin="Round" Stretch="Uniform" />
-                <TextBlock VerticalAlignment="Center" Text="工作范围" />
-              </StackPanel>
-            </ToggleButton>
+            <Button Content="工作范围" Click="OnOpenTicketRange" HorizontalContentAlignment="Left"
+                    Padding="10,7" Margin="0,2,0,0" />
           </StackPanel>
         </ScrollViewer>
       </Border>
@@ -526,7 +512,7 @@
           <ScrollViewer x:Name="TicketRangePanel" DockPanel.Dock="Top" Visibility="Collapsed"
                         Margin="0,0,0,12" MaxHeight="480" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-            <TextBlock Text="工作票范围设置" FontWeight="SemiBold" FontSize="17" />
+            <TextBlock Text="工作范围" FontWeight="SemiBold" FontSize="17" />
             <TextBlock Text="工作内容" Margin="0,8,0,2" />
             <TextBox x:Name="TicketRangeTaskContent" />
             <TextBlock Text="工作对象 / 地点" Margin="0,6,0,2" />
@@ -543,7 +529,9 @@
                     HorizontalAlignment="Left" Margin="0,4,0,4" />
             <ComboBox x:Name="TicketElectricalRangeChoice" DisplayMemberPath="Display"
                       Margin="0,4,0,4" />
-            <Button Content="添加已有线路范围" Click="OnAddTicketElectricalRange"
+            <Button Content="添加已有电气区段" Click="OnAddTicketElectricalRange"
+                    HorizontalAlignment="Left" Margin="0,0,0,8" />
+            <Button Content="新建电气区段" Click="OnBeginAddWorkScope"
                     HorizontalAlignment="Left" Margin="0,0,0,8" />
             <TextBlock x:Name="TicketRangeStatus" TextWrapping="Wrap" Margin="0,2,0,8" />
             <WrapPanel>
@@ -850,7 +838,7 @@
                       Margin="0,0,0,10"
                       Visibility="Collapsed">
             <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
-                       Text="添加工作范围" />
+                       Text="创建电气区段" />
             <TextBlock x:Name="WorkScopePickStateText"
                        Margin="0,4,0,4"
                        Foreground="{StaticResource TextSecondaryBrush}" />
@@ -893,7 +881,7 @@
                      ToolTip="当前版本使用稳定 ID 关联已有工作地线"
                      TextWrapping="Wrap" />
             <WrapPanel>
-              <Button Content="创建工作范围"
+              <Button Content="创建电气区段"
                       Margin="0,0,4,0"
                       Click="OnApplyWorkScope" />
               <Button Content="取消"

@@ -225,7 +225,6 @@ public sealed class DesktopCommandRuntimeTests : IDisposable
                 AddCableTermination = noOp,
                 AddPoleSwitch = noOp,
                 AddGroundingPoint = noOp,
-                AddWorkScope = noOp,
                 ZoomIn = noOp,
                 ZoomOut = noOp,
                 FitDrawing = noOp,

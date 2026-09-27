@@ -46,7 +46,6 @@ public sealed class DesktopUserActionHandlers
     public required Action AddCableTermination { get; init; }
     public required Action AddPoleSwitch { get; init; }
     public required Action AddGroundingPoint { get; init; }
-    public required Action AddWorkScope { get; init; }
     public required Action ZoomIn { get; init; }
     public required Action ZoomOut { get; init; }
     public required Action FitDrawing { get; init; }
@@ -160,11 +159,6 @@ public sealed class DesktopUserActions
             handlers.AddGroundingPoint,
             messages,
             CanStartDrawing);
-        AddWorkScope = Create(
-            "无法添加工作范围",
-            handlers.AddWorkScope,
-            messages,
-            CanStartDrawing);
         ZoomIn = Create("放大失败", handlers.ZoomIn, messages, HasSession);
         ZoomOut = Create("缩小失败", handlers.ZoomOut, messages, HasSession);
         FitDrawing = Create("适合图形失败", handlers.FitDrawing, messages, HasSession);
@@ -202,7 +196,7 @@ public sealed class DesktopUserActions
             Undo, Redo, Copy, Paste, PasteAtCursor, SelectAll, Delete, CancelCurrentOperation,
             Select, CreatePole, CreateRingCabinet, CreateTransformer, CreateCustomerStation,
             CreateOverheadLine, CreateCable,
-            AddCableTermination, AddPoleSwitch, AddGroundingPoint, AddWorkScope,
+            AddCableTermination, AddPoleSwitch, AddGroundingPoint,
             ZoomIn, ZoomOut, FitDrawing, ToggleGrid, TypographySettings,
             RotateLeft, RotateRight, SwitchOperation,
             ReconnectCableStart, ReconnectCableEnd
@@ -234,7 +228,6 @@ public sealed class DesktopUserActions
     public DesktopAction AddCableTermination { get; }
     public DesktopAction AddPoleSwitch { get; }
     public DesktopAction AddGroundingPoint { get; }
-    public DesktopAction AddWorkScope { get; }
     public DesktopAction ZoomIn { get; }
     public DesktopAction ZoomOut { get; }
     public DesktopAction FitDrawing { get; }

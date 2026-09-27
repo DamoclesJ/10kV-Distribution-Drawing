@@ -25,6 +25,7 @@ public partial class WorkTicketWorkspace : UserControl
     private List<IsolationBoundary> _boundaries = [];
     private List<UserTicketFact> _facts = [];
     private bool _binding;
+    private bool _suspendCommandStackRefresh;
 
     public WorkTicketWorkspace()
     {
@@ -48,10 +49,25 @@ public partial class WorkTicketWorkspace : UserControl
     public event Action? SelectionChanged;
     public event Action? RangeEditRequested;
     public WorkTicketSession? SelectedTicket => CurrentTicket();
+    public bool IsRangeEditActive => _suspendCommandStackRefresh;
+    public WorkTicketSession? PendingSetup => CurrentTicket() is { } ticket
+        ? CaptureSetup(ticket)
+        : null;
+
+    public void BeginRangeEdit() => _suspendCommandStackRefresh = true;
+
+    public void CompleteRangeEdit() => _suspendCommandStackRefresh = false;
+
+    internal void ReturnFromRangeEdit(WorkTicketRangeNavigationState navigation)
+    {
+        _suspendCommandStackRefresh = false;
+        navigation.ReturnToTicketWorkspace(CommitPendingEdits, Refresh);
+    }
 
     public void Bind(ProjectRuntimeSession? session)
     {
         if (_session is not null) _session.CommandStack.StateChanged -= OnCommandStateChanged;
+        _suspendCommandStackRefresh = false;
         _session = session;
         _ticketId = null;
         if (_session is not null) _session.CommandStack.StateChanged += OnCommandStateChanged;
@@ -209,7 +225,10 @@ public partial class WorkTicketWorkspace : UserControl
 
     private WorkTicketSession? CurrentTicket() => _session?.PersistenceSession.WorkTickets.Selected(_ticketId);
 
-    private void OnCommandStateChanged(object? sender, EventArgs e) => Refresh();
+    private void OnCommandStateChanged(object? sender, EventArgs e)
+    {
+        if (!_suspendCommandStackRefresh) Refresh();
+    }
 
     private void OnTicketSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
