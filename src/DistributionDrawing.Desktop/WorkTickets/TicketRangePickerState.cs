@@ -6,8 +6,7 @@ internal enum TicketRangePickMode
 {
     Idle,
     PickingBoundaryDevice,
-    ChoosingBoundarySide,
-    PickingWorkScopeEquipment
+    ChoosingBoundarySide
 }
 
 internal sealed record TicketBoundarySlot(Guid? DeviceId = null, BoundarySide? Side = null,
@@ -66,12 +65,6 @@ internal sealed class TicketRangePickerState
     public void SideChosen()
     {
         if (Mode == TicketRangePickMode.ChoosingBoundarySide) Reset();
-    }
-
-    public void BeginEquipment()
-    {
-        Reset();
-        Mode = TicketRangePickMode.PickingWorkScopeEquipment;
     }
 
     public (int Index, TicketBoundarySlot Previous)? Cancel()

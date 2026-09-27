@@ -7,7 +7,6 @@
       <TextBlock Text="配电第一种工作票" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,6,0,16"/>
       <DockPanel Margin="0,0,0,12">
         <ComboBox x:Name="TicketList" DockPanel.Dock="Right" Width="230" DisplayMemberPath="Display" SelectionChanged="OnTicketSelectionChanged"/>
-        <Button Content="创建工作票" Click="OnCreate" Padding="14,6" Margin="0,0,8,0"/>
         <Button Content="分析 / 重新分析" Click="OnAnalyze" Padding="14,6" Margin="0,0,8,0"/>
         <Button Content="保存当前编辑" Click="OnSaveEdit" Padding="14,6" Margin="0,0,8,0"/>
         <Button Content="复制六栏文字" Click="OnCopyAll" Padding="14,6"/>
@@ -16,18 +15,18 @@
         <StackPanel>
           <TextBlock Text="工作票准备" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,8"/>
           <TextBlock Text="工作内容"/>
-          <TextBox x:Name="TaskContent" Margin="0,2,0,8"/>
+          <TextBox x:Name="TaskContent" Margin="0,2,0,8" IsReadOnly="True"/>
           <TextBlock Text="工作对象 / 地点"/>
-          <TextBox x:Name="TaskObject" Margin="0,2,0,8"/>
-          <TextBlock Text="隔离边界和实际工作范围请在图纸页的“工作范围”设置；下方为同一工作票的高级编辑。"
+          <TextBox x:Name="TaskObject" Margin="0,2,0,8" IsReadOnly="True"/>
+          <Button Content="返回图纸修改工作范围" Click="OnRequestRangeEdit"
+                  HorizontalAlignment="Left" Margin="0,0,0,8"/>
+          <TextBlock Text="停电边界和工作任务请在图纸页的“工作范围”设置；下方为同一工作票的高级编辑。"
                      TextWrapping="Wrap" Margin="0,0,0,6" />
           <TextBlock x:Name="RangeSummary" TextWrapping="Wrap" Margin="0,0,0,8" />
           <Expander Header="高级范围编辑（可选）" IsExpanded="False" Margin="0,0,0,8">
             <StackPanel>
           <TextBlock Text="停电 / 隔离边界（只读；由图纸范围面板统一校验和修改）"/>
           <ListBox x:Name="BoundaryList" Height="66" DisplayMemberPath="Display" IsHitTestVisible="False"/>
-          <Button Content="返回图纸修改工作范围" Click="OnRequestRangeEdit"
-                  HorizontalAlignment="Left" Margin="0,4,0,10"/>
           <TextBlock Text="实际工作范围（选择已有电气区段）"/>
           <ListBox x:Name="ScopeList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,10"/>
           <TextBlock Text="实际工作设备（可直接选择已有设备，无需创建虚拟线路）"/>

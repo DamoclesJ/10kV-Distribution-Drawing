@@ -2,7 +2,6 @@ using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
-using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using Xunit;
 
@@ -35,11 +34,11 @@ public sealed class WorkTicketRangeSetupTests
         };
 
         WorkTicketSession reordered = WorkTicketRangeSetup.Confirm(drawing, ticket,
-            [boundaryB, boundaryA], ticket.WorkScopeItems);
+            [boundaryB, boundaryA]);
         WorkTicketSession removed = WorkTicketRangeSetup.Confirm(drawing, reordered,
-            [boundaryA], ticket.WorkScopeItems);
+            [boundaryA]);
         WorkTicketSession replaced = WorkTicketRangeSetup.Confirm(drawing, removed,
-            [boundaryB], ticket.WorkScopeItems);
+            [boundaryB]);
 
         Assert.Equal(switches[1].Id, Assert.Single(reordered.UserFacts[0].References).Id);
         Assert.Equal(switches[1].Id, Assert.Single(removed.UserFacts[0].References).Id);
@@ -60,8 +59,7 @@ public sealed class WorkTicketRangeSetupTests
         WorkTicketSession Ticket(params IsolationBoundary[] boundaries) => WorkTicketSession.Create() with
         {
             Task = new WorkTask("更换开关", "一号柜"),
-            IsolationBoundaries = boundaries,
-            WorkScopeItems = [new WorkScopeItem(WorkScopeItemKind.Equipment, cabinet.Id)]
+            IsolationBoundaries = boundaries
         };
         var analyzer = new WorkTicketAnalyzer();
         IsolationBoundary validA = Resolve(switches[0]);
@@ -101,6 +99,14 @@ public sealed class WorkTicketRangeSetupTests
         Assert.NotNull(noManualLiveOrGrounding.Draft);
         Assert.Equal(SectionCompletion.NeedsConfirmation,
             noManualLiveOrGrounding.Draft!.Section("6.4").Completion);
+
+        WorkTicketSession emptyTask = analyzer.Analyze(drawing, WorkTicketSession.Create() with
+        {
+            IsolationBoundaries = [validA]
+        });
+        Assert.NotNull(emptyTask.Draft);
+        Assert.Equal("", emptyTask.Task.Content);
+        Assert.Equal("", emptyTask.Task.WorkObject);
     }
 
     [Fact]
@@ -122,22 +128,33 @@ public sealed class WorkTicketRangeSetupTests
         };
         WorkScopeItem equipment = new(WorkScopeItemKind.Equipment, cabinet.Id);
         WorkTicketSession first = WorkTicketRangeSetup.Confirm(drawing, ticket,
-            boundaries.Cast<IsolationBoundary?>().ToArray(), [equipment]);
+            boundaries.Cast<IsolationBoundary?>().ToArray());
         Assert.Equal(switches.Select(device => device.Id),
             first.IsolationBoundaries.Select(item => item.DeviceId));
         Assert.Equal(SectionCompletion.Stale, first.Draft!.Section("6.1").Completion);
 
+        WorkTicketSession orderedTicket = first with
+        {
+            IsolationBoundaries = [boundaries[0], boundaries[1]],
+            Draft = new WorkTicketDraft([new SectionDraft("6.1", [], SectionCompletion.Completed)])
+        };
+        WorkTicketSession reorderedTicket = WorkTicketRangeSetup.Confirm(drawing, orderedTicket,
+            [boundaries[1], boundaries[0]]);
+        Assert.Equal([boundaries[1], boundaries[0]], reorderedTicket.IsolationBoundaries);
+        Assert.Equal(SectionCompletion.Stale, reorderedTicket.Draft!.Section("6.1").Completion);
+
         IsolationBoundary[] replacement = [boundaries[4], boundaries[0], boundaries[2], boundaries[3]];
         WorkTicketSession second = WorkTicketRangeSetup.Confirm(drawing, first,
-            replacement.Cast<IsolationBoundary?>().ToArray(), [equipment]);
+            replacement.Cast<IsolationBoundary?>().ToArray());
         Assert.Equal(replacement, second.IsolationBoundaries);
         Assert.Equal("AA", WorkTicketRangeSetup.SlotName(26));
         Assert.Same(second, WorkTicketRangeSetup.Confirm(drawing, second,
-            replacement.Cast<IsolationBoundary?>().ToArray(), [equipment]));
+            replacement.Cast<IsolationBoundary?>().ToArray()));
+        Assert.Equal(ticket.WorkScopeItems, first.WorkScopeItems);
     }
 
     [Fact]
-    public void SideOrEquipmentChangeInvalidatesCompletedDraftAndUnresolvedSideCannotConfirm()
+    public void SideChangeInvalidatesCompletedDraftAndUnresolvedSideCannotConfirm()
     {
         (DrawingDocument drawing, RingCabinet cabinet, SwitchDevice[] switches) = Cabinet();
         Assert.True(WorkTicketRangeSetup.TryResolve(drawing, switches[0].Id, BoundarySide.Line,
@@ -148,21 +165,15 @@ public sealed class WorkTicketRangeSetupTests
         WorkTicketSession ticket = WorkTicketSession.Create() with
         {
             IsolationBoundaries = [line!],
-            WorkScopeItems = [new WorkScopeItem(WorkScopeItemKind.Equipment, cabinet.Id)],
             Draft = new WorkTicketDraft([new SectionDraft("6.1", [], SectionCompletion.Completed)])
         };
         WorkTicketSession changedSide = WorkTicketRangeSetup.Confirm(drawing, ticket,
-            [bus], ticket.WorkScopeItems);
+            [bus]);
         Assert.Equal(SectionCompletion.Stale, changedSide.Draft!.Section("6.1").Completion);
-
-        WorkTicketSession changedEquipment = WorkTicketRangeSetup.Confirm(drawing, ticket,
-            [line], [new WorkScopeItem(WorkScopeItemKind.Equipment, switches[1].Id)]);
-        Assert.Equal(SectionCompletion.Stale, changedEquipment.Draft!.Section("6.1").Completion);
         Assert.Throws<InvalidOperationException>(() => WorkTicketRangeSetup.Confirm(drawing,
-            ticket, [null], ticket.WorkScopeItems));
+            ticket, [null]));
         Assert.Throws<InvalidOperationException>(() => WorkTicketRangeSetup.Confirm(drawing,
-            ticket, [new IsolationBoundary(switches[0].Id, BoundarySide.Unknown)],
-            ticket.WorkScopeItems));
+            ticket, [new IsolationBoundary(switches[0].Id, BoundarySide.Unknown)]));
     }
 
     [Fact]
@@ -186,8 +197,7 @@ public sealed class WorkTicketRangeSetupTests
             WorkTicketSession.Create() with
             {
                 Task = new WorkTask("更换隔离刀闸", "P02杆"),
-                IsolationBoundaries = [smaller],
-                WorkScopeItems = [new WorkScopeItem(WorkScopeItemKind.Equipment, isolator.Id)]
+                IsolationBoundaries = [smaller]
             });
         Assert.NotNull(analyzed.Draft);
     }
@@ -223,19 +233,15 @@ public sealed class WorkTicketRangeSetupTests
     }
 
     [Fact]
-    public void ExistingElectricalRangeRemainsAValidActualWorkScope()
+    public void ConfirmDoesNotCreateAnElectricalRangeOrRequireOne()
     {
-        (DrawingDocument drawing, RingCabinet cabinet, SwitchDevice[] switches) = Cabinet();
-        WorkScope range = WorkScope.Create(Guid.NewGuid(),
-            new BoundaryPoint(cabinet.Id, cabinet.Intervals[0].CableTerminalId!.Value, "线路侧"),
-            new BoundaryPoint(cabinet.Id, cabinet.Intervals[1].CableTerminalId!.Value, "线路侧"),
-            "线路区段", []);
-        drawing.AddWorkScope(range);
+        (DrawingDocument drawing, _, SwitchDevice[] switches) = Cabinet();
         Assert.True(WorkTicketRangeSetup.TryResolve(drawing, switches[0].Id,
             BoundarySide.Line, out IsolationBoundary? boundary, out _));
         WorkTicketSession result = WorkTicketRangeSetup.Confirm(drawing, WorkTicketSession.Create(),
-            [boundary], [new WorkScopeItem(WorkScopeItemKind.ElectricalRange, range.WorkScopeId)]);
-        Assert.Equal([range.WorkScopeId], result.WorkScopeIds);
+            [boundary]);
+        Assert.Empty(drawing.WorkScopes);
+        Assert.Empty(result.WorkScopeIds);
         Assert.Empty(result.WorkScopeItems);
     }
 

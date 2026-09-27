@@ -111,32 +111,17 @@ public static class WorkTicketRangeSetup
     }
 
     public static WorkTicketSession Confirm(DrawingDocument drawing, WorkTicketSession ticket,
-        IReadOnlyList<IsolationBoundary?> slots, IReadOnlyList<WorkScopeItem> workScopes)
+        IReadOnlyList<IsolationBoundary?> slots)
     {
         if (slots.Count == 0 || slots.Any(item => item is null))
             throw new InvalidOperationException("请完成至少一个隔离边界。");
         IsolationBoundary[] boundaries = slots.Select(item => item!).ToArray();
         ValidateBoundaries(drawing, boundaries);
-        if (workScopes.Count == 0 || workScopes.Distinct().Count() != workScopes.Count ||
-            workScopes.Any(item => item.Kind switch
-            {
-                WorkScopeItemKind.Equipment => !drawing.Devices.Any(device => device.Id == item.TargetId),
-                WorkScopeItemKind.ElectricalRange => !drawing.WorkScopes.Any(scope => scope.WorkScopeId == item.TargetId),
-                _ => true
-            }))
-            throw new InvalidOperationException("请选择有效的实际工作范围。");
-        Guid[] ranges = workScopes.Where(item => item.Kind == WorkScopeItemKind.ElectricalRange)
-            .Select(item => item.TargetId).ToArray();
-        WorkScopeItem[] equipment = workScopes.Where(item => item.Kind == WorkScopeItemKind.Equipment)
-            .ToArray();
-        if (ticket.IsolationBoundaries.SequenceEqual(boundaries) &&
-            ticket.WorkScopeIds.SequenceEqual(ranges) && ticket.WorkScopeItems.SequenceEqual(equipment))
+        if (ticket.IsolationBoundaries.SequenceEqual(boundaries))
             return ticket;
         return (ticket with
         {
-            IsolationBoundaries = boundaries,
-            WorkScopeIds = ranges,
-            WorkScopeItems = equipment
+            IsolationBoundaries = boundaries
         }).Invalidate();
     }
 

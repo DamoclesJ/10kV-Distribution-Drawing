@@ -508,9 +508,9 @@
           <Style TargetType="ComboBox" BasedOn="{StaticResource InspectorEditorStyle}" />
           <Style TargetType="Button" BasedOn="{StaticResource InspectorButtonStyle}" />
         </Border.Resources>
-        <DockPanel>
-          <ScrollViewer x:Name="TicketRangePanel" DockPanel.Dock="Top" Visibility="Collapsed"
-                        Margin="0,0,0,12" MaxHeight="480" VerticalScrollBarVisibility="Auto">
+        <Grid>
+          <ScrollViewer x:Name="TicketRangePanel" Visibility="Collapsed"
+                        VerticalScrollBarVisibility="Auto">
             <StackPanel>
             <TextBlock Text="工作范围" FontWeight="SemiBold" FontSize="17" />
             <TextBlock Text="工作内容" Margin="0,8,0,2" />
@@ -523,23 +523,11 @@
               <Button Content="－" Click="OnRemoveTicketBoundarySlot" Margin="0,0,4,0" />
               <Button Content="＋" Click="OnAddTicketBoundarySlot" />
             </WrapPanel>
-            <TextBlock Text="实际工作范围" Margin="0,4,0,4" />
-            <StackPanel x:Name="TicketScopeRows" />
-            <Button Content="从图纸选择实际工作设备" Click="OnPickTicketEquipment"
-                    HorizontalAlignment="Left" Margin="0,4,0,4" />
-            <ComboBox x:Name="TicketElectricalRangeChoice" DisplayMemberPath="Display"
-                      Margin="0,4,0,4" />
-            <Button Content="添加已有电气区段" Click="OnAddTicketElectricalRange"
-                    HorizontalAlignment="Left" Margin="0,0,0,8" />
-            <Button Content="新建电气区段" Click="OnBeginAddWorkScope"
-                    HorizontalAlignment="Left" Margin="0,0,0,8" />
             <TextBlock x:Name="TicketRangeStatus" TextWrapping="Wrap" Margin="0,2,0,8" />
-            <WrapPanel>
-              <Button Content="确认本次工作范围" Click="OnConfirmTicketRange" Margin="0,0,4,0" />
-              <Button Content="取消" Click="OnCancelTicketRange" />
-            </WrapPanel>
+            <Button Content="确定" Click="OnConfirmTicketRange" HorizontalAlignment="Right" />
             </StackPanel>
           </ScrollViewer>
+          <DockPanel x:Name="InspectorContent">
           <TextBlock DockPanel.Dock="Top"
                      FontSize="{StaticResource Typography.Title}"
                      FontWeight="SemiBold"
@@ -951,7 +939,8 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
           </ScrollViewer>
-        </DockPanel>
+          </DockPanel>
+        </Grid>
       </Border>
     </Grid>
       <tickets:WorkTicketWorkspace x:Name="TicketWorkspace" Visibility="Collapsed" />

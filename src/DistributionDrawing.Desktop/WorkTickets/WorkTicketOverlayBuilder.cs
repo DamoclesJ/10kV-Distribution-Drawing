@@ -5,6 +5,26 @@ using DistributionDrawing.Rendering.Wpf.Scene;
 
 namespace DistributionDrawing.Desktop.WorkTickets;
 
+internal sealed record WorkTicketRangeOwner(Guid ProjectId, Guid? TicketId)
+{
+    public bool Matches(Guid? projectId, Guid? ticketId) =>
+        projectId == ProjectId && ticketId == TicketId;
+}
+
+internal static class WorkRangeCanvasActivation
+{
+    public static bool ActivateOrdinaryObject(
+        TicketRangePickMode pickerMode,
+        SelectionReference? target,
+        Action showInspector)
+    {
+        ArgumentNullException.ThrowIfNull(showInspector);
+        if (pickerMode != TicketRangePickMode.Idle || target is null) return false;
+        showInspector();
+        return true;
+    }
+}
+
 // Presentation only: colors explicit ticket setup facts; it never derives electrical state.
 internal static class WorkTicketOverlayBuilder
 {
@@ -23,6 +43,30 @@ internal static class WorkTicketOverlayBuilder
             if (part.Origin == FactOrigin.ModelFact)
                 foreach (TicketReference reference in part.References)
                     if (ToSelection(reference) is { } selected) Add(elements, index, selected, Colors.Firebrick);
+        return elements;
+    }
+
+    public static IReadOnlyList<SceneElement> BuildBoundarySelection(
+        SelectionHitTestIndex index, WorkTicketRangeOwner? owner,
+        Guid? currentProjectId, Guid? currentTicketId,
+        IReadOnlyList<IsolationBoundary?> boundaries)
+    {
+        if (owner is null || !owner.Matches(currentProjectId, currentTicketId)) return [];
+        List<SceneElement> elements = [];
+        for (int slot = 0; slot < boundaries.Count; slot++)
+        {
+            if (boundaries[slot] is not { } boundary) continue;
+            SelectionReference reference = new(SelectionTargetKind.Device, boundary.DeviceId);
+            SelectionHitTestEntry? entry = index.FindAll(reference).FirstOrDefault();
+            if (entry is null) continue;
+            DocumentRect bounds = entry.Bounds;
+            elements.Add(new SceneRectangle(new DocumentRect(bounds.XMillimeters - 3,
+                bounds.YMillimeters - 3, bounds.WidthMillimeters + 6, bounds.HeightMillimeters + 6),
+                Colors.SteelBlue, 1.8));
+            elements.Add(new SceneText(new DocumentPoint(bounds.XMillimeters - 3,
+                bounds.YMillimeters - 3), $"[{WorkTicketRangeSetup.SlotName(slot)}]",
+                Colors.SteelBlue, 4.5));
+        }
         return elements;
     }
 

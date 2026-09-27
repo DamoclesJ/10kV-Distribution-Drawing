@@ -254,7 +254,7 @@ public sealed class WorkTicketAnalyzerTests
     }
 
     [Fact]
-    public void EquipmentWorkScopeIsAValidTypedTargetAndChangesAnalysisFingerprint()
+    public void EquipmentWorkScopeIsPreservedButIsNotAnAnalyzePrerequisiteOrInput()
     {
         (DrawingDocument drawing, WorkTicketSession ticket) = ReadyTicket();
         Guid equipmentId = drawing.Devices.First().Id;
@@ -265,11 +265,14 @@ public sealed class WorkTicketAnalyzerTests
 
         WorkTicketSession analyzed = new WorkTicketAnalyzer().Analyze(drawing, scoped);
         Assert.Equal(equipmentId, Assert.Single(analyzed.WorkScopeItems).TargetId);
-        Assert.False(new WorkTicketAnalyzer().IsStale(drawing, analyzed));
-        Assert.True(new WorkTicketAnalyzer().IsStale(drawing, analyzed with { WorkScopeItems = [] }));
+        var analyzer = new WorkTicketAnalyzer();
+        Assert.False(analyzer.IsStale(drawing, analyzed));
+        Assert.False(analyzer.IsStale(drawing, analyzed with { WorkScopeItems = [] }));
 
         var root = new WorkTicketDataRoot(drawing.Id, [scoped]);
         WorkTicketReferenceGuard.Validate(drawing, root);
+        drawing.RemoveWorkScope(analyzed.WorkScopeIds.Single());
+        Assert.False(analyzer.IsStale(drawing, analyzed));
     }
 
     [Fact]

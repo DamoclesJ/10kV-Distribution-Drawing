@@ -13,7 +13,7 @@ public sealed class WorkTicketRangeCommandTests
     [Fact]
     public void RangeChangeStalesDraftAndUndoRedoRestoresExpectedCompletion()
     {
-        (DrawingDocument drawing, RingCabinet cabinet, SwitchDevice[] switches) = Cabinet();
+        (DrawingDocument drawing, _, SwitchDevice[] switches) = Cabinet();
         IsolationBoundary[] boundaries = switches.Select(device =>
         {
             Assert.True(WorkTicketRangeSetup.TryResolve(drawing, device.Id, BoundarySide.Line,
@@ -23,13 +23,11 @@ public sealed class WorkTicketRangeCommandTests
         var tickets = new WorkTicketDataRoot(drawing.Id);
         var stack = new CommandStack();
         WorkTask task = new("更换并验收测试", "一号环网柜");
-        WorkScopeItem actualScope = new(WorkScopeItemKind.Equipment, cabinet.Id);
         WorkTicketSession analyzed = new WorkTicketAnalyzer().Analyze(drawing,
             WorkTicketSession.Create() with
             {
                 Task = task,
-                IsolationBoundaries = [boundaries[0], boundaries[1]],
-                WorkScopeItems = [actualScope]
+                IsolationBoundaries = [boundaries[0], boundaries[1]]
             });
         SectionDraft[] completedSections = analyzed.Draft!.Sections.Select(section =>
             section.Code == "6.1" ? section with { Completion = SectionCompletion.Completed } : section).ToArray();
@@ -37,7 +35,7 @@ public sealed class WorkTicketRangeCommandTests
         tickets.Add(before);
 
         WorkTicketSession stale = WorkTicketRangeCommit.Apply(drawing, tickets, stack, before.Id,
-            [boundaries[1]], [actualScope], task);
+            [boundaries[1]], task);
         Assert.Equal(SectionCompletion.Stale, stale.Draft!.Section("6.1").Completion);
         Assert.True(stack.Undo());
         Assert.Same(before, tickets.Selected(before.Id));
@@ -50,7 +48,7 @@ public sealed class WorkTicketRangeCommandTests
     [Fact]
     public void ConfirmRangeCreatesAndUpdatesTheSameTicketWithUndoRedo()
     {
-        (DrawingDocument drawing, RingCabinet cabinet, SwitchDevice[] switches) = Cabinet();
+        (DrawingDocument drawing, _, SwitchDevice[] switches) = Cabinet();
         IsolationBoundary[] boundaries = switches.Take(2).Select(device =>
         {
             Assert.True(WorkTicketRangeSetup.TryResolve(drawing, device.Id, BoundarySide.Line,
@@ -59,7 +57,6 @@ public sealed class WorkTicketRangeCommandTests
         }).ToArray();
         var tickets = new WorkTicketDataRoot(drawing.Id);
         var stack = new CommandStack();
-        WorkScopeItem actualScope = new(WorkScopeItemKind.Equipment, cabinet.Id);
         WorkTask task = new("更换并验收测试", "一号环网柜");
 
         var pendingSlots = new TicketBoundarySlotCollection();
@@ -70,12 +67,11 @@ public sealed class WorkTicketRangeCommandTests
         Assert.False(stack.CanUndo);
         Assert.Throws<InvalidOperationException>(() => WorkTicketRangeCommit.Apply(drawing,
             tickets, stack, null,
-            [boundaries[0] with { TerminalId = switches[0].FirstTerminalId }],
-            [actualScope], task));
+            [boundaries[0] with { TerminalId = switches[0].FirstTerminalId }], task));
         Assert.Empty(tickets.Tickets);
         Assert.False(stack.CanUndo);
         WorkTicketSession created = WorkTicketRangeCommit.Apply(drawing, tickets, stack, null,
-            boundaries.Cast<IsolationBoundary?>().ToArray(), [actualScope], task);
+            boundaries.Cast<IsolationBoundary?>().ToArray(), task);
 
         Assert.Same(created, tickets.Selected(created.Id));
         Assert.Equal(task, created.Task);
@@ -86,11 +82,11 @@ public sealed class WorkTicketRangeCommandTests
             created.IsolationBoundaries.Select(item => item.Side));
         Assert.Equal(boundaries.Select(item => item.TerminalId),
             created.IsolationBoundaries.Select(item => item.TerminalId));
-        Assert.Equal(cabinet.Id, Assert.Single(created.EquipmentScopeIds));
+        Assert.Empty(created.EquipmentScopeIds);
         Assert.Single(stack.History);
 
         WorkTicketSession updated = WorkTicketRangeCommit.Apply(drawing, tickets, stack, created.Id,
-            [boundaries[1]], [actualScope], task with { Content = "仅更换" });
+            [boundaries[1]], task with { Content = "仅更换" });
         Assert.Same(updated, tickets.Selected(created.Id));
         Assert.Equal(created.Id, updated.Id);
         Assert.Single(updated.IsolationBoundaries);

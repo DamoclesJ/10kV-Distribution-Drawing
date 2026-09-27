@@ -28,7 +28,7 @@ public sealed class TicketRangePickerStateTests
     }
 
     [Fact]
-    public void EquipmentPickerIsExclusiveAndSuccessfulSideChoiceReturnsToIdle()
+    public void SideChoiceEndsTheOnlyBoundaryPicker()
     {
         var state = new TicketRangePickerState();
         state.BeginBoundary(0, new TicketBoundarySlot());
@@ -36,11 +36,7 @@ public sealed class TicketRangePickerStateTests
         state.SideChosen();
         Assert.Equal(TicketRangePickMode.Idle, state.Mode);
 
-        state.BeginEquipment();
-        Assert.Equal(TicketRangePickMode.PickingWorkScopeEquipment, state.Mode);
         Assert.Null(state.BoundaryIndex);
-        Assert.Null(state.Cancel());
-        Assert.Equal(TicketRangePickMode.Idle, state.Mode);
     }
 
     [Fact]

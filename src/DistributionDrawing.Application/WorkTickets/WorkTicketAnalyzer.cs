@@ -338,32 +338,10 @@ public sealed class WorkTicketAnalyzer(
     {
         ArgumentNullException.ThrowIfNull(drawing);
         ArgumentNullException.ThrowIfNull(ticket);
-        if (string.IsNullOrWhiteSpace(ticket.Task.Content) || string.IsNullOrWhiteSpace(ticket.Task.WorkObject))
-            throw new InvalidOperationException("先填写工作内容和工作对象。");
         WorkTicketRangeSetup.ValidateBoundaries(drawing, ticket.IsolationBoundaries);
-        if (ticket.WorkScopeIds.Count == 0 && ticket.WorkScopeItems.Count == 0)
-            throw new InvalidOperationException("先设置有效的实际工作范围。");
         if (ticket.UserFacts.Any(item => item.Kind == "OtherReversible" && item.Confirmed &&
                 string.IsNullOrWhiteSpace(item.RestorationText)))
             throw new InvalidOperationException("可恢复措施需要填写对应的现场恢复文字。");
-        foreach (Guid scopeId in ticket.WorkScopeIds)
-            if (!drawing.WorkScopes.Any(scope => scope.WorkScopeId == scopeId))
-                throw new InvalidOperationException($"工作范围 {scopeId} 已不存在。");
-        foreach (WorkScopeItem item in ticket.WorkScopeItems)
-        {
-            if (item.TargetId == Guid.Empty || !Enum.IsDefined(item.Kind))
-                throw new InvalidOperationException("实际工作范围引用无效。");
-            bool exists = item.Kind switch
-            {
-                WorkScopeItemKind.Equipment => drawing.Devices.Any(device => device.Id == item.TargetId),
-                WorkScopeItemKind.ElectricalRange => drawing.WorkScopes.Any(scope => scope.WorkScopeId == item.TargetId),
-                _ => false
-            };
-            if (!exists) throw new InvalidOperationException($"工作范围目标 {item.TargetId} 已不存在。");
-        }
-        foreach (Guid deviceId in ticket.EquipmentScopeIds)
-            if (!drawing.Devices.Any(device => device.Id == deviceId))
-                throw new InvalidOperationException($"工作设备 {deviceId} 已不存在。");
 
         MeasureFact[] switching = ticket.IsolationBoundaries
             .SelectMany(boundary => _rules.Switching(drawing, boundary)
@@ -501,8 +479,6 @@ public sealed class WorkTicketAnalyzer(
         StringBuilder value = new();
         value.Append(ticket.Task).Append('|');
         foreach (IsolationBoundary item in ticket.IsolationBoundaries) value.Append(item).Append('|');
-        foreach (Guid id in ticket.WorkScopeIds) value.Append(id).Append('|');
-        foreach (WorkScopeItem item in ticket.WorkScopeItems) value.Append(item.Kind).Append(':').Append(item.TargetId).Append('|');
         foreach (Guid id in ticket.GroundingPointIds) value.Append(id).Append('|');
         foreach (UserTicketFact item in ticket.UserFacts)
         {
@@ -529,8 +505,6 @@ public sealed class WorkTicketAnalyzer(
                 .Append(item.LineSide).Append(item.PlacementSide).Append(item.AdjacentEndpoint);
         foreach (OverheadLine item in drawing.OverheadLines.OrderBy(item => item.ConnectionId))
             value.Append(item.ConnectionId).Append(item.ContinuationState).Append(item.ContinuationTerminalId);
-        foreach (WorkScope item in drawing.WorkScopes.OrderBy(item => item.WorkScopeId))
-            value.Append(item.WorkScopeId).Append(item.StartBoundary).Append(item.EndBoundary).Append(item.Description);
         foreach (GroundingPoint item in drawing.GroundingPoints.OrderBy(item => item.GroundingPointId))
             value.Append(item.GroundingPointId).Append(item.Target).Append(item.Location).Append(item.Number);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.ToString())));

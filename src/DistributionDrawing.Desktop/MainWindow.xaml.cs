@@ -1007,15 +1007,10 @@ public partial class MainWindow : Window
     private void OnShowTicketWorkspace(object sender, RoutedEventArgs e)
     {
         CancelTicketRangePicking();
-        DiscardTicketRangeBuffer();
         TicketRangePanel.Visibility = Visibility.Collapsed;
-        if (TicketWorkspace.IsRangeEditActive)
-            TicketWorkspace.ReturnFromRangeEdit(_workTicketRangeNavigation);
-        else
-        {
-            TicketWorkspace.CommitPendingEdits();
-            TicketWorkspace.Refresh();
-        }
+        InspectorContent.Visibility = Visibility.Visible;
+        TicketWorkspace.CommitPendingEdits();
+        TicketWorkspace.Refresh();
         DrawingWorkspace.Visibility = Visibility.Collapsed;
         TicketWorkspace.Visibility = Visibility.Visible;
     }
@@ -1114,7 +1109,6 @@ public partial class MainWindow : Window
         object? sender,
         ActiveDocumentSessionChangedEventArgs e)
     {
-        _workTicketRangeNavigation.Reset();
         DiscardTicketRangeBuffer();
         TicketRangePanel.Visibility = Visibility.Collapsed;
         TicketWorkspace.CommitPendingEdits();
@@ -1309,6 +1303,7 @@ public partial class MainWindow : Window
         WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
         WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
         TicketRangePanel.Visibility = Visibility.Collapsed;
+        InspectorContent.Visibility = Visibility.Visible;
         CancelTicketRangePicking();
         DiscardTicketRangeBuffer();
         DrawingSurface.Clear();
@@ -1400,7 +1395,6 @@ public partial class MainWindow : Window
                     "工作范围：请在右侧选择专业电气侧，Esc 取消",
                 _ when _ticketRangePicker.Mode == TicketRangePickMode.PickingBoundaryDevice =>
                     $"工作范围：请选择 Boundary {WorkTicketRangeSetup.SlotName(_ticketRangePicker.BoundaryIndex!.Value)} 的设备，Esc 取消",
-                _ when _ticketRangePicker.Mode == TicketRangePickMode.PickingWorkScopeEquipment => "工作范围：请选择实际工作设备，Esc 取消",
                 _ when _workScopePickState is WorkScopePickState.PickingBoundaryA =>
                     "添加工作范围：请选择边界 A",
                 _ when _workScopePickState is WorkScopePickState.PickingBoundaryB =>
@@ -2117,7 +2111,7 @@ public partial class MainWindow : Window
             {
                 CancelTicketRangePicking();
                 TicketRangePanel.Visibility = Visibility.Collapsed;
-                DiscardTicketRangeBuffer();
+                InspectorContent.Visibility = Visibility.Visible;
             }
             UpdateCanvasStatus();
         }
@@ -2236,15 +2230,6 @@ public partial class MainWindow : Window
             _commandStack.ExecuteCommand(addCommand);
             ResetWorkScopePick();
             RefreshDrawingScene();
-            if (TicketRangePanel.Visibility == Visibility.Visible)
-            {
-                _ticketScopeItems.Add(new WorkScopeItem(WorkScopeItemKind.ElectricalRange,
-                    addCommand.After.WorkScopeId));
-                TicketElectricalRangeChoice.ItemsSource = _activeSource.Document.WorkScopes
-                    .Select(scope => new TicketRangeChoice(scope.WorkScopeId, scope.Description)).ToArray();
-                RefreshTicketRangePanel();
-                TicketRangeStatus.Text = "电气区段已加入本次工作范围；确认后写入工作票。";
-            }
             _selectionManager.Select(
                 new SelectionReference(
                     SelectionTargetKind.WorkScope,
@@ -2425,15 +2410,25 @@ public partial class MainWindow : Window
             return;
         }
 
+        SelectionHitTestEntry? hit = _currentScene.HitTestIndex.HitTestEntry(
+            documentPoint,
+            _viewport.Transform.ViewDistanceToDocument(4));
+        SelectionReference? target = hit?.Target;
+        WorkRangeCanvasActivation.ActivateOrdinaryObject(
+            _ticketRangePicker.Mode,
+            target,
+            () =>
+            {
+                TicketRangePanel.Visibility = Visibility.Collapsed;
+                InspectorContent.Visibility = Visibility.Visible;
+            });
+
         if (e.ClickCount == 2)
         {
-            SelectionReference? doubleClickTarget = _currentScene.HitTestIndex.HitTest(
-                documentPoint,
-                _viewport.Transform.ViewDistanceToDocument(4));
-            if (doubleClickTarget?.Kind == SelectionTargetKind.Device &&
-                _selectionResolver.Resolve(doubleClickTarget)?.SwitchDevice is not null)
+            if (target?.Kind == SelectionTargetKind.Device &&
+                _selectionResolver.Resolve(target)?.SwitchDevice is not null)
             {
-                _selectionManager.Select(doubleClickTarget);
+                _selectionManager.Select(target);
                 SwitchOperationResult result = _switchOperation.ToggleSelected();
                 if (!result.IsSuccess)
                 {
@@ -2445,10 +2440,6 @@ public partial class MainWindow : Window
             }
         }
 
-        SelectionHitTestEntry? hit = _currentScene.HitTestIndex.HitTestEntry(
-            documentPoint,
-            _viewport.Transform.ViewDistanceToDocument(4));
-        SelectionReference? target = hit?.Target;
         bool shiftPressed =
             (System.Windows.Input.Keyboard.Modifiers &
              System.Windows.Input.ModifierKeys.Shift) != 0;
@@ -2761,6 +2752,12 @@ public partial class MainWindow : Window
 
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
+        if (_ticketRangePicker.Mode == TicketRangePickMode.Idle &&
+            TicketRangePanel.Visibility == Visibility.Visible)
+        {
+            TicketRangePanel.Visibility = Visibility.Collapsed;
+            InspectorContent.Visibility = Visibility.Visible;
+        }
         DrawingPerformanceTrace.PhaseOperation selectionRefresh =
             DrawingPerformanceTrace.Measure("InspectorSelectionRefresh");
         if (_intervalPreview.TargetIntervalId != _selectionManager.Selected?.ObjectId)
@@ -3980,6 +3977,13 @@ public partial class MainWindow : Window
                 ticket = ticket with { Analysis = null };
             elements.AddRange(WorkTicketOverlayBuilder.Build(_currentScene.HitTestIndex, ticket));
         }
+        if (_ticketRangeDraftOwner is { } owner)
+            elements.AddRange(WorkTicketOverlayBuilder.BuildBoundarySelection(
+                _currentScene.HitTestIndex,
+                owner,
+                _workspace.CurrentSession?.PersistenceSession.Domain.Id,
+                TicketWorkspace.SelectedTicket?.Id,
+                _ticketBoundarySlots.Slots.Select(slot => slot.Resolved).ToArray()));
         elements.AddRange(
             SelectionOverlayBuilder.CreateElements(
                 _currentScene.HitTestIndex,
