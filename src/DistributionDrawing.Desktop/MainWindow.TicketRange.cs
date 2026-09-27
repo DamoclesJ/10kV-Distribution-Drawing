@@ -92,17 +92,24 @@ public partial class MainWindow
                         slot.Resolved ?? new IsolationBoundary(deviceId, BoundarySide.Unknown)),
                     TextWrapping = TextWrapping.Wrap
                 });
-                var side = new ComboBox { Tag = index, DisplayMemberPath = "Display",
-                    Margin = new Thickness(0, 3, 0, 0) };
-                TicketSideChoice[] choices = WorkTicketRangeSetup.AvailableSides(device)
+                TicketSideChoice[] choices = TicketRangeSideSelection.ResolvableSides(drawing, device)
                     .Select(value => new TicketSideChoice(value,
                         WorkTicketWorkspace.BoundarySideName(value))).ToArray();
-                side.ItemsSource = choices;
-                side.SelectedItem = choices.FirstOrDefault(value => value.Side == slot.Side);
-                side.SelectionChanged += OnTicketBoundarySideChanged;
-                row.Children.Add(side);
+                if (choices.Length > 0)
+                {
+                    var side = new ComboBox { Tag = index, DisplayMemberPath = "Display",
+                        Margin = new Thickness(0, 3, 0, 0) };
+                    side.ItemsSource = choices;
+                    side.SelectedItem = choices.FirstOrDefault(value => value.Side == slot.Side);
+                    side.SelectionChanged += OnTicketBoundarySideChanged;
+                    row.Children.Add(side);
+                }
                 if (slot.Resolved is null)
-                    row.Children.Add(new TextBlock { Text = "待确认 / 无法确定电气侧",
+                    row.Children.Add(new TextBlock
+                    {
+                        Text = choices.Length == 0
+                            ? "待确认 / 当前拓扑无法证明电气侧"
+                            : "待确认 / 请选择已解析的电气侧",
                         TextWrapping = TextWrapping.Wrap });
             }
             else row.Children.Add(new TextBlock { Text = "未选择" });
@@ -126,21 +133,12 @@ public partial class MainWindow
         if (sender is not ComboBox { SelectedItem: TicketSideChoice choice, Tag: int index } ||
             _workspace.CurrentSession is not { } session ||
             _ticketBoundarySlots[index].DeviceId is not Guid deviceId) return;
-        TicketBoundarySlot slot = _ticketBoundarySlots[index];
-        bool resolved = WorkTicketRangeSetup.TryResolve(session.PersistenceSession.Domain,
-            deviceId, choice.Side, out IsolationBoundary? boundary, out string issue);
-        _ticketBoundarySlots.Replace(index, slot with
-        {
-            Side = choice.Side,
-            Resolved = resolved ? boundary : null
-        });
+        bool resolved = TicketRangeSideSelection.TryChoose(_ticketBoundarySlots,
+            _ticketRangePicker, session.PersistenceSession.Domain, index, choice.Side,
+            out string issue);
         TicketRangeStatus.Text = resolved ? "电气侧已解析。" : issue;
-        if (resolved && _ticketRangePicker.Mode == TicketRangePickMode.ChoosingBoundarySide &&
-            _ticketRangePicker.BoundaryIndex == index)
-        {
-            _ticketRangePicker.SideChosen();
+        if (resolved)
             UpdateCanvasStatus();
-        }
         RefreshTicketRangePanel();
     }
 
@@ -161,7 +159,9 @@ public partial class MainWindow
             int index = _ticketRangePicker.BoundaryIndex!.Value;
             _ticketBoundarySlots.Replace(index, new TicketBoundarySlot(device.Id));
             _ticketRangePicker.DevicePicked();
-            TicketRangeStatus.Text = "请选择该设备的专业电气侧。";
+            TicketRangeStatus.Text = TicketRangeSideSelection.ResolvableSides(drawing, device).Count > 0
+                ? "请选择该设备已解析的专业电气侧。"
+                : "当前拓扑无法证明该设备的电气侧；请取消选择或修正拓扑。";
         }
         else if (_ticketRangePicker.Mode == TicketRangePickMode.ChoosingBoundarySide)
         {

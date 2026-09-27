@@ -1,4 +1,6 @@
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Documents;
 
 namespace DistributionDrawing.Desktop.WorkTickets;
 
@@ -82,5 +84,48 @@ internal sealed class TicketRangePickerState
         Mode = TicketRangePickMode.Idle;
         BoundaryIndex = null;
         PreviousBoundary = null;
+    }
+}
+
+internal static class TicketRangeSideSelection
+{
+    public static IReadOnlyList<BoundarySide> ResolvableSides(
+        DrawingDocument drawing,
+        SwitchDevice device) => WorkTicketRangeSetup.AvailableSides(device)
+        .Where(side => WorkTicketRangeSetup.TryResolve(drawing, device.Id, side, out _, out _))
+        .ToArray();
+
+    public static bool TryChoose(
+        TicketBoundarySlotCollection slots,
+        TicketRangePickerState picker,
+        DrawingDocument drawing,
+        int index,
+        BoundarySide side,
+        out string issue)
+    {
+        if (index < 0 || index >= slots.Count ||
+            (picker.Mode != TicketRangePickMode.Idle &&
+             (picker.Mode != TicketRangePickMode.ChoosingBoundarySide ||
+              picker.BoundaryIndex != index)))
+        {
+            issue = "请先完成或取消当前选择。";
+            return false;
+        }
+
+        TicketBoundarySlot slot = slots[index];
+        if (slot.DeviceId is not Guid deviceId)
+        {
+            issue = "请先选择边界设备。";
+            return false;
+        }
+        if (!WorkTicketRangeSetup.TryResolve(drawing, deviceId, side,
+                out IsolationBoundary? boundary, out issue))
+            return false;
+
+        slots.Replace(index, new TicketBoundarySlot(deviceId, side, boundary));
+        if (picker.Mode == TicketRangePickMode.ChoosingBoundarySide)
+            picker.SideChosen();
+        issue = "";
+        return true;
     }
 }
