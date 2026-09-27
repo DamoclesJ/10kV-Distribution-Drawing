@@ -325,11 +325,13 @@ public sealed class WorkTicketAnalyzerTests
         WorkScope scope = WorkScope.Create(Guid.NewGuid(), new BoundaryPoint(cabinet.Id, first, "线路侧"),
             new BoundaryPoint(cabinet.Id, second, "线路侧"), "检修范围", []);
         drawing.AddWorkScope(scope);
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing,
+            cabinet.Intervals[0].SwitchDevices[0].Id, BoundarySide.Line,
+            out IsolationBoundary? boundary, out string issue), issue);
         WorkTicketSession ticket = WorkTicketSession.Create() with
         {
             Task = new WorkTask("检修", "一号柜"),
-            IsolationBoundaries = [new IsolationBoundary(cabinet.Intervals[0].SwitchDevices[0].Id,
-                BoundarySide.Line)], WorkScopeIds = [scope.WorkScopeId]
+            IsolationBoundaries = [boundary!], WorkScopeIds = [scope.WorkScopeId]
         };
         return (drawing, ticket);
     }
@@ -485,12 +487,16 @@ public sealed class WorkTicketAnalyzerTests
             new BoundaryPoint(cabinet.Id, firstTerminal, "线路侧"),
             new BoundaryPoint(cabinet.Id, secondTerminal, "线路侧"), "负1至负2", [point.GroundingPointId]);
         drawing.AddWorkScope(scope);
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing,
+            cabinet.Intervals[0].SwitchDevices[0].Id, BoundarySide.Line,
+            out IsolationBoundary? firstBoundary, out string firstIssue), firstIssue);
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing,
+            cabinet.Intervals[1].SwitchDevices[0].Id, BoundarySide.Line,
+            out IsolationBoundary? secondBoundary, out string secondIssue), secondIssue);
         WorkTicketSession ticket = WorkTicketSession.Create() with
         {
             Task = new WorkTask("检修", "环网柜"),
-            IsolationBoundaries = [
-                new IsolationBoundary(cabinet.Intervals[0].SwitchDevices[0].Id, BoundarySide.Line),
-                new IsolationBoundary(cabinet.Intervals[1].SwitchDevices[0].Id, BoundarySide.Line)],
+            IsolationBoundaries = [firstBoundary!, secondBoundary!],
             WorkScopeIds = [scope.WorkScopeId],
             GroundingPointIds = [point.GroundingPointId]
         };

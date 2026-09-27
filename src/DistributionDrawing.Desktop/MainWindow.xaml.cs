@@ -116,7 +116,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         TicketWorkspace.LocateRequested += OnTicketLocateRequested;
-        TicketWorkspace.SelectionChanged += RenderCurrentScene;
+        TicketWorkspace.SelectionChanged += OnTicketWorkspaceSelectionChanged;
+        TicketWorkspace.RangeEditRequested += OnTicketRangeEditRequested;
         _messageService = new DesktopMessageService(this);
         _propertyEditor = new(_selectionResolver, _commandStack);
         _selectionRectangle = new SelectionRectangleController(_selectionManager);
@@ -788,7 +789,8 @@ public partial class MainWindow : Window
                !_selectionRectangle.IsActive &&
                !_viewport.IsPanning &&
                !_groundingPointPickMode &&
-               _workScopePickState == WorkScopePickState.Idle;
+               _workScopePickState == WorkScopePickState.Idle &&
+               _ticketRangePicker.Mode == TicketRangePickMode.Idle;
     }
 
     private bool CanRotateCurrentSelection()
@@ -1005,6 +1007,9 @@ public partial class MainWindow : Window
 
     private void OnShowTicketWorkspace(object sender, RoutedEventArgs e)
     {
+        CancelTicketRangePicking();
+        DiscardTicketRangeBuffer();
+        TicketRangePanel.Visibility = Visibility.Collapsed;
         TicketWorkspace.CommitPendingEdits();
         DrawingWorkspace.Visibility = Visibility.Collapsed;
         TicketWorkspace.Visibility = Visibility.Visible;
@@ -1017,19 +1022,14 @@ public partial class MainWindow : Window
         RenderCurrentScene();
     }
 
-    private void OnProposeTicketBoundary(object sender, RoutedEventArgs e)
+    private void OnTicketRangeEditRequested() =>
+        OnOpenTicketRange(this, new RoutedEventArgs());
+
+    private void OnTicketWorkspaceSelectionChanged()
     {
-        if (_workspace.CurrentSession is not { } session ||
-            _selectionManager.Selected is not { } selected ||
-            !session.PersistenceSession.Domain.Devices.OfType<SwitchDevice>()
-                .Any(device => device.Id == selected.ObjectId))
-        {
-            MessageBox.Show(this, "请先在图纸中选中一个开关设备。", "工作票边界",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        OnShowTicketWorkspace(sender, e);
-        TicketWorkspace.ProposeBoundary(selected.ObjectId);
+        if (_ticketRangePicker.Mode != TicketRangePickMode.Idle)
+            CancelTicketRangePicking();
+        RenderCurrentScene();
     }
 
     private void OnTicketLocateRequested(TicketReference reference)
@@ -1110,6 +1110,8 @@ public partial class MainWindow : Window
         object? sender,
         ActiveDocumentSessionChangedEventArgs e)
     {
+        DiscardTicketRangeBuffer();
+        TicketRangePanel.Visibility = Visibility.Collapsed;
         TicketWorkspace.CommitPendingEdits();
         CancelTransientInteraction();
         if (e.Previous is not null &&
@@ -1301,6 +1303,9 @@ public partial class MainWindow : Window
         GroundingAccessPointEditorPanel.Visibility = Visibility.Collapsed;
         WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
         WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
+        TicketRangePanel.Visibility = Visibility.Collapsed;
+        CancelTicketRangePicking();
+        DiscardTicketRangeBuffer();
         DrawingSurface.Clear();
         _viewport.Reset();
     }
@@ -1386,6 +1391,11 @@ public partial class MainWindow : Window
                 _ when _poleSwitchAttachment.IsSelectingControlledConnection =>
                     _poleSwitchAttachment.StatusText,
                 _ when _groundingPointPickMode => "添加工作地线：请选择端子",
+                _ when _ticketRangePicker.Mode == TicketRangePickMode.ChoosingBoundarySide =>
+                    "工作票范围：请在右侧选择专业电气侧，Esc 取消",
+                _ when _ticketRangePicker.Mode == TicketRangePickMode.PickingBoundaryDevice =>
+                    $"工作票范围：请选择 Boundary {WorkTicketRangeSetup.SlotName(_ticketRangePicker.BoundaryIndex!.Value)} 的设备，Esc 取消",
+                _ when _ticketRangePicker.Mode == TicketRangePickMode.PickingWorkScopeEquipment => "工作票范围：请选择实际工作设备，Esc 取消",
                 _ when _workScopePickState is WorkScopePickState.PickingBoundaryA =>
                     "添加工作范围：请选择边界 A",
                 _ when _workScopePickState is WorkScopePickState.PickingBoundaryB =>
@@ -1510,7 +1520,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_groundingPointPickMode || _workScopePickState != WorkScopePickState.Idle)
+        if (_groundingPointPickMode || _workScopePickState != WorkScopePickState.Idle ||
+            _ticketRangePicker.Mode != TicketRangePickMode.Idle)
         {
             CancelProfessionalPicking();
             SyncToolboxModeFromInteraction();
@@ -2057,6 +2068,9 @@ public partial class MainWindow : Window
 
         CancelDeviceDrag();
         _drawingTools.Cancel();
+        CancelTicketRangePicking();
+        DiscardTicketRangeBuffer();
+        TicketRangePanel.Visibility = Visibility.Collapsed;
         _groundingPointPickMode = false;
         _pendingGroundingTarget = null;
         _hoveredGroundingTarget = null;
@@ -2095,6 +2109,13 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(ToolboxViewModel.SelectedMode))
         {
+            if (_ticketRangePicker.Mode != TicketRangePickMode.Idle &&
+                _shellViewModel.Toolbox.SelectedMode != DesktopToolMode.Select)
+            {
+                CancelTicketRangePicking();
+                TicketRangePanel.Visibility = Visibility.Collapsed;
+                DiscardTicketRangeBuffer();
+            }
             UpdateCanvasStatus();
         }
     }
@@ -2273,6 +2294,15 @@ public partial class MainWindow : Window
 
         System.Windows.Point point = e.GetPosition(DrawingSurface);
         DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
+
+        if (_ticketRangePicker.Mode != TicketRangePickMode.Idle)
+        {
+            SelectionReference? picked = _currentScene.HitTestIndex.HitTest(
+                documentPoint, _viewport.Transform.ViewDistanceToDocument(4));
+            HandleTicketRangePick(picked);
+            e.Handled = true;
+            return;
+        }
 
         if (_drawingTools.IsActive)
         {
@@ -2515,6 +2545,11 @@ public partial class MainWindow : Window
 
     private void CancelProfessionalPicking()
     {
+        if (_ticketRangePicker.Mode != TicketRangePickMode.Idle)
+        {
+            CancelTicketRangePicking();
+            TicketRangeStatus.Text = "选择已取消；范围内容未改变。";
+        }
         _groundingPointPickMode = false;
         _pendingGroundingTarget = null;
         _hoveredGroundingTarget = null;

@@ -12,6 +12,17 @@ public sealed record IsolationScope(IReadOnlyList<IsolationBoundary> Boundaries)
 public sealed record WorkTask(string Content, string WorkObject);
 public sealed record UserTicketFact(string Kind, string Text, IReadOnlyList<TicketReference> References,
     bool Confirmed, string? RestorationText = null);
+public static class UserTicketFactReferences
+{
+    public static IReadOnlyList<TicketReference> Create(string kind, Guid? deviceId)
+    {
+        if (kind == "RedCloth61" && deviceId is null)
+            throw new InvalidOperationException("6.1 红布幔位置必须明确选择目标设备。");
+        if (deviceId is null) return [];
+        if (deviceId == Guid.Empty) throw new ArgumentException("事实目标设备无效。", nameof(deviceId));
+        return [new TicketReference(TicketReferenceKind.Device, deviceId.Value)];
+    }
+}
 public enum FactOrigin { ModelFact, SystemRecommendation, UserAdded }
 public enum DraftOrigin { Generated, RuleDerived, UserAdded, UserEdited, Confirmed, Rejected }
 public enum SectionCompletion { Empty, Generated, NeedsInput, NeedsConfirmation, Completed, Stale }

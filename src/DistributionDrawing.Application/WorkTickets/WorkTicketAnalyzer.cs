@@ -35,6 +35,14 @@ public sealed class FirstKindRulePack : IWorkTicketRulePack, IRiskRulePack
         SwitchDevice? device = drawing.Devices.OfType<SwitchDevice>().SingleOrDefault(item => item.Id == boundary.DeviceId);
         if (device is null) return $"隔离边界设备 {boundary.DeviceId} 不存在";
         if (boundary.Side == BoundarySide.Unknown) return $"{device.DisplayName} 缺少边界侧别";
+        if (device.InstallationType == SwitchInstallationType.Pole)
+        {
+            if (!WorkTicketRangeSetup.TryResolve(drawing, device.Id, boundary.Side,
+                    out IsolationBoundary? resolved, out string issue)) return issue;
+            return boundary.TerminalId == resolved!.TerminalId &&
+                   boundary.ConnectionId == resolved.ConnectionId
+                ? null : $"{device.DisplayName} 的电气侧与端子不一致";
+        }
         if (boundary.Side is not (BoundarySide.Bus or BoundarySide.Line))
             return $"{device.DisplayName} 的 {boundary.Side} 侧缺少可核实的电气方向";
         RingCabinet? cabinet = drawing.Devices.OfType<RingCabinet>().SingleOrDefault(item =>
@@ -332,9 +340,9 @@ public sealed class WorkTicketAnalyzer(
         ArgumentNullException.ThrowIfNull(ticket);
         if (string.IsNullOrWhiteSpace(ticket.Task.Content) || string.IsNullOrWhiteSpace(ticket.Task.WorkObject))
             throw new InvalidOperationException("先填写工作内容和工作对象。");
-        if (ticket.IsolationBoundaries.Count == 0 ||
-            (ticket.WorkScopeIds.Count == 0 && ticket.WorkScopeItems.Count == 0))
-            throw new InvalidOperationException("先设置停电/隔离边界及实际工作范围。");
+        WorkTicketRangeSetup.ValidateBoundaries(drawing, ticket.IsolationBoundaries);
+        if (ticket.WorkScopeIds.Count == 0 && ticket.WorkScopeItems.Count == 0)
+            throw new InvalidOperationException("先设置有效的实际工作范围。");
         if (ticket.UserFacts.Any(item => item.Kind == "OtherReversible" && item.Confirmed &&
                 string.IsNullOrWhiteSpace(item.RestorationText)))
             throw new InvalidOperationException("可恢复措施需要填写对应的现场恢复文字。");

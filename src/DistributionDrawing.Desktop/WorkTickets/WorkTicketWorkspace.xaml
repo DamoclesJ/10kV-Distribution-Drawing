@@ -19,23 +19,26 @@
           <TextBox x:Name="TaskContent" Margin="0,2,0,8"/>
           <TextBlock Text="工作对象 / 地点"/>
           <TextBox x:Name="TaskObject" Margin="0,2,0,8"/>
-          <TextBlock Text="停电 / 隔离边界（逐项选择设备和电气侧）"/>
-          <StackPanel Orientation="Horizontal" Margin="0,3,0,4">
-            <ComboBox x:Name="BoundaryDevice" Width="280" DisplayMemberPath="Display" Margin="0,0,8,0"
-                      SelectionChanged="OnBoundaryDeviceChanged"/>
-            <ComboBox x:Name="BoundaryTerminal" Width="180" DisplayMemberPath="Display" Margin="0,0,8,0"/>
-            <ComboBox x:Name="BoundarySide" Width="150" Margin="0,0,8,0"/>
-            <Button Content="增加边界" Click="OnAddBoundary" Padding="8,3"/>
-          </StackPanel>
-          <ListBox x:Name="BoundaryList" Height="66" DisplayMemberPath="Display"/>
-          <Button Content="移除选中边界" Click="OnRemoveBoundary" HorizontalAlignment="Left" Margin="0,4,0,10"/>
+          <TextBlock Text="隔离边界和实际工作范围请在图纸页的“工作票范围”设置；下方为同一工作票的高级编辑。"
+                     TextWrapping="Wrap" Margin="0,0,0,6" />
+          <TextBlock x:Name="RangeSummary" TextWrapping="Wrap" Margin="0,0,0,8" />
+          <Expander Header="高级范围编辑（可选）" IsExpanded="False" Margin="0,0,0,8">
+            <StackPanel>
+          <TextBlock Text="停电 / 隔离边界（只读；由图纸范围面板统一校验和修改）"/>
+          <ListBox x:Name="BoundaryList" Height="66" DisplayMemberPath="Display" IsHitTestVisible="False"/>
+          <Button Content="返回图纸修改工作票范围" Click="OnRequestRangeEdit"
+                  HorizontalAlignment="Left" Margin="0,4,0,10"/>
           <TextBlock Text="实际工作范围（选择图纸中已有工作范围）"/>
           <ListBox x:Name="ScopeList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,10"/>
           <TextBlock Text="实际工作设备（可直接选择已有设备，无需创建虚拟线路）"/>
           <ListBox x:Name="EquipmentScopeList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,10"/>
+            </StackPanel>
+          </Expander>
           <TextBlock Text="工作接地点（选择图纸中已有 GroundingPoint；不自动创建）"/>
           <ListBox x:Name="GroundList" SelectionMode="Multiple" Height="70" DisplayMemberPath="Display" Margin="0,3,0,8"/>
           <TextBlock Text="人工现场事实（不得由拓扑推测）" Margin="0,2,0,4"/>
+          <TextBlock Text="事实目标设备（6.1 红布幔位置必须选择；其他事实可选）"/>
+          <ComboBox x:Name="FactTargetDevice" DisplayMemberPath="Display" Margin="0,2,0,6"/>
           <StackPanel Orientation="Horizontal">
             <ComboBox x:Name="FactKind" Width="170" Margin="0,0,8,0"/>
             <TextBox x:Name="FactText" Width="450" Margin="0,0,8,0"/>

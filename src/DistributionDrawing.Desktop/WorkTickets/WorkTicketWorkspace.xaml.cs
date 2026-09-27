@@ -12,9 +12,9 @@ public partial class WorkTicketWorkspace : UserControl
 {
     private sealed record Choice(Guid Id, string Display);
     private sealed record ScopeChoice(Guid Id, string Display);
-    private sealed record BoundarySideChoice(BoundarySide Side, string Display);
     private sealed record BoundaryChoice(IsolationBoundary Boundary, string Display);
     private sealed record FactKindChoice(string Code, string Display);
+    private sealed record FactTargetChoice(Guid? Id, string Display);
     private sealed record FactChoice(UserTicketFact Fact, string Display);
     private sealed record DraftChoice(string Section, DraftItem Item, string Display);
     private sealed record SectionChoice(string Code, string Display);
@@ -29,19 +29,6 @@ public partial class WorkTicketWorkspace : UserControl
     public WorkTicketWorkspace()
     {
         InitializeComponent();
-        BoundarySide.ItemsSource = new[]
-        {
-            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Bus, "母线侧"),
-            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Line, "线路侧"),
-            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.SmallerNumber, "小号侧"),
-            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.LargerNumber, "大号侧"),
-            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Source, "电源侧"),
-            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Load, "负荷侧"),
-            new BoundarySideChoice(DistributionDrawing.Application.WorkTickets.BoundarySide.Unknown, "待确认")
-        };
-        BoundarySide.DisplayMemberPath = "Display";
-        BoundarySide.SelectedItem = ((IEnumerable<BoundarySideChoice>)BoundarySide.ItemsSource)
-            .Single(item => item.Side == DistributionDrawing.Application.WorkTickets.BoundarySide.Line);
         FactKind.ItemsSource = new[]
         {
             new FactKindChoice("RetainedLive", "保留/邻近带电"),
@@ -59,6 +46,7 @@ public partial class WorkTicketWorkspace : UserControl
 
     public event Action<TicketReference>? LocateRequested;
     public event Action? SelectionChanged;
+    public event Action? RangeEditRequested;
     public WorkTicketSession? SelectedTicket => CurrentTicket();
 
     public void Bind(ProjectRuntimeSession? session)
@@ -70,11 +58,18 @@ public partial class WorkTicketWorkspace : UserControl
         Refresh();
     }
 
-    public void ProposeBoundary(Guid switchDeviceId)
+    public WorkTicketSession? ApplyRange(IReadOnlyList<IsolationBoundary?> boundaries,
+        IReadOnlyList<WorkScopeItem> workScopes, WorkTask task)
     {
-        BoundaryDevice.SelectedItem = (BoundaryDevice.ItemsSource as IEnumerable<Choice>)?
-            .FirstOrDefault(item => item.Id == switchDeviceId);
-        BoundaryDevice.Focus();
+        if (_session is null) return null;
+        CommitPendingEdits();
+        WorkTicketSession after = WorkTicketRangeCommit.Apply(
+            _session.PersistenceSession.Domain, _session.PersistenceSession.WorkTickets,
+            _session.CommandStack, _ticketId, boundaries, workScopes, task);
+        _ticketId = after.Id;
+        Refresh();
+        SelectionChanged?.Invoke();
+        return after;
     }
 
     public void Refresh()
@@ -91,9 +86,6 @@ public partial class WorkTicketWorkspace : UserControl
             _ticketId ??= _session?.PersistenceSession.WorkTickets.Tickets.FirstOrDefault()?.Id;
             TicketList.SelectedItem = (TicketList.ItemsSource as IEnumerable<Choice>)?
                 .FirstOrDefault(item => item.Id == _ticketId);
-            BoundaryDevice.ItemsSource = drawing?.Devices.OfType<SwitchDevice>()
-                .OrderBy(device => device.DisplayName)
-                .Select(device => new Choice(device.Id, DescribeSwitch(drawing, device))).ToArray() ?? [];
             ScopeList.ItemsSource = drawing?.WorkScopes
                 .Select(scope => new ScopeChoice(scope.WorkScopeId, scope.Description)).ToArray() ?? [];
             EquipmentScopeList.ItemsSource = drawing?.Devices
@@ -102,11 +94,26 @@ public partial class WorkTicketWorkspace : UserControl
             GroundList.ItemsSource = drawing?.GroundingPoints
                 .Select(point => new Choice(point.GroundingPointId,
                     $"{point.Number ?? "未编号"} — {point.Location} ({point.Target.Kind})")).ToArray() ?? [];
+            FactTargetDevice.ItemsSource = new[] { new FactTargetChoice(null, "不指定设备") }
+                .Concat(drawing?.Devices.OrderBy(device => device.DisplayName)
+                    .Select(device => new FactTargetChoice(device.Id,
+                        $"{DescribeSwitchOrDevice(drawing!, device)} [{device.Id.ToString("N")[..8]}]")) ?? [])
+                .ToArray();
+            FactTargetDevice.SelectedIndex = 0;
             WorkTicketSession? ticket = CurrentTicket();
             TaskContent.Text = ticket?.Task.Content ?? "";
             TaskObject.Text = ticket?.Task.WorkObject ?? "";
             _boundaries = ticket?.IsolationBoundaries.ToList() ?? [];
             RefreshBoundaries();
+            RangeSummary.Text = ticket is null ? "尚无范围" :
+                "停电 / 隔离边界：\n" +
+                string.Join("\n", ticket.IsolationBoundaries.Select((item, index) =>
+                    $"{WorkTicketRangeSetup.SlotName(index)}  {FormatBoundaryDisplay(drawing, item)}")) +
+                "\n实际工作范围：" +
+                string.Join("、", ticket.WorkScopeIds.Select(id =>
+                    drawing?.WorkScopes.FirstOrDefault(scope => scope.WorkScopeId == id)?.Description ?? "范围已移除")
+                    .Concat(ticket.EquipmentScopeIds.Select(id =>
+                        drawing?.Devices.FirstOrDefault(device => device.Id == id)?.DisplayName ?? "设备已移除")));
             _facts = ticket?.UserFacts.ToList() ?? [];
             RefreshFacts();
             foreach (ScopeChoice choice in ScopeList.Items)
@@ -235,41 +242,7 @@ public partial class WorkTicketWorkspace : UserControl
         SelectionChanged?.Invoke();
     }
 
-    private void OnAddBoundary(object sender, RoutedEventArgs e)
-    {
-        if (BoundaryDevice.SelectedItem is not Choice device || BoundarySide.SelectedItem is not BoundarySideChoice side)
-            return;
-        IsolationBoundary boundary = new(device.Id, side.Side,
-            (BoundaryTerminal.SelectedItem as Choice)?.Id);
-        if (!_boundaries.Contains(boundary)) _boundaries.Add(boundary);
-        RefreshBoundaries();
-    }
-
-    private void OnBoundaryDeviceChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_session?.PersistenceSession.Domain is not { } drawing ||
-            BoundaryDevice.SelectedItem is not Choice selected)
-        {
-            BoundaryTerminal.ItemsSource = null;
-            return;
-        }
-        SwitchDevice device = drawing.Devices.OfType<SwitchDevice>().Single(item => item.Id == selected.Id);
-        BoundaryTerminal.ItemsSource = device.TerminalIds.Select(id =>
-        {
-            var terminal = drawing.Terminals.Single(item => item.Id == id);
-            return new Choice(id, terminal.Role);
-        }).ToArray();
-        BoundaryTerminal.SelectedIndex = -1;
-    }
-
-    private void OnRemoveBoundary(object sender, RoutedEventArgs e)
-    {
-        if (BoundaryList.SelectedItem is BoundaryChoice selected)
-        {
-            _boundaries.Remove(selected.Boundary);
-            RefreshBoundaries();
-        }
-    }
+    private void OnRequestRangeEdit(object sender, RoutedEventArgs e) => RangeEditRequested?.Invoke();
 
     private void RefreshBoundaries()
     {
@@ -279,11 +252,21 @@ public partial class WorkTicketWorkspace : UserControl
             .ToArray();
     }
 
-    private void RefreshFacts() => FactList.ItemsSource = _facts.Select(item =>
-        new FactChoice(item, $"{item.Kind}: {item.Text}" +
-            (item.RestorationText is null ? "" : $" → {item.RestorationText}") +
-            $" {(item.Confirmed ? "已确认" : "待确认")}"))
-        .ToArray();
+    private void RefreshFacts()
+    {
+        DrawingDocument? drawing = _session?.PersistenceSession.Domain;
+        FactList.ItemsSource = _facts.Select(item =>
+        {
+            TicketReference? target = item.References.FirstOrDefault(reference =>
+                reference.Kind == TicketReferenceKind.Device);
+            string targetText = target is null ? "（无目标设备）" :
+                drawing?.Devices.FirstOrDefault(device => device.Id == target.Id) is { } device
+                    ? $"（目标：{DescribeSwitchOrDevice(drawing, device)}）" : "（目标设备已移除）";
+            return new FactChoice(item, $"{item.Kind}: {item.Text} {targetText}" +
+                (item.RestorationText is null ? "" : $" → {item.RestorationText}") +
+                $" {(item.Confirmed ? "已确认" : "待确认")}");
+        }).ToArray();
+    }
 
     private void OnAddFact(object sender, RoutedEventArgs e)
     {
@@ -293,8 +276,20 @@ public partial class WorkTicketWorkspace : UserControl
             MessageBox.Show(Window.GetWindow(this), "请填写对应的现场恢复措施。", "工作票准备");
             return;
         }
-        TicketReference[] references = BoundaryDevice.SelectedItem is Choice device
-            ? [new TicketReference(TicketReferenceKind.Device, device.Id)] : [];
+        Guid? targetDeviceId = (FactTargetDevice.SelectedItem as FactTargetChoice)?.Id;
+        if (targetDeviceId is Guid selectedId &&
+            !(_session?.PersistenceSession.Domain.Devices.Any(device => device.Id == selectedId) ?? false))
+        {
+            MessageBox.Show(Window.GetWindow(this), "事实目标设备已不存在，请重新选择。", "工作票准备");
+            return;
+        }
+        IReadOnlyList<TicketReference> references;
+        try { references = UserTicketFactReferences.Create(kind.Code, targetDeviceId); }
+        catch (InvalidOperationException exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), exception.Message, "工作票准备");
+            return;
+        }
         _facts.Add(new UserTicketFact(kind.Code, FactText.Text.Trim(), references,
             FactConfirmed.IsChecked == true,
             string.IsNullOrWhiteSpace(FactRestorationText.Text) ? null : FactRestorationText.Text.Trim()));
@@ -334,6 +329,7 @@ public partial class WorkTicketWorkspace : UserControl
             !before.GroundingPointIds.SequenceEqual(after.GroundingPointIds) ||
             !before.UserFacts.SequenceEqual(after.UserFacts);
         if (!setupChanged && ReferenceEquals(before.Draft, after.Draft)) return;
+        if (setupChanged) after = after.Invalidate();
         _session.CommandStack.ExecuteCommand(new WorkTicketChangeCommand(
             _session.PersistenceSession.WorkTickets, before, after));
         Refresh();

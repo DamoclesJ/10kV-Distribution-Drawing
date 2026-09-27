@@ -28,6 +28,26 @@ public sealed class WorkTicketDisplayTests
         Assert.DoesNotContain("Guid", display);
     }
 
+    [Fact]
+    public void PoleBoundaryDisplayIncludesPoleNumberAndProfessionalSide()
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "柱上边界");
+        var pole = new Pole(Guid.NewGuid(), "P02");
+        SwitchDevice isolator = SwitchDevice.CreateForPole(Guid.NewGuid(), SwitchKind.IsolationSwitch,
+            Guid.NewGuid(), Guid.NewGuid(), displayName: "隔离刀闸");
+        drawing.AddDevice(pole);
+        drawing.AddDevice(isolator);
+        drawing.AddPoleAttachment(new PoleAttachment(Guid.NewGuid(), pole.Id, isolator.Id));
+
+        string display = WorkTicketWorkspace.FormatBoundaryDisplay(drawing,
+            new IsolationBoundary(isolator.Id, BoundarySide.SmallerNumber,
+                isolator.FirstTerminalId));
+        Assert.Contains("P02", display);
+        Assert.Contains("隔离刀闸", display);
+        Assert.Contains("小号侧", display);
+        Assert.DoesNotContain("SwitchLeftTerminal", display);
+    }
+
     [Theory]
     [InlineData(BoundarySide.Bus, "母线侧")]
     [InlineData(BoundarySide.Line, "线路侧")]
