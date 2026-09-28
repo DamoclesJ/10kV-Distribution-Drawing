@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
@@ -57,7 +56,7 @@ public static class WorkTicketRangeSetup
         PoleAttachment? attachment = drawing.PoleAttachments.SingleOrDefault(item => item.AttachedDeviceId == deviceId);
         Pole? pole = attachment is null ? null : drawing.Devices.OfType<Pole>()
             .SingleOrDefault(item => item.Id == attachment.PoleId);
-        if (pole is null || !TryPoleNumber(pole.PoleNumber, out int currentNumber))
+        if (pole is null)
         {
             issue = "待确认 / 无法确定电气侧";
             return false;
@@ -77,9 +76,10 @@ public static class WorkTicketRangeSetup
                     ? line.SupportPoleIds[index - 1] : null;
             Pole? adjacent = adjacentId is Guid id ? drawing.Devices.OfType<Pole>()
                 .SingleOrDefault(item => item.Id == id) : null;
-            if (adjacent is null || !TryPoleNumber(adjacent.PoleNumber, out int adjacentNumber) ||
-                adjacentNumber == currentNumber) continue;
-            BoundarySide direction = adjacentNumber < currentNumber
+            if (adjacent is null) continue;
+            PoleNumberOrder numberOrder = PoleNumberComparer.Compare(adjacent.PoleNumber, pole.PoleNumber);
+            if (numberOrder is PoleNumberOrder.Unresolved or PoleNumberOrder.Equal) continue;
+            BoundarySide direction = numberOrder == PoleNumberOrder.Less
                 ? BoundarySide.SmallerNumber : BoundarySide.LargerNumber;
             if (mapped.TryGetValue(direction, out Guid previous) && previous != terminalId)
             {
@@ -146,10 +146,4 @@ public static class WorkTicketRangeSetup
         }
     }
 
-    private static bool TryPoleNumber(string value, out int number)
-    {
-        Match match = Regex.Match(value.Trim(), "^(?:P-?)?(?<number>[0-9]+)#?$",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        return int.TryParse(match.Groups["number"].Value, out number);
-    }
 }

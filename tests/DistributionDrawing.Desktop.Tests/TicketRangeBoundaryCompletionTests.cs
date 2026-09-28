@@ -48,6 +48,68 @@ public sealed class TicketRangeBoundaryCompletionTests
         Assert.Equal(2, ticket.IsolationBoundaries.Select(item => item.DeviceId).Distinct().Count());
     }
 
+    [Theory]
+    [InlineData("P01", "P02")]
+    [InlineData("P1", "P2")]
+    [InlineData("P9", "P10")]
+    [InlineData("新11", "新12")]
+    [InlineData("新1500001", "新1500002")]
+    [InlineData("P-01#", "P-02#")]
+    public void PoleSideComparesSharedPrefixAndTrailingDigitsNumerically(
+        string smallerPoleNumber, string currentPoleNumber)
+    {
+        (DrawingDocument drawing, _, PoleSetup pole) = CreateDrawing(connectLarger: false,
+            smallerPoleNumber, currentPoleNumber);
+
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing, pole.Switch.Id,
+            BoundarySide.SmallerNumber, out IsolationBoundary? boundary, out string issue), issue);
+        Assert.Equal(pole.Switch.FirstTerminalId, boundary!.TerminalId);
+        Assert.Equal(pole.SmallerConnection, boundary.ConnectionId);
+        Assert.False(WorkTicketRangeSetup.TryResolve(drawing, pole.Switch.Id,
+            BoundarySide.LargerNumber, out _, out _));
+    }
+
+    [Fact]
+    public void NumberedThreePoleChainResolvesEndAndMiddlePoleDirectionsFromTopology()
+    {
+        (DrawingDocument drawing, SwitchDevice firstSwitch, SwitchDevice middleSwitch,
+            SwitchDevice lastSwitch, Guid firstMiddleConnection, Guid middleLastConnection) =
+            CreateNumberedPoleChain("新11", "新1500001", "新1500002");
+
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing, lastSwitch.Id,
+            BoundarySide.SmallerNumber, out IsolationBoundary? lastTowardMiddle, out string issue), issue);
+        Assert.Equal(lastSwitch.FirstTerminalId, lastTowardMiddle!.TerminalId);
+        Assert.Equal(middleLastConnection, lastTowardMiddle.ConnectionId);
+
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing, firstSwitch.Id,
+            BoundarySide.LargerNumber, out IsolationBoundary? firstTowardMiddle, out issue), issue);
+        Assert.Equal(firstSwitch.SecondTerminalId, firstTowardMiddle!.TerminalId);
+        Assert.Equal(firstMiddleConnection, firstTowardMiddle.ConnectionId);
+
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing, middleSwitch.Id,
+            BoundarySide.SmallerNumber, out IsolationBoundary? middleTowardFirst, out issue), issue);
+        Assert.Equal(firstMiddleConnection, middleTowardFirst!.ConnectionId);
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing, middleSwitch.Id,
+            BoundarySide.LargerNumber, out IsolationBoundary? middleTowardLast, out issue), issue);
+        Assert.Equal(middleLastConnection, middleTowardLast!.ConnectionId);
+    }
+
+    [Theory]
+    [InlineData("A01", "B02", "C03")]
+    [InlineData("P1-1", "P1-2", "P1-3")]
+    [InlineData("P9", "P-10", "P11")]
+    public void AmbiguousPoleNumberPrefixesOrSegmentsLeaveBothSidesUnresolved(
+        string smallerPoleNumber, string currentPoleNumber, string largerPoleNumber)
+    {
+        (DrawingDocument drawing, _, PoleSetup pole) = CreateDrawing(
+            connectLarger: true, smallerPoleNumber, currentPoleNumber, largerPoleNumber);
+
+        Assert.False(WorkTicketRangeSetup.TryResolve(drawing, pole.Switch.Id,
+            BoundarySide.SmallerNumber, out _, out _));
+        Assert.False(WorkTicketRangeSetup.TryResolve(drawing, pole.Switch.Id,
+            BoundarySide.LargerNumber, out _, out _));
+    }
+
     [Fact]
     public void UnprovenPoleSideDoesNotCompletePickerOrPassConfirm()
     {
@@ -213,7 +275,8 @@ public sealed class TicketRangeBoundaryCompletionTests
     }
 
     private static (DrawingDocument Drawing, SwitchDevice RingSwitch, PoleSetup Pole) CreateDrawing(
-        bool connectLarger = true)
+        bool connectLarger = true, string smallerPoleNumber = "P01",
+        string currentPoleNumber = "P02", string largerPoleNumber = "P03")
     {
         var drawing = new DrawingDocument(Guid.NewGuid(), "Ring + Pole Boundary");
         RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "一号柜",
@@ -222,9 +285,9 @@ public sealed class TicketRangeBoundaryCompletionTests
         drawing.AddDevice(cabinet);
         SwitchDevice ringSwitch = GetMainLoadSwitch(cabinet.Intervals[0]);
 
-        Pole smallerPole = new(Guid.NewGuid(), "P01");
-        Pole currentPole = new(Guid.NewGuid(), "P02");
-        Pole largerPole = new(Guid.NewGuid(), "P03");
+        Pole smallerPole = new(Guid.NewGuid(), smallerPoleNumber);
+        Pole currentPole = new(Guid.NewGuid(), currentPoleNumber);
+        Pole largerPole = new(Guid.NewGuid(), largerPoleNumber);
         drawing.AddDevice(smallerPole);
         drawing.AddDevice(currentPole);
         drawing.AddDevice(largerPole);
@@ -259,6 +322,59 @@ public sealed class TicketRangeBoundaryCompletionTests
         }
         return (drawing, ringSwitch, new PoleSetup(poleSwitch, smallerConnection.Id,
             largerConnectionId));
+    }
+
+    private static (DrawingDocument Drawing, SwitchDevice FirstSwitch,
+        SwitchDevice MiddleSwitch, SwitchDevice LastSwitch,
+        Guid FirstMiddleConnection, Guid MiddleLastConnection) CreateNumberedPoleChain(
+            string firstNumber, string middleNumber, string lastNumber)
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "编号柱上开关拓扑");
+        Pole firstPole = new(Guid.NewGuid(), firstNumber);
+        Pole middlePole = new(Guid.NewGuid(), middleNumber);
+        Pole lastPole = new(Guid.NewGuid(), lastNumber);
+        drawing.AddDevice(firstPole);
+        drawing.AddDevice(middlePole);
+        drawing.AddDevice(lastPole);
+
+        SwitchDevice firstSwitch = AddPoleSwitch(drawing, firstPole);
+        SwitchDevice middleSwitch = AddPoleSwitch(drawing, middlePole);
+        SwitchDevice lastSwitch = AddPoleSwitch(drawing, lastPole);
+        Guid firstMiddleConnection = AddOverheadConnection(drawing,
+            firstSwitch.SecondTerminalId, middleSwitch.FirstTerminalId,
+            [firstPole.Id, middlePole.Id], $"{firstNumber}-{middleNumber}");
+        Guid middleLastConnection = AddOverheadConnection(drawing,
+            middleSwitch.SecondTerminalId, lastSwitch.FirstTerminalId,
+            [middlePole.Id, lastPole.Id], $"{middleNumber}-{lastNumber}");
+
+        return (drawing, firstSwitch, middleSwitch, lastSwitch,
+            firstMiddleConnection, middleLastConnection);
+    }
+
+    private static SwitchDevice AddPoleSwitch(DrawingDocument drawing, Pole pole)
+    {
+        SwitchDevice switchDevice = SwitchDevice.CreateForPole(Guid.NewGuid(),
+            SwitchKind.IsolationSwitch, Guid.NewGuid(), Guid.NewGuid(),
+            displayName: $"{pole.PoleNumber}隔离刀闸");
+        drawing.AddDevice(switchDevice);
+        drawing.AddTerminal(new Terminal(switchDevice.FirstTerminalId, TopologyOwnerType.Device,
+            switchDevice.Id, "SwitchLeftTerminal", "10kV", true, true, null,
+            [ConnectionType.OverheadLine]));
+        drawing.AddTerminal(new Terminal(switchDevice.SecondTerminalId, TopologyOwnerType.Device,
+            switchDevice.Id, "SwitchRightTerminal", "10kV", true, false, null,
+            [ConnectionType.OverheadLine]));
+        drawing.AddPoleAttachment(new PoleAttachment(Guid.NewGuid(), pole.Id, switchDevice.Id));
+        return switchDevice;
+    }
+
+    private static Guid AddOverheadConnection(DrawingDocument drawing, Guid startTerminalId,
+        Guid endTerminalId, IReadOnlyList<Guid> supportPoleIds, string displayName)
+    {
+        var connection = new Connection(Guid.NewGuid(), ConnectionType.OverheadLine,
+            startTerminalId, endTerminalId, displayName, "10kV");
+        drawing.AddConnection(connection);
+        drawing.AddOverheadLine(new OverheadLine(connection.Id, "JKLYJ", supportPoleIds));
+        return connection.Id;
     }
 
     private sealed record PoleSetup(SwitchDevice Switch, Guid SmallerConnection,
