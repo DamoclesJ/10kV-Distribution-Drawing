@@ -166,7 +166,7 @@ public sealed class TicketRangeBoundaryCompletionTests
         RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "一号柜",
             [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
              RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Closed, SwitchState.Open)]));
-        SwitchDevice ringSwitch = Assert.Single(cabinet.Intervals[0].SwitchDevices);
+        SwitchDevice ringSwitch = GetMainLoadSwitch(cabinet.Intervals[0]);
         RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(cabinet,
             new DocumentPoint(10, 10));
         DrawingScene scene = new DrawingSceneBuilder().Build(cabinet, layout);
@@ -202,6 +202,16 @@ public sealed class TicketRangeBoundaryCompletionTests
         Assert.Null(picker.PreviousBoundary);
     }
 
+    private static SwitchDevice GetMainLoadSwitch(RingCabinetInterval interval)
+    {
+        SwitchDevice loadSwitch = Assert.Single(interval.SwitchDevices,
+            device => device.SwitchKind == SwitchKind.LoadSwitch);
+        SwitchDevice groundSwitch = Assert.Single(interval.SwitchDevices,
+            device => device.SwitchKind == SwitchKind.GroundSwitch);
+        Assert.NotEqual(loadSwitch.Id, groundSwitch.Id);
+        return loadSwitch;
+    }
+
     private static (DrawingDocument Drawing, SwitchDevice RingSwitch, PoleSetup Pole) CreateDrawing(
         bool connectLarger = true)
     {
@@ -210,7 +220,7 @@ public sealed class TicketRangeBoundaryCompletionTests
             [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
              RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Closed, SwitchState.Open)]));
         drawing.AddDevice(cabinet);
-        SwitchDevice ringSwitch = Assert.Single(cabinet.Intervals[0].SwitchDevices);
+        SwitchDevice ringSwitch = GetMainLoadSwitch(cabinet.Intervals[0]);
 
         Pole smallerPole = new(Guid.NewGuid(), "P01");
         Pole currentPole = new(Guid.NewGuid(), "P02");
