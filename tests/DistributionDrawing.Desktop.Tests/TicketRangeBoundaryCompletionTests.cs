@@ -164,8 +164,9 @@ public sealed class TicketRangeBoundaryCompletionTests
     public void RingBoundaryOverlayStillTargetsRealCabinetSwitchSceneEntry()
     {
         RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "一号柜",
-            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open)]));
-        SwitchDevice ringSwitch = Assert.Single(cabinet.Intervals.Single().SwitchDevices);
+            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Closed, SwitchState.Open)]));
+        SwitchDevice ringSwitch = Assert.Single(cabinet.Intervals[0].SwitchDevices);
         RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(cabinet,
             new DocumentPoint(10, 10));
         DrawingScene scene = new DrawingSceneBuilder().Build(cabinet, layout);
@@ -206,9 +207,10 @@ public sealed class TicketRangeBoundaryCompletionTests
     {
         var drawing = new DrawingDocument(Guid.NewGuid(), "Ring + Pole Boundary");
         RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "一号柜",
-            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open)]));
+            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Closed, SwitchState.Open)]));
         drawing.AddDevice(cabinet);
-        SwitchDevice ringSwitch = Assert.Single(cabinet.Intervals.Single().SwitchDevices);
+        SwitchDevice ringSwitch = Assert.Single(cabinet.Intervals[0].SwitchDevices);
 
         Pole smallerPole = new(Guid.NewGuid(), "P01");
         Pole currentPole = new(Guid.NewGuid(), "P02");
