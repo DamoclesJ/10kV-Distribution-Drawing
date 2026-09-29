@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Domain.Energization;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
@@ -52,7 +53,8 @@ public sealed record ProjectSession
         bool isDirty,
         int openedFormatVersion = ProjectFileFormat.CurrentVersion,
         TransformerNamingContractMode transformerNamingMode = TransformerNamingContractMode.Current,
-        WorkTicketDataRoot? workTickets = null)
+        WorkTicketDataRoot? workTickets = null,
+        EnergizationScenario? energizationScenario = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(document);
@@ -73,6 +75,10 @@ public sealed record ProjectSession
         OpenedFormatVersion = openedFormatVersion;
         TransformerNamingMode = transformerNamingMode;
         WorkTickets = workTickets ?? new WorkTicketDataRoot(domain.Id);
+        EnergizationScenario = energizationScenario ??
+            (document.EnergizationScenario is { } scenarioDto
+                ? ProjectEnergizationMapper.ToDomain(scenarioDto, domain.Id)
+                : new EnergizationScenario(Guid.NewGuid()));
     }
 
     public string FilePath { get; }
@@ -86,6 +92,8 @@ public sealed record ProjectSession
     public ProjectProfessionalSnapshot Professional { get; init; }
 
     public WorkTicketDataRoot WorkTickets { get; init; }
+
+    public EnergizationScenario EnergizationScenario { get; init; }
 
     public ProjectFileManifest Manifest => Document.Manifest;
 

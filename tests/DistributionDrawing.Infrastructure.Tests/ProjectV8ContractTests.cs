@@ -44,15 +44,15 @@ public sealed class ProjectV8ContractTests : IDisposable
     }
 
     [Fact]
-    public void NewProject_WritesVersion8WithEmptyFoundationCollections()
+    public void NewProject_WritesVersion9WithEmptyFoundationCollections()
     {
         string path = NextPath();
         var service = new ProjectService();
 
         ProjectSession session = service.CreateProject(path, "V7 空工程");
 
-        Assert.Equal(ProjectFileFormat.Version8, session.Manifest.FormatVersion);
-        Assert.Equal(ProjectFileFormat.Version8, session.OpenedFormatVersion);
+        Assert.Equal(ProjectFileFormat.Version9, session.Manifest.FormatVersion);
+        Assert.Equal(ProjectFileFormat.Version9, session.OpenedFormatVersion);
         Assert.Empty(session.Document.Domain!.Transformers!);
         Assert.Empty(session.Document.Domain.CustomerStations!);
         Assert.Empty(session.Professional.GroundingAccessPoints);

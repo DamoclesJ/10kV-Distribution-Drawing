@@ -1,5 +1,6 @@
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Domain.Energization;
 
 namespace DistributionDrawing.Infrastructure.Persistence;
 
@@ -48,7 +49,8 @@ public sealed class ProjectService
             isDirty: false,
             openedFormatVersion: ProjectFileFormat.CurrentVersion,
             transformerNamingMode: TransformerNamingContractMode.Current,
-            workTickets: RestoreWorkTickets(document, domain));
+            workTickets: RestoreWorkTickets(document, domain),
+            energizationScenario: RestoreEnergizationScenario(document, domain));
         Current = candidate;
         return candidate;
     }
@@ -86,7 +88,9 @@ public sealed class ProjectService
             Domain = ProjectDomainMapper.ToDto(current.Domain),
             Layout = ProjectLayoutMapper.ToDto(current.Domain, layout),
             Professional = ProjectProfessionalMapper.ToDto(current.Domain),
-            WorkTicketData = ProjectWorkTicketMapper.ToDto(current.WorkTickets, current.Domain)
+            WorkTicketData = ProjectWorkTicketMapper.ToDto(current.WorkTickets, current.Domain),
+            EnergizationScenario = ProjectEnergizationMapper.ToDto(
+                current.EnergizationScenario, current.Domain.Id)
         };
         _container.Save(filePath, snapshot);
 
@@ -99,6 +103,7 @@ public sealed class ProjectService
             persisted.TransformerNamingMode);
         _ = RestoreProfessional(persistedDocument, validationDomain);
         _ = RestoreWorkTickets(persistedDocument, validationDomain);
+        _ = RestoreEnergizationScenario(persistedDocument, validationDomain);
         _ = RestoreLayout(persistedDocument, validationDomain);
         ProjectSession candidate = new(
             filePath,
@@ -109,7 +114,8 @@ public sealed class ProjectService
             isDirty: false,
             openedFormatVersion: persisted.OpenedFormatVersion,
             transformerNamingMode: persisted.TransformerNamingMode,
-            workTickets: current.WorkTickets);
+            workTickets: current.WorkTickets,
+            energizationScenario: current.EnergizationScenario);
 
         Current = candidate;
         return candidate;
@@ -134,7 +140,8 @@ public sealed class ProjectService
             isDirty: false,
             openedFormatVersion: opened.OpenedFormatVersion,
             transformerNamingMode: opened.TransformerNamingMode,
-            workTickets: RestoreWorkTickets(document, domain));
+            workTickets: RestoreWorkTickets(document, domain),
+            energizationScenario: RestoreEnergizationScenario(document, domain));
         Current = candidate;
         return candidate;
     }
@@ -210,4 +217,8 @@ public sealed class ProjectService
 
     private static WorkTicketDataRoot RestoreWorkTickets(ProjectFileDocument document, DrawingDocument domain) =>
         ProjectWorkTicketMapper.ToRoot(document.WorkTicketData, domain);
+
+    private static EnergizationScenario RestoreEnergizationScenario(
+        ProjectFileDocument document, DrawingDocument domain) =>
+        ProjectEnergizationMapper.ToDomain(document.EnergizationScenario, domain.Id);
 }

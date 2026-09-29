@@ -11,7 +11,7 @@ namespace DistributionDrawing.Infrastructure.Tests;
 public sealed class WorkTicketPersistenceTests
 {
     [Fact]
-    public void RequiredV8WorkTicketSectionRoundTripsManualDraftAndKeepsFormatVersion()
+    public void RequiredWorkTicketSectionRoundTripsManualDraftAndKeepsFormatVersion()
     {
         string path = Path.Combine(Path.GetTempPath(), $"wta-{Guid.NewGuid():N}.kvdrawing");
         try
@@ -33,7 +33,7 @@ public sealed class WorkTicketPersistenceTests
             project.WorkTickets.Add(ticket);
             service.SaveProject();
             ProjectSession opened = new ProjectService().LoadProject(path);
-            Assert.Equal(8, opened.OpenedFormatVersion);
+            Assert.Equal(9, opened.OpenedFormatVersion);
             WorkTicketSession restored = Assert.Single(opened.WorkTickets.Tickets);
             Assert.Equal(ticket.Id, restored.Id);
             Assert.Equal("检修设备", restored.Task.Content);
@@ -48,7 +48,7 @@ public sealed class WorkTicketPersistenceTests
     }
 
     [Fact]
-    public void V8RoundTripsEquipmentWorkScopeTargetIdentity()
+    public void CurrentFormatRoundTripsEquipmentWorkScopeTargetIdentity()
     {
         string path = Path.Combine(Path.GetTempPath(), $"wta-equipment-{Guid.NewGuid():N}.kvdrawing");
         try
@@ -95,8 +95,8 @@ public sealed class WorkTicketPersistenceTests
     [Theory]
     [InlineData(7)]
     [InlineData(6)]
-    [InlineData(9)]
-    public void NonV8ProjectsAreRejected(int version)
+    [InlineData(10)]
+    public void UnsupportedProjectVersionsAreRejected(int version)
     {
         string path = Path.Combine(Path.GetTempPath(), $"wta-version-{Guid.NewGuid():N}.kvdrawing");
         try
@@ -109,7 +109,7 @@ public sealed class WorkTicketPersistenceTests
     }
 
     [Fact]
-    public void V8RequiresWorkTicketData()
+    public void CurrentFormatRequiresWorkTicketData()
     {
         string path = Path.Combine(Path.GetTempPath(), $"wta-required-{Guid.NewGuid():N}.kvdrawing");
         try
@@ -122,7 +122,7 @@ public sealed class WorkTicketPersistenceTests
     }
 
     [Fact]
-    public void V8RoundTripsCompleteTicketAnalysisAndDraftFields()
+    public void CurrentFormatRoundTripsCompleteTicketAnalysisAndDraftFields()
     {
         string path = Path.Combine(Path.GetTempPath(), $"wta-full-{Guid.NewGuid():N}.kvdrawing");
         try

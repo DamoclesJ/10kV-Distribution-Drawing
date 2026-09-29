@@ -61,7 +61,9 @@ public sealed class ProjectFileContainer
             Professional = document.Professional ??
                 ProjectProfessionalDto.Empty(document.Manifest.ProjectId),
             WorkTicketData = document.WorkTicketData ??
-                ProjectWorkTicketDto.Empty(document.Manifest.ProjectId)
+                ProjectWorkTicketDto.Empty(document.Manifest.ProjectId),
+            EnergizationScenario = document.EnergizationScenario ??
+                ProjectEnergizationScenarioDto.Empty(document.Manifest.ProjectId)
         };
         ValidateDocument(normalizedDocument);
 
@@ -103,7 +105,8 @@ public sealed class ProjectFileContainer
                         savedDocument.Layout,
                         savedDocument.Professional,
                         TransformerNamingContractVersion: 1,
-                        WorkTicketData: savedDocument.WorkTicketData));
+                        WorkTicketData: savedDocument.WorkTicketData,
+                        EnergizationScenario: savedDocument.EnergizationScenario));
             }
 
             File.Move(temporaryPath, targetPath, overwrite: true);
@@ -142,6 +145,25 @@ public sealed class ProjectFileContainer
         ValidateManifest(manifest);
 
         JsonObject migratedPayload = ReadJsonObjectEntry(archive, manifest.MainEntry);
+        KeyValuePair<string, JsonNode?>[] scenarioFields = migratedPayload
+            .Where(property => string.Equals(property.Key,
+                "energizationScenario", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (manifest.FormatVersion == ProjectFileFormat.Version8 && scenarioFields.Length != 0)
+            throw new InvalidDataException("V8 project cannot contain EnergizationScenario.");
+        if (manifest.FormatVersion == ProjectFileFormat.Version9)
+        {
+            if (scenarioFields.Length != 1 || scenarioFields[0].Value is not JsonObject scenarioJson)
+                throw new InvalidDataException(
+                    "V9 project requires EnergizationScenario.");
+            KeyValuePair<string, JsonNode?>[] completenessFields = scenarioJson
+                .Where(property => string.Equals(property.Key,
+                    "isSourceSetComplete", StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (completenessFields.Length != 1 ||
+                completenessFields[0].Value is not JsonValue completeness ||
+                !completeness.TryGetValue<bool>(out _))
+                throw new InvalidDataException(
+                    "V9 EnergizationScenario requires IsSourceSetComplete.");
+        }
         TransformerNamingContractMode transformerNamingMode =
             ReadTransformerNamingContractMode(migratedPayload);
         ProjectFilePayload payload = migratedPayload.Deserialize<ProjectFilePayload>(JsonOptions)
@@ -180,7 +202,13 @@ public sealed class ProjectFileContainer
         }
 
         if (payload.WorkTicketData is null)
-            throw new InvalidDataException("V8 project requires WorkTicketData.");
+            throw new InvalidDataException("V8 or V9 project requires WorkTicketData.");
+
+        ProjectEnergizationScenarioDto scenario = manifest.FormatVersion == ProjectFileFormat.Version8
+            ? ProjectEnergizationScenarioDto.Empty(manifest.ProjectId)
+            : payload.EnergizationScenario ?? throw new InvalidDataException(
+                "V9 project requires EnergizationScenario.");
+        ProjectEnergizationMapper.Validate(scenario, manifest.ProjectId);
 
         ProjectProfessionalDto professional = payload.Professional;
         if (professional.DocumentId != manifest.ProjectId)
@@ -201,7 +229,8 @@ public sealed class ProjectFileContainer
                 payload.Domain,
                 payload.Layout,
                 professional,
-                payload.WorkTicketData),
+                payload.WorkTicketData,
+                scenario),
             manifest.FormatVersion,
             transformerNamingMode);
     }
@@ -266,6 +295,10 @@ public sealed class ProjectFileContainer
         {
             throw new InvalidDataException("Work ticket section identity does not match the project manifest.");
         }
+
+        if (document.EnergizationScenario is not { } scenario)
+            throw new InvalidDataException("V9 project requires EnergizationScenario.");
+        ProjectEnergizationMapper.Validate(scenario, document.Manifest.ProjectId);
 
         foreach (ProjectTransformerDto transformer in document.Domain?.Transformers ?? [])
         {
@@ -374,5 +407,6 @@ public sealed class ProjectFileContainer
         ProjectLayoutDto? Layout,
         ProjectProfessionalDto? Professional = null,
         int? TransformerNamingContractVersion = null,
-        ProjectWorkTicketDto? WorkTicketData = null);
+        ProjectWorkTicketDto? WorkTicketData = null,
+        ProjectEnergizationScenarioDto? EnergizationScenario = null);
 }
