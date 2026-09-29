@@ -2,7 +2,15 @@
 
 ## Current development baseline
 
-WP-WTA-01 is Implementation Complete / Code Review Passed / Awaiting Windows Acceptance on the `wp-wta-01` candidate branch. Its project persistence format is V8, with required `WorkTicketData`. New projects use V8; V8 Save/Load is supported. V7 and earlier test projects and versions above V8 are rejected. No migration, unknown-field preservation, or old-version write compatibility is planned. Automated verification is blocked on macOS because `Microsoft.WindowsDesktop.App` is unavailable. This format change does not reopen the closed Electrical Model work packages. WP-WTA-01 remains open until Windows acceptance.
+WP-WTA-01 Work Ticket Assistance Framework V0.1 is **CLOSED / ACCEPTED / WINDOWS VERIFIED** at final accepted SHA `bccc03f4ca0ede4407ced95e7c23ba0f60a1cbff`. FormatVersion V8 requires `WorkTicketData`; V7 and earlier test projects and versions above V8 are rejected, with no historical migration or old-version write compatibility. The closed Electrical Model work packages remain unchanged. See [WP-WTA-01 Closure Report](WP-WTA-01-CLOSURE.md).
+
+## Next Work Package
+
+**WP-EA-01 — Topological Energization State Analysis Framework**
+
+**Status:** PLANNING ONLY — implementation has not started.
+
+This is the next planned work package after WP-WTA-01 closure. Its scope and acceptance criteria must be defined in its own planning and requirements freeze before implementation.
 
 ## V1.0
 
