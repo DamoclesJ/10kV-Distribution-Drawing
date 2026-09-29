@@ -1,4 +1,6 @@
 using DistributionDrawing.Application.Energization;
+using DistributionDrawing.Application.Devices;
+using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
@@ -207,6 +209,40 @@ public sealed class EnergizationAnalyzerTests
         Assert.Equal(EnergizationState.Deenergized,
             result.Terminals[destination.FirstTerminalId].State);
         Assert.Contains(result.ConductingEdges, edge => edge.SourceId == cable.Id);
+    }
+
+    [Fact]
+    public void CableTerminationPropagatesFromCableSideThroughItsExistingInternalPath()
+    {
+        (DrawingDocument drawing, RingCabinet cabinet) = Cabinet(
+            RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
+            RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open));
+        PoleCreationResult pole = new PoleCreationFactory().CreateWithAttachments(
+            "P-100", PoleType.Cement, null, switchKinds: null, includeCableTerminal: true);
+        new CreatePoleCommand(drawing, pole).Execute();
+        CableTermination termination = Assert.Single(pole.Devices.OfType<CableTermination>());
+        var cable = new Connection(Guid.NewGuid(), ConnectionType.Cable,
+            cabinet.Intervals[0].CableTerminalId!.Value,
+            termination.CableSideTerminalId, "cable", "10kV");
+        drawing.AddConnection(cable);
+        Guid[] nodeIdsBeforeAnalysis = drawing.ElectricalNodes.Select(node => node.Id).ToArray();
+        EnergizedSeed seed = Seed(LoadSwitch(cabinet.Intervals[0]), EnergizationSide.Bus);
+
+        EnergizationResult result = new EnergizationAnalyzer().Analyze(drawing,
+            new EnergizationScenario(Guid.NewGuid(), [seed], true));
+
+        Assert.Equal(EnergizationState.Energized,
+            result.Terminals[termination.CableSideTerminalId].State);
+        Assert.Equal(EnergizationState.Energized,
+            result.Terminals[termination.OverheadSideTerminalId].State);
+        Assert.Equal(EnergizationState.Energized, result.Nodes[termination.InternalNodeId].State);
+        Assert.Equal([seed.Id], result.Terminals[termination.OverheadSideTerminalId].EnergizedBy);
+        Assert.Equal([seed.Id], result.Nodes[termination.InternalNodeId].EnergizedBy);
+        Assert.Contains(result.ConductingEdges, edge =>
+            edge.Type == ElectricalConnectivityEdgeType.PassiveDeviceInternal &&
+            edge.SourceId == termination.Id);
+        Assert.Equal(nodeIdsBeforeAnalysis, drawing.ElectricalNodes.Select(node => node.Id));
+        Assert.Equal(nodeIdsBeforeAnalysis.ToHashSet(), result.Nodes.Keys.ToHashSet());
     }
 
     [Fact]
