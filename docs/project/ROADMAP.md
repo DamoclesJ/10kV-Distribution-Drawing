@@ -2,15 +2,15 @@
 
 ## Current development baseline
 
-WP-WTA-01 Work Ticket Assistance Framework V0.1 is **CLOSED / ACCEPTED / WINDOWS VERIFIED** at final accepted SHA `bccc03f4ca0ede4407ced95e7c23ba0f60a1cbff`. FormatVersion V8 requires `WorkTicketData`; V7 and earlier test projects and versions above V8 are rejected, with no historical migration or old-version write compatibility. The closed Electrical Model work packages remain unchanged. See [WP-WTA-01 Closure Report](WP-WTA-01-CLOSURE.md).
+WP-WTA-01 Work Ticket Assistance Framework V0.1 is **CLOSED / ACCEPTED / WINDOWS VERIFIED** at final accepted SHA `bccc03f4ca0ede4407ced95e7c23ba0f60a1cbff`. Its accepted persistence baseline was FormatVersion V8 with required `WorkTicketData`; V7 and earlier were rejected, and no historical migration or old-version write compatibility was provided by that package. WP-EA-01A subsequently added FormatVersion V9 and controlled V8-to-V9 migration. The closed Electrical Model and WTA work packages remain unchanged. See [WP-WTA-01 Closure Report](WP-WTA-01-CLOSURE.md).
+
+WP-EA-01A Topological Energization Analysis Foundation is **CLOSED / ACCEPTED** at final candidate `5246c1f37bab871319f08449dcbd15012aa2ad71`. Windows full regression passed on implementation candidate `3918c6d85d81748b8bd47092d5abe38265e8c04d`; Windows delta acceptance passed on the final test-only candidate. FormatVersion is V9 with controlled V8-to-V9 migration. See [WP-EA-01A Closure Report](WP-EA-01A-CLOSURE.md).
 
 ## Next Work Package
 
-**WP-EA-01 — Topological Energization State Analysis Framework**
+**Status:** None assigned.
 
-**Status:** PLANNING ONLY — implementation has not started.
-
-This is the next planned work package after WP-WTA-01 closure. Its scope and acceptance criteria must be defined in its own planning and requirements freeze before implementation.
+No next Work Package is authorized by the WP-EA-01A closure. WP-EA-01B, GUI implementation, and subsequent energization features have not started and require separate project-control planning.
 
 ## V1.0
 
