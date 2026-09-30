@@ -214,6 +214,10 @@ public sealed class DrawingSceneRenderer
                 ],
                 0);
         }
+        else if (strokeStyle == SceneStrokeStyle.Dotted)
+        {
+            pen.DashStyle = DashStyles.Dot;
+        }
 
         pen.Freeze();
         return pen;

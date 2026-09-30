@@ -1,0 +1,140 @@
+using DistributionDrawing.Application.Energization;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Energization;
+using Xunit;
+
+namespace DistributionDrawing.Application.Tests;
+
+public sealed class EnergizationUiTests
+{
+    [Fact]
+    public void ScenarioCommandsRestoreSeedOrderIdentityAndConfirmation()
+    {
+        EnergizedSeed a = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
+        EnergizedSeed b = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Line);
+        var scenario = new EnergizationScenario(Guid.NewGuid(), [a, b], true);
+        var remove = EnergizationScenarioCommand.Remove(scenario, a.Id);
+        remove.Execute();
+        Assert.Equal([b.Id], scenario.Seeds.Select(seed => seed.Id));
+        Assert.False(scenario.IsSourceSetComplete);
+        remove.Undo();
+        Assert.Equal([a.Id, b.Id], scenario.Seeds.Select(seed => seed.Id));
+        Assert.True(scenario.IsSourceSetComplete);
+        remove.Redo();
+        Assert.Equal([b.Id], scenario.Seeds.Select(seed => seed.Id));
+
+        remove.Undo();
+        var replacement = new EnergizedSeed(b.Id, Guid.NewGuid(), EnergizationSide.Bus);
+        var replace = EnergizationScenarioCommand.Replace(scenario, replacement);
+        replace.Execute();
+        Assert.Equal(replacement, scenario.Seeds[1]);
+        Assert.False(scenario.IsSourceSetComplete);
+        replace.Undo();
+        Assert.Equal([a, b], scenario.Seeds);
+        Assert.True(scenario.IsSourceSetComplete);
+        replace.Redo();
+        Assert.Equal(replacement, scenario.Seeds[1]);
+
+        var add = EnergizationScenarioCommand.Add(scenario,
+            new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Line));
+        add.Execute();
+        Assert.Equal(3, scenario.Seeds.Count);
+        add.Undo();
+        Assert.Equal([a.Id, b.Id], scenario.Seeds.Select(seed => seed.Id));
+        add.Redo();
+        Assert.Equal(3, scenario.Seeds.Count);
+    }
+
+    [Fact]
+    public void IdenticalReplaceAndConfirmationAreNoOps()
+    {
+        EnergizedSeed seed = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
+        var scenario = new EnergizationScenario(Guid.NewGuid(), [seed], true);
+        Assert.False(EnergizationScenarioCommand.Replace(scenario, seed).HasChanges);
+        Assert.False(EnergizationScenarioCommand.SetComplete(scenario, true).HasChanges);
+        var confirm = EnergizationScenarioCommand.SetComplete(scenario, false);
+        Assert.True(confirm.HasChanges);
+        confirm.Execute();
+        Assert.False(scenario.IsSourceSetComplete);
+        confirm.Undo();
+        Assert.True(scenario.IsSourceSetComplete);
+    }
+
+    [Fact]
+    public void CabinetCandidatesUsePolicyAndHideUnsupportedSwitches()
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "EA");
+        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(
+            Guid.NewGuid(), "柜 A",
+            [RingCabinetIntervalDefinition.CreateLoadSwitch(1,
+                SwitchState.Open, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateIntegratedFeeder(2,
+                GroundingStructureKind.LowerLowerGrounding,
+                SwitchState.Open, SwitchState.Open, SwitchState.Open)]));
+        drawing.AddDevice(cabinet);
+
+        IReadOnlyList<EnergizationBoundaryCandidate> candidates =
+            new EnergizationUiService().Candidates(drawing, cabinet.Id);
+        Assert.Equal(4, candidates.Count);
+        Assert.All(candidates, candidate => Assert.True(candidate.IsResolvable));
+        Assert.Contains(candidates, candidate => candidate.DeviceKind == SwitchKind.LoadSwitch);
+        Assert.Contains(candidates, candidate => candidate.DeviceKind == SwitchKind.CircuitBreaker);
+        Assert.DoesNotContain(candidates, candidate =>
+            candidate.DeviceKind is SwitchKind.GroundSwitch or SwitchKind.IsolationSwitch);
+        var service = new EnergizationUiService();
+        var scenario = new EnergizationScenario(Guid.NewGuid(),
+            [new EnergizedSeed(Guid.NewGuid(), candidates[0].DeviceId, candidates[0].Side)]);
+        Assert.True(service.CanConfirmSources(drawing, scenario));
+        Assert.False(service.CanConfirmSources(drawing, new EnergizationScenario(Guid.NewGuid())));
+    }
+
+    [Fact]
+    public void UnresolvedPoleSideIsVisibleAndCannotBeConfirmed()
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "EA pole");
+        var pole = new Pole(Guid.NewGuid(), "P02");
+        SwitchDevice switchDevice = SwitchDevice.CreateForPole(Guid.NewGuid(),
+            SwitchKind.IsolationSwitch, Guid.NewGuid(), Guid.NewGuid(),
+            displayName: "柱上隔离开关");
+        drawing.AddDevice(pole);
+        drawing.AddDevice(switchDevice);
+        drawing.AddPoleAttachment(new PoleAttachment(Guid.NewGuid(), pole.Id,
+            switchDevice.Id));
+        var service = new EnergizationUiService();
+        EnergizationBoundaryCandidate[] candidates = service.Candidates(drawing,
+            pole.Id).ToArray();
+        Assert.Equal(2, candidates.Length);
+        Assert.All(candidates, candidate =>
+        {
+            Assert.False(candidate.IsResolvable);
+            Assert.Equal(EnergizationDiagnosticCode.UnresolvedSide, candidate.Diagnostic);
+        });
+        EnergizedSeed seed = new(Guid.NewGuid(), switchDevice.Id,
+            EnergizationSide.SmallerNumber);
+        var scenario = new EnergizationScenario(Guid.NewGuid(), [seed]);
+        Assert.False(service.CanConfirmSources(drawing, scenario));
+        Assert.Equal(EnergizationDiagnosticCode.UnresolvedSide,
+            service.DescribeSeed(drawing, seed).Diagnostic);
+    }
+
+    [Fact]
+    public void AnalysisStateNeverExposesStaleResultAsCurrent()
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "EA");
+        var scenario = new EnergizationScenario(Guid.NewGuid());
+        var state = new EnergizationAnalysisState();
+        Assert.Equal(EnergizationFreshness.NotAnalyzed, state.Freshness);
+        state.Execute(drawing, scenario);
+        Assert.Equal(EnergizationValidity.NoSeeds, state.CurrentResult!.Validity);
+        Assert.True(state.CanShowOverlay);
+        Assert.Contains(state.LatestDiagnostics, item => item.Message == "未设置电源点");
+        state.Invalidate();
+        Assert.Equal(EnergizationFreshness.Stale, state.Freshness);
+        Assert.Null(state.CurrentResult);
+        Assert.False(state.CanShowOverlay);
+        state.Execute(drawing, scenario);
+        Assert.Equal(EnergizationFreshness.Current, state.Freshness);
+    }
+}

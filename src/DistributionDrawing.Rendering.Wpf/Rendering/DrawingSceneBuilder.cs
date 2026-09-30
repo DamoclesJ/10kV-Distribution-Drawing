@@ -4,6 +4,7 @@ using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Professional;
@@ -682,11 +683,20 @@ public sealed class DrawingSceneBuilder
                     : null;
                 Guid targetId = isCable ? cable!.Id : route.ConnectionId;
                 DocumentRect routeBounds = ExpandBounds(route.Bounds, isCable ? 2 : 3);
+                ElectricalVisualIdentity? electricalIdentity = connectionById is not null &&
+                    connectionById.TryGetValue(route.ConnectionId, out Connection? routeConnection)
+                    ? ElectricalVisualIdentity.Edge(
+                        ElectricalConnectivityEdgeType.Connection,
+                        routeConnection.Id,
+                        routeConnection.StartTerminalId,
+                        routeConnection.EndTerminalId)
+                    : null;
                 elements.AddRange(routeElements.Select(element => element with
                 {
                     TargetKind = sceneTargetKind,
                     TargetId = targetId,
-                    HitTestBounds = routeBounds
+                    HitTestBounds = routeBounds,
+                    ElectricalIdentity = electricalIdentity
                 }));
                 foreach (OrthogonalRouteSegment segment in route.Segments)
                 {
@@ -721,7 +731,8 @@ public sealed class DrawingSceneBuilder
                             _metrics.Line.ConnectionThickness)
                         {
                             TargetId = route.ConnectionId,
-                            HitTestBounds = ExpandBounds(CreateBounds(start, finish, 0), 3)
+                            HitTestBounds = ExpandBounds(CreateBounds(start, finish, 0), 3),
+                            ElectricalIdentity = electricalIdentity
                         });
                     }
                 }
@@ -842,6 +853,22 @@ public sealed class DrawingSceneBuilder
                 poleLayout,
                 switchInputs,
                 cableTerminationInputs));
+            foreach (PoleAttachmentRenderInput input in cableTerminationInputs)
+            {
+                CableTermination termination = input.CableTermination;
+                PoleAttachmentGeometry geometry = PoleProfessionalGeometry.GetAttachmentGeometry(
+                    poleLayout,
+                    input.Layout,
+                    SymbolKind.CableTermination);
+                elements.Add(new SceneLine(
+                    geometry.FirstTerminal,
+                    geometry.SecondTerminal,
+                    Colors.Black,
+                    _metrics.Line.ConnectionThickness)
+                {
+                    ElectricalIdentity = ElectricalVisualIdentity.Node(termination.InternalNodeId)
+                });
+            }
             DocumentRect poleBounds = PoleProfessionalGeometry.GetPoleBounds(poleLayout);
             hitTestEntries.Add(
                 new SelectionHitTestEntry(

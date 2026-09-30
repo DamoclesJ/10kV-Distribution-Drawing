@@ -10,6 +10,7 @@ using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Desktop.Selection;
+using DistributionDrawing.Application.Energization;
 
 namespace DistributionDrawing.Desktop;
 
@@ -21,6 +22,7 @@ namespace DistributionDrawing.Desktop;
 public sealed class ProjectRuntimeSession
 {
     private readonly DrawingSceneBuilder _sceneBuilder;
+    private long _lastCommandStateId;
     private ProjectRuntimeSession(
         ProjectSession persistenceSession,
         RuntimeLayoutDocument layout,
@@ -42,6 +44,8 @@ public sealed class ProjectRuntimeSession
         CommandStack = new CommandStack();
         SelectionTransitions = new SelectionTransitionCoordinator();
         CommandStack.MarkSaved();
+        _lastCommandStateId = CommandStack.CurrentStateId;
+        CommandStack.StateChanged += OnCommandStackStateChanged;
     }
 
     public ProjectSession PersistenceSession { get; private set; }
@@ -63,6 +67,19 @@ public sealed class ProjectRuntimeSession
     public CommandStack CommandStack { get; }
 
     public ISelectionTransitionCoordinator SelectionTransitions { get; }
+    public EnergizationAnalysisState Energization { get; } = new();
+
+    public bool ExecuteScenarioCommand(EnergizationScenarioCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (!command.HasChanges) return false;
+        CommandStack.ExecuteCommand(new ScenarioCommandAdapter(command));
+        return true;
+    }
+
+    public void ExecuteEnergizationAnalysis() =>
+        Energization.Execute(PersistenceSession.Domain,
+            PersistenceSession.EnergizationScenario);
 
     /// <summary>
     /// Runtime edits are tracked by the command-stack save checkpoint. The
@@ -126,6 +143,21 @@ public sealed class ProjectRuntimeSession
         InspectionSource = inspectionSource;
         SelectionResolver.SetSource(InspectionSource);
         SelectionManager.Retain(reference => SelectionResolver.Resolve(reference) is not null);
+    }
+
+    private void OnCommandStackStateChanged(object? sender, EventArgs e)
+    {
+        long stateId = CommandStack.CurrentStateId;
+        if (stateId == _lastCommandStateId) return;
+        _lastCommandStateId = stateId;
+        Energization.Invalidate();
+    }
+
+    private sealed class ScenarioCommandAdapter(EnergizationScenarioCommand command) : ICommand
+    {
+        public void Execute() => command.Execute();
+        public void Undo() => command.Undo();
+        public void Redo() => command.Redo();
     }
 
     public void AcceptSavedSession(ProjectSession persistenceSession)

@@ -60,7 +60,10 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
             new DocumentPoint(isolationTop.XMillimeters, busY),
             isolationTop,
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(isolation.FirstTerminalId)
+        });
 
         AddPTCoils(elements, ptOrigin, out DocumentPoint coilTop);
         DocumentPoint terminalTip = new(
@@ -73,7 +76,10 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
             common,
             terminalBase,
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(isolation.SecondTerminalId)
+        });
 
         RingCabinetProfessionalGeometry.AddCableTerminationMarker(
             elements,

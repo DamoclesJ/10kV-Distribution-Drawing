@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:renderingCanvas="clr-namespace:DistributionDrawing.Rendering.Wpf.Canvas;assembly=DistributionDrawing.Rendering.Wpf"
         xmlns:tickets="clr-namespace:DistributionDrawing.Desktop.WorkTickets"
+        xmlns:ea="clr-namespace:DistributionDrawing.Desktop.Energization"
         Title="10kV 配电工作票绘图"
         Icon="Assets/AppIcon.ico"
         Width="1200"
@@ -192,7 +193,7 @@
                         IsChecked="{Binding Toolbox.IsGroundingPointActive, Mode=OneWay}" Command="{Binding AddGroundingPointCommand}">
             <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.WorkGrounding}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="工作地线" /></StackPanel>
           </ToggleButton>
-          <Button Content="工作范围" Click="OnOpenTicketRange" Padding="10,6" Margin="2,0" />
+          <Button Content="工作范围" Click="OnOpenTicketRangeFromDrawing" Padding="10,6" Margin="2,0" />
         </StackPanel>
       </ScrollViewer>
     </Border>
@@ -221,6 +222,7 @@
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Background="{StaticResource PanelBackgroundBrush}">
       <Button Content="图纸" Click="OnShowDrawingWorkspace" Padding="18,5" Margin="8,3,2,3" />
       <Button Content="工作票" Click="OnShowTicketWorkspace" Padding="18,5" Margin="2,3" />
+      <Button Content="带电分析" Click="OnOpenEnergizationPanel" Padding="18,5" Margin="2,3" />
       <CheckBox x:Name="TicketOverlayToggle" Content="显示工作票图形状态" VerticalAlignment="Center"
                 Margin="16,0,0,0" Checked="OnTicketOverlayChanged" Unchecked="OnTicketOverlayChanged" />
     </StackPanel>
@@ -362,7 +364,7 @@
                 <TextBlock VerticalAlignment="Center" Text="工作地线" />
               </StackPanel>
             </ToggleButton>
-            <Button Content="工作范围" Click="OnOpenTicketRange" HorizontalContentAlignment="Left"
+            <Button Content="工作范围" Click="OnOpenTicketRangeFromDrawing" HorizontalContentAlignment="Left"
                     Padding="10,7" Margin="0,2,0,0" />
           </StackPanel>
         </ScrollViewer>
@@ -509,6 +511,7 @@
           <Style TargetType="Button" BasedOn="{StaticResource InspectorButtonStyle}" />
         </Border.Resources>
         <Grid>
+          <ea:EnergizationPanel x:Name="EaPanel" Visibility="Collapsed" />
           <ScrollViewer x:Name="TicketRangePanel" Visibility="Collapsed"
                         VerticalScrollBarVisibility="Auto">
             <StackPanel>

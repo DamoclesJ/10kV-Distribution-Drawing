@@ -70,7 +70,10 @@ public sealed class RingCabinetSymbol
                 new DocumentPoint(busStartX, busY),
                 new DocumentPoint(busEndX, busY),
                 Colors.Black,
-                _metrics.RingCabinet.BusbarHeight));
+                _metrics.RingCabinet.BusbarHeight)
+            {
+                ElectricalIdentity = ElectricalVisualIdentity.Node(cabinet.MainBusNodeId)
+            });
 
         foreach (RingCabinetInterval interval in cabinet.Intervals.OrderBy(
                      candidate => candidate.Sequence))

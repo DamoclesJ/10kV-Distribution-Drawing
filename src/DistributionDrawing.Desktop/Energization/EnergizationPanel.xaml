@@ -1,0 +1,42 @@
+<UserControl x:Class="DistributionDrawing.Desktop.Energization.EnergizationPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="4">
+      <TextBlock Text="带电分析" FontSize="17" FontWeight="SemiBold" />
+      <TextBlock Text="选择图纸中的开关，或选择柜体、间隔后从下方选取设备与电气侧。"
+                 TextWrapping="Wrap" Margin="0,8,0,8" />
+      <TextBlock Text="候选电源边界" FontWeight="SemiBold" />
+      <ListBox x:Name="CandidateList" Height="145" SelectionChanged="OnCandidateSelected"
+               DisplayMemberPath="DisplayText" />
+      <TextBlock x:Name="CandidateDiagnostic" TextWrapping="Wrap" Margin="0,4,0,4" />
+      <StackPanel Orientation="Horizontal" Margin="0,4,0,12">
+        <Button x:Name="AddButton" Content="添加电源点" Click="OnAddSeed" Padding="8,4" />
+        <Button x:Name="ReplaceButton" Content="修改所选电源点" Click="OnReplaceSeed"
+                Padding="8,4" Margin="8,0,0,0" />
+      </StackPanel>
+      <TextBlock Text="当前电源点" FontWeight="SemiBold" />
+      <ListBox x:Name="SeedList" Height="170" SelectionChanged="OnSeedSelected"
+               DisplayMemberPath="DisplayText" />
+      <Button x:Name="RemoveButton" Content="删除所选电源点" Click="OnRemoveSeed"
+              Padding="8,4" Margin="0,6,0,8" />
+      <TextBlock x:Name="CompletionText" TextWrapping="Wrap" Margin="0,2,0,6" />
+      <Button x:Name="ConfirmButton" Content="确认以上列出的就是本图纸全部电源点"
+              Click="OnConfirmSources" Padding="8,6" />
+      <Button x:Name="AnalyzeButton" Content="执行带电分析" Click="OnExecuteAnalysis"
+              Padding="8,6" Margin="0,12,0,4" />
+      <TextBlock x:Name="AnalysisText" TextWrapping="Wrap" Margin="0,4,0,4" />
+      <TextBlock Text="诊断" FontWeight="SemiBold" Margin="0,8,0,3" />
+      <ItemsControl x:Name="DiagnosticList" />
+      <Border x:Name="Legend" BorderBrush="Gray" BorderThickness="1" Padding="7"
+              Margin="0,12,0,0" Visibility="Collapsed">
+        <StackPanel>
+          <TextBlock Text="带电分析图例" FontWeight="SemiBold" />
+          <TextBlock Text="━━ 带电" Foreground="Red" />
+          <TextBlock Text="━━ 已判定无电" Foreground="Black" />
+          <TextBlock Text="···· 未知" Foreground="Gray" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

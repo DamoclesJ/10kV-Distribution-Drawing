@@ -36,6 +36,10 @@ public abstract record SceneElement
     public Guid? TargetId { get; init; }
 
     public DocumentRect? HitTestBounds { get; init; }
+
+    public ElectricalVisualIdentity? ElectricalIdentity { get; init; }
+
+    public ElectricalVisualState? ElectricalState { get; init; }
 }
 
 /// <summary>

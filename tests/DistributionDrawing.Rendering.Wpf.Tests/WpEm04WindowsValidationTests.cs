@@ -547,6 +547,10 @@ public sealed class WpEm04WindowsValidationTests
 
         Assert.Empty(scene.Diagnostics);
         OrthogonalRoute route = Assert.Single(scene.Routes, item => item.ConnectionId == connection.Id);
+        Assert.Contains(scene.Elements.OfType<SceneLine>(), line =>
+            line.ElectricalIdentity == ElectricalVisualIdentity.Edge(
+                DistributionDrawing.Application.Topology.ElectricalConnectivityEdgeType.Connection,
+                connection.Id, connection.StartTerminalId, connection.EndTerminalId));
         Assert.Contains(
             PoleProfessionalGeometry.GetPoleCenter(runtime.DrawingLayout.Poles[start.Pole.Id]),
             route.Points);

@@ -51,7 +51,10 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             new DocumentPoint(centerX, busY),
             loadTop,
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(loadSwitch.FirstTerminalId)
+        });
 
         DocumentPoint terminalTip = new(
             centerX,
@@ -62,7 +65,10 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             common,
             new DocumentPoint(centerX, terminalTop),
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(loadSwitch.SecondTerminalId)
+        });
 
         if (interval.HasCableTerminal)
         {

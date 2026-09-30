@@ -44,6 +44,7 @@ using DistributionDrawing.Desktop.Actions;
 using DistributionDrawing.Desktop.Export;
 using DistributionDrawing.Desktop.WorkScopeCreation;
 using DistributionDrawing.Desktop.WorkTickets;
+using DistributionDrawing.Desktop.Energization;
 using System.Windows.Threading;
 
 namespace DistributionDrawing.Desktop;
@@ -118,6 +119,7 @@ public partial class MainWindow : Window
         TicketWorkspace.LocateRequested += OnTicketLocateRequested;
         TicketWorkspace.SelectionChanged += OnTicketWorkspaceSelectionChanged;
         TicketWorkspace.RangeEditRequested += OnTicketRangeEditRequested;
+        EaPanel.VisualStateChanged += (_, _) => RenderCurrentScene();
         _messageService = new DesktopMessageService(this);
         _propertyEditor = new(_selectionResolver, _commandStack);
         _selectionRectangle = new SelectionRectangleController(_selectionManager);
@@ -1002,6 +1004,20 @@ public partial class MainWindow : Window
         TicketWorkspace.CommitPendingEdits();
         DrawingWorkspace.Visibility = Visibility.Visible;
         TicketWorkspace.Visibility = Visibility.Collapsed;
+        TicketOverlayToggle.IsEnabled = EaPanel.Visibility != Visibility.Visible;
+        RenderCurrentScene();
+    }
+
+    private void OnOpenEnergizationPanel(object sender, RoutedEventArgs e)
+    {
+        OnShowDrawingWorkspace(sender, e);
+        CancelTicketRangePicking();
+        TicketRangePanel.Visibility = Visibility.Collapsed;
+        bool open = EaPanel.Visibility != Visibility.Visible;
+        EaPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        InspectorContent.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        TicketOverlayToggle.IsEnabled = !open;
+        RenderCurrentScene();
     }
 
     private void OnShowTicketWorkspace(object sender, RoutedEventArgs e)
@@ -1013,6 +1029,7 @@ public partial class MainWindow : Window
         TicketWorkspace.Refresh();
         DrawingWorkspace.Visibility = Visibility.Collapsed;
         TicketWorkspace.Visibility = Visibility.Visible;
+        TicketOverlayToggle.IsEnabled = true;
     }
 
     private void OnTicketOverlayChanged(object sender, RoutedEventArgs e)
@@ -1022,7 +1039,15 @@ public partial class MainWindow : Window
     }
 
     private void OnTicketRangeEditRequested() =>
-        OnOpenTicketRange(this, new RoutedEventArgs());
+        OnOpenTicketRangeFromDrawing(this, new RoutedEventArgs());
+
+    private void OnOpenTicketRangeFromDrawing(object sender, RoutedEventArgs e)
+    {
+        EaPanel.Visibility = Visibility.Collapsed;
+        TicketOverlayToggle.IsEnabled = true;
+        OnOpenTicketRange(sender, e);
+        RenderCurrentScene();
+    }
 
     private void OnTicketWorkspaceSelectionChanged()
     {
@@ -1131,6 +1156,7 @@ public partial class MainWindow : Window
             _selectionResolver.SetSource(_activeSource);
             OnSelectionChanged(this, EventArgs.Empty);
             TicketWorkspace.Bind(current);
+            EaPanel.SetSelection(_selectionManager.Selected?.ObjectId);
             return;
         }
 
@@ -1156,6 +1182,7 @@ public partial class MainWindow : Window
             OnClearDrawing(this, new RoutedEventArgs());
             _shellViewModel.RefreshCommandStates();
             TicketWorkspace.Bind(null);
+            EaPanel.Bind(null);
             return;
         }
 
@@ -1175,12 +1202,15 @@ public partial class MainWindow : Window
         _viewport.RestoreState(documentSession.ViewState);
         OnSelectionChanged(this, EventArgs.Empty);
         TicketWorkspace.Bind(session);
+        EaPanel.Bind(session);
+        EaPanel.SetSelection(_selectionManager.Selected?.ObjectId);
     }
 
     private void OnBoundDocumentSessionStateChanged(object? sender, EventArgs e)
     {
         RefreshBoundSessionState();
-        if (TicketOverlayToggle.IsChecked == true) RenderCurrentScene();
+        if (TicketOverlayToggle.IsChecked == true || EaPanel.Visibility == Visibility.Visible)
+            RenderCurrentScene();
     }
 
     private void RefreshBoundSessionState()
@@ -2756,8 +2786,10 @@ public partial class MainWindow : Window
             TicketRangePanel.Visibility == Visibility.Visible)
         {
             TicketRangePanel.Visibility = Visibility.Collapsed;
-            InspectorContent.Visibility = Visibility.Visible;
+            InspectorContent.Visibility = EaPanel.Visibility == Visibility.Visible
+                ? Visibility.Collapsed : Visibility.Visible;
         }
+        EaPanel.SetSelection(_selectionManager.Selected?.ObjectId);
         DrawingPerformanceTrace.PhaseOperation selectionRefresh =
             DrawingPerformanceTrace.Measure("InspectorSelectionRefresh");
         if (_intervalPreview.TargetIntervalId != _selectionManager.Selected?.ObjectId)
@@ -3955,11 +3987,22 @@ public partial class MainWindow : Window
         UpdateCablePropertyEditor();
 
         var elements = _currentScene.Elements.ToList();
+        DrawingOverlayVisibility overlayVisibility = DrawingOverlayVisibility.Resolve(
+            DrawingWorkspace.Visibility == Visibility.Visible,
+            EaPanel.Visibility == Visibility.Visible,
+            _workspace.CurrentSession?.Energization.CanShowOverlay == true,
+            TicketOverlayToggle.IsChecked == true);
+        if (overlayVisibility.ShowEnergization &&
+            _workspace.CurrentSession?.Energization.CurrentResult is { } result)
+        {
+            elements.AddRange(EnergizationOverlayBuilder.Build(_currentScene, result));
+        }
         elements.AddRange(_intervalPreview.Elements);
         elements.AddRange(_drawingTools.CreateTransientElements());
         elements.AddRange(_groundingTargetPicker.CreateAffordance(
             _hoveredGroundingTarget));
-        if (TicketOverlayToggle.IsChecked == true && _workspace.CurrentSession is { } ticketSession)
+        if (overlayVisibility.ShowWorkTicket &&
+            _workspace.CurrentSession is { } ticketSession)
         {
             WorkTicketSession? ticket = TicketWorkspace.SelectedTicket;
             if (ticket is not null &&

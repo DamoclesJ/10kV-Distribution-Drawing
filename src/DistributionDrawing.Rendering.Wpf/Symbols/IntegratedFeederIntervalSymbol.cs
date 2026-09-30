@@ -126,12 +126,18 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
             new DocumentPoint(centerX, busY),
             upperTop,
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(upper.FirstTerminalId)
+        });
         elements.Add(new SceneLine(
             upperBottom,
             lowerTop,
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(upper.SecondTerminalId)
+        });
 
         DocumentPoint terminalTip = new(
             centerX,
@@ -159,7 +165,10 @@ public sealed class IntegratedFeederIntervalSymbol : IIntervalSymbolDefinition
             lowerBottom,
             new DocumentPoint(centerX, terminalTop),
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(lower.SecondTerminalId)
+        });
 
         if (interval.HasCableTerminal)
         {
