@@ -222,7 +222,6 @@
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Background="{StaticResource PanelBackgroundBrush}">
       <Button Content="图纸" Click="OnShowDrawingWorkspace" Padding="18,5" Margin="8,3,2,3" />
       <Button Content="工作票" Click="OnShowTicketWorkspace" Padding="18,5" Margin="2,3" />
-      <Button Content="带电分析" Click="OnOpenEnergizationPanel" Padding="18,5" Margin="2,3" />
       <CheckBox x:Name="TicketOverlayToggle" Content="显示工作票图形状态" VerticalAlignment="Center"
                 Margin="16,0,0,0" Checked="OnTicketOverlayChanged" Unchecked="OnTicketOverlayChanged" />
     </StackPanel>
@@ -511,7 +510,6 @@
           <Style TargetType="Button" BasedOn="{StaticResource InspectorButtonStyle}" />
         </Border.Resources>
         <Grid>
-          <ea:EnergizationPanel x:Name="EaPanel" Visibility="Collapsed" />
           <ScrollViewer x:Name="TicketRangePanel" Visibility="Collapsed"
                         VerticalScrollBarVisibility="Auto">
             <StackPanel>
@@ -530,6 +528,9 @@
             <Button Content="确定" Click="OnConfirmTicketRange" HorizontalAlignment="Right" />
             </StackPanel>
           </ScrollViewer>
+          <TabControl x:Name="DrawingRightPanelTabs"
+                      SelectionChanged="OnDrawingRightPanelChanged">
+            <TabItem x:Name="InspectorTab" Header="属性">
           <DockPanel x:Name="InspectorContent">
           <TextBlock DockPanel.Dock="Top"
                      FontSize="{StaticResource Typography.Title}"
@@ -943,6 +944,11 @@
             </ItemsControl>
           </ScrollViewer>
           </DockPanel>
+            </TabItem>
+            <TabItem x:Name="EnergizationTab" Header="带电分析">
+              <ea:EnergizationPanel x:Name="EaPanel" />
+            </TabItem>
+          </TabControl>
         </Grid>
       </Border>
     </Grid>

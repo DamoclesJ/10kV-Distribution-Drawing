@@ -29,9 +29,12 @@ public sealed class WorkRangeEntryAcceptanceTests
         string drawingEntry = HandlerBody(windowCode,
             "private void OnOpenTicketRangeFromDrawing",
             "private void OnTicketWorkspaceSelectionChanged");
-        Assert.Contains("EaPanel.Visibility = Visibility.Collapsed;", drawingEntry);
-        Assert.Contains("TicketOverlayToggle.IsEnabled = true;", drawingEntry);
         Assert.Contains("OnOpenTicketRange(sender, e);", drawingEntry);
+        string rangeHandler = HandlerBody(
+            File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs")),
+            "private void OnOpenTicketRange", "private void OnAddTicketBoundarySlot");
+        Assert.Contains("DrawingRightPanelTabs.Visibility = Visibility.Collapsed;", rangeHandler);
+        Assert.Contains("TicketOverlayToggle.IsEnabled = true;", rangeHandler);
         Assert.True(HasVisibilitySetter(left, "Visible"));
         Assert.True(HasVisibilitySetter(top, "Collapsed"));
         Assert.True(HasVisibilityTrigger(left, "IsLeftToolPalette", "False", "Collapsed"));
@@ -76,7 +79,10 @@ public sealed class WorkRangeEntryAcceptanceTests
             (string?)button.Attribute("Click") == "OnConfirmTicketRange");
         Assert.Contains(rangeHost.Elements(Presentation + "ScrollViewer"), element =>
             (string?)element.Attribute(Xaml + "Name") == "TicketRangePanel");
-        Assert.Contains(inspector, rangeHost.Elements());
+        XElement rightPanelTabs = NamedElement(mainWindowXaml, Presentation + "TabControl",
+            "DrawingRightPanelTabs");
+        Assert.Contains(rightPanelTabs, rangeHost.Elements());
+        Assert.Contains(inspector, rightPanelTabs.Descendants());
         Assert.Contains("返回图纸修改工作范围", workTicketWorkspaceXaml.ToString());
         Assert.DoesNotContain("工作票范围", workTicketWorkspaceXaml.ToString());
         Assert.DoesNotContain("创建工作票", workTicketWorkspaceXaml.ToString());
