@@ -169,11 +169,16 @@ public sealed class EnergizationOverlayTests
     private static RingCabinet Cabinet()
     {
         var template = new RingCabinetTemplate(
-            new TemplateId("test:ea:rendering"), "EA cabinet", RingCabinetTemplateType.Mixed,
-            [new BayTemplate(1, new LoadSwitchConfiguration())],
+            new TemplateId("test:ea:rendering"), "EA cabinet", RingCabinetTemplateType.Conventional,
+            [
+                new BayTemplate(1, new LoadSwitchConfiguration()),
+                new BayTemplate(2, new LoadSwitchConfiguration())
+            ],
             RingCabinetLayoutRule.Default, NoSecondaryConfiguration.Instance);
         RingCabinetDomainBuildOutcome outcome =
             new RingCabinetTemplateDomainBuilder().Build(template, "EA cabinet");
+        Assert.True(outcome.IsSuccess,
+            outcome.Failure?.Cause?.ToString() ?? outcome.Failure?.Message);
         return Assert.IsType<RingCabinetDomainBuildResult>(outcome.Result).Cabinet;
     }
 }

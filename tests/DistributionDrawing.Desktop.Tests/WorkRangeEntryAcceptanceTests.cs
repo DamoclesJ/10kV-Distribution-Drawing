@@ -23,8 +23,15 @@ public sealed class WorkRangeEntryAcceptanceTests
         XElement topEntry = Assert.Single(top.Descendants(Presentation + "Button"),
             button => (string?)button.Attribute("Content") == "工作范围");
 
-        Assert.Equal("OnOpenTicketRange", (string?)leftEntry.Attribute("Click"));
-        Assert.Equal("OnOpenTicketRange", (string?)topEntry.Attribute("Click"));
+        Assert.Equal("OnOpenTicketRangeFromDrawing", (string?)leftEntry.Attribute("Click"));
+        Assert.Equal("OnOpenTicketRangeFromDrawing", (string?)topEntry.Attribute("Click"));
+        string windowCode = File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs"));
+        string drawingEntry = HandlerBody(windowCode,
+            "private void OnOpenTicketRangeFromDrawing",
+            "private void OnTicketWorkspaceSelectionChanged");
+        Assert.Contains("EaPanel.Visibility = Visibility.Collapsed;", drawingEntry);
+        Assert.Contains("TicketOverlayToggle.IsEnabled = true;", drawingEntry);
+        Assert.Contains("OnOpenTicketRange(sender, e);", drawingEntry);
         Assert.True(HasVisibilitySetter(left, "Visible"));
         Assert.True(HasVisibilitySetter(top, "Collapsed"));
         Assert.True(HasVisibilityTrigger(left, "IsLeftToolPalette", "False", "Collapsed"));

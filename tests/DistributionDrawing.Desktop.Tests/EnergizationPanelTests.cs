@@ -111,9 +111,18 @@ public sealed class EnergizationPanelTests
                 Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
                 analyze.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Contains("分析完成", status.Text);
+                Assert.Contains(cabinet.Intervals.SelectMany(interval => interval.SwitchDevices),
+                    device => device.Id == original.BoundaryDeviceId);
+                RingCabinetInterval sourceInterval = Assert.Single(cabinet.Intervals,
+                    interval => interval.SwitchDevices.Any(device =>
+                        device.Id == original.BoundaryDeviceId));
                 runtime.SelectionManager.Select(new SelectionReference(
-                    SelectionTargetKind.Device, original.BoundaryDeviceId));
-                Assert.True(new SwitchOperationController(() => runtime).ToggleSelected().IsSuccess);
+                    SelectionTargetKind.Device, original.BoundaryDeviceId,
+                    sourceInterval.IntervalId));
+                SwitchOperationResult switchResult =
+                    new SwitchOperationController(() => runtime).ToggleSelected();
+                Assert.True(switchResult.IsSuccess, switchResult.ErrorMessage);
+                Assert.True(runtime.CommandStack.CanUndo);
                 Assert.True(scenario.IsSourceSetComplete);
                 Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
                 analyze.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
