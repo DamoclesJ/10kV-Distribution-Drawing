@@ -54,7 +54,9 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
         }
 
         AddText(context, elements);
-        return elements;
+        return elements.Select(element => element.ElectricalIdentity is null &&
+            element is not SceneLogicalBounds ? Bind(element, context,
+                Kind == SymbolKind.DropoutFuse && element is ScenePolyline ? 3 : 0) : element).ToArray();
     }
 
     private void CreateCircuitBreaker(SymbolRenderContext context, ICollection<SceneElement> elements)
@@ -66,16 +68,16 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
         double centerY = y + height / 2;
         double inset = Math.Min(_metrics.PoleAttachment.InternalInset, width / 5);
         elements.Add(new SceneRectangle(new DocumentRect(x, y, width, height), context.Stroke, context.ThicknessMillimeters, context.Fill));
-        elements.Add(Line(context, new DocumentPoint(x, centerY), new DocumentPoint(x + inset, centerY)));
-        elements.Add(Line(context, new DocumentPoint(x + width - inset, centerY), new DocumentPoint(x + width, centerY)));
+        elements.Add(Line(context, new DocumentPoint(x, centerY), new DocumentPoint(x + inset, centerY), 1));
+        elements.Add(Line(context, new DocumentPoint(x + width - inset, centerY), new DocumentPoint(x + width, centerY), 2));
         DocumentPoint bladeEnd = context.State == SymbolVisualState.Open
             ? new DocumentPoint(x + width - inset, y + inset)
             : new DocumentPoint(x + width - inset, centerY);
-        elements.Add(Line(context, new DocumentPoint(x + inset, centerY), bladeEnd));
+        elements.Add(Line(context, new DocumentPoint(x + inset, centerY), bladeEnd, 3));
         double contactX = x + width - inset;
         double crossHalfSize = _metrics.PoleAttachment.ContactCrossSize / 2;
-        elements.Add(Line(context, new DocumentPoint(contactX - crossHalfSize, centerY - crossHalfSize), new DocumentPoint(contactX + crossHalfSize, centerY + crossHalfSize)));
-        elements.Add(Line(context, new DocumentPoint(contactX - crossHalfSize, centerY + crossHalfSize), new DocumentPoint(contactX + crossHalfSize, centerY - crossHalfSize)));
+        elements.Add(Line(context, new DocumentPoint(contactX - crossHalfSize, centerY - crossHalfSize), new DocumentPoint(contactX + crossHalfSize, centerY + crossHalfSize), 2));
+        elements.Add(Line(context, new DocumentPoint(contactX - crossHalfSize, centerY + crossHalfSize), new DocumentPoint(contactX + crossHalfSize, centerY - crossHalfSize), 2));
     }
 
     private void CreateLoadSwitch(SymbolRenderContext context, ICollection<SceneElement> elements)
@@ -88,18 +90,19 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
         double inset = Math.Min(_metrics.PoleAttachment.InternalInset, width / 5);
         double contactX = x + width - inset;
         elements.Add(new SceneRectangle(new DocumentRect(x, y, width, height), context.Stroke, context.ThicknessMillimeters, context.Fill));
-        elements.Add(Line(context, new DocumentPoint(x, centerY), new DocumentPoint(x + inset, centerY)));
-        elements.Add(Line(context, new DocumentPoint(contactX, centerY), new DocumentPoint(x + width, centerY)));
+        elements.Add(Line(context, new DocumentPoint(x, centerY), new DocumentPoint(x + inset, centerY), 1));
+        elements.Add(Line(context, new DocumentPoint(contactX, centerY), new DocumentPoint(x + width, centerY), 2));
         elements.Add(new SceneEllipse(
             new DocumentRect(contactX - _metrics.Switch.ContactRadius, centerY - _metrics.Switch.ContactRadius, _metrics.Switch.ContactRadius * 2, _metrics.Switch.ContactRadius * 2),
             context.Stroke,
-            context.ThicknessMillimeters));
+            context.ThicknessMillimeters) { ElectricalIdentity = context.ElectricalSwitch is { } device
+                ? ElectricalVisualIdentity.Terminal(device.SecondTerminalId) : null });
         DocumentPoint bladeEnd = context.State == SymbolVisualState.Open
             ? new DocumentPoint(contactX - 1, y + inset)
             : new DocumentPoint(contactX, centerY);
-        elements.Add(Line(context, new DocumentPoint(x + inset, centerY), bladeEnd));
+        elements.Add(Line(context, new DocumentPoint(x + inset, centerY), bladeEnd, 3));
         double markerHalfLength = _metrics.PoleAttachment.ContactMarkerLength / 2;
-        elements.Add(Line(context, new DocumentPoint(contactX + _metrics.Switch.ContactRadius + 1, centerY - markerHalfLength), new DocumentPoint(contactX + _metrics.Switch.ContactRadius + 1, centerY + markerHalfLength)));
+        elements.Add(Line(context, new DocumentPoint(contactX + _metrics.Switch.ContactRadius + 1, centerY - markerHalfLength), new DocumentPoint(contactX + _metrics.Switch.ContactRadius + 1, centerY + markerHalfLength), 2));
     }
 
     private void CreateIsolationSwitch(SymbolRenderContext context, ICollection<SceneElement> elements)
@@ -116,13 +119,13 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
             context.Stroke,
             context.ThicknessMillimeters,
             context.Fill));
-        elements.Add(Line(context, new DocumentPoint(x, centerY), bladeStart));
-        elements.Add(Line(context, new DocumentPoint(contactX, centerY), new DocumentPoint(x + width, centerY)));
+        elements.Add(Line(context, new DocumentPoint(x, centerY), bladeStart, 1));
+        elements.Add(Line(context, new DocumentPoint(contactX, centerY), new DocumentPoint(x + width, centerY), 2));
         elements.Add(Line(context, bladeStart, context.State == SymbolVisualState.Open
             ? new DocumentPoint(contactX, y + height * _metrics.PoleAttachment.OpenBladeTopRatio)
-            : new DocumentPoint(contactX, centerY)));
+            : new DocumentPoint(contactX, centerY), 3));
         double markerHalfLength = _metrics.PoleAttachment.ContactMarkerLength / 2;
-        elements.Add(Line(context, new DocumentPoint(contactX, centerY - markerHalfLength), new DocumentPoint(contactX, centerY + markerHalfLength)));
+        elements.Add(Line(context, new DocumentPoint(contactX, centerY - markerHalfLength), new DocumentPoint(contactX, centerY + markerHalfLength), 2));
     }
 
     private void CreateDropoutFuse(SymbolRenderContext context, ICollection<SceneElement> elements)
@@ -140,7 +143,7 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
                 tubeStartY)
             : new DocumentPoint(centerX, tubeStartY);
         DocumentPoint tubeBottom = new(centerX, y + height - inset);
-        elements.Add(Line(context, new DocumentPoint(centerX, y), new DocumentPoint(centerX, y + inset)));
+        elements.Add(Line(context, new DocumentPoint(centerX, y), new DocumentPoint(centerX, y + inset), 1));
         elements.Add(Line(
             context,
             new DocumentPoint(
@@ -148,8 +151,8 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
                 y + inset),
             new DocumentPoint(
                 centerX + _metrics.PoleAttachment.ContactMarkerLength / 2,
-                y + inset)));
-        elements.Add(Line(context, tubeBottom, new DocumentPoint(centerX, y + height)));
+                y + inset), 1));
+        elements.Add(Line(context, tubeBottom, new DocumentPoint(centerX, y + height), 2));
         double halfTubeWidth = _metrics.PoleAttachment.FuseTubeWidth / 2;
         elements.Add(new ScenePolyline(
             [
@@ -162,7 +165,7 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
             context.Stroke,
             context.ThicknessMillimeters,
             context.Fill));
-        elements.Add(Line(context, tubeTop, tubeBottom));
+        elements.Add(Line(context, tubeTop, tubeBottom, 3));
         AddDropoutFuseOperationArrow(context, elements, tubeTop, tubeBottom);
     }
 
@@ -218,6 +221,27 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
 
     }
 
-    private static SceneLine Line(SymbolRenderContext context, DocumentPoint start, DocumentPoint end) =>
-        new(start, end, context.Stroke, context.ThicknessMillimeters);
+    private static SceneElement Bind(SceneElement element, SymbolRenderContext context, int side)
+    {
+        if (context.ElectricalSwitch is not { } device || KindIsGround(device)) return element;
+        ElectricalVisualIdentity identity = side switch
+        {
+            1 => ElectricalVisualIdentity.Terminal(device.FirstTerminalId),
+            2 => ElectricalVisualIdentity.Terminal(device.SecondTerminalId),
+            3 => device.SwitchState == DistributionDrawing.Domain.Devices.SwitchState.Closed
+                ? ElectricalVisualIdentity.SwitchPath(device)
+                : ElectricalVisualIdentity.Terminal(device.SwitchKind == DistributionDrawing.Domain.Devices.SwitchKind.DropoutFuse
+                    ? device.SecondTerminalId : device.FirstTerminalId),
+            _ => ElectricalVisualIdentity.Association(device.Id, [
+                ElectricalVisualIdentity.Terminal(device.FirstTerminalId),
+                ElectricalVisualIdentity.Terminal(device.SecondTerminalId)])
+        };
+        return element with { ElectricalIdentity = identity };
+    }
+
+    private static bool KindIsGround(DistributionDrawing.Domain.Devices.SwitchDevice device) =>
+        device.SwitchKind == DistributionDrawing.Domain.Devices.SwitchKind.GroundSwitch;
+
+    private static SceneLine Line(SymbolRenderContext context, DocumentPoint start, DocumentPoint end, int side = 0) =>
+        (SceneLine)Bind(new SceneLine(start, end, context.Stroke, context.ThicknessMillimeters), context, side);
 }

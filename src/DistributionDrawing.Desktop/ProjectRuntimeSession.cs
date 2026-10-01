@@ -150,7 +150,13 @@ public sealed class ProjectRuntimeSession
         long stateId = CommandStack.CurrentStateId;
         if (stateId == _lastCommandStateId) return;
         _lastCommandStateId = stateId;
-        Energization.Invalidate();
+        if (CommandStack.LastAppliedCommand is ISwitchStateCommand &&
+            Energization.Freshness == EnergizationFreshness.Current &&
+            Energization.CurrentResult?.Validity is EnergizationValidity.Complete or EnergizationValidity.ForwardOnly &&
+            PersistenceSession.EnergizationScenario.Seeds.Count > 0)
+            ExecuteEnergizationAnalysis();
+        else
+            Energization.Invalidate();
     }
 
     private sealed class ScenarioCommandAdapter(EnergizationScenarioCommand command) : ICommand

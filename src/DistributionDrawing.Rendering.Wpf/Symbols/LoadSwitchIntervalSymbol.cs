@@ -75,7 +75,7 @@ public sealed class LoadSwitchIntervalSymbol : IIntervalSymbolDefinition
             RingCabinetProfessionalGeometry.AddCableTerminationMarker(
                 elements,
                 terminalTip,
-                _metrics);
+                _metrics, ElectricalVisualIdentity.Terminal(loadSwitch.SecondTerminalId));
         }
 
         return elements;

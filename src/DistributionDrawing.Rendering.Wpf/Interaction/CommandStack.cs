@@ -42,6 +42,9 @@ public sealed class CommandStack
 
     public bool IsDirty => CurrentStateId != SavedStateId;
 
+    /// <summary>The last successfully applied execute, undo or redo, published before StateChanged.</summary>
+    public ICommand? LastAppliedCommand { get; private set; }
+
     public event EventHandler? StateChanged;
 
     public event EventHandler? DirtyChanged;
@@ -123,6 +126,7 @@ public sealed class CommandStack
             throw;
         }
         CurrentIndex--;
+        LastAppliedCommand = command;
         NotifyStateChanged(wasDirty);
         return true;
     }
@@ -152,6 +156,7 @@ public sealed class CommandStack
             throw;
         }
         CurrentIndex++;
+        LastAppliedCommand = command;
         NotifyStateChanged(wasDirty);
         return true;
     }
@@ -184,6 +189,7 @@ public sealed class CommandStack
         _afterStateIds.Add(_nextStateId++);
         CurrentIndex++;
         TrimHistory();
+        LastAppliedCommand = command;
         NotifyStateChanged(wasDirty);
     }
 

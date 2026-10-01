@@ -143,7 +143,9 @@ public sealed class SymbolLibrary
                 poleConnector,
                 attachmentConnector,
                 Colors.Black,
-                _metrics.General.ThinStrokeThickness));
+                _metrics.General.ThinStrokeThickness)
+            { ElectricalIdentity = attachedDevice is SwitchDevice sw
+                ? ElectricalVisualIdentity.Terminal(kind == SymbolKind.DropoutFuse ? sw.SecondTerminalId : sw.FirstTerminalId) : null });
         }
 
         if (kind == SymbolKind.CableTermination && geometry.Outline is { } outline)
@@ -154,7 +156,11 @@ public sealed class SymbolLibrary
                 isClosed: true,
                 Colors.Black,
                 _metrics.General.StandardStrokeThickness,
-                Colors.White));
+                Colors.White) { ElectricalIdentity = attachedDevice is CableTermination termination
+                    ? ElectricalVisualIdentity.Association(termination.Id, [
+                        ElectricalVisualIdentity.Terminal(termination.CableSideTerminalId),
+                        ElectricalVisualIdentity.Terminal(termination.OverheadSideTerminalId),
+                        ElectricalVisualIdentity.Node(termination.InternalNodeId)]) : null });
             return elements;
         }
 
@@ -170,7 +176,7 @@ public sealed class SymbolLibrary
                     label: ResolveAttachmentLabel(attachedDevice),
                     state: visualState,
                     fill: Colors.White,
-                    includeLabel: includeLabel));
+                    includeLabel: includeLabel) { ElectricalSwitch = attachedDevice as SwitchDevice });
 
         symbolElements = RotateElements(
             symbolElements,
@@ -215,6 +221,7 @@ public sealed class SymbolLibrary
                 ellipse.StrokeStyle)
             {
                 TargetKind = ellipse.TargetKind,
+                ElectricalIdentity = ellipse.ElectricalIdentity,
                 TargetId = ellipse.TargetId
             },
             ScenePolyline polyline => new ScenePolyline(
@@ -227,6 +234,7 @@ public sealed class SymbolLibrary
                 polyline.StrokeStyle)
             {
                 TargetKind = polyline.TargetKind,
+                ElectricalIdentity = polyline.ElectricalIdentity,
                 TargetId = polyline.TargetId
             },
             SceneText text => text with

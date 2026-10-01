@@ -45,6 +45,8 @@ public sealed record SymbolRenderContext
         IncludeLabel = includeLabel;
     }
 
+    public DistributionDrawing.Domain.Devices.SwitchDevice? ElectricalSwitch { get; init; }
+
     public DocumentPoint Origin { get; }
 
     public double WidthMillimeters { get; }

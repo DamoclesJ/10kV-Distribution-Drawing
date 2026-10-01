@@ -21,6 +21,94 @@ namespace DistributionDrawing.Desktop.Tests;
 
 public sealed class EnergizationPanelTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EaPanelSwitchOpenCloseUndoRedoReanalyzesLatestDomainAndPreservesCompleteness(bool complete)
+    {
+        RunOnSta(() =>
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"ea-realtime-{Guid.NewGuid():N}.kvdrawing");
+            try
+            {
+                var runtime = ProjectRuntimeSession.CreateEmpty(new ProjectService().CreateProject(path, "EA realtime"));
+                var addCabinet = new DeviceCommandFactory().CreateAddRingCabinet(runtime.PersistenceSession.Domain, runtime.Layout,
+                    new RingCabinetCreationConfiguration("Realtime cabinet", new RingCabinetCreationTemplateFactory().Create(
+                        RingCabinetTemplateType.Conventional, 4), "10kV"), new DocumentPoint(20, 20));
+                runtime.CommandStack.ExecuteCommand(addCabinet);
+                runtime.RebuildScene();
+                var interval = addCabinet.Cabinet.Intervals[0];
+                var load = interval.SwitchDevices.Single(device => device.SwitchKind == SwitchKind.LoadSwitch);
+                var selected = new SelectionReference(SelectionTargetKind.Device, load.Id, interval.IntervalId);
+                runtime.SelectionManager.Select(selected);
+                var scenario = runtime.PersistenceSession.EnergizationScenario;
+                runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario, new EnergizedSeed(Guid.NewGuid(), load.Id, EnergizationSide.Bus)));
+                if (complete) runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.SetComplete(scenario, true));
+                runtime.ExecuteEnergizationAnalysis();
+                var panel = new EnergizationPanel();
+                panel.Bind(runtime);
+                panel.SetSelection(load.Id);
+                var open = (Button)panel.FindName("OpenSwitchButton")!;
+                var close = (Button)panel.FindName("CloseSwitchButton")!;
+                int applied = 0;
+                panel.SwitchOperationApplied += (_, _) => applied++;
+                var controller = new SwitchOperationController(() => runtime);
+                EnergizationResult? previous = runtime.Energization.CurrentResult;
+                void AssertLatest(bool closed)
+                {
+                    Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+                    Assert.NotSame(previous, runtime.Energization.CurrentResult);
+                    previous = runtime.Energization.CurrentResult;
+                    Assert.NotNull(previous);
+                    Assert.Equal(EnergizationState.Energized, previous.Terminals[load.FirstTerminalId].State);
+                    Assert.Equal(closed ? EnergizationState.Energized : complete ? EnergizationState.Deenergized : EnergizationState.Unknown,
+                        previous.Terminals[load.SecondTerminalId].State);
+                    Assert.Equal(complete, scenario.IsSourceSetComplete);
+                    Assert.Equal(selected, runtime.SelectionManager.Selected);
+                }
+                Assert.True(close.IsEnabled);
+                close.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                AssertLatest(true);
+                Assert.True(open.IsEnabled);
+                Assert.False(close.IsEnabled);
+                open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                AssertLatest(false);
+                Assert.Equal(2, applied);
+                Assert.True(runtime.CommandStack.Undo());
+                AssertLatest(true);
+                Assert.True(runtime.CommandStack.Redo());
+                AssertLatest(false);
+                Assert.True(controller.SetSelectedState(SwitchState.Closed).IsSuccess);
+                AssertLatest(true);
+                // A no-op command or save checkpoint must not publish another result.
+                Assert.True(controller.SetSelectedState(SwitchState.Closed).IsSuccess);
+                runtime.CommandStack.MarkSaved();
+                Assert.Same(previous, runtime.Energization.CurrentResult);
+                var ground = interval.SwitchDevices.Single(device => device.SwitchKind == SwitchKind.GroundSwitch);
+                runtime.SelectionManager.Select(new(SelectionTargetKind.Device, ground.Id, interval.IntervalId));
+                Assert.False(controller.SetSelectedState(SwitchState.Closed).IsSuccess);
+                Assert.Same(previous, runtime.Energization.CurrentResult);
+                runtime.SelectionManager.Select(selected);
+                // Seed-side edits revoke completeness and require explicit analysis; later switches cannot revive stale facts.
+                var seed = scenario.Seeds[0];
+                runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Replace(scenario,
+                    new EnergizedSeed(seed.Id, seed.BoundaryDeviceId, EnergizationSide.Line)));
+                Assert.False(scenario.IsSourceSetComplete);
+                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+                Assert.True(controller.SetSelectedState(SwitchState.Open).IsSuccess);
+                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+                Assert.Null(runtime.Energization.CurrentResult);
+                runtime.ExecuteEnergizationAnalysis();
+                // A layout/structural command still invalidates; it is not marked as a switch operation.
+                runtime.CommandStack.ExecuteCommand(new DeviceCommandFactory().CreateAddRingCabinet(runtime.PersistenceSession.Domain, runtime.Layout,
+                    new RingCabinetCreationConfiguration("Other cabinet", new RingCabinetCreationTemplateFactory().Create(
+                        RingCabinetTemplateType.Conventional, 4), "10kV"), new DocumentPoint(200, 20)));
+                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+            }
+            finally { if (File.Exists(path)) File.Delete(path); }
+        });
+    }
+
     [Fact]
     public void PanelExecutesExplicitlyAndWithdrawsLegendWhenScenarioChanges()
     {
@@ -124,8 +212,6 @@ public sealed class EnergizationPanelTests
                 Assert.True(switchResult.IsSuccess, switchResult.ErrorMessage);
                 Assert.True(runtime.CommandStack.CanUndo);
                 Assert.True(scenario.IsSourceSetComplete);
-                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
-                analyze.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
 
                 seeds.SelectedIndex = 0;

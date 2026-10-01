@@ -8,53 +8,32 @@ namespace DistributionDrawing.Rendering.Wpf.Rendering;
 /// Projects analyzer facts onto explicit electrical scene bindings. It never infers
 /// connectivity from drawing positions or selection targets.
 /// </summary>
-public static class EnergizationOverlayBuilder
+public static class EnergizationSceneStyler
 {
     public static IReadOnlyList<SceneElement> Build(DrawingScene scene, EnergizationResult result)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(result);
 
-        var output = new List<SceneElement>();
-        foreach (SceneElement element in scene.Elements)
+        return scene.Elements.Select(element =>
         {
-            if (element.ElectricalIdentity is not ElectricalVisualIdentity identity)
-                continue;
+            if (element.ElectricalIdentity is not { } identity) return element;
             ElectricalVisualState state = Resolve(identity, result);
-            EnergizationVisualStyle style = EnergizationVisualStyleResolver.Resolve(state);
-            switch (element)
+            var color = EnergizationVisualStyleResolver.Resolve(state).Color;
+            SceneStrokeStyle Pattern(SceneStrokeStyle original) =>
+                EnergizationVisualStyleResolver.Resolve(state, original).StrokeStyle;
+            SceneElement styled = element switch
             {
-                case SceneLine line:
-                    (DocumentPoint start, DocumentPoint end) = Offset(line.Start, line.End);
-                    output.Add(new SceneLine(start, end, style.Color,
-                        style.ThicknessMillimeters, style.StrokeStyle)
-                    {
-                        ElectricalIdentity = identity,
-                        ElectricalState = state
-                    });
-                    break;
-                case SceneArc arc:
-                    output.Add(new SceneArc(arc.Center, arc.RadiusMillimeters,
-                        arc.StartAngleDegrees, arc.SweepAngleDegrees, style.Color,
-                        style.ThicknessMillimeters, style.StrokeStyle)
-                    {
-                        ElectricalIdentity = identity,
-                        ElectricalState = state,
-                        HitTestBounds = null
-                    });
-                    break;
-                case ScenePolyline polyline when !polyline.IsClosed:
-                    output.Add(new ScenePolyline(polyline.Points, false, style.Color,
-                        style.ThicknessMillimeters, strokeStyle: style.StrokeStyle)
-                    {
-                        ElectricalIdentity = identity,
-                        ElectricalState = state,
-                        HitTestBounds = null
-                    });
-                    break;
-            }
-        }
-        return output;
+                SceneLine line => line with { Stroke = color, StrokeStyle = Pattern(line.StrokeStyle) },
+                SceneArc arc => arc with { Stroke = color, StrokeStyle = Pattern(arc.StrokeStyle) },
+                ScenePolyline polyline => polyline with { Stroke = color, Fill = polyline.Fill == polyline.Stroke ? color : polyline.Fill, StrokeStyle = Pattern(polyline.StrokeStyle) },
+                SceneEllipse ellipse => ellipse with { Stroke = color, Fill = ellipse.Fill == ellipse.Stroke ? color : ellipse.Fill, StrokeStyle = Pattern(ellipse.StrokeStyle) },
+                SceneRectangle rectangle => rectangle with { Stroke = color, Fill = rectangle.Fill == rectangle.Stroke ? color : rectangle.Fill, StrokeStyle = Pattern(rectangle.StrokeStyle) },
+                SceneText text => text with { Foreground = color },
+                _ => element
+            };
+            return styled with { ElectricalState = state };
+        }).ToArray();
     }
 
     public static ElectricalVisualState Resolve(
@@ -63,6 +42,10 @@ public static class EnergizationOverlayBuilder
         EnergizationState state;
         switch (identity.Kind)
         {
+            case ElectricalVisualIdentityKind.Association:
+                ElectricalVisualState[] members = identity.Members.Select(member => Resolve(member, result)).ToArray();
+                return members.Length > 0 && members.All(member => member == members[0])
+                    ? members[0] : ElectricalVisualState.Unknown;
             case ElectricalVisualIdentityKind.Terminal:
                 state = result.Terminals.TryGetValue(identity.Id, out EnergizationPointResult? terminal)
                     ? terminal.State : EnergizationState.Unknown;
@@ -96,18 +79,4 @@ public static class EnergizationOverlayBuilder
         };
     }
 
-    private static (DocumentPoint Start, DocumentPoint End) Offset(
-        DocumentPoint start, DocumentPoint end)
-    {
-        double dx = end.XMillimeters - start.XMillimeters;
-        double dy = end.YMillimeters - start.YMillimeters;
-        double length = Math.Sqrt(dx * dx + dy * dy);
-        if (length == 0) return (start, end);
-        const double separation = 1.1;
-        double shiftX = -dy / length * separation;
-        double shiftY = dx / length * separation;
-        return (
-            new DocumentPoint(start.XMillimeters + shiftX, start.YMillimeters + shiftY),
-            new DocumentPoint(end.XMillimeters + shiftX, end.YMillimeters + shiftY));
-    }
 }

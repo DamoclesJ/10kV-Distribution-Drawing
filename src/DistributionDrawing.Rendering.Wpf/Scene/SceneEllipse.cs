@@ -28,11 +28,11 @@ public sealed record SceneEllipse : SceneElement
 
     public DocumentRect Bounds { get; }
 
-    public Color Stroke { get; }
+    public Color Stroke { get; init; }
 
     public double ThicknessMillimeters { get; }
 
-    public Color? Fill { get; }
+    public Color? Fill { get; init; }
 
-    public SceneStrokeStyle StrokeStyle { get; }
+    public SceneStrokeStyle StrokeStyle { get; init; }
 }

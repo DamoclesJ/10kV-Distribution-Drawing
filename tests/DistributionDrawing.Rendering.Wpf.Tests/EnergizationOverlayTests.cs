@@ -34,7 +34,7 @@ public sealed class EnergizationOverlayTests
             edges: [new ElectricalConnectivityEdge(first, second,
                 ElectricalConnectivityEdgeType.Connection, connection)]);
 
-        SceneLine[] overlay = EnergizationOverlayBuilder.Build(scene, result)
+        SceneLine[] overlay = EnergizationSceneStyler.Build(scene, result)
             .OfType<SceneLine>().ToArray();
 
         Assert.Equal(2, overlay.Length);
@@ -42,11 +42,16 @@ public sealed class EnergizationOverlayTests
         {
             Assert.Equal(ElectricalVisualState.Energized, line.ElectricalState);
             Assert.Null(line.TargetId);
-            Assert.Null(line.HitTestBounds);
+            Assert.Equal(cable.HitTestBounds, line.HitTestBounds);
         });
         Assert.Equal(SceneStrokeStyle.Dashed, cable.StrokeStyle);
         Assert.Equal(SceneStrokeStyle.Solid, ohl.StrokeStyle);
-        Assert.NotEqual(cable.Start, overlay[0].Start);
+        Assert.Equal(cable.Start, overlay[0].Start);
+        Assert.Equal(cable.End, overlay[0].End);
+        Assert.Equal(cable.ThicknessMillimeters, overlay[0].ThicknessMillimeters);
+        Assert.Equal(SceneStrokeStyle.Dashed, overlay[0].StrokeStyle);
+        Assert.Equal(SceneStrokeStyle.Solid, overlay[1].StrokeStyle);
+        Assert.Equal(scene.Elements.Count, overlay.Length);
     }
 
     [Fact]
@@ -63,7 +68,7 @@ public sealed class EnergizationOverlayTests
             edges: [new ElectricalConnectivityEdge(first, second,
                 ElectricalConnectivityEdgeType.Connection, source)]);
 
-        Assert.Equal(ElectricalVisualState.Unknown, EnergizationOverlayBuilder.Resolve(
+        Assert.Equal(ElectricalVisualState.Unknown, EnergizationSceneStyler.Resolve(
             ElectricalVisualIdentity.Edge(ElectricalConnectivityEdgeType.Connection,
                 source, first, third), result));
     }
@@ -86,7 +91,7 @@ public sealed class EnergizationOverlayTests
                 Colors.Black, 1) { ElectricalIdentity = identity }
         ]);
 
-        Assert.All(EnergizationOverlayBuilder.Build(scene, result), element =>
+        Assert.All(EnergizationSceneStyler.Build(scene, result), element =>
             Assert.Equal(ElectricalVisualState.Energized, element.ElectricalState));
     }
 
@@ -98,9 +103,9 @@ public sealed class EnergizationOverlayTests
             device.SwitchKind == SwitchKind.LoadSwitch);
         IReadOnlyList<SceneElement> elements = new RingCabinetRenderer().Render(cabinet,
             new RingCabinetLayoutFactory().Create(cabinet, new DocumentPoint(0, 0)));
-        SceneLine firstLead = Assert.Single(elements.OfType<SceneLine>(), line =>
+        SceneLine firstLead = elements.OfType<SceneLine>().First(line =>
             line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(load.FirstTerminalId));
-        SceneLine secondLead = Assert.Single(elements.OfType<SceneLine>(), line =>
+        SceneLine secondLead = elements.OfType<SceneLine>().First(line =>
             line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(load.SecondTerminalId));
         EnergizationResult result = Result(EnergizationValidity.Complete,
             new Dictionary<Guid, EnergizationState>
@@ -111,9 +116,9 @@ public sealed class EnergizationOverlayTests
 
         Assert.NotEqual(firstLead.Start, secondLead.Start);
         Assert.Equal(ElectricalVisualState.Energized,
-            EnergizationOverlayBuilder.Resolve(firstLead.ElectricalIdentity!, result));
+            EnergizationSceneStyler.Resolve(firstLead.ElectricalIdentity!, result));
         Assert.Equal(ElectricalVisualState.Deenergized,
-            EnergizationOverlayBuilder.Resolve(secondLead.ElectricalIdentity!, result));
+            EnergizationSceneStyler.Resolve(secondLead.ElectricalIdentity!, result));
         Assert.Contains(elements.OfType<SceneLine>(), line =>
             line.ElectricalIdentity is null && line.Start.YMillimeters == line.End.YMillimeters);
     }
@@ -126,7 +131,7 @@ public sealed class EnergizationOverlayTests
         EnergizationResult result = Result(EnergizationValidity.ForwardOnly,
             new Dictionary<Guid, EnergizationState> { [terminal] = EnergizationState.Deenergized });
         Assert.Equal(ElectricalVisualState.Unknown,
-            EnergizationOverlayBuilder.Resolve(identity, result));
+            EnergizationSceneStyler.Resolve(identity, result));
         Assert.NotEqual(EnergizationVisualStyleResolver.Resolve(ElectricalVisualState.Unknown).StrokeStyle,
             EnergizationVisualStyleResolver.Resolve(ElectricalVisualState.Deenergized).StrokeStyle);
     }
@@ -150,12 +155,11 @@ public sealed class EnergizationOverlayTests
             {
                 [terminal] = EnergizationState.Energized
             });
-        SceneElement[] composed = [..scene.Elements,
-            ..EnergizationOverlayBuilder.Build(scene, result),
+        SceneElement[] composed = [..EnergizationSceneStyler.Build(scene, result),
             ..SelectionOverlayBuilder.CreateElements(hitIndex, target)];
 
         Assert.IsType<SceneRectangle>(composed[^1]);
-        Assert.Null(composed[^2].HitTestBounds);
+        Assert.Equal(scene.Elements[0].HitTestBounds, composed[0].HitTestBounds);
         Assert.Equal(target, hitIndex.HitTest(new DocumentPoint(10, 1)));
     }
 

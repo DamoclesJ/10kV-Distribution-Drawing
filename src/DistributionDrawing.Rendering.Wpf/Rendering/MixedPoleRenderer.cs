@@ -40,14 +40,23 @@ public sealed class MixedPoleRenderer
         ArgumentNullException.ThrowIfNull(switchAttachments);
         ArgumentNullException.ThrowIfNull(cableTerminationAttachments);
 
+        SwitchAttachmentRenderInput[] switches = switchAttachments.ToArray();
+        PoleAttachmentRenderInput[] terminations = cableTerminationAttachments.ToArray();
+        var poleMembers = pole.OverheadAnchorTerminalIds.Select(ElectricalVisualIdentity.Terminal).ToArray();
+        ElectricalVisualIdentity poleIdentity = ElectricalVisualIdentity.Association(pole.Id,
+            poleMembers.Length > 0 ? poleMembers : switches.SelectMany(input => new[] {
+                ElectricalVisualIdentity.Terminal(input.SwitchDevice.FirstTerminalId),
+                ElectricalVisualIdentity.Terminal(input.SwitchDevice.SecondTerminalId) })
+                .Concat(terminations.Select(input => ElectricalVisualIdentity.Node(input.CableTermination.InternalNodeId))));
         var elements = new List<SceneElement>();
-        elements.AddRange(_poleSymbol.CreateElements(pole, poleLayout, includeLabel: false));
+        elements.AddRange(_poleSymbol.CreateElements(pole, poleLayout, includeLabel: false)
+            .Select(element => element is SceneLogicalBounds ? element : element with { ElectricalIdentity = poleIdentity }));
         var labelRequests = new List<LabelRequest>
         {
             _poleLabel.CreatePoleRequest(pole, poleLayout)
         };
 
-        foreach (SwitchAttachmentRenderInput input in switchAttachments)
+        foreach (SwitchAttachmentRenderInput input in switches)
         {
             ArgumentNullException.ThrowIfNull(input);
             ValidateAttachment(input.Attachment, pole, input.SwitchDevice.Id);
@@ -76,7 +85,7 @@ public sealed class MixedPoleRenderer
                 input.Layout));
         }
 
-        foreach (PoleAttachmentRenderInput input in cableTerminationAttachments)
+        foreach (PoleAttachmentRenderInput input in terminations)
         {
             ArgumentNullException.ThrowIfNull(input);
             ValidateAttachment(input.Attachment, pole, input.CableTermination.Id);
@@ -94,7 +103,19 @@ public sealed class MixedPoleRenderer
         }
 
         elements.AddRange(_labelLayoutEngine.Layout(labelRequests)
-            .Select(_poleLabel.CreateElement));
+            .Select(result => _poleLabel.CreateElement(result) with
+            {
+                ElectricalIdentity = result.Request.TargetKind == LabelTargetKind.Pole ? poleIdentity :
+                    result.Request.TargetKind == LabelTargetKind.SwitchDevice
+                        ? ElectricalVisualIdentity.Association(result.TargetId, switches.Where(input => input.SwitchDevice.Id == result.TargetId)
+                            .SelectMany(input => new[] { ElectricalVisualIdentity.Terminal(input.SwitchDevice.FirstTerminalId),
+                                ElectricalVisualIdentity.Terminal(input.SwitchDevice.SecondTerminalId) }))
+                        : terminations.Where(input => input.Attachment.AttachmentId == result.TargetId)
+                            .Select(input => ElectricalVisualIdentity.Association(input.CableTermination.Id, [
+                                ElectricalVisualIdentity.Terminal(input.CableTermination.CableSideTerminalId),
+                                ElectricalVisualIdentity.Terminal(input.CableTermination.OverheadSideTerminalId),
+                                ElectricalVisualIdentity.Node(input.CableTermination.InternalNodeId)])).SingleOrDefault()
+            }));
 
         return elements;
     }

@@ -4,5 +4,6 @@ public enum SceneStrokeStyle
 {
     Solid,
     Dashed,
-    Dotted
+    Dotted,
+    DashDot
 }

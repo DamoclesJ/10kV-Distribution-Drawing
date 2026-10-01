@@ -4,6 +4,11 @@
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="4">
       <TextBlock Text="带电分析" FontSize="17" FontWeight="SemiBold" />
+      <TextBlock x:Name="SwitchStateText" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+        <Button x:Name="OpenSwitchButton" Content="分闸" Click="OnOpenSwitch" Padding="8,4" />
+        <Button x:Name="CloseSwitchButton" Content="合闸" Click="OnCloseSwitch" Padding="8,4" Margin="8,0,0,0" />
+      </StackPanel>
       <TextBlock Text="选择图纸中的开关，或选择柜体、间隔后从下方选取设备与电气侧。"
                  TextWrapping="Wrap" Margin="0,8,0,8" />
       <TextBlock Text="候选电源边界" FontWeight="SemiBold" />
@@ -34,7 +39,7 @@
           <TextBlock Text="带电分析图例" FontWeight="SemiBold" />
           <TextBlock Text="━━ 带电" Foreground="Red" />
           <TextBlock Text="━━ 已判定无电" Foreground="Black" />
-          <TextBlock Text="···· 未知" Foreground="Gray" />
+          <TextBlock Text="···· / —· 未知；文字带下划线及 ?" Foreground="Gray" />
         </StackPanel>
       </Border>
     </StackPanel>

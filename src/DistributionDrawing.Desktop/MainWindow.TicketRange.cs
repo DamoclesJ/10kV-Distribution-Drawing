@@ -37,7 +37,8 @@ public partial class MainWindow
             _ticketRangeDraftOwner = owner;
         }
         TicketRangePanel.Visibility = Visibility.Visible;
-        DrawingRightPanelTabs.Visibility = Visibility.Collapsed;
+        DrawingRightPanelHost.Visibility = Visibility.Collapsed;
+        RefreshEnergizationModeEntry();
         TicketOverlayToggle.IsEnabled = true;
         TicketRangeStatus.Text = "选择边界开关和侧别。";
         RefreshTicketRangePanel();

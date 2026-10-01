@@ -14,6 +14,40 @@ namespace DistributionDrawing.Rendering.Wpf.Tests;
 public sealed class DrawingSceneBuilderCableRenderingTests
 {
     [Fact]
+    public void NativeCableAndTerminationStatePreservesGeometryAndRejectsAnySideIconColor()
+    {
+        CableSceneFixture fixture = CreateFixture();
+        DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
+        var result = EnergizationNativeRenderingTests.Result(fixture.Document.Terminals.Select(terminal => terminal.Id),
+            fixture.Document.ElectricalNodes.Select(node => node.Id),
+            DistributionDrawing.Application.Energization.EnergizationState.Energized,
+            [new ElectricalConnectivityEdge(fixture.Cable.StartTerminalId, fixture.Cable.EndTerminalId,
+                ElectricalConnectivityEdgeType.Connection, fixture.Cable.ConnectionId)]);
+        var styled = EnergizationSceneStyler.Build(scene, result);
+        Assert.Equal(scene.Elements.Count, styled.Count);
+        Assert.All(styled.OfType<SceneLine>().Where(line => line.TargetId == fixture.Cable.Id), line =>
+        {
+            Assert.Equal(SceneStrokeStyle.Dashed, line.StrokeStyle);
+            Assert.Equal(ElectricalVisualState.Energized, line.ElectricalState);
+            Assert.Contains(scene.Elements.OfType<SceneLine>(), original => original.Start == line.Start && original.End == line.End &&
+                original.ThicknessMillimeters == line.ThicknessMillimeters && original.ElectricalIdentity == line.ElectricalIdentity);
+        });
+        Assert.Equal(ElectricalVisualState.Energized, Assert.Single(styled.OfType<SceneText>(), text => text.TargetId == fixture.Cable.Id).ElectricalState);
+        var termination = fixture.Document.Devices.OfType<CableTermination>().First();
+        var mixed = EnergizationNativeRenderingTests.Result([termination.CableSideTerminalId], [],
+            DistributionDrawing.Application.Energization.EnergizationState.Energized,
+            extra: new Dictionary<Guid, DistributionDrawing.Application.Energization.EnergizationState>
+            { [termination.OverheadSideTerminalId] = DistributionDrawing.Application.Energization.EnergizationState.Deenergized });
+        var mixedScene = EnergizationSceneStyler.Build(scene, mixed);
+        Assert.Equal(ElectricalVisualState.Energized, Assert.Single(mixedScene.OfType<SceneLine>(), line =>
+            line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(termination.CableSideTerminalId)).ElectricalState);
+        Assert.Equal(ElectricalVisualState.Deenergized, Assert.Single(mixedScene.OfType<SceneLine>(), line =>
+            line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(termination.OverheadSideTerminalId)).ElectricalState);
+        Assert.Equal(ElectricalVisualState.Unknown, Assert.Single(mixedScene.OfType<ScenePolyline>(), icon =>
+            icon.ElectricalIdentity?.Id == termination.Id).ElectricalState);
+    }
+
+    [Fact]
     public void BuildDocumentScene_RendersCableSegmentAndBusinessLabel()
     {
         CableSceneFixture fixture = CreateFixture();
@@ -45,7 +79,7 @@ public sealed class DrawingSceneBuilderCableRenderingTests
     }
 
     [Fact]
-    public void CableTerminationInternalPathBindsItsNodeInsteadOfTriangleOutline()
+    public void CableTerminationHasIndependentSidesNodePathAndConsensusIcon()
     {
         CableSceneFixture fixture = CreateFixture();
         DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
@@ -57,9 +91,15 @@ public sealed class DrawingSceneBuilderCableRenderingTests
             Assert.Single(scene.Elements.OfType<SceneLine>(), line =>
                 line.ElectricalIdentity ==
                     ElectricalVisualIdentity.Node(termination.InternalNodeId));
+            Assert.Single(scene.Elements.OfType<SceneLine>(), line =>
+                line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(termination.CableSideTerminalId));
+            Assert.Single(scene.Elements.OfType<SceneLine>(), line =>
+                line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(termination.OverheadSideTerminalId));
+            ScenePolyline icon = Assert.Single(scene.Elements.OfType<ScenePolyline>(), polyline =>
+                polyline.IsClosed && polyline.ElectricalIdentity?.Id == termination.Id);
+            Assert.Equal(ElectricalVisualIdentityKind.Association, icon.ElectricalIdentity!.Kind);
+            Assert.Equal(3, icon.ElectricalIdentity.Members.Count);
         }
-        Assert.DoesNotContain(scene.Elements.OfType<ScenePolyline>(), polyline =>
-            polyline.IsClosed && polyline.ElectricalIdentity is not null);
     }
 
     [Fact]

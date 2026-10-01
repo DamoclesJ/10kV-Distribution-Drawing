@@ -610,7 +610,7 @@ public sealed class PoleProfessionalSymbolTests
                 ellipse.Stroke,
                 ellipse.ThicknessMillimeters,
                 ellipse.Fill,
-                ellipse.StrokeStyle),
+                ellipse.StrokeStyle) { ElectricalIdentity = ellipse.ElectricalIdentity },
             ScenePolyline polyline => new ScenePolyline(
                 polyline.Points.Select(point => PoleProfessionalGeometry.RotateAroundPole(
                     poleLayout, point, quarterTurns)),
@@ -618,7 +618,7 @@ public sealed class PoleProfessionalSymbolTests
                 polyline.Stroke,
                 polyline.ThicknessMillimeters,
                 polyline.Fill,
-                polyline.StrokeStyle),
+                polyline.StrokeStyle) { ElectricalIdentity = polyline.ElectricalIdentity },
             SceneLogicalBounds bounds => new SceneLogicalBounds(
                 PoleProfessionalGeometry.RotateBoundsAroundPole(
                     poleLayout, bounds.Bounds, quarterTurns)),

@@ -848,11 +848,17 @@ public sealed class DrawingSceneBuilder
                 }
             }
 
-            elements.AddRange(_mixedPoleRenderer.Render(
-                pole,
-                poleLayout,
-                switchInputs,
-                cableTerminationInputs));
+            var poleVisuals = _mixedPoleRenderer.Render(pole, poleLayout, switchInputs, cableTerminationInputs);
+            ElectricalVisualIdentity[] supportEdges = overheadLinesArray.Where(line => line.SupportPoleIds.Contains(pole.Id))
+                .Where(line => connectionById?.ContainsKey(line.ConnectionId) == true)
+                .Select(line => connectionById![line.ConnectionId])
+                .Select(connection => ElectricalVisualIdentity.Edge(ElectricalConnectivityEdgeType.Connection,
+                    connection.Id, connection.StartTerminalId, connection.EndTerminalId)).ToArray();
+            ElectricalVisualIdentity? supportIdentity = supportEdges.Length > 0
+                ? ElectricalVisualIdentity.Association(pole.Id, supportEdges) : null;
+            elements.AddRange(poleVisuals.Select(element => supportIdentity is not null &&
+                element.ElectricalIdentity?.Id == pole.Id
+                    ? element with { ElectricalIdentity = supportIdentity } : element));
             foreach (PoleAttachmentRenderInput input in cableTerminationInputs)
             {
                 CableTermination termination = input.CableTermination;
@@ -860,14 +866,17 @@ public sealed class DrawingSceneBuilder
                     poleLayout,
                     input.Layout,
                     SymbolKind.CableTermination);
-                elements.Add(new SceneLine(
-                    geometry.FirstTerminal,
-                    geometry.SecondTerminal,
-                    Colors.Black,
-                    _metrics.Line.ConnectionThickness)
-                {
-                    ElectricalIdentity = ElectricalVisualIdentity.Node(termination.InternalNodeId)
-                });
+                // The original terminal-to-terminal path is partitioned by semantic ownership,
+                // with identical endpoints and total geometry (no parallel outline).
+                DocumentPoint Along(double fraction) => new(
+                    geometry.FirstTerminal.XMillimeters + (geometry.SecondTerminal.XMillimeters - geometry.FirstTerminal.XMillimeters) * fraction,
+                    geometry.FirstTerminal.YMillimeters + (geometry.SecondTerminal.YMillimeters - geometry.FirstTerminal.YMillimeters) * fraction);
+                elements.Add(new SceneLine(geometry.FirstTerminal, Along(1.0 / 3), Colors.Black, _metrics.Line.ConnectionThickness)
+                { ElectricalIdentity = ElectricalVisualIdentity.Terminal(termination.CableSideTerminalId) });
+                elements.Add(new SceneLine(Along(1.0 / 3), Along(2.0 / 3), Colors.Black, _metrics.Line.ConnectionThickness)
+                { ElectricalIdentity = ElectricalVisualIdentity.Node(termination.InternalNodeId) });
+                elements.Add(new SceneLine(Along(2.0 / 3), geometry.SecondTerminal, Colors.Black, _metrics.Line.ConnectionThickness)
+                { ElectricalIdentity = ElectricalVisualIdentity.Terminal(termination.OverheadSideTerminalId) });
             }
             DocumentRect poleBounds = PoleProfessionalGeometry.GetPoleBounds(poleLayout);
             hitTestEntries.Add(

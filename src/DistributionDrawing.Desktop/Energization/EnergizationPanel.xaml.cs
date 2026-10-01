@@ -2,6 +2,8 @@ using System.Windows;
 using System.Windows.Controls;
 using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Domain.Energization;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Desktop.SwitchOperation;
 
 namespace DistributionDrawing.Desktop.Energization;
 
@@ -24,6 +26,21 @@ public partial class EnergizationPanel : UserControl
     }
 
     public event EventHandler? VisualStateChanged;
+    public event EventHandler? SwitchOperationApplied;
+    private void OnOpenSwitch(object sender, RoutedEventArgs e) => OperateSwitch(SwitchState.Open);
+    private void OnCloseSwitch(object sender, RoutedEventArgs e) => OperateSwitch(SwitchState.Closed);
+
+    private void OperateSwitch(SwitchState state)
+    {
+        SwitchOperationResult result = new SwitchOperationController(() => _session).SetSelectedState(state);
+        if (!result.IsSuccess) SwitchStateText.Text = result.ErrorMessage;
+        else
+        {
+            Refresh();
+            SwitchOperationApplied?.Invoke(this, EventArgs.Empty);
+            VisualStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     public void Bind(ProjectRuntimeSession? session)
     {
@@ -145,6 +162,12 @@ public partial class EnergizationPanel : UserControl
 
     private void UpdateButtons()
     {
+        SwitchDevice? selectedSwitch = _session?.SelectionManager.HasSingleSelection == true
+            ? _session.SelectionResolver.Resolve(_session.SelectionManager.Selected)?.SwitchDevice : null;
+        OpenSwitchButton.IsEnabled = selectedSwitch?.SwitchState == SwitchState.Closed;
+        CloseSwitchButton.IsEnabled = selectedSwitch?.SwitchState == SwitchState.Open;
+        SwitchStateText.Text = selectedSwitch is null ? "选择开关后可直接分闸 / 合闸" :
+            $"当前开关：{selectedSwitch.DisplayName ?? "开关"}；{(selectedSwitch.SwitchState == SwitchState.Closed ? "合" : "分")}";
         CandidateItem? candidate = CandidateList.SelectedItem as CandidateItem;
         bool validCandidate = candidate?.Candidate.IsResolvable == true;
         AddButton.IsEnabled = _session is not null && validCandidate;

@@ -74,7 +74,9 @@ public sealed class CableRenderer
             {
                 TargetKind = SelectionTargetKind.CableSegment,
                 TargetId = cableSegment.Id,
-                HitTestBounds = hitTestBounds
+                HitTestBounds = hitTestBounds,
+                ElectricalIdentity = ElectricalVisualIdentity.Edge(DistributionDrawing.Application.Topology.ElectricalConnectivityEdgeType.Connection,
+                    cableSegment.ConnectionId, cableSegment.StartTerminalId, cableSegment.EndTerminalId)
             }));
             elements.Add(labelsByCableId[cableSegment.Id]);
         }
@@ -93,7 +95,10 @@ public sealed class CableRenderer
             .Select(result => _cableLabel.CreateElement(result) with
             {
                 TargetKind = SelectionTargetKind.CableSegment,
-                TargetId = result.TargetId
+                TargetId = result.TargetId,
+                ElectricalIdentity = inputs.Where(input => input.CableSegment.Id == result.TargetId)
+                    .Select(input => ElectricalVisualIdentity.Edge(DistributionDrawing.Application.Topology.ElectricalConnectivityEdgeType.Connection,
+                        input.CableSegment.ConnectionId, input.CableSegment.StartTerminalId, input.CableSegment.EndTerminalId)).Single()
             })
             .ToArray();
     }
