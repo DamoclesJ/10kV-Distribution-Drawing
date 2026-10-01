@@ -39,7 +39,8 @@ public sealed class DrawingRightPanelAcceptanceTests
             "private void CollapseSingleSelectionEditors");
         Assert.Contains("EaPanel.SetSelection(_selectionManager.Selected?.ObjectId)", selection);
         Assert.Contains("_propertyInspector.Apply(", selection);
-        Assert.DoesNotContain("_rightPanelMode =", selection);
+        Assert.DoesNotMatch(@"_rightPanelMode\s*=(?!=)", selection);
+        Assert.Contains("_rightPanelMode == DrawingRightPanelMode.WorkRange", selection);
         Assert.DoesNotContain("InspectorContent.Visibility", selection);
         string mode = Between(source, "private void OnEnterEnergizationMode(", "private void OnShowTicketWorkspace(");
         Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Energization)", mode);

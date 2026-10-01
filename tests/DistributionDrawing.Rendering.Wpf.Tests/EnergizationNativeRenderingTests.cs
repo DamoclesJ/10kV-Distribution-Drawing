@@ -331,7 +331,7 @@ public sealed class EnergizationNativeRenderingTests
             ], []);
         var styled = EnergizationSceneStyler.Build(new DrawingScene([
             new SceneEllipse(new(0, 0, 5, 5), Colors.Black, 0.5) { ElectricalIdentity = pole },
-            new ScenePolyline([new(0, 0), new(5, 5)], true, Colors.Black, 0.5) { ElectricalIdentity = terminationIdentity },
+            new ScenePolyline([new(0, 0), new(5, 0), new(5, 5)], true, Colors.Black, 0.5) { ElectricalIdentity = terminationIdentity },
             new SceneText(new(0, 0), "P-01", Colors.Black, 3) { ElectricalIdentity = pole }
         ]), result);
 
