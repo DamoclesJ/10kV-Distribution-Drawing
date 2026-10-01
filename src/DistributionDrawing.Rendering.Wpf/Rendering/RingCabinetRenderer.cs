@@ -74,7 +74,7 @@ public sealed class RingCabinetRenderer
         }
         var selectedSwitch = cabinet.Intervals.SelectMany(item => item.SwitchDevices)
             .FirstOrDefault(device => device.Id == label.TargetId);
-        return selectedSwitch is not null
+        return selectedSwitch is not null && selectedSwitch.SwitchKind != SwitchKind.GroundSwitch
             ? ElectricalVisualIdentity.HazardAssociation(selectedSwitch.Id, [
                 ElectricalVisualIdentity.Terminal(selectedSwitch.FirstTerminalId),
                 ElectricalVisualIdentity.Terminal(selectedSwitch.SecondTerminalId)]) : null;

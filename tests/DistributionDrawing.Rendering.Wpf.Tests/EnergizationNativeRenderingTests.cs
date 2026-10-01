@@ -66,7 +66,8 @@ public sealed class EnergizationNativeRenderingTests
             connection.StartTerminalId, connection.EndTerminalId);
         foreach (var pole in new[] { first.Pole, second.Pole })
         {
-            var identity = ElectricalVisualIdentity.HazardAssociation(pole.Id, [edge]);
+            var identity = ElectricalVisualIdentity.HazardAssociation(pole.Id,
+                [edge, .. pole.OverheadAnchorTerminalIds.Select(ElectricalVisualIdentity.Terminal)]);
             Assert.Equal(identity, Assert.Single(scene.Elements.OfType<SceneText>(), text => text.Text == pole.PoleNumber).ElectricalIdentity);
             Assert.Contains(scene.Elements.OfType<SceneEllipse>(), ellipse => ellipse.ElectricalIdentity == identity);
         }
@@ -224,17 +225,19 @@ public sealed class EnergizationNativeRenderingTests
         Assert.All(styled.Where(element => element.ElectricalIdentity == bus), element => Assert.Equal(ElectricalVisualState.Energized, element.ElectricalState));
     }
 
-    [Fact]
-    public void CabinetGroundSwitchDesignationUsesHazardAggregation()
+    [Theory]
+    [InlineData(SwitchState.Open)]
+    [InlineData(SwitchState.Closed)]
+    public void GroundSwitchDesignationAndEarthGeometryStayNormalBlack(SwitchState groundState)
     {
-        RingCabinet cabinet = Cabinet(new LoadSwitchConfiguration());
+        RingCabinet cabinet = GroundCabinet(groundState);
         SwitchDevice ground = cabinet.Intervals[0].SwitchDevices.Single(device =>
             device.SwitchKind == SwitchKind.GroundSwitch);
         var scene = new DrawingScene(new RingCabinetRenderer().Render(cabinet,
             new RingCabinetLayoutFactory().Create(cabinet, new(0, 0))));
         SceneText label = Assert.Single(scene.Elements.OfType<SceneText>(),
             text => text.Text == cabinet.Intervals[0].GetSwitchBusinessNumber(ground.Id));
-        Assert.Equal(ElectricalVisualIdentityKind.Hazard, label.ElectricalIdentity!.Kind);
+        Assert.Null(label.ElectricalIdentity);
 
         var result = Result([ground.FirstTerminalId], [], EnergizationState.Energized,
             extra: new Dictionary<Guid, EnergizationState>
@@ -245,7 +248,93 @@ public sealed class EnergizationNativeRenderingTests
         SceneText styledLabel = Assert.Single(styled.OfType<SceneText>(),
             text => text.Text == cabinet.Intervals[0].GetSwitchBusinessNumber(ground.Id));
 
-        Assert.Equal(ElectricalVisualState.Energized, styledLabel.ElectricalState);
+        Assert.Null(styledLabel.ElectricalState);
+        Assert.Equal(Colors.Black, styledLabel.Foreground);
+        SceneElement[] unboundGroundGeometry = scene.Elements
+            .Where(element => element.ElectricalIdentity is null).ToArray();
+        Assert.All(unboundGroundGeometry, element =>
+            Assert.Contains(styled, item => ReferenceEquals(item, element)));
+        Assert.All(unboundGroundGeometry.OfType<SceneLine>(), line =>
+            Assert.Equal(Colors.Black, line.Stroke));
+    }
+
+    [Fact]
+    public void PoleSwitchWithOneEnergizedSideHasHazardFrameAndLabelWithExactTerminalColors()
+    {
+        var creation = new PoleCreationFactory().CreateWithAttachments(
+            "P02", PoleType.Cement, null, [SwitchKind.IsolationSwitch], false);
+        SwitchDevice device = Assert.Single(creation.Devices.OfType<SwitchDevice>());
+        PoleAttachment attachment = Assert.Single(creation.Attachments);
+        var switchInput = new SwitchAttachmentRenderInput(attachment, device,
+            new AttachmentLayout(attachment.AttachmentId, new(15, 0)));
+        var scene = new DrawingScene(new MixedPoleRenderer().Render(creation.Pole,
+            new PoleLayout(creation.Pole.Id, new(20, 20)), [switchInput], []));
+        var result = Result([device.FirstTerminalId], [], EnergizationState.Energized,
+            extra: new Dictionary<Guid, EnergizationState>
+            {
+                [device.SecondTerminalId] = EnergizationState.Deenergized
+            });
+
+        IReadOnlyList<SceneElement> styled = EnergizationSceneStyler.Build(scene, result);
+        SceneEllipse poleSymbol = Assert.Single(styled.OfType<SceneEllipse>(),
+            ellipse => ellipse.ElectricalIdentity?.Id == creation.Pole.Id);
+        SceneText poleNumber = Assert.Single(styled.OfType<SceneText>(),
+            text => text.Text == "P02");
+        SceneText deviceName = Assert.Single(styled.OfType<SceneText>(),
+            text => text.Text == "柱上隔离开关");
+        SceneRectangle frame = Assert.Single(styled.OfType<SceneRectangle>(),
+            rectangle => rectangle.ElectricalIdentity?.Kind == ElectricalVisualIdentityKind.Hazard);
+        SceneLine[] energizedSide = styled.OfType<SceneLine>()
+            .Where(line => line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(device.FirstTerminalId))
+            .ToArray();
+        SceneLine[] deenergizedSide = styled.OfType<SceneLine>()
+            .Where(line => line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(device.SecondTerminalId))
+            .ToArray();
+
+        Assert.Equal(ElectricalVisualState.Energized, poleSymbol.ElectricalState);
+        Assert.Equal(Colors.Red, poleSymbol.Stroke);
+        Assert.Equal(ElectricalVisualState.Energized, poleNumber.ElectricalState);
+        Assert.Equal(Colors.Red, poleNumber.Foreground);
+        Assert.Equal(ElectricalVisualState.Energized, deviceName.ElectricalState);
+        Assert.Equal(Colors.Red, deviceName.Foreground);
+        Assert.Equal(ElectricalVisualState.Energized, frame.ElectricalState);
+        Assert.Equal(Colors.Red, frame.Stroke);
+        Assert.NotEmpty(energizedSide);
+        Assert.NotEmpty(deenergizedSide);
+        Assert.All(energizedSide, line =>
+        {
+            Assert.Equal(ElectricalVisualState.Energized, line.ElectricalState);
+            Assert.Equal(Colors.Red, line.Stroke);
+        });
+        Assert.All(deenergizedSide, line =>
+        {
+            Assert.Equal(ElectricalVisualState.Deenergized, line.ElectricalState);
+            Assert.Equal(Colors.Black, line.Stroke);
+        });
+    }
+
+    [Fact]
+    public void PoleHazardIncludesAttachedSwitchMembersAlongsideAnchorTerminals()
+    {
+        var creation = new PoleCreationFactory().CreateWithAttachments(
+            "P03", PoleType.Cement, null, [SwitchKind.LoadSwitch], false);
+        SwitchDevice device = Assert.Single(creation.Devices.OfType<SwitchDevice>());
+        PoleAttachment attachment = Assert.Single(creation.Attachments);
+        var switchInput = new SwitchAttachmentRenderInput(attachment, device,
+            new AttachmentLayout(attachment.AttachmentId, new(15, 0)));
+        var scene = new DrawingScene(new MixedPoleRenderer().Render(creation.Pole,
+            new PoleLayout(creation.Pole.Id, new(20, 20)), [switchInput], []));
+        ElectricalVisualIdentity[] poleIdentities = scene.Elements
+            .Select(element => element.ElectricalIdentity)
+            .OfType<ElectricalVisualIdentity>()
+            .Where(identity => identity.Kind == ElectricalVisualIdentityKind.Hazard &&
+                identity.Id == creation.Pole.Id)
+            .Distinct().ToArray();
+        ElectricalVisualIdentity identity = Assert.Single(poleIdentities)!;
+        Assert.Contains(ElectricalVisualIdentity.Terminal(device.FirstTerminalId), identity.Members);
+        Assert.Contains(ElectricalVisualIdentity.Terminal(device.SecondTerminalId), identity.Members);
+        Assert.All(creation.Pole.OverheadAnchorTerminalIds,
+            terminalId => Assert.Contains(ElectricalVisualIdentity.Terminal(terminalId), identity.Members));
     }
 
     [Theory]
@@ -410,6 +499,12 @@ public sealed class EnergizationNativeRenderingTests
         Assert.True(outcome.IsSuccess, outcome.Failure?.Message);
         return outcome.Result!.Cabinet;
     }
+
+    private static RingCabinet GroundCabinet(SwitchState groundState) => RingCabinet.Create(
+        RingCabinetDefinition.Create(Guid.NewGuid(), "Ground cabinet", [
+            RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, groundState),
+            RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open)
+        ]));
 
     internal static EnergizationResult Result(IEnumerable<Guid> terminals, IEnumerable<Guid> nodes, EnergizationState state,
         IEnumerable<ElectricalConnectivityEdge>? edges = null, IReadOnlyDictionary<Guid, EnergizationState>? extra = null) =>

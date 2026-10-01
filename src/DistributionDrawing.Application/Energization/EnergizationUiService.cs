@@ -171,9 +171,12 @@ public sealed class EnergizationUiService
 
     private static string PoleDeviceKindText(SwitchKind kind) => kind switch
     {
+        SwitchKind.LoadSwitch => "负荷开关",
+        SwitchKind.IsolationSwitch => "隔离开关",
         SwitchKind.DropoutFuse => "跌落式熔断器",
         SwitchKind.CircuitBreaker => "柱上断路器",
-        _ => "柱上开关"
+        SwitchKind.GroundSwitch => "接地刀闸",
+        _ => "开关设备"
     };
 
     public static string DeviceKindText(SwitchKind kind) => kind switch

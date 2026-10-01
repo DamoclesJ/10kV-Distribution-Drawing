@@ -161,10 +161,21 @@ public sealed class EnergizationUiTests
             poleSwitch.Id));
         EnergizationBoundaryCandidate poleCandidate = service.Candidates(drawing, pole.Id)
             .First();
-        Assert.Equal("P02（柱上开关）", poleCandidate.DeviceName);
+        Assert.Equal("P02（隔离开关）", poleCandidate.DeviceName);
         Assert.DoesNotContain("PoleSwitch", poleCandidate.DeviceName);
         Assert.Equal(poleCandidate.DeviceName, service.DescribeSeed(drawing,
             new EnergizedSeed(Guid.NewGuid(), poleSwitch.Id, poleCandidate.Side)).DeviceName);
+
+        var fusePole = new Pole(Guid.NewGuid(), "P06");
+        SwitchDevice fuse = SwitchDevice.CreateForPole(Guid.NewGuid(),
+            SwitchKind.DropoutFuse, Guid.NewGuid(), Guid.NewGuid());
+        drawing.AddDevice(fusePole);
+        drawing.AddDevice(fuse);
+        drawing.AddPoleAttachment(new PoleAttachment(Guid.NewGuid(), fusePole.Id, fuse.Id));
+        EnergizationBoundaryCandidate fuseCandidate = service.Candidates(drawing, fusePole.Id)
+            .First(candidate => candidate.DeviceId == fuse.Id);
+        Assert.Equal("P06（跌落式熔断器）", fuseCandidate.DeviceName);
+        Assert.DoesNotContain("PoleSwitch", fuseCandidate.DeviceName);
     }
 
     [Fact]

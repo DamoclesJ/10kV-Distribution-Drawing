@@ -1,6 +1,7 @@
 using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Desktop.WorkTickets;
+using DistributionDrawing.Desktop;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
@@ -147,7 +148,8 @@ public sealed class TicketRangeBoundaryCompletionTests
         var normalTarget = new SelectionReference(SelectionTargetKind.Device, Guid.NewGuid());
         SelectionReference? inspectorTarget = null;
         bool activated = WorkRangeCanvasActivation.ActivateOrdinaryObject(picker.Mode,
-            normalTarget, () => inspectorTarget = normalTarget);
+            DrawingRightPanelMode.WorkRange, normalTarget,
+            () => inspectorTarget = normalTarget);
 
         Assert.True(activated);
         Assert.Equal(normalTarget, inspectorTarget);

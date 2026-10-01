@@ -232,7 +232,7 @@ public sealed class SwitchSymbolDefinition : ISymbolDefinition
                 ? ElectricalVisualIdentity.SwitchPath(device)
                 : ElectricalVisualIdentity.Terminal(device.SwitchKind == DistributionDrawing.Domain.Devices.SwitchKind.DropoutFuse
                     ? device.SecondTerminalId : device.FirstTerminalId),
-            _ => ElectricalVisualIdentity.Association(device.Id, [
+            _ => ElectricalVisualIdentity.HazardAssociation(device.Id, [
                 ElectricalVisualIdentity.Terminal(device.FirstTerminalId),
                 ElectricalVisualIdentity.Terminal(device.SecondTerminalId)])
         };

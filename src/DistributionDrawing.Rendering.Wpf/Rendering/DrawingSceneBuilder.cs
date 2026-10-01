@@ -855,7 +855,9 @@ public sealed class DrawingSceneBuilder
                 .Select(connection => ElectricalVisualIdentity.Edge(ElectricalConnectivityEdgeType.Connection,
                     connection.Id, connection.StartTerminalId, connection.EndTerminalId)).ToArray();
             ElectricalVisualIdentity? supportIdentity = supportEdges.Length > 0
-                ? ElectricalVisualIdentity.HazardAssociation(pole.Id, supportEdges) : null;
+                ? ElectricalVisualIdentity.HazardAssociation(pole.Id, supportEdges.Concat(
+                    poleVisuals.FirstOrDefault(element => element.ElectricalIdentity?.Id == pole.Id)
+                        ?.ElectricalIdentity?.Members ?? [])) : null;
             elements.AddRange(poleVisuals.Select(element => supportIdentity is not null &&
                 element.ElectricalIdentity?.Id == pole.Id
                     ? element with { ElectricalIdentity = supportIdentity } : element));

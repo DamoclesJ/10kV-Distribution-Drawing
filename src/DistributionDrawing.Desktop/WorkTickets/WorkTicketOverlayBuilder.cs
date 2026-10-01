@@ -1,5 +1,6 @@
 using System.Windows.Media;
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Desktop;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Scene;
 
@@ -15,11 +16,13 @@ internal static class WorkRangeCanvasActivation
 {
     public static bool ActivateOrdinaryObject(
         TicketRangePickMode pickerMode,
+        DrawingRightPanelMode rightPanelMode,
         SelectionReference? target,
         Action showInspector)
     {
         ArgumentNullException.ThrowIfNull(showInspector);
-        if (pickerMode != TicketRangePickMode.Idle || target is null) return false;
+        if (pickerMode != TicketRangePickMode.Idle || target is null ||
+            rightPanelMode == DrawingRightPanelMode.Energization) return false;
         showInspector();
         return true;
     }

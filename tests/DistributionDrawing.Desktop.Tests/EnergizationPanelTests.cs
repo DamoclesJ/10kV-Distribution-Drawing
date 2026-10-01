@@ -153,7 +153,7 @@ public sealed class EnergizationPanelTests
     }
 
     [Fact]
-    public void PanelExecutesExplicitlyAndWithdrawsLegendWhenScenarioChanges()
+    public void PanelExecutesExplicitlyAndWithdrawsStaleStatusWhenScenarioChanges()
     {
         RunOnSta(() =>
         {
@@ -168,18 +168,16 @@ public sealed class EnergizationPanelTests
                 TextBlock status = (TextBlock)panel.FindName("AnalysisText")!;
                 Button execute = (Button)panel.FindName("AnalyzeButton")!;
                 Button confirm = (Button)panel.FindName("ConfirmButton")!;
-                Border legend = (Border)panel.FindName("Legend")!;
+                Assert.Null(panel.FindName("Legend"));
 
                 Assert.Equal("尚未执行带电分析", status.Text);
                 Assert.False(confirm.IsEnabled);
                 execute.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Contains("未设置电源点", status.Text);
-                Assert.Equal(Visibility.Visible, legend.Visibility);
                 runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(
                     runtime.PersistenceSession.EnergizationScenario,
                     new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)));
                 Assert.Contains("请重新执行带电分析", status.Text);
-                Assert.Equal(Visibility.Collapsed, legend.Visibility);
                 Assert.False(confirm.IsEnabled);
                 execute.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Contains("分析信息不完整", status.Text);

@@ -39,15 +39,6 @@
         <Button x:Name="AnalyzeButton" Content="开始分析" Click="OnExecuteAnalysis"
                 Padding="12,6" Margin="8,0,0,0" />
       </StackPanel>
-      <Border x:Name="Legend" BorderBrush="Gray" BorderThickness="1" Padding="7"
-              Margin="0,12,0,0" Visibility="Collapsed">
-        <StackPanel>
-          <TextBlock Text="带电分析图例" FontWeight="SemiBold" />
-          <TextBlock Text="━━ 带电" Foreground="Red" />
-          <TextBlock Text="━━ 已判定无电" Foreground="Black" />
-          <TextBlock Text="···· / —· 未知；文字带下划线及 ?" Foreground="Gray" />
-        </StackPanel>
-      </Border>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

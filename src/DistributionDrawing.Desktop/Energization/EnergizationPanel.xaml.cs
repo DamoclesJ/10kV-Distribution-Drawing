@@ -90,7 +90,6 @@ public partial class EnergizationPanel : UserControl
                 CompletionText.Text = "没有打开的图纸";
                 AnalysisText.Text = "尚未执行带电分析";
                 DiagnosticList.ItemsSource = null;
-                Legend.Visibility = Visibility.Collapsed;
                 UpdateButtons();
                 return;
             }
@@ -135,7 +134,6 @@ public partial class EnergizationPanel : UserControl
                         ? $"电源点 {Array.FindIndex(seeds, seed => seed.Seed.Id == id) + 1}：{item.Message}"
                         : $"图纸：{item.Message}").ToArray()
                 : null;
-            Legend.Visibility = state.CanShowOverlay ? Visibility.Visible : Visibility.Collapsed;
             UpdateButtons();
         }
         finally

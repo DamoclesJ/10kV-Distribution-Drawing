@@ -2503,6 +2503,7 @@ public partial class MainWindow : Window
         SelectionReference? target = hit?.Target;
         WorkRangeCanvasActivation.ActivateOrdinaryObject(
             _ticketRangePicker.Mode,
+            _rightPanelMode,
             target,
             () => SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector));
 

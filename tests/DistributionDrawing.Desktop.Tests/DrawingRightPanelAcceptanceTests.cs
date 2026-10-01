@@ -42,6 +42,10 @@ public sealed class DrawingRightPanelAcceptanceTests
         Assert.DoesNotMatch(@"_rightPanelMode\s*=(?!=)", selection);
         Assert.Contains("_rightPanelMode == DrawingRightPanelMode.WorkRange", selection);
         Assert.DoesNotContain("InspectorContent.Visibility", selection);
+        string canvasSelection = Between(source, "private void OnDrawingSurfaceMouseUp(",
+            "private void OnDrawingSurfaceMouseLeave(");
+        Assert.Contains("WorkRangeCanvasActivation.ActivateOrdinaryObject(", canvasSelection);
+        Assert.Contains("_rightPanelMode", canvasSelection);
         string mode = Between(source, "private void OnEnterEnergizationMode(", "private void OnShowTicketWorkspace(");
         Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Energization)", mode);
         Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector)", mode);

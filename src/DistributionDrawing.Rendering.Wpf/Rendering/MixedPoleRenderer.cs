@@ -42,12 +42,18 @@ public sealed class MixedPoleRenderer
 
         SwitchAttachmentRenderInput[] switches = switchAttachments.ToArray();
         PoleAttachmentRenderInput[] terminations = cableTerminationAttachments.ToArray();
-        var poleMembers = pole.OverheadAnchorTerminalIds.Select(ElectricalVisualIdentity.Terminal).ToArray();
-        ElectricalVisualIdentity poleIdentity = ElectricalVisualIdentity.HazardAssociation(pole.Id,
-            poleMembers.Length > 0 ? poleMembers : switches.SelectMany(input => new[] {
+        ElectricalVisualIdentity[] poleMembers = pole.OverheadAnchorTerminalIds
+            .Select(ElectricalVisualIdentity.Terminal)
+            .Concat(switches.SelectMany(input => new[] {
                 ElectricalVisualIdentity.Terminal(input.SwitchDevice.FirstTerminalId),
-                ElectricalVisualIdentity.Terminal(input.SwitchDevice.SecondTerminalId) })
-                .Concat(terminations.Select(input => ElectricalVisualIdentity.Node(input.CableTermination.InternalNodeId))));
+                ElectricalVisualIdentity.Terminal(input.SwitchDevice.SecondTerminalId) }))
+            .Concat(terminations.SelectMany(input => new[] {
+                ElectricalVisualIdentity.Terminal(input.CableTermination.CableSideTerminalId),
+                ElectricalVisualIdentity.Terminal(input.CableTermination.OverheadSideTerminalId),
+                ElectricalVisualIdentity.Node(input.CableTermination.InternalNodeId) }))
+            .Distinct().ToArray();
+        ElectricalVisualIdentity poleIdentity =
+            ElectricalVisualIdentity.HazardAssociation(pole.Id, poleMembers);
         var elements = new List<SceneElement>();
         elements.AddRange(_poleSymbol.CreateElements(pole, poleLayout, includeLabel: false)
             .Select(element => element is SceneLogicalBounds ? element : element with { ElectricalIdentity = poleIdentity }));
