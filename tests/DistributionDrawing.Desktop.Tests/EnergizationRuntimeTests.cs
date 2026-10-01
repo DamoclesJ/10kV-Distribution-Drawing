@@ -111,7 +111,7 @@ public sealed class EnergizationRuntimeTests : IDisposable
         string source = File.ReadAllText(path);
         string render = source[source.IndexOf("private void RenderCurrentScene()",
             StringComparison.Ordinal)..];
-        int ea = render.IndexOf("EnergizationOverlayBuilder.Build", StringComparison.Ordinal);
+        int ea = render.IndexOf("EnergizationSceneProjector.Project", StringComparison.Ordinal);
         int hover = render.IndexOf("_groundingTargetPicker.CreateAffordance",
             StringComparison.Ordinal);
         int selection = render.IndexOf("SelectionOverlayBuilder.CreateElements",

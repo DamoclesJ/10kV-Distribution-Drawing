@@ -5,6 +5,8 @@ using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 
 namespace DistributionDrawing.Desktop.SwitchOperation;
 
+internal interface ISwitchStateCommand : ICommand { }
+
 public sealed record SwitchOperationResult(bool IsSuccess, string? ErrorMessage = null)
 {
     public static SwitchOperationResult Success { get; } = new(true);
@@ -91,8 +93,8 @@ public sealed class SwitchOperationController
                 switchDevice.Id,
                 targetState);
             session.CommandStack.ExecuteCommand(
-                new ChangeSwitchStateCommandAdapter(applicationCommand));
-            session.RebuildScene();
+                new ChangeSwitchStateCommandAdapter(applicationCommand),
+                session.RebuildScene);
             SceneChanged?.Invoke(this, EventArgs.Empty);
             return SwitchOperationResult.Success;
         }
@@ -124,7 +126,7 @@ public sealed class SwitchOperationController
         return "开关状态操作失败，请检查当前工程状态。";
     }
 
-    private sealed class ChangeSwitchStateCommandAdapter : ICommand
+    private sealed class ChangeSwitchStateCommandAdapter : ISwitchStateCommand
     {
         private readonly ChangeSwitchStateCommand _command;
 

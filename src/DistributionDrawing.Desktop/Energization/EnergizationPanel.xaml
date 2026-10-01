@@ -6,6 +6,13 @@
       <TextBlock Text="带电分析" FontSize="17" FontWeight="SemiBold" />
       <TextBlock Text="选择图纸中的开关，或选择柜体、间隔后从下方选取设备与电气侧。"
                  TextWrapping="Wrap" Margin="0,8,0,8" />
+      <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+        <Button Content="所选开关分/合"
+                Command="{Binding DataContext.SwitchOperationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                Padding="8,4" />
+        <Button Content="退出带电分析" Click="OnExitRequested"
+                Padding="8,4" Margin="8,0,0,0" />
+      </StackPanel>
       <TextBlock Text="候选电源边界" FontWeight="SemiBold" />
       <ListBox x:Name="CandidateList" Height="145" SelectionChanged="OnCandidateSelected"
                DisplayMemberPath="DisplayText" />

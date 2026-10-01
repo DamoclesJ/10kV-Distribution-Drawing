@@ -66,4 +66,10 @@ public sealed record SymbolRenderContext
     public double ThicknessMillimeters { get; }
 
     public bool IncludeLabel { get; }
+
+    public ElectricalVisualIdentity? FirstSide { get; init; }
+
+    public ElectricalVisualIdentity? SecondSide { get; init; }
+
+    public ElectricalVisualIdentity? ConductingPath { get; init; }
 }

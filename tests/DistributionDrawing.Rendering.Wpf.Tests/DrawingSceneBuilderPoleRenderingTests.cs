@@ -73,8 +73,14 @@ public sealed class DrawingSceneBuilderPoleRenderingTests
         SceneText[] labels = scene.Elements.OfType<SceneText>().ToArray();
 
         Assert.Equal(1, labels.Count(text => text.Text == "P-301"));
+        Assert.Equal(ElectricalVisualIdentity.Pole(poleId),
+            Assert.Single(labels, text => text.Text == "P-301").ElectricalIdentity);
         Assert.Equal(1, labels.Count(text => text.Text == "柱上隔离开关"));
+        Assert.Equal(ElectricalVisualIdentity.SwitchDevice(switchId),
+            Assert.Single(labels, text => text.Text == "柱上隔离开关").ElectricalIdentity);
         Assert.Equal(1, labels.Count(text => text.Text == "电缆终端"));
+        Assert.Equal(ElectricalVisualIdentity.PoleAttachment(cableAttachment.AttachmentId),
+            Assert.Single(labels, text => text.Text == "电缆终端").ElectricalIdentity);
         Assert.DoesNotContain(labels, text => text.Text is "合" or "分");
         Assert.Single(scene.Elements.OfType<SceneEllipse>(), ellipse =>
             ellipse.Bounds.WidthMillimeters == ellipse.Bounds.HeightMillimeters &&

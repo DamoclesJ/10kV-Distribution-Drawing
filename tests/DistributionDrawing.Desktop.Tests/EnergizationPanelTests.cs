@@ -122,11 +122,22 @@ public sealed class EnergizationPanelTests
                 SwitchOperationResult switchResult =
                     new SwitchOperationController(() => runtime).ToggleSelected();
                 Assert.True(switchResult.IsSuccess, switchResult.ErrorMessage);
+                SwitchState changedState = runtime.PersistenceSession.Domain.Devices
+                    .OfType<SwitchDevice>().Single(device => device.Id == original.BoundaryDeviceId)
+                    .SwitchState!.Value;
                 Assert.True(runtime.CommandStack.CanUndo);
                 Assert.True(scenario.IsSourceSetComplete);
-                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
-                analyze.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+                Assert.True(runtime.CommandStack.Undo());
+                Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+                Assert.NotEqual(changedState, runtime.PersistenceSession.Domain.Devices
+                    .OfType<SwitchDevice>().Single(device => device.Id == original.BoundaryDeviceId)
+                    .SwitchState);
+                Assert.True(runtime.CommandStack.Redo());
+                Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+                Assert.True(new SwitchOperationController(() => runtime).ToggleSelected().IsSuccess);
+                Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+                Assert.True(scenario.IsSourceSetComplete);
 
                 seeds.SelectedIndex = 0;
                 candidates.SelectedIndex = 1;

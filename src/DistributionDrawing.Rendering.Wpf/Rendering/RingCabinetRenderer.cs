@@ -49,7 +49,20 @@ public sealed class RingCabinetRenderer
                 : result.Position,
             result.Text,
             System.Windows.Media.Colors.Black,
-            result.Request.FontSizeMillimeters)));
+            result.Request.FontSizeMillimeters)
+        {
+            ElectricalIdentity = result.Request.TargetKind switch
+            {
+                LabelTargetKind.RingCabinet => ElectricalVisualIdentity.Node(
+                    cabinet.MainBusNodeId),
+                LabelTargetKind.Interval => ElectricalVisualIdentity.Node(
+                    cabinet.Intervals.Single(interval => interval.IntervalId ==
+                        result.Request.TargetId).CircuitNodeId),
+                LabelTargetKind.SwitchDevice => ElectricalVisualIdentity.SwitchDevice(
+                    result.Request.TargetId),
+                _ => null
+            }
+        }));
         return elements;
     }
 }

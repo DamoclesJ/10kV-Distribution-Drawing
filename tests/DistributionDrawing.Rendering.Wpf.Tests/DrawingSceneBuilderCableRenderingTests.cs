@@ -39,13 +39,16 @@ public sealed class DrawingSceneBuilderCableRenderingTests
         Assert.True(scene.HitTestIndex.FindAll(new(
             DistributionDrawing.Rendering.Wpf.Interaction.SelectionTargetKind.CableSegment,
             fixture.Cable.Id)).Count >= 2);
-        Assert.Single(
-            scene.Elements.OfType<SceneText>(),
+        SceneText label = Assert.Single(scene.Elements.OfType<SceneText>(),
             text => text.Text == "YJV22-8.7/15kV 120m");
+        Assert.Equal(ElectricalVisualIdentity.Edge(
+            ElectricalConnectivityEdgeType.Connection, fixture.Cable.ConnectionId,
+            fixture.Cable.StartTerminalId, fixture.Cable.EndTerminalId),
+            label.ElectricalIdentity);
     }
 
     [Fact]
-    public void CableTerminationInternalPathBindsItsNodeInsteadOfTriangleOutline()
+    public void CableTerminationInternalPathAndOutlineHaveSeparateIdentities()
     {
         CableSceneFixture fixture = CreateFixture();
         DrawingScene scene = fixture.Builder.Build(fixture.Document, fixture.Layout);
@@ -58,8 +61,10 @@ public sealed class DrawingSceneBuilderCableRenderingTests
                 line.ElectricalIdentity ==
                     ElectricalVisualIdentity.Node(termination.InternalNodeId));
         }
-        Assert.DoesNotContain(scene.Elements.OfType<ScenePolyline>(), polyline =>
-            polyline.IsClosed && polyline.ElectricalIdentity is not null);
+        foreach (CableTermination termination in terminations)
+            Assert.Contains(scene.Elements.OfType<ScenePolyline>(), polyline =>
+                polyline.IsClosed && polyline.ElectricalIdentity ==
+                    ElectricalVisualIdentity.CableTermination(termination.Id));
     }
 
     [Fact]

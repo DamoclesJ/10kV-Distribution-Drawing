@@ -33,8 +33,9 @@ public sealed class WorkRangeEntryAcceptanceTests
         string rangeHandler = HandlerBody(
             File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs")),
             "private void OnOpenTicketRange", "private void OnAddTicketBoundarySlot");
-        Assert.Contains("DrawingRightPanelTabs.Visibility = Visibility.Collapsed;", rangeHandler);
-        Assert.Contains("TicketOverlayToggle.IsEnabled = true;", rangeHandler);
+        Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.WorkRange);", rangeHandler);
+        Assert.Contains("TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;",
+            windowCode);
         Assert.True(HasVisibilitySetter(left, "Visible"));
         Assert.True(HasVisibilitySetter(top, "Collapsed"));
         Assert.True(HasVisibilityTrigger(left, "IsLeftToolPalette", "False", "Collapsed"));
@@ -79,10 +80,7 @@ public sealed class WorkRangeEntryAcceptanceTests
             (string?)button.Attribute("Click") == "OnConfirmTicketRange");
         Assert.Contains(rangeHost.Elements(Presentation + "ScrollViewer"), element =>
             (string?)element.Attribute(Xaml + "Name") == "TicketRangePanel");
-        XElement rightPanelTabs = NamedElement(mainWindowXaml, Presentation + "TabControl",
-            "DrawingRightPanelTabs");
-        Assert.Contains(rightPanelTabs, rangeHost.Elements());
-        Assert.Contains(inspector, rightPanelTabs.Descendants());
+        Assert.Contains(inspector, rangeHost.Elements());
         Assert.Contains("返回图纸修改工作范围", workTicketWorkspaceXaml.ToString());
         Assert.DoesNotContain("工作票范围", workTicketWorkspaceXaml.ToString());
         Assert.DoesNotContain("创建工作票", workTicketWorkspaceXaml.ToString());
@@ -100,7 +98,7 @@ public sealed class WorkRangeEntryAcceptanceTests
         string ticketNavigation = HandlerBody(windowCode, "private void OnShowTicketWorkspace", "private void OnTicketOverlayChanged");
         string projectSwitch = HandlerBody(windowCode, "private void OnActiveDocumentSessionChanging", "private void BindActiveSession");
 
-        Assert.Contains("TicketRangePanel.Visibility = Visibility.Visible;", openHandler);
+        Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.WorkRange);", openHandler);
         Assert.DoesNotContain("OnShowDrawingWorkspace(", openHandler);
         Assert.DoesNotContain("CommitPendingEdits(", openHandler);
         Assert.DoesNotContain("CommandStack", openHandler);
@@ -108,7 +106,7 @@ public sealed class WorkRangeEntryAcceptanceTests
         Assert.Contains("session.PersistenceSession.Domain.Id", openHandler);
         Assert.Contains("ApplyRange(", confirmHandler);
         Assert.Contains("OnShowTicketWorkspace(", confirmHandler);
-        Assert.Contains("TicketRangePanel.Visibility = Visibility.Collapsed;", selectionHandler);
+        Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);", selectionHandler);
         Assert.DoesNotContain("DiscardTicketRangeBuffer();", selectionHandler);
         Assert.DoesNotContain("DiscardTicketRangeBuffer();", ticketNavigation);
         string workspaceCode = File.ReadAllText(AcceptanceFile("WorkTicketWorkspace.xaml.cs"));

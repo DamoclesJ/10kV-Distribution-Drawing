@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -25,6 +26,12 @@ public sealed class CableRendererTests
         Assert.Contains(elements.OfType<SceneText>(), text =>
             text.Text.Contains(cable.CableType, StringComparison.Ordinal) &&
             text.Text.Contains("120", StringComparison.Ordinal));
+        ElectricalVisualIdentity identity = ElectricalVisualIdentity.Edge(
+            ElectricalConnectivityEdgeType.Connection, cable.ConnectionId,
+            cable.StartTerminalId, cable.EndTerminalId);
+        Assert.All(elements.OfType<SceneLine>(), line =>
+            Assert.Equal(identity, line.ElectricalIdentity));
+        Assert.Equal(identity, Assert.Single(elements.OfType<SceneText>()).ElectricalIdentity);
     }
 
     [Fact]

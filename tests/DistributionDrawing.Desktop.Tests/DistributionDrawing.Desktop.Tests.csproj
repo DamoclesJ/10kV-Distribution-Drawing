@@ -35,6 +35,8 @@
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/DistributionDrawing.Desktop/MainWindow.xaml.cs" Link="Acceptance/MainWindow.xaml.cs"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/DistributionDrawing.Desktop/Energization/EnergizationPanel.xaml" Link="Acceptance/EnergizationPanel.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/DistributionDrawing.Desktop/WorkTickets/WorkTicketWorkspace.xaml" Link="Acceptance/WorkTicketWorkspace.xaml"
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/DistributionDrawing.Desktop/WorkTickets/WorkTicketWorkspace.xaml.cs" Link="Acceptance/WorkTicketWorkspace.xaml.cs"

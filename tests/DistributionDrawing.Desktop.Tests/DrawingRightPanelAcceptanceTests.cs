@@ -12,69 +12,66 @@ public sealed class DrawingRightPanelAcceptanceTests
         "http://schemas.microsoft.com/winfx/2006/xaml";
 
     [Fact]
-    public void InspectorAndEnergizationShareOneExclusiveRightPanelHost()
+    public void LeftAndTopToolboxesEnterEaModeAndRightHostHasExclusiveContents()
     {
         XDocument xaml = XDocument.Load(AcceptanceFile("MainWindow.xaml"));
-        XElement host = Named(xaml, "DrawingRightPanelTabs");
-        XElement[] tabs = host.Elements(Presentation + "TabItem").ToArray();
+        XElement left = Named(xaml, "LeftToolPalette");
+        XElement top = Named(xaml, "TopToolPalette");
+        foreach (XElement palette in new[] { left, top })
+        {
+            XElement entry = Assert.Single(palette.Descendants(Presentation + "Button"),
+                button => (string?)button.Attribute("Content") == "带电分析");
+            Assert.Equal("OnEnterEnergizationMode", (string?)entry.Attribute("Click"));
+        }
 
-        Assert.Equal(2, tabs.Length);
-        Assert.Equal("属性", (string?)tabs[0].Attribute("Header"));
-        Assert.Equal("带电分析", (string?)tabs[1].Attribute("Header"));
-        Assert.Contains(tabs[0].Descendants(), element =>
-            (string?)element.Attribute(Xaml + "Name") == "InspectorContent");
-        Assert.Contains(tabs[1].Descendants(), element =>
-            (string?)element.Attribute(Xaml + "Name") == "EaPanel");
-        Assert.Null(Named(xaml, "InspectorContent").Attribute("Visibility"));
-        Assert.Null(Named(xaml, "EaPanel").Attribute("Visibility"));
-        Assert.DoesNotContain(xaml.Descendants(Presentation + "Button"), button =>
-            (string?)button.Attribute("Click") == "OnOpenEnergizationPanel");
-        Assert.Equal("OnDrawingRightPanelChanged",
-            (string?)host.Attribute("SelectionChanged"));
+        XElement inspector = Named(xaml, "InspectorContent");
+        XElement ea = Named(xaml, "EaPanel");
+        XElement workRange = Named(xaml, "TicketRangePanel");
+        Assert.Same(inspector.Parent, ea.Parent);
+        Assert.Same(inspector.Parent, workRange.Parent);
+        Assert.Equal("Collapsed", (string?)ea.Attribute("Visibility"));
+        Assert.Equal("Collapsed", (string?)workRange.Attribute("Visibility"));
+        Assert.Null(inspector.Attribute("Visibility"));
+        Assert.DoesNotContain(xaml.Descendants(Presentation + "TabControl"),
+            tab => (string?)tab.Attribute(Xaml + "Name") == "DrawingRightPanelTabs");
     }
 
     [Fact]
-    public void SelectionRefreshesEaCandidateAndInspectorWithoutChangingPanelMode()
+    public void SelectionUpdatesBothProjectionsWithoutLeavingEaMode()
     {
         string source = File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs"));
         string selection = Between(source, "private void OnSelectionChanged(",
             "private void CollapseSingleSelectionEditors");
-        string panelChange = Between(source, "private void OnDrawingRightPanelChanged(",
+        string apply = Between(source, "private void ApplyDrawingRightPanelMode()",
             "private void OnShowTicketWorkspace(");
+        string enter = Between(source, "private void OnEnterEnergizationMode(",
+            "private void OnExitEnergizationMode(");
 
         Assert.Contains("EaPanel.SetSelection(_selectionManager.Selected?.ObjectId)", selection);
         Assert.Contains("_propertyInspector.Apply(", selection);
-        Assert.DoesNotContain("_rightPanelMode =", selection);
-        Assert.DoesNotContain("DrawingRightPanelTabs.Selected", selection);
-        Assert.DoesNotContain("InspectorContent.Visibility", source);
-        Assert.DoesNotContain("EaPanel.Visibility", source);
-        Assert.Contains("DrawingRightPanelTabs.SelectedItem", panelChange);
-        Assert.Contains("_rightPanelMode =", panelChange);
-        Assert.DoesNotContain("_selectionManager.Clear()", panelChange);
-        Assert.DoesNotContain("_selectionManager.Select(", panelChange);
+        Assert.DoesNotContain("_rightPanelMode = DrawingRightPanelMode.Inspector", selection);
+        Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Energization)", enter);
+        Assert.Contains("InspectorContent.Visibility = _rightPanelMode == DrawingRightPanelMode.Inspector", apply);
+        Assert.Contains("EaPanel.Visibility = _rightPanelMode == DrawingRightPanelMode.Energization", apply);
+        Assert.Contains("TicketRangePanel.Visibility = _rightPanelMode == DrawingRightPanelMode.WorkRange", apply);
     }
 
     [Fact]
-    public void WorkspaceAndRangeTransitionsKeepThePanelContentsSeparate()
+    public void ExitRestoresInspectorWithoutClearingSelectionAndEaKeepsSwitchOperation()
     {
         string source = File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs"));
-        string range = File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs"));
-        string showDrawing = Between(source, "private void OnShowDrawingWorkspace(",
-            "private void OnDrawingRightPanelChanged(");
-        string showTicket = Between(source, "private void OnShowTicketWorkspace(",
-            "private void OnTicketOverlayChanged(");
-        string selection = Between(source, "private void OnSelectionChanged(",
-            "private void CollapseSingleSelectionEditors");
-        string render = source[source.IndexOf("private void RenderCurrentScene()",
-            StringComparison.Ordinal)..];
+        string exit = Between(source, "private void OnExitEnergizationMode(",
+            "private void SetDrawingRightPanelMode(");
+        string set = Between(source, "private void SetDrawingRightPanelMode(",
+            "private void ApplyDrawingRightPanelMode(");
+        XDocument ea = XDocument.Load(AcceptanceFile("EnergizationPanel.xaml"));
 
-        Assert.Contains("DrawingRightPanelTabs.Visibility = TicketRangePanel.Visibility", showDrawing);
-        Assert.Contains("DrawingRightPanelTabs.Visibility = Visibility.Visible", showTicket);
-        Assert.Contains("DrawingRightPanelTabs.Visibility = Visibility.Visible", selection);
-        Assert.DoesNotContain("_rightPanelMode =", showDrawing + showTicket + selection);
-        Assert.Contains("DrawingRightPanelTabs.Visibility = Visibility.Collapsed", range);
-        Assert.Contains("_rightPanelMode == DrawingRightPanelMode.Energization", render);
-        Assert.Contains("DrawingRightPanelTabs.Visibility == Visibility.Visible", render);
+        Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector)", exit);
+        Assert.DoesNotContain("_selectionManager.Clear()", exit + set);
+        Assert.DoesNotContain("_selectionManager.Select(", exit + set);
+        Assert.Contains(ea.Descendants(Presentation + "Button"), button =>
+            (string?)button.Attribute("Content") == "所选开关分/合" &&
+            ((string?)button.Attribute("Command"))?.Contains("SwitchOperationCommand") == true);
     }
 
     private static XElement Named(XDocument xaml, string name) =>

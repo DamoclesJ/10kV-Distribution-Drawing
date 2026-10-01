@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Topology;
+using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Application.Interaction;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Labels;
@@ -74,7 +75,10 @@ public sealed class CableRenderer
             {
                 TargetKind = SelectionTargetKind.CableSegment,
                 TargetId = cableSegment.Id,
-                HitTestBounds = hitTestBounds
+                HitTestBounds = hitTestBounds,
+                ElectricalIdentity = ElectricalVisualIdentity.Edge(
+                    ElectricalConnectivityEdgeType.Connection, cableSegment.ConnectionId,
+                    cableSegment.StartTerminalId, cableSegment.EndTerminalId)
             }));
             elements.Add(labelsByCableId[cableSegment.Id]);
         }
@@ -87,13 +91,19 @@ public sealed class CableRenderer
     {
         ArgumentNullException.ThrowIfNull(cables);
         (CableSegment CableSegment, CableLayout Layout)[] inputs = cables.ToArray();
+        Dictionary<Guid, CableSegment> byId = inputs.ToDictionary(input => input.CableSegment.Id,
+            input => input.CableSegment);
         return _labelLayoutEngine
             .Layout(inputs.Select(input =>
                 _cableLabel.CreateRequest(input.CableSegment, input.Layout)))
             .Select(result => _cableLabel.CreateElement(result) with
             {
                 TargetKind = SelectionTargetKind.CableSegment,
-                TargetId = result.TargetId
+                TargetId = result.TargetId,
+                ElectricalIdentity = byId.TryGetValue(result.TargetId, out CableSegment? cable)
+                    ? ElectricalVisualIdentity.Edge(ElectricalConnectivityEdgeType.Connection,
+                        cable.ConnectionId, cable.StartTerminalId, cable.EndTerminalId)
+                    : null
             })
             .ToArray();
     }

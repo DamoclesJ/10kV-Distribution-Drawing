@@ -2,7 +2,10 @@ using DistributionDrawing.Application.Topology;
 
 namespace DistributionDrawing.Rendering.Wpf.Scene;
 
-public enum ElectricalVisualIdentityKind { Terminal, Node, Edge }
+public enum ElectricalVisualIdentityKind
+{
+    Terminal, Node, Edge, Pole, SwitchDevice, CableTermination, PoleAttachment
+}
 
 public enum ElectricalVisualState { Normal, Energized, Deenergized, Unknown }
 
@@ -18,6 +21,18 @@ public sealed record ElectricalVisualIdentity(
 
     public static ElectricalVisualIdentity Node(Guid id) =>
         new(ElectricalVisualIdentityKind.Node, id);
+
+    public static ElectricalVisualIdentity Pole(Guid id) =>
+        new(ElectricalVisualIdentityKind.Pole, id);
+
+    public static ElectricalVisualIdentity SwitchDevice(Guid id) =>
+        new(ElectricalVisualIdentityKind.SwitchDevice, id);
+
+    public static ElectricalVisualIdentity CableTermination(Guid id) =>
+        new(ElectricalVisualIdentityKind.CableTermination, id);
+
+    public static ElectricalVisualIdentity PoleAttachment(Guid id) =>
+        new(ElectricalVisualIdentityKind.PoleAttachment, id);
 
     public static ElectricalVisualIdentity Edge(
         ElectricalConnectivityEdgeType type, Guid sourceId, Guid firstTerminalId,

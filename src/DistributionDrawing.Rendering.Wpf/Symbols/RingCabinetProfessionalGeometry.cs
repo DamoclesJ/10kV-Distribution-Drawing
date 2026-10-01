@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Metrics;
@@ -36,7 +37,8 @@ internal static class RingCabinetProfessionalGeometry
         }
         else
         {
-            AddFixedContact(elements, top, horizontalBlade: false, metrics);
+            AddFixedContact(elements, top, horizontalBlade: false, metrics,
+                ElectricalVisualIdentity.Terminal(switchDevice.FirstTerminalId));
             AddKnifeSwitch(
                 elements,
                 top,
@@ -91,7 +93,10 @@ internal static class RingCabinetProfessionalGeometry
             circuitNode,
             right,
             Colors.Black,
-            metrics.General.StandardStrokeThickness));
+            metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(switchDevice.FirstTerminalId)
+        });
         AddFixedContact(elements, left, horizontalBlade: true, metrics);
         double openOffset = Math.Max(3, metrics.Switch.ContactRadius * 2);
         DocumentPoint bladeEnd = switchDevice.SwitchState == SwitchState.Closed
@@ -159,11 +164,12 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint mainContact = top;
         if (mainSwitch.SwitchKind == SwitchKind.LoadSwitch)
         {
-            mainContact = AddLoadSwitchFixedContact(elements, top, metrics);
+            mainContact = AddLoadSwitchFixedContact(elements, top, mainSwitch, metrics);
         }
         else
         {
-            AddFixedContact(elements, top, horizontalBlade: false, metrics);
+            AddFixedContact(elements, top, horizontalBlade: false, metrics,
+                ElectricalVisualIdentity.Terminal(mainSwitch.FirstTerminalId));
         }
         AddFixedContact(elements, groundContact, horizontalBlade: true, metrics);
         AddLeftFacingEarth(elements, groundContact, metrics);
@@ -188,7 +194,13 @@ internal static class RingCabinetProfessionalGeometry
                 common.YMillimeters - diagonal);
         }
 
-        elements.Add(Line(common, bladeEnd, metrics));
+        elements.Add(Line(common, bladeEnd, metrics) with
+        {
+            ElectricalIdentity = mainSwitch.SwitchState == SwitchState.Closed
+                ? SwitchPath(mainSwitch)
+                : groundSwitch.SwitchState == SwitchState.Closed
+                    ? null : ElectricalVisualIdentity.Terminal(mainSwitch.SecondTerminalId)
+        });
         return (top, common);
     }
 
@@ -199,13 +211,14 @@ internal static class RingCabinetProfessionalGeometry
         SwitchDevice switchDevice,
         DrawingMetrics metrics)
     {
-        DocumentPoint bladeContact = AddLoadSwitchFixedContact(elements, top, metrics);
+        DocumentPoint bladeContact = AddLoadSwitchFixedContact(elements, top, switchDevice, metrics);
         AddKnifeSwitch(elements, bladeContact, bottom, switchDevice, metrics);
     }
 
     private static DocumentPoint AddLoadSwitchFixedContact(
         ICollection<SceneElement> elements,
         DocumentPoint top,
+        SwitchDevice switchDevice,
         DrawingMetrics metrics)
     {
         double contactRadius = metrics.Switch.ContactRadius / 2;
@@ -220,7 +233,10 @@ internal static class RingCabinetProfessionalGeometry
                 contactRadius * 2),
             Colors.Black,
             metrics.General.StandardStrokeThickness,
-            Colors.White));
+            Colors.White)
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(switchDevice.FirstTerminalId)
+        });
         elements.Add(Line(
             new DocumentPoint(
                 top.XMillimeters - metrics.Switch.ContactRadius,
@@ -228,7 +244,10 @@ internal static class RingCabinetProfessionalGeometry
             new DocumentPoint(
                 top.XMillimeters + metrics.Switch.ContactRadius,
                 top.YMillimeters),
-            metrics));
+            metrics) with
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(switchDevice.FirstTerminalId)
+        });
         return new DocumentPoint(
             contactCenter.XMillimeters,
             contactCenter.YMillimeters + contactRadius);
@@ -237,7 +256,8 @@ internal static class RingCabinetProfessionalGeometry
     public static void AddCableTerminationMarker(
         ICollection<SceneElement> elements,
         DocumentPoint tip,
-        DrawingMetrics metrics)
+        DrawingMetrics metrics,
+        ElectricalVisualIdentity? identity = null)
     {
         double halfWidth = metrics.CableTermination.TriangleWidth / 2;
         double topY = tip.YMillimeters - metrics.CableTermination.TriangleHeight;
@@ -250,7 +270,10 @@ internal static class RingCabinetProfessionalGeometry
             isClosed: true,
             Colors.Black,
             metrics.General.StandardStrokeThickness,
-            Colors.White));
+            Colors.White)
+        {
+            ElectricalIdentity = identity
+        });
     }
 
     public static DocumentRect GetBounds(
@@ -281,14 +304,20 @@ internal static class RingCabinetProfessionalGeometry
             bladeStart,
             bladeEnd,
             Colors.Black,
-            metrics.General.StandardStrokeThickness));
+            metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = switchDevice.SwitchState == SwitchState.Closed
+                ? SwitchPath(switchDevice)
+                : ElectricalVisualIdentity.Terminal(switchDevice.SecondTerminalId)
+        });
     }
 
     private static void AddFixedContact(
         ICollection<SceneElement> elements,
         DocumentPoint center,
         bool horizontalBlade,
-        DrawingMetrics metrics)
+        DrawingMetrics metrics,
+        ElectricalVisualIdentity? identity = null)
     {
         double halfLength = metrics.Switch.ContactRadius;
         DocumentPoint start = horizontalBlade
@@ -297,7 +326,7 @@ internal static class RingCabinetProfessionalGeometry
         DocumentPoint end = horizontalBlade
             ? new DocumentPoint(center.XMillimeters, center.YMillimeters + halfLength)
             : new DocumentPoint(center.XMillimeters + halfLength, center.YMillimeters);
-        elements.Add(Line(start, end, metrics));
+        elements.Add(Line(start, end, metrics) with { ElectricalIdentity = identity });
     }
 
     private static void AddCircuitBreaker(
@@ -314,11 +343,17 @@ internal static class RingCabinetProfessionalGeometry
         elements.Add(Line(
             new DocumentPoint(top.XMillimeters - crossHalf, top.YMillimeters - crossHalf),
             new DocumentPoint(top.XMillimeters + crossHalf, top.YMillimeters + crossHalf),
-            metrics));
+            metrics) with
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(switchDevice.FirstTerminalId)
+        });
         elements.Add(Line(
             new DocumentPoint(top.XMillimeters - crossHalf, top.YMillimeters + crossHalf),
             new DocumentPoint(top.XMillimeters + crossHalf, top.YMillimeters - crossHalf),
-            metrics));
+            metrics) with
+        {
+            ElectricalIdentity = ElectricalVisualIdentity.Terminal(switchDevice.FirstTerminalId)
+        });
 
         DocumentPoint end = switchDevice.SwitchState == SwitchState.Closed
             ? bottom
@@ -332,8 +367,17 @@ internal static class RingCabinetProfessionalGeometry
             start,
             end,
             Colors.Black,
-            metrics.General.StandardStrokeThickness));
+            metrics.General.StandardStrokeThickness)
+        {
+            ElectricalIdentity = switchDevice.SwitchState == SwitchState.Closed
+                ? SwitchPath(switchDevice)
+                : ElectricalVisualIdentity.Terminal(switchDevice.SecondTerminalId)
+        });
     }
+
+    private static ElectricalVisualIdentity SwitchPath(SwitchDevice device) =>
+        ElectricalVisualIdentity.Edge(ElectricalConnectivityEdgeType.ClosedSwitch,
+            device.Id, device.FirstTerminalId, device.SecondTerminalId);
 
     private static SceneLine Line(
         DocumentPoint start,

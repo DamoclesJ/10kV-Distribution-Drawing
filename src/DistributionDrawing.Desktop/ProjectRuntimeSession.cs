@@ -11,6 +11,7 @@ using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Application.Energization;
+using DistributionDrawing.Desktop.SwitchOperation;
 
 namespace DistributionDrawing.Desktop;
 
@@ -23,6 +24,7 @@ public sealed class ProjectRuntimeSession
 {
     private readonly DrawingSceneBuilder _sceneBuilder;
     private long _lastCommandStateId;
+    private int _lastCommandIndex;
     private ProjectRuntimeSession(
         ProjectSession persistenceSession,
         RuntimeLayoutDocument layout,
@@ -45,6 +47,7 @@ public sealed class ProjectRuntimeSession
         SelectionTransitions = new SelectionTransitionCoordinator();
         CommandStack.MarkSaved();
         _lastCommandStateId = CommandStack.CurrentStateId;
+        _lastCommandIndex = CommandStack.CurrentIndex;
         CommandStack.StateChanged += OnCommandStackStateChanged;
     }
 
@@ -149,7 +152,21 @@ public sealed class ProjectRuntimeSession
     {
         long stateId = CommandStack.CurrentStateId;
         if (stateId == _lastCommandStateId) return;
+        int previousIndex = _lastCommandIndex;
         _lastCommandStateId = stateId;
+        _lastCommandIndex = CommandStack.CurrentIndex;
+        ICommand? changedCommand = CommandStack.CurrentIndex < previousIndex
+            ? CommandStack.History[CommandStack.CurrentIndex]
+            : CommandStack.CurrentIndex > 0
+                ? CommandStack.History[CommandStack.CurrentIndex - 1]
+                : null;
+        if (changedCommand is ISwitchStateCommand &&
+            Energization.Freshness == EnergizationFreshness.Current &&
+            PersistenceSession.EnergizationScenario.Seeds.Count > 0)
+        {
+            ExecuteEnergizationAnalysis();
+            return;
+        }
         Energization.Invalidate();
     }
 

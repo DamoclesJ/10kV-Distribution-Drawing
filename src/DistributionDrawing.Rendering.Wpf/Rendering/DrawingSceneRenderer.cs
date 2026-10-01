@@ -74,6 +74,7 @@ public sealed class DrawingSceneRenderer
 
     private void DrawLine(DrawingContext context, SceneLine line)
     {
+        EnergizationVisualStyle style = Style(line, line.Stroke, line.StrokeStyle);
         var geometry = new StreamGeometry();
 
         using (StreamGeometryContext geometryContext = geometry.Open())
@@ -85,23 +86,25 @@ public sealed class DrawingSceneRenderer
         geometry.Freeze();
         context.DrawGeometry(
             null,
-            CreatePen(line.Stroke, line.ThicknessMillimeters, line.StrokeStyle),
+            CreatePen(style.Color, line.ThicknessMillimeters, style.StrokeStyle),
             geometry);
     }
 
     private void DrawEllipse(DrawingContext context, SceneEllipse ellipse)
     {
+        EnergizationVisualStyle style = Style(ellipse, ellipse.Stroke, ellipse.StrokeStyle);
         Geometry geometry = new EllipseGeometry(_coordinates.ToRect(ellipse.Bounds));
         geometry.Freeze();
 
         context.DrawGeometry(
             CreateOptionalBrush(ellipse.Fill),
-            CreatePen(ellipse.Stroke, ellipse.ThicknessMillimeters, ellipse.StrokeStyle),
+            CreatePen(style.Color, ellipse.ThicknessMillimeters, style.StrokeStyle),
             geometry);
     }
 
     private void DrawPolyline(DrawingContext context, ScenePolyline polyline)
     {
+        EnergizationVisualStyle style = Style(polyline, polyline.Stroke, polyline.StrokeStyle);
         var geometry = new StreamGeometry();
 
         using (StreamGeometryContext geometryContext = geometry.Open())
@@ -119,12 +122,13 @@ public sealed class DrawingSceneRenderer
         geometry.Freeze();
         context.DrawGeometry(
             CreateOptionalBrush(polyline.Fill),
-            CreatePen(polyline.Stroke, polyline.ThicknessMillimeters, polyline.StrokeStyle),
+            CreatePen(style.Color, polyline.ThicknessMillimeters, style.StrokeStyle),
             geometry);
     }
 
     private void DrawArc(DrawingContext context, SceneArc arc)
     {
+        EnergizationVisualStyle style = Style(arc, arc.Stroke, arc.StrokeStyle);
         double startRadians = arc.StartAngleDegrees * Math.PI / 180;
         double endRadians =
             (arc.StartAngleDegrees + arc.SweepAngleDegrees) * Math.PI / 180;
@@ -155,33 +159,37 @@ public sealed class DrawingSceneRenderer
         geometry.Freeze();
         context.DrawGeometry(
             null,
-            CreatePen(arc.Stroke, arc.ThicknessMillimeters, arc.StrokeStyle),
+            CreatePen(style.Color, arc.ThicknessMillimeters, style.StrokeStyle),
             geometry);
     }
 
     private void DrawRectangle(DrawingContext context, SceneRectangle rectangle)
     {
+        EnergizationVisualStyle style = Style(rectangle, rectangle.Stroke,
+            rectangle.StrokeStyle);
         Geometry geometry = new RectangleGeometry(_coordinates.ToRect(rectangle.Bounds));
         geometry.Freeze();
 
         context.DrawGeometry(
             CreateOptionalBrush(rectangle.Fill),
             CreatePen(
-                rectangle.Stroke,
+                style.Color,
                 rectangle.ThicknessMillimeters,
-                rectangle.StrokeStyle),
+                style.StrokeStyle),
             geometry);
     }
 
     private void DrawText(DrawingContext context, SceneText text, double pixelsPerDip)
     {
+        Color foreground = text.ElectricalState is ElectricalVisualState state
+            ? EnergizationVisualStyleResolver.Resolve(state).Color : text.Foreground;
         var formattedText = new FormattedText(
             text.Text,
             CultureInfo.GetCultureInfo("zh-CN"),
             FlowDirection.LeftToRight,
             new Typeface("Microsoft YaHei"),
             _coordinates.MillimetersToDip(text.FontSizeMillimeters),
-            CreateBrush(text.Foreground),
+            CreateBrush(foreground),
             pixelsPerDip);
 
         Point origin = _coordinates.ToPoint(text.Origin);
@@ -191,11 +199,23 @@ public sealed class DrawingSceneRenderer
             origin.X -= visibleBounds.Left + visibleBounds.Width / 2;
             Geometry geometry = formattedText.BuildGeometry(origin);
             geometry.Freeze();
-            context.DrawGeometry(CreateBrush(text.Foreground), null, geometry);
-            return;
+            context.DrawGeometry(CreateBrush(foreground), null, geometry);
         }
-        context.DrawText(formattedText, origin);
+        else context.DrawText(formattedText, origin);
+        if (text.ElectricalState == ElectricalVisualState.Unknown)
+        {
+            double y = origin.Y + formattedText.Height;
+            context.DrawLine(CreatePen(foreground, 0.3, SceneStrokeStyle.Dotted),
+                new Point(origin.X, y),
+                new Point(origin.X + formattedText.WidthIncludingTrailingWhitespace, y));
+        }
     }
+
+    private static EnergizationVisualStyle Style(
+        SceneElement element, Color normalColor, SceneStrokeStyle normalStyle) =>
+        element.ElectricalState is ElectricalVisualState state
+            ? EnergizationVisualStyleResolver.Resolve(state, normalStyle)
+            : new EnergizationVisualStyle(normalColor, normalStyle);
 
     private Pen CreatePen(
         Color color,

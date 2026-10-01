@@ -120,6 +120,18 @@ public sealed class PoleLabel
             layoutResult.Position,
             layoutResult.Text,
             Colors.Black,
-            layoutResult.Request.FontSizeMillimeters);
+            layoutResult.Request.FontSizeMillimeters)
+        {
+            ElectricalIdentity = layoutResult.Request.TargetKind switch
+            {
+                LabelTargetKind.Pole => ElectricalVisualIdentity.Pole(
+                    layoutResult.Request.TargetId),
+                LabelTargetKind.SwitchDevice => ElectricalVisualIdentity.SwitchDevice(
+                    layoutResult.Request.TargetId),
+                LabelTargetKind.PoleAttachment => ElectricalVisualIdentity.PoleAttachment(
+                    layoutResult.Request.TargetId),
+                _ => null
+            }
+        };
     }
 }

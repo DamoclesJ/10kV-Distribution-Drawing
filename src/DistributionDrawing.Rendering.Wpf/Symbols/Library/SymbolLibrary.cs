@@ -77,7 +77,11 @@ public sealed class SymbolLibrary
                     layout.Position.YMillimeters + layout.LabelOffset.YMillimeters),
                 label: pole.PoleNumber,
                 thicknessMillimeters: _metrics.General.StandardStrokeThickness,
-                includeLabel: includeLabel));
+                includeLabel: includeLabel))
+            .Select(element => element is SceneLogicalBounds ? element : element with
+            {
+                ElectricalIdentity = ElectricalVisualIdentity.Pole(pole.Id)
+            }).ToArray();
     }
 
     public IReadOnlyList<SceneElement> CreateAttachment(
@@ -139,11 +143,18 @@ public sealed class SymbolLibrary
         var elements = new List<SceneElement>();
         if (kind != SymbolKind.CableTermination)
         {
+            ElectricalVisualIdentity? connectorIdentity = attachedDevice is SwitchDevice connectorSwitch
+                ? ElectricalVisualIdentity.Terminal(kind == SymbolKind.DropoutFuse
+                    ? connectorSwitch.SecondTerminalId : connectorSwitch.FirstTerminalId)
+                : null;
             elements.Add(new SceneLine(
                 poleConnector,
                 attachmentConnector,
                 Colors.Black,
-                _metrics.General.ThinStrokeThickness));
+                _metrics.General.ThinStrokeThickness)
+            {
+                ElectricalIdentity = connectorIdentity
+            });
         }
 
         if (kind == SymbolKind.CableTermination && geometry.Outline is { } outline)
@@ -154,7 +165,11 @@ public sealed class SymbolLibrary
                 isClosed: true,
                 Colors.Black,
                 _metrics.General.StandardStrokeThickness,
-                Colors.White));
+                Colors.White)
+            {
+                ElectricalIdentity = ElectricalVisualIdentity.CableTermination(
+                    ((CableTermination)attachedDevice).Id)
+            });
             return elements;
         }
 
@@ -170,7 +185,21 @@ public sealed class SymbolLibrary
                     label: ResolveAttachmentLabel(attachedDevice),
                     state: visualState,
                     fill: Colors.White,
-                    includeLabel: includeLabel));
+                    includeLabel: includeLabel)
+                {
+                    FirstSide = attachedDevice is SwitchDevice first
+                        ? ElectricalVisualIdentity.Terminal(first.FirstTerminalId) : null,
+                    SecondSide = attachedDevice is SwitchDevice second &&
+                        second.SwitchKind != SwitchKind.GroundSwitch
+                        ? ElectricalVisualIdentity.Terminal(second.SecondTerminalId) : null,
+                    ConductingPath = attachedDevice is SwitchDevice path &&
+                        path.SwitchKind != SwitchKind.GroundSwitch &&
+                        path.SwitchState == SwitchState.Closed
+                        ? ElectricalVisualIdentity.Edge(
+                            DistributionDrawing.Application.Topology.ElectricalConnectivityEdgeType.ClosedSwitch,
+                            path.Id, path.FirstTerminalId, path.SecondTerminalId)
+                        : null
+                });
 
         symbolElements = RotateElements(
             symbolElements,
@@ -215,7 +244,8 @@ public sealed class SymbolLibrary
                 ellipse.StrokeStyle)
             {
                 TargetKind = ellipse.TargetKind,
-                TargetId = ellipse.TargetId
+                TargetId = ellipse.TargetId,
+                ElectricalIdentity = ellipse.ElectricalIdentity
             },
             ScenePolyline polyline => new ScenePolyline(
                 polyline.Points.Select(point => PoleProfessionalGeometry.RotateAroundPole(
@@ -227,7 +257,8 @@ public sealed class SymbolLibrary
                 polyline.StrokeStyle)
             {
                 TargetKind = polyline.TargetKind,
-                TargetId = polyline.TargetId
+                TargetId = polyline.TargetId,
+                ElectricalIdentity = polyline.ElectricalIdentity
             },
             SceneText text => text with
             {

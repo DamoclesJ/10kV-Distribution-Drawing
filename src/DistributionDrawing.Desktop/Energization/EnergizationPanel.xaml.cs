@@ -24,6 +24,10 @@ public partial class EnergizationPanel : UserControl
     }
 
     public event EventHandler? VisualStateChanged;
+    public event RoutedEventHandler? ExitRequested;
+
+    private void OnExitRequested(object sender, RoutedEventArgs e) =>
+        ExitRequested?.Invoke(this, e);
 
     public void Bind(ProjectRuntimeSession? session)
     {

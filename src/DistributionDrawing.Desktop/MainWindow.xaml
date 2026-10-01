@@ -193,6 +193,7 @@
                         IsChecked="{Binding Toolbox.IsGroundingPointActive, Mode=OneWay}" Command="{Binding AddGroundingPointCommand}">
             <StackPanel Orientation="Horizontal"><Path Width="18" Height="18" Margin="0,0,6,0" Data="{StaticResource Icon.WorkGrounding}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" StrokeThickness="1.7" Stretch="Uniform" /><TextBlock VerticalAlignment="Center" Text="工作地线" /></StackPanel>
           </ToggleButton>
+          <Button Content="带电分析" Click="OnEnterEnergizationMode" Padding="10,6" Margin="2,0" />
           <Button Content="工作范围" Click="OnOpenTicketRangeFromDrawing" Padding="10,6" Margin="2,0" />
         </StackPanel>
       </ScrollViewer>
@@ -363,6 +364,8 @@
                 <TextBlock VerticalAlignment="Center" Text="工作地线" />
               </StackPanel>
             </ToggleButton>
+            <Button Content="带电分析" Click="OnEnterEnergizationMode" HorizontalContentAlignment="Left"
+                    Padding="10,7" Margin="0,2,0,0" />
             <Button Content="工作范围" Click="OnOpenTicketRangeFromDrawing" HorizontalContentAlignment="Left"
                     Padding="10,7" Margin="0,2,0,0" />
           </StackPanel>
@@ -510,6 +513,8 @@
           <Style TargetType="Button" BasedOn="{StaticResource InspectorButtonStyle}" />
         </Border.Resources>
         <Grid>
+          <ea:EnergizationPanel x:Name="EaPanel" Visibility="Collapsed"
+                                ExitRequested="OnExitEnergizationMode" />
           <ScrollViewer x:Name="TicketRangePanel" Visibility="Collapsed"
                         VerticalScrollBarVisibility="Auto">
             <StackPanel>
@@ -528,9 +533,6 @@
             <Button Content="确定" Click="OnConfirmTicketRange" HorizontalAlignment="Right" />
             </StackPanel>
           </ScrollViewer>
-          <TabControl x:Name="DrawingRightPanelTabs"
-                      SelectionChanged="OnDrawingRightPanelChanged">
-            <TabItem x:Name="InspectorTab" Header="属性">
           <DockPanel x:Name="InspectorContent">
           <TextBlock DockPanel.Dock="Top"
                      FontSize="{StaticResource Typography.Title}"
@@ -944,11 +946,6 @@
             </ItemsControl>
           </ScrollViewer>
           </DockPanel>
-            </TabItem>
-            <TabItem x:Name="EnergizationTab" Header="带电分析">
-              <ea:EnergizationPanel x:Name="EaPanel" />
-            </TabItem>
-          </TabControl>
         </Grid>
       </Border>
     </Grid>
