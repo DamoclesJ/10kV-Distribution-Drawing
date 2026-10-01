@@ -60,11 +60,11 @@ public sealed record SceneArc : SceneElement
 
     public double SweepAngleDegrees { get; }
 
-    public Color Stroke { get; }
+    public Color Stroke { get; init; }
 
     public double ThicknessMillimeters { get; }
 
-    public SceneStrokeStyle StrokeStyle { get; }
+    public SceneStrokeStyle StrokeStyle { get; init; }
 
     public DocumentRect Bounds { get; }
 }

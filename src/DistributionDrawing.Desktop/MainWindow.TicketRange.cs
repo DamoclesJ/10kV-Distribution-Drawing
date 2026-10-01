@@ -36,9 +36,7 @@ public partial class MainWindow
                     ? resolved : null);
             _ticketRangeDraftOwner = owner;
         }
-        TicketRangePanel.Visibility = Visibility.Visible;
-        DrawingRightPanelTabs.Visibility = Visibility.Collapsed;
-        TicketOverlayToggle.IsEnabled = true;
+        SetDrawingRightPanelMode(DrawingRightPanelMode.WorkRange);
         TicketRangeStatus.Text = "选择边界开关和侧别。";
         RefreshTicketRangePanel();
     }
@@ -184,7 +182,6 @@ public partial class MainWindow
                 new WorkTask(TicketRangeTaskContent.Text.Trim(), TicketRangeTaskObject.Text.Trim()));
             _ticketRangeDraftOwner = null;
             TicketRangeStatus.Text = "工作范围已确认。";
-            TicketRangePanel.Visibility = Visibility.Collapsed;
             UpdateCanvasStatus();
             OnShowTicketWorkspace(this, new RoutedEventArgs());
             RenderCurrentScene();
@@ -208,6 +205,6 @@ public partial class MainWindow
         (int Index, TicketBoundarySlot Previous)? rollback = _ticketRangePicker.Cancel();
         if (rollback is { } value && value.Index < _ticketBoundarySlots.Count)
             _ticketBoundarySlots.Replace(value.Index, value.Previous);
-        if (TicketRangePanel.Visibility == Visibility.Visible) RefreshTicketRangePanel();
+        if (_rightPanelMode == DrawingRightPanelMode.WorkRange) RefreshTicketRangePanel();
     }
 }

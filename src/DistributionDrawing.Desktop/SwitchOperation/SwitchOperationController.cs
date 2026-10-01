@@ -124,7 +124,7 @@ public sealed class SwitchOperationController
         return "开关状态操作失败，请检查当前工程状态。";
     }
 
-    private sealed class ChangeSwitchStateCommandAdapter : ICommand
+    private sealed class ChangeSwitchStateCommandAdapter : ISwitchStateCommand
     {
         private readonly ChangeSwitchStateCommand _command;
 

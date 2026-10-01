@@ -52,7 +52,8 @@ namespace DistributionDrawing.Desktop;
 internal enum DrawingRightPanelMode
 {
     Inspector,
-    Energization
+    Energization,
+    WorkRange
 }
 
 public partial class MainWindow : Window
@@ -127,6 +128,7 @@ public partial class MainWindow : Window
         TicketWorkspace.SelectionChanged += OnTicketWorkspaceSelectionChanged;
         TicketWorkspace.RangeEditRequested += OnTicketRangeEditRequested;
         EaPanel.VisualStateChanged += (_, _) => RenderCurrentScene();
+        EaPanel.SwitchOperationApplied += OnSwitchOperationSceneChanged;
         _messageService = new DesktopMessageService(this);
         _propertyEditor = new(_selectionResolver, _commandStack);
         _selectionRectangle = new SelectionRectangleController(_selectionManager);
@@ -1011,33 +1013,68 @@ public partial class MainWindow : Window
         TicketWorkspace.CommitPendingEdits();
         DrawingWorkspace.Visibility = Visibility.Visible;
         TicketWorkspace.Visibility = Visibility.Collapsed;
-        DrawingRightPanelTabs.Visibility = TicketRangePanel.Visibility == Visibility.Visible
-            ? Visibility.Collapsed : Visibility.Visible;
-        TicketOverlayToggle.IsEnabled = DrawingRightPanelTabs.Visibility != Visibility.Visible ||
-            _rightPanelMode != DrawingRightPanelMode.Energization;
+        ApplyDrawingContextPanel();
         RenderCurrentScene();
     }
 
-    private void OnDrawingRightPanelChanged(object sender, SelectionChangedEventArgs e)
+    private void OnEnterEnergizationMode(object sender, RoutedEventArgs e)
     {
-        if (!ReferenceEquals(e.OriginalSource, DrawingRightPanelTabs)) return;
-        _rightPanelMode = ReferenceEquals(DrawingRightPanelTabs.SelectedItem, EnergizationTab)
-            ? DrawingRightPanelMode.Energization : DrawingRightPanelMode.Inspector;
-        if (_workspace is null) return;
-        TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;
+        if (_rightPanelMode == DrawingRightPanelMode.Energization &&
+            DrawingWorkspace.Visibility == Visibility.Visible)
+        {
+            OnExitEnergizationMode(sender, e);
+            return;
+        }
+        TicketWorkspace.CommitPendingEdits();
+        CancelTicketRangePicking();
+        _drawingTools.Cancel();
+        CancelProfessionalPicking();
+        _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
+        DrawingWorkspace.Visibility = Visibility.Visible;
+        TicketWorkspace.Visibility = Visibility.Collapsed;
+        SetDrawingRightPanelMode(DrawingRightPanelMode.Energization);
         RenderCurrentScene();
+    }
+
+    private void OnExitEnergizationMode(object? sender, EventArgs e) =>
+        SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
+
+    private void SetDrawingRightPanelMode(DrawingRightPanelMode mode)
+    {
+        _rightPanelMode = mode;
+        ApplyDrawingContextPanel();
+        RenderCurrentScene();
+    }
+
+    private void ApplyDrawingContextPanel()
+    {
+        InspectorContent.Visibility = _rightPanelMode == DrawingRightPanelMode.Inspector
+            ? Visibility.Visible : Visibility.Collapsed;
+        EaPanel.Visibility = _rightPanelMode == DrawingRightPanelMode.Energization
+            ? Visibility.Visible : Visibility.Collapsed;
+        TicketRangePanel.Visibility = _rightPanelMode == DrawingRightPanelMode.WorkRange
+            ? Visibility.Visible : Visibility.Collapsed;
+        TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;
+        RefreshEnergizationModeEntry();
+    }
+
+    private void RefreshEnergizationModeEntry()
+    {
+        bool active = _rightPanelMode == DrawingRightPanelMode.Energization &&
+            DrawingWorkspace.Visibility == Visibility.Visible;
+        LeftEnergizationModeButton.Content = TopEnergizationModeButton.Content = active ? "退出带电分析" : "带电分析";
     }
 
     private void OnShowTicketWorkspace(object sender, RoutedEventArgs e)
     {
         CancelTicketRangePicking();
-        TicketRangePanel.Visibility = Visibility.Collapsed;
-        DrawingRightPanelTabs.Visibility = Visibility.Visible;
+        ApplyDrawingContextPanel();
         TicketWorkspace.CommitPendingEdits();
         TicketWorkspace.Refresh();
         DrawingWorkspace.Visibility = Visibility.Collapsed;
         TicketWorkspace.Visibility = Visibility.Visible;
         TicketOverlayToggle.IsEnabled = true;
+        RefreshEnergizationModeEntry();
     }
 
     private void OnTicketOverlayChanged(object sender, RoutedEventArgs e)
@@ -1141,9 +1178,10 @@ public partial class MainWindow : Window
         ActiveDocumentSessionChangedEventArgs e)
     {
         DiscardTicketRangeBuffer();
-        TicketRangePanel.Visibility = Visibility.Collapsed;
-        DrawingRightPanelTabs.Visibility = Visibility.Visible;
-        TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;
+        if (_rightPanelMode == DrawingRightPanelMode.WorkRange)
+            SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
+        else
+            ApplyDrawingContextPanel();
         TicketWorkspace.CommitPendingEdits();
         CancelTransientInteraction();
         if (e.Previous is not null &&
@@ -1341,9 +1379,10 @@ public partial class MainWindow : Window
         GroundingAccessPointEditorPanel.Visibility = Visibility.Collapsed;
         WorkScopeCreationPanel.Visibility = Visibility.Collapsed;
         WorkScopeEditorPanel.Visibility = Visibility.Collapsed;
-        TicketRangePanel.Visibility = Visibility.Collapsed;
-        DrawingRightPanelTabs.Visibility = Visibility.Visible;
-        TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;
+        if (_rightPanelMode == DrawingRightPanelMode.WorkRange)
+            SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
+        else
+            ApplyDrawingContextPanel();
         CancelTicketRangePicking();
         DiscardTicketRangeBuffer();
         DrawingSurface.Clear();
@@ -2150,9 +2189,7 @@ public partial class MainWindow : Window
                 _shellViewModel.Toolbox.SelectedMode != DesktopToolMode.Select)
             {
                 CancelTicketRangePicking();
-                TicketRangePanel.Visibility = Visibility.Collapsed;
-                DrawingRightPanelTabs.Visibility = Visibility.Visible;
-                TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;
+                SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
             }
             UpdateCanvasStatus();
         }
@@ -2458,12 +2495,7 @@ public partial class MainWindow : Window
         WorkRangeCanvasActivation.ActivateOrdinaryObject(
             _ticketRangePicker.Mode,
             target,
-            () =>
-            {
-                TicketRangePanel.Visibility = Visibility.Collapsed;
-                DrawingRightPanelTabs.Visibility = Visibility.Visible;
-                TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;
-            });
+            () => SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector));
 
         if (e.ClickCount == 2)
         {
@@ -2795,11 +2827,9 @@ public partial class MainWindow : Window
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
         if (_ticketRangePicker.Mode == TicketRangePickMode.Idle &&
-            TicketRangePanel.Visibility == Visibility.Visible)
+            _rightPanelMode == DrawingRightPanelMode.WorkRange)
         {
-            TicketRangePanel.Visibility = Visibility.Collapsed;
-            DrawingRightPanelTabs.Visibility = Visibility.Visible;
-            TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;
+            SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
         }
         EaPanel.SetSelection(_selectionManager.Selected?.ObjectId);
         DrawingPerformanceTrace.PhaseOperation selectionRefresh =
@@ -4001,14 +4031,13 @@ public partial class MainWindow : Window
         var elements = _currentScene.Elements.ToList();
         DrawingOverlayVisibility overlayVisibility = DrawingOverlayVisibility.Resolve(
             DrawingWorkspace.Visibility == Visibility.Visible,
-            _rightPanelMode == DrawingRightPanelMode.Energization &&
-            DrawingRightPanelTabs.Visibility == Visibility.Visible,
+            _rightPanelMode == DrawingRightPanelMode.Energization,
             _workspace.CurrentSession?.Energization.CanShowOverlay == true,
             TicketOverlayToggle.IsChecked == true);
         if (overlayVisibility.ShowEnergization &&
             _workspace.CurrentSession?.Energization.CurrentResult is { } result)
         {
-            elements.AddRange(EnergizationOverlayBuilder.Build(_currentScene, result));
+            elements = EnergizationSceneStyler.Build(_currentScene, result).ToList();
         }
         elements.AddRange(_intervalPreview.Elements);
         elements.AddRange(_drawingTools.CreateTransientElements());

@@ -65,7 +65,7 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
             ElectricalIdentity = ElectricalVisualIdentity.Terminal(isolation.FirstTerminalId)
         });
 
-        AddPTCoils(elements, ptOrigin, out DocumentPoint coilTop);
+        AddPTCoils(elements, ptOrigin, ElectricalVisualIdentity.Terminal(isolation.SecondTerminalId), out DocumentPoint coilTop);
         DocumentPoint terminalTip = new(
             coilTop.XMillimeters,
             origin.YMillimeters + layout.HeightMillimeters);
@@ -84,12 +84,12 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
         RingCabinetProfessionalGeometry.AddCableTerminationMarker(
             elements,
             terminalTip,
-            _metrics);
+            _metrics, ElectricalVisualIdentity.Terminal(isolation.SecondTerminalId));
         elements.Add(new SceneLine(
             terminalTip,
             coilTop,
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness) { ElectricalIdentity = ElectricalVisualIdentity.Terminal(isolation.SecondTerminalId) });
 
         return elements;
     }
@@ -97,6 +97,7 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
     private void AddPTCoils(
         ICollection<SceneElement> elements,
         DocumentPoint origin,
+        ElectricalVisualIdentity identity,
         out DocumentPoint top)
     {
         double radius = _metrics.PT.CoilRadius;
@@ -105,7 +106,7 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
         elements.Add(new SceneEllipse(
             new DocumentRect(origin.XMillimeters, origin.YMillimeters, diameter, diameter),
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness) { ElectricalIdentity = identity });
         elements.Add(new SceneEllipse(
             new DocumentRect(
                 origin.XMillimeters,
@@ -113,7 +114,7 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
                 diameter,
                 diameter),
             Colors.Black,
-            _metrics.General.StandardStrokeThickness));
+            _metrics.General.StandardStrokeThickness) { ElectricalIdentity = identity });
 
         double centerX = origin.XMillimeters + radius;
         top = new DocumentPoint(centerX, origin.YMillimeters);
@@ -125,7 +126,7 @@ public sealed class PTIntervalSymbol : IIntervalSymbolDefinition
                 _metrics.Typography.PTLabelFontSize + 2),
             "PT",
             Colors.Black,
-            _metrics.Typography.PTLabelFontSize));
+            _metrics.Typography.PTLabelFontSize) { ElectricalIdentity = identity });
     }
 
     private static RingCabinetSwitchLayout GetLayout(

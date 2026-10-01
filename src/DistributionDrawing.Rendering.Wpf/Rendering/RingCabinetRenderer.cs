@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Labels;
 using DistributionDrawing.Rendering.Wpf.Scene;
@@ -49,7 +50,34 @@ public sealed class RingCabinetRenderer
                 : result.Position,
             result.Text,
             System.Windows.Media.Colors.Black,
-            result.Request.FontSizeMillimeters)));
+            result.Request.FontSizeMillimeters)
+        { ElectricalIdentity = LabelIdentity(cabinet, result.Request) }));
         return elements;
+    }
+
+    private static ElectricalVisualIdentity? LabelIdentity(RingCabinet cabinet, LabelRequest label)
+    {
+        if (label.TargetKind == LabelTargetKind.RingCabinet)
+            return ElectricalVisualIdentity.Node(cabinet.MainBusNodeId);
+        var interval = cabinet.Intervals.FirstOrDefault(item => item.IntervalId == label.TargetId);
+        if (interval is not null)
+        {
+            SwitchKind numberOwner = interval.IntervalKind switch
+            {
+                IntervalKind.LoadSwitchInterval => SwitchKind.LoadSwitch,
+                IntervalKind.PTInterval => SwitchKind.IsolationSwitch,
+                IntervalKind.IntegratedFeederInterval => SwitchKind.CircuitBreaker,
+                _ => throw new ArgumentOutOfRangeException(nameof(interval))
+            };
+            return ElectricalVisualIdentity.Terminal(interval.SwitchDevices.Single(
+                device => device.SwitchKind == numberOwner).SecondTerminalId);
+        }
+        var selectedSwitch = cabinet.Intervals.SelectMany(item => item.SwitchDevices)
+            .FirstOrDefault(device => device.Id == label.TargetId);
+        // Ground-device labels stay neutral along with their Earth branch.
+        return selectedSwitch is not null && selectedSwitch.SwitchKind != SwitchKind.GroundSwitch
+            ? ElectricalVisualIdentity.Association(selectedSwitch.Id, [
+                ElectricalVisualIdentity.Terminal(selectedSwitch.FirstTerminalId),
+                ElectricalVisualIdentity.Terminal(selectedSwitch.SecondTerminalId)]) : null;
     }
 }

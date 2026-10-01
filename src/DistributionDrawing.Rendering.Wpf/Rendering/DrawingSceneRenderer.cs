@@ -184,7 +184,18 @@ public sealed class DrawingSceneRenderer
             CreateBrush(text.Foreground),
             pixelsPerDip);
 
+        if (text.ElectricalState == ElectricalVisualState.Unknown)
+            formattedText.SetTextDecorations(TextDecorations.Underline);
         Point origin = _coordinates.ToPoint(text.Origin);
+        if (text.ElectricalState == ElectricalVisualState.Unknown)
+        {
+            var marker = new FormattedText("?", CultureInfo.GetCultureInfo("zh-CN"),
+                FlowDirection.LeftToRight, new Typeface("Microsoft YaHei"),
+                _coordinates.MillimetersToDip(text.FontSizeMillimeters), CreateBrush(text.Foreground), pixelsPerDip);
+            double markerX = text.HorizontalAlignment == SceneTextHorizontalAlignment.Center
+                ? origin.X + formattedText.Width / 2 : origin.X + formattedText.Width;
+            context.DrawText(marker, new Point(markerX, origin.Y));
+        }
         if (text.HorizontalAlignment == SceneTextHorizontalAlignment.Center)
         {
             Rect visibleBounds = formattedText.BuildGeometry(new Point()).Bounds;
@@ -213,6 +224,13 @@ public sealed class DrawingSceneRenderer
                     _metrics.Line.CableDashGap / thicknessMillimeters
                 ],
                 0);
+        }
+        else if (strokeStyle == SceneStrokeStyle.DashDot)
+        {
+            pen.DashStyle = new DashStyle([
+                _metrics.Line.CableDashLength / thicknessMillimeters,
+                _metrics.Line.CableDashGap / thicknessMillimeters,
+                1, _metrics.Line.CableDashGap / thicknessMillimeters], 0);
         }
         else if (strokeStyle == SceneStrokeStyle.Dotted)
         {
