@@ -32,6 +32,11 @@
       <Button x:Name="ConfirmButton" Content="确认以上列出的就是本图纸全部电源点"
               Click="OnConfirmSources" Padding="8,6" />
       <TextBlock x:Name="AnalysisText" TextWrapping="Wrap" Margin="0,4,0,4" />
+      <Button x:Name="GenerateWorkScopeDraftButton"
+              Content="根据带电边界自动确定停电工作范围"
+              Click="OnGenerateWorkScopeDraft" Padding="8,6" Margin="0,8,0,4" />
+      <TextBlock x:Name="WorkScopeDraftText" TextWrapping="Wrap" Margin="0,2,0,4" />
+      <ItemsControl x:Name="WorkScopeDraftWarnings" />
       <TextBlock Text="诊断" FontWeight="SemiBold" Margin="0,8,0,3" />
       <ItemsControl x:Name="DiagnosticList" />
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,4">

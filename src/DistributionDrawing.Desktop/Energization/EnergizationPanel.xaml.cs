@@ -4,6 +4,7 @@ using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Domain.Energization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Desktop.SwitchOperation;
+using DistributionDrawing.Application.WorkScopes;
 
 namespace DistributionDrawing.Desktop.Energization;
 
@@ -18,7 +19,9 @@ public partial class EnergizationPanel : UserControl
     private sealed record SeedItem(EnergizedSeed Seed, string DisplayText);
 
     private readonly EnergizationUiService _service = new();
+    private readonly WorkScopeDraftGenerator _draftGenerator = new();
     private ProjectRuntimeSession? _session;
+    private WorkScopeDraftResult? _draft;
     private Guid? _selectedObjectId;
     private bool _everConfirmed;
     private bool _updating;
@@ -55,6 +58,7 @@ public partial class EnergizationPanel : UserControl
             _session.Energization.Changed -= OnSessionChanged;
         }
         _session = session;
+        _draft = null;
         _selectedObjectId = null;
         _everConfirmed = session?.PersistenceSession.EnergizationScenario.IsSourceSetComplete == true;
         if (session is not null)
@@ -90,6 +94,8 @@ public partial class EnergizationPanel : UserControl
                 CompletionText.Text = "没有打开的图纸";
                 AnalysisText.Text = "尚未执行带电分析";
                 DiagnosticList.ItemsSource = null;
+                WorkScopeDraftText.Text = "";
+                WorkScopeDraftWarnings.ItemsSource = null;
                 UpdateButtons();
                 return;
             }
@@ -134,6 +140,7 @@ public partial class EnergizationPanel : UserControl
                         ? $"电源点 {Array.FindIndex(seeds, seed => seed.Seed.Id == id) + 1}：{item.Message}"
                         : $"图纸：{item.Message}").ToArray()
                 : null;
+            RefreshWorkScopeDraft();
             UpdateButtons();
         }
         finally
@@ -192,6 +199,57 @@ public partial class EnergizationPanel : UserControl
             !_session.PersistenceSession.EnergizationScenario.IsSourceSetComplete &&
             _service.CanConfirmSources(_session.PersistenceSession.Domain,
                 _session.PersistenceSession.EnergizationScenario);
+        GenerateWorkScopeDraftButton.IsEnabled = _session?.Energization.CurrentResult?.Validity ==
+            EnergizationValidity.Complete;
+    }
+
+    private void OnGenerateWorkScopeDraft(object sender, RoutedEventArgs e)
+    {
+        if (_session is null) return;
+        _draft = _draftGenerator.Generate(_session.PersistenceSession.Domain,
+            _session.PersistenceSession.EnergizationScenario, _session.Energization);
+        RefreshWorkScopeDraft();
+    }
+
+    private void RefreshWorkScopeDraft()
+    {
+        if (_session is null || _draft is null)
+        {
+            WorkScopeDraftText.Text = "";
+            WorkScopeDraftWarnings.ItemsSource = null;
+            return;
+        }
+        if (_draft.Status == WorkScopeDraftStatus.Success &&
+            !_draft.IsCurrent(_session.PersistenceSession.Domain,
+                _session.PersistenceSession.EnergizationScenario, _session.Energization))
+        {
+            WorkScopeDraftText.Text = "工作范围草案已失效；请重新分析并生成。";
+            WorkScopeDraftWarnings.ItemsSource = null;
+            return;
+        }
+        if (_draft.Status != WorkScopeDraftStatus.Success)
+        {
+            WorkScopeDraftText.Text = string.Join("\n", _draft.Diagnostics);
+            WorkScopeDraftWarnings.ItemsSource = null;
+            return;
+        }
+
+        var drawing = _session.PersistenceSession.Domain;
+        var scenario = _session.PersistenceSession.EnergizationScenario;
+        string[] boundaries = _draft.BoundaryAnchors.Select((anchor, index) =>
+        {
+            EnergizedSeed seed = scenario.Seeds.Single(item => item.Id == anchor.SeedId);
+            EnergizationSeedDisplay display = _service.DescribeSeed(drawing, seed);
+            return $"{index + 1}. {display.DeviceName}；电源侧：{SideText(anchor.SourceSide)}；" +
+                $"工作侧：{SideText(anchor.WorkSide)}";
+        }).ToArray();
+        string[] items = _draft.RegionDeviceSummary.Select(item =>
+            $"{item.Kind}：{item.Name}").ToArray();
+        WorkScopeDraftText.Text = "工作范围草案已生成（尚未确认或写入工作票）。\n" +
+            "带电边界：\n" + string.Join("\n", boundaries) + "\n范围摘要：\n" +
+            (items.Length == 0 ? "仅包含边界工作侧端子" : string.Join("\n", items));
+        WorkScopeDraftWarnings.ItemsSource = _draft.Warnings.Select(item =>
+            $"提示：{item}").ToArray();
     }
 
     private void OnCandidateSelected(object sender, SelectionChangedEventArgs e)
