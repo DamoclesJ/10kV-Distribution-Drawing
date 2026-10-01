@@ -6,11 +6,19 @@ WP-WTA-01 Work Ticket Assistance Framework V0.1 is **CLOSED / ACCEPTED / WINDOWS
 
 WP-EA-01A Topological Energization Analysis Foundation is **CLOSED / ACCEPTED** at final candidate `5246c1f37bab871319f08449dcbd15012aa2ad71`. Windows full regression passed on implementation candidate `3918c6d85d81748b8bd47092d5abe38265e8c04d`; Windows delta acceptance passed on the final test-only candidate. FormatVersion is V9 with controlled V8-to-V9 migration. See [WP-EA-01A Closure Report](WP-EA-01A-CLOSURE.md).
 
-## Next Work Package
+## Energization UI & Visualization Closure
 
-**Status:** None assigned.
+**WP-EA-01B — Scenario UI & Energization Visualization: CLOSED / ACCEPTED** at implementation SHA `d5ad046b515c7d90c9ac1511d0a71ba694771b6a`. Windows automated acceptance passed (1523/1523; 0 failed, 0 skipped), and user-completed Windows GUI acceptance was **PASSED / ACCEPTED**. See [WP-EA-01B Closure](WP-EA-01B-CLOSURE.md).
 
-No next Work Package is authorized by the WP-EA-01A closure. WP-EA-01B, GUI implementation, and subsequent energization features have not started and require separate project-control planning.
+No follow-up Work Package is started or authorized by this closure. The following are proposed for separate project-control planning, in this order:
+
+1. EA-aware export.
+2. EA Scenario / Result → WorkScope Draft.
+3. WorkScope / WorkTicket integration.
+4. Device Interlock.
+5. Grounding conflict handling.
+
+These proposals remain deferred and must not be treated as active implementation scope.
 
 ## V1.0
 
