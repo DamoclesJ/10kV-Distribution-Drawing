@@ -12,11 +12,14 @@
       <TextBlock Text="选择图纸中的开关，或选择柜体、间隔后从下方选取设备与电气侧。"
                  TextWrapping="Wrap" Margin="0,8,0,8" />
       <TextBlock Text="候选电源边界" FontWeight="SemiBold" />
-      <ListBox x:Name="CandidateList" Height="145" SelectionChanged="OnCandidateSelected"
+      <ListBox x:Name="CandidateList" Height="120" SelectionChanged="OnCandidateSelected"
                DisplayMemberPath="DisplayText" />
       <TextBlock x:Name="CandidateDiagnostic" TextWrapping="Wrap" Margin="0,4,0,4" />
+      <TextBlock Text="电源方向" Margin="0,4,0,2" />
+      <ComboBox x:Name="SourceSideComboBox" SelectionChanged="OnSourceSideSelected"
+                MinHeight="30" />
       <StackPanel Orientation="Horizontal" Margin="0,4,0,12">
-        <Button x:Name="AddButton" Content="添加电源点" Click="OnAddSeed" Padding="8,4" />
+        <Button x:Name="AddButton" Content="添加" Click="OnAddSeed" Padding="8,4" />
         <Button x:Name="ReplaceButton" Content="修改所选电源点" Click="OnReplaceSeed"
                 Padding="8,4" Margin="8,0,0,0" />
       </StackPanel>
@@ -28,11 +31,14 @@
       <TextBlock x:Name="CompletionText" TextWrapping="Wrap" Margin="0,2,0,6" />
       <Button x:Name="ConfirmButton" Content="确认以上列出的就是本图纸全部电源点"
               Click="OnConfirmSources" Padding="8,6" />
-      <Button x:Name="AnalyzeButton" Content="执行带电分析" Click="OnExecuteAnalysis"
-              Padding="8,6" Margin="0,12,0,4" />
       <TextBlock x:Name="AnalysisText" TextWrapping="Wrap" Margin="0,4,0,4" />
       <TextBlock Text="诊断" FontWeight="SemiBold" Margin="0,8,0,3" />
       <ItemsControl x:Name="DiagnosticList" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,4">
+        <Button x:Name="ExitButton" Content="退出" Click="OnExit" Padding="12,6" />
+        <Button x:Name="AnalyzeButton" Content="开始分析" Click="OnExecuteAnalysis"
+                Padding="12,6" Margin="8,0,0,0" />
+      </StackPanel>
       <Border x:Name="Legend" BorderBrush="Gray" BorderThickness="1" Padding="7"
               Margin="0,12,0,0" Visibility="Collapsed">
         <StackPanel>

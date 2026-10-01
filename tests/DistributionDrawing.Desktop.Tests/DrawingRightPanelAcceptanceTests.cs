@@ -74,6 +74,41 @@ public sealed class DrawingRightPanelAcceptanceTests
         Assert.DoesNotContain("elements.AddRange(EnergizationSceneStyler", render);
     }
 
+    [Fact]
+    public void AnalysisExitsConfigurationAndDisplayIsIndependentFromRightPanelMode()
+    {
+        string main = File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs"));
+        string panel = File.ReadAllText(AcceptanceFile("EnergizationPanel.xaml.cs"));
+        XDocument panelXaml = XDocument.Load(AcceptanceFile("EnergizationPanel.xaml"));
+
+        Assert.Contains("EaPanel.ExitRequested += OnExitEnergizationMode", main);
+        string start = Between(panel, "private void OnExecuteAnalysis(", "private void OnExit(");
+        Assert.True(start.IndexOf("ExecuteEnergizationAnalysis", StringComparison.Ordinal) <
+            start.IndexOf("ExitRequested?.Invoke", StringComparison.Ordinal));
+        Assert.Equal("退出", (string?)Named(panelXaml, "ExitButton").Attribute("Content"));
+        Assert.Equal("开始分析", (string?)Named(panelXaml, "AnalyzeButton").Attribute("Content"));
+
+        string exit = Between(main, "private void OnExitEnergizationMode(",
+            "private void OnEnergizationDisplayToggle(");
+        Assert.Contains("DrawingRightPanelMode.Inspector", exit);
+        Assert.DoesNotContain("Scenario", exit);
+        Assert.DoesNotContain("Energization.Invalidate", exit);
+
+        string toggle = Between(main, "private void OnEnergizationDisplayToggle(",
+            "private void OnShowTicketWorkspace(");
+        Assert.Contains("CurrentResult is null", toggle);
+        Assert.Contains("SetOverlayRequested", toggle);
+        Assert.DoesNotContain("ExecuteEnergizationAnalysis", toggle);
+
+        string render = main[main.IndexOf("private void RenderCurrentScene()",
+            StringComparison.Ordinal)..];
+        Assert.Contains("energization?.OverlayRequested == true", render);
+        Assert.DoesNotContain("energization.CanShowOverlay", render);
+        XElement displayToggle = Named(XDocument.Load(AcceptanceFile("MainWindow.xaml")),
+            "EnergizationDisplayToggle");
+        Assert.Equal("OnEnergizationDisplayToggle", (string?)displayToggle.Attribute("Click"));
+    }
+
     private static XElement Named(XDocument xaml, string name) =>
         Assert.Single(xaml.Descendants(), element =>
             (string?)element.Attribute(Xaml + "Name") == name);

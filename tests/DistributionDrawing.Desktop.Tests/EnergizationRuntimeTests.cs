@@ -67,6 +67,12 @@ public sealed class EnergizationRuntimeTests : IDisposable
             service.CreateProject(_path, "EA runtime"));
         runtime.ExecuteEnergizationAnalysis();
         runtime.Energization.SetOverlayRequested(false);
+        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+        Assert.NotNull(runtime.Energization.CurrentResult);
+        Assert.False(runtime.Energization.CanShowOverlay);
+        runtime.Energization.SetOverlayRequested(true);
+        Assert.True(runtime.Energization.CanShowOverlay);
+        runtime.Energization.SetOverlayRequested(false);
         service.SaveProject();
 
         using ZipArchive archive = ZipFile.OpenRead(_path);
@@ -83,22 +89,32 @@ public sealed class EnergizationRuntimeTests : IDisposable
     public void EaAndWorkTicketOverlaysAreMutuallyExclusiveByWorkspaceMode()
     {
         DrawingOverlayVisibility ea = DrawingOverlayVisibility.Resolve(true, true,
-            true, true);
+            true, true, true);
         Assert.True(ea.ShowEnergization);
         Assert.False(ea.ShowWorkTicket);
 
+        DrawingOverlayVisibility inspectorWithResult = DrawingOverlayVisibility.Resolve(
+            true, false, true, true, true);
+        Assert.True(inspectorWithResult.ShowEnergization);
+        Assert.False(inspectorWithResult.ShowWorkTicket);
+
+        DrawingOverlayVisibility hidden = DrawingOverlayVisibility.Resolve(true, false,
+            true, false, true);
+        Assert.False(hidden.ShowEnergization);
+        Assert.True(hidden.ShowWorkTicket);
+
         DrawingOverlayVisibility ticket = DrawingOverlayVisibility.Resolve(true, false,
-            true, true);
+            false, true, true);
         Assert.False(ticket.ShowEnergization);
         Assert.True(ticket.ShowWorkTicket);
 
         DrawingOverlayVisibility stale = DrawingOverlayVisibility.Resolve(true, true,
-            false, true);
+            false, true, true);
         Assert.False(stale.ShowEnergization);
         Assert.False(stale.ShowWorkTicket);
 
         DrawingOverlayVisibility otherWorkspace = DrawingOverlayVisibility.Resolve(false,
-            true, true, true);
+            true, true, true, true);
         Assert.False(otherWorkspace.ShowEnergization);
         Assert.False(otherWorkspace.ShowWorkTicket);
     }

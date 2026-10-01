@@ -153,7 +153,8 @@ public sealed class ProjectRuntimeSession
         if (CommandStack.LastAppliedCommand is ISwitchStateCommand &&
             Energization.Freshness == EnergizationFreshness.Current &&
             PersistenceSession.EnergizationScenario.Seeds.Count > 0)
-            ExecuteEnergizationAnalysis();
+            Energization.Execute(PersistenceSession.Domain,
+                PersistenceSession.EnergizationScenario, showOverlay: false);
         else
             Energization.Invalidate();
     }

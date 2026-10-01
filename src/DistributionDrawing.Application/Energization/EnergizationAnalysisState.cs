@@ -20,12 +20,16 @@ public sealed class EnergizationAnalysisState
     public bool CanShowOverlay => OverlayRequested && CurrentResult is not null;
     public event EventHandler? Changed;
 
-    public void Execute(DrawingDocument drawing, EnergizationScenario scenario)
+    public void Execute(
+        DrawingDocument drawing,
+        EnergizationScenario scenario,
+        bool showOverlay = true)
     {
         EnergizationResult result = _service.Analyze(drawing, scenario);
         LatestResult = result;
         LatestDiagnostics = _service.Diagnostics(result);
         Freshness = EnergizationFreshness.Current;
+        if (showOverlay) OverlayRequested = true;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 

@@ -10,6 +10,7 @@ using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
@@ -129,6 +130,7 @@ public partial class MainWindow : Window
         TicketWorkspace.RangeEditRequested += OnTicketRangeEditRequested;
         EaPanel.VisualStateChanged += (_, _) => RenderCurrentScene();
         EaPanel.SwitchOperationApplied += OnSwitchOperationSceneChanged;
+        EaPanel.ExitRequested += OnExitEnergizationMode;
         _messageService = new DesktopMessageService(this);
         _propertyEditor = new(_selectionResolver, _commandStack);
         _selectionRectangle = new SelectionRectangleController(_selectionManager);
@@ -1038,6 +1040,13 @@ public partial class MainWindow : Window
 
     private void OnExitEnergizationMode(object? sender, EventArgs e) =>
         SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
+
+    private void OnEnergizationDisplayToggle(object sender, RoutedEventArgs e)
+    {
+        EnergizationAnalysisState? state = _workspace.CurrentSession?.Energization;
+        if (state?.CurrentResult is null) return;
+        state.SetOverlayRequested(!state.OverlayRequested);
+    }
 
     private void SetDrawingRightPanelMode(DrawingRightPanelMode mode)
     {
@@ -4027,12 +4036,15 @@ public partial class MainWindow : Window
 
         UpdateSwitchOperationEditor();
         UpdateCablePropertyEditor();
+        RefreshEnergizationDisplayControl();
 
         var elements = _currentScene.Elements.ToList();
+        EnergizationAnalysisState? energization = _workspace.CurrentSession?.Energization;
         DrawingOverlayVisibility overlayVisibility = DrawingOverlayVisibility.Resolve(
             DrawingWorkspace.Visibility == Visibility.Visible,
             _rightPanelMode == DrawingRightPanelMode.Energization,
-            _workspace.CurrentSession?.Energization.CanShowOverlay == true,
+            energization?.CurrentResult is not null,
+            energization?.OverlayRequested == true,
             TicketOverlayToggle.IsChecked == true);
         if (overlayVisibility.ShowEnergization &&
             _workspace.CurrentSession?.Energization.CurrentResult is { } result)
@@ -4077,6 +4089,19 @@ public partial class MainWindow : Window
         double pixelsPerDip = VisualTreeHelper.GetDpi(DrawingSurface).PixelsPerDip;
         DrawingSurface.Show(_renderer.Render(new DrawingScene(elements), pixelsPerDip));
         DrawingSurface.SetViewTransform(_viewport.Transform);
+    }
+
+    private void RefreshEnergizationDisplayControl()
+    {
+        bool hasCurrentResult = DrawingWorkspace.Visibility == Visibility.Visible &&
+            _workspace.CurrentSession?.Energization.CurrentResult is not null;
+        EnergizationDisplaySeparator.Visibility = hasCurrentResult
+            ? Visibility.Visible : Visibility.Collapsed;
+        EnergizationDisplayToggle.Visibility = hasCurrentResult
+            ? Visibility.Visible : Visibility.Collapsed;
+        EnergizationDisplayToggle.IsEnabled = hasCurrentResult;
+        EnergizationDisplayToggle.Content = _workspace.CurrentSession?.Energization.OverlayRequested == true
+            ? "隐藏带电状态" : "显示带电状态";
     }
 
     private void UpdateSwitchOperationEditor()

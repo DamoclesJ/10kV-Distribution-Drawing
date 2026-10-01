@@ -9,7 +9,11 @@ namespace DistributionDrawing.Desktop.Energization;
 
 public partial class EnergizationPanel : UserControl
 {
-    private sealed record CandidateItem(EnergizationBoundaryCandidate Candidate,
+    private sealed record CandidateItem(
+        Guid DeviceId,
+        IReadOnlyList<EnergizationBoundaryCandidate> Options,
+        string DisplayText);
+    private sealed record SideItem(EnergizationBoundaryCandidate Candidate,
         string DisplayText);
     private sealed record SeedItem(EnergizedSeed Seed, string DisplayText);
 
@@ -27,6 +31,7 @@ public partial class EnergizationPanel : UserControl
 
     public event EventHandler? VisualStateChanged;
     public event EventHandler? SwitchOperationApplied;
+    public event EventHandler? ExitRequested;
     private void OnOpenSwitch(object sender, RoutedEventArgs e) => OperateSwitch(SwitchState.Open);
     private void OnCloseSwitch(object sender, RoutedEventArgs e) => OperateSwitch(SwitchState.Closed);
 
@@ -95,11 +100,10 @@ public partial class EnergizationPanel : UserControl
             {
                 EnergizationSeedDisplay display = _service.DescribeSeed(
                     _session.PersistenceSession.Domain, seed);
-                string side = SideText(seed.Side);
                 string status = display.IsResolvable ? "已解析" :
                     $"无法解析：{EnergizationUiService.DiagnosticText(display.Diagnostic)}";
                 return new SeedItem(seed,
-                    $"{display.OwnerName} → {display.DeviceName} ({display.DeviceType}) / {side}\n{status}");
+                    $"{display.DeviceName}    {SideText(seed.Side)}\n{status}");
             }).ToArray();
             SeedList.ItemsSource = seeds;
             SeedList.SelectedItem = seeds.FirstOrDefault(item => item.Seed.Id == selectedSeedId);
@@ -114,7 +118,7 @@ public partial class EnergizationPanel : UserControl
             AnalysisText.Text = state.Freshness switch
             {
                 EnergizationFreshness.NotAnalyzed => "尚未执行带电分析",
-                EnergizationFreshness.Stale => "图纸或电源点已变化，请重新执行分析",
+                EnergizationFreshness.Stale => "图纸或电源配置已发生变化，请重新执行带电分析。",
                 _ => state.CurrentResult?.Validity switch
                 {
                     EnergizationValidity.NoSeeds => "未设置电源点；无法判定无电",
@@ -142,22 +146,33 @@ public partial class EnergizationPanel : UserControl
 
     private void RefreshCandidates()
     {
-        Guid? selectedDeviceId = (CandidateList.SelectedItem as CandidateItem)?.Candidate.DeviceId;
-        EnergizationSide? selectedSide = (CandidateList.SelectedItem as CandidateItem)?.Candidate.Side;
-        CandidateItem[] candidates = _session is not null && _selectedObjectId is Guid id
-            ? _service.Candidates(_session.PersistenceSession.Domain, id)
-                .Select(item => new CandidateItem(item,
-                    $"{item.OwnerName} → {item.DeviceName} ({item.DeviceType}) / {SideText(item.Side)}"))
-                .ToArray()
+        Guid? selectedDeviceId = (CandidateList.SelectedItem as CandidateItem)?.DeviceId;
+        EnergizationSide? selectedSide = (SourceSideComboBox.SelectedItem as SideItem)?.Candidate.Side;
+        EnergizationBoundaryCandidate[] options = _session is not null && _selectedObjectId is Guid id
+            ? _service.Candidates(_session.PersistenceSession.Domain, id).ToArray()
             : [];
+        CandidateItem[] candidates = options.GroupBy(item => item.DeviceId)
+            .Select(group => new CandidateItem(group.Key, group.ToArray(),
+                group.First().DeviceName))
+            .ToArray();
         CandidateList.ItemsSource = candidates;
         CandidateList.SelectedItem = candidates.FirstOrDefault(item =>
-            item.Candidate.DeviceId == selectedDeviceId &&
-            item.Candidate.Side == selectedSide);
+            item.DeviceId == selectedDeviceId);
+        SetSideOptions(CandidateList.SelectedItem as CandidateItem, selectedSide);
         CandidateDiagnostic.Text = candidates.Length == 0
             ? "选择可用的开关设备、柜体、间隔或杆塔"
-            : "请选择设备及电气侧";
+            : "请选择候选设备和电源方向";
         UpdateButtons();
+    }
+
+    private void SetSideOptions(CandidateItem? item, EnergizationSide? preferredSide = null)
+    {
+        SideItem[] sides = item?.Options.Select(option =>
+            new SideItem(option, SideText(option.Side))).ToArray() ?? [];
+        SourceSideComboBox.ItemsSource = sides;
+        SourceSideComboBox.DisplayMemberPath = nameof(SideItem.DisplayText);
+        SourceSideComboBox.SelectedItem = sides.FirstOrDefault(side =>
+            side.Candidate.Side == preferredSide);
     }
 
     private void UpdateButtons()
@@ -168,8 +183,9 @@ public partial class EnergizationPanel : UserControl
         CloseSwitchButton.IsEnabled = selectedSwitch?.SwitchState == SwitchState.Open;
         SwitchStateText.Text = selectedSwitch is null ? "选择开关后可直接分闸 / 合闸" :
             $"当前开关：{selectedSwitch.DisplayName ?? "开关"}；{(selectedSwitch.SwitchState == SwitchState.Closed ? "合" : "分")}";
-        CandidateItem? candidate = CandidateList.SelectedItem as CandidateItem;
-        bool validCandidate = candidate?.Candidate.IsResolvable == true;
+        SideItem? side = SourceSideComboBox.SelectedItem as SideItem;
+        SourceSideComboBox.IsEnabled = CandidateList.SelectedItem is CandidateItem;
+        bool validCandidate = side?.Candidate.IsResolvable == true;
         AddButton.IsEnabled = _session is not null && validCandidate;
         ReplaceButton.IsEnabled = AddButton.IsEnabled && SeedList.SelectedItem is SeedItem;
         RemoveButton.IsEnabled = _session is not null && SeedList.SelectedItem is SeedItem;
@@ -184,9 +200,21 @@ public partial class EnergizationPanel : UserControl
     {
         if (_updating) return;
         CandidateDiagnostic.Text = CandidateList.SelectedItem is CandidateItem item
+            ? "请选择电源方向"
+            : "请选择候选设备";
+        SetSideOptions(CandidateList.SelectedItem as CandidateItem);
+        UpdateButtons();
+    }
+
+    private void OnSourceSideSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updating) return;
+        CandidateDiagnostic.Text = SourceSideComboBox.SelectedItem is SideItem item
             ? item.Candidate.IsResolvable ? "可以作为电源边界" :
                 EnergizationUiService.DiagnosticText(item.Candidate.Diagnostic)
-            : "请选择设备及电气侧";
+            : CandidateList.SelectedItem is CandidateItem
+                ? "请选择电源方向"
+                : "请选择候选设备";
         UpdateButtons();
     }
 
@@ -197,7 +225,7 @@ public partial class EnergizationPanel : UserControl
 
     private void OnAddSeed(object sender, RoutedEventArgs e)
     {
-        if (_session is null || CandidateList.SelectedItem is not CandidateItem item ||
+        if (_session is null || SourceSideComboBox.SelectedItem is not SideItem item ||
             !item.Candidate.IsResolvable) return;
         _session.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(
             _session.PersistenceSession.EnergizationScenario,
@@ -214,7 +242,7 @@ public partial class EnergizationPanel : UserControl
     private void OnReplaceSeed(object sender, RoutedEventArgs e)
     {
         if (_session is null || SeedList.SelectedItem is not SeedItem seed ||
-            CandidateList.SelectedItem is not CandidateItem candidate ||
+            SourceSideComboBox.SelectedItem is not SideItem candidate ||
             !candidate.Candidate.IsResolvable) return;
         _session.ExecuteScenarioCommand(EnergizationScenarioCommand.Replace(
             _session.PersistenceSession.EnergizationScenario,
@@ -229,8 +257,15 @@ public partial class EnergizationPanel : UserControl
             _session.PersistenceSession.EnergizationScenario, true));
     }
 
-    private void OnExecuteAnalysis(object sender, RoutedEventArgs e) =>
-        _session?.ExecuteEnergizationAnalysis();
+    private void OnExecuteAnalysis(object sender, RoutedEventArgs e)
+    {
+        if (_session is null) return;
+        _session.ExecuteEnergizationAnalysis();
+        ExitRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnExit(object sender, RoutedEventArgs e) =>
+        ExitRequested?.Invoke(this, EventArgs.Empty);
 
     private static string SideText(EnergizationSide side) => side switch
     {

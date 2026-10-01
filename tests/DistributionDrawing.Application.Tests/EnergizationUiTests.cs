@@ -120,6 +120,54 @@ public sealed class EnergizationUiTests
     }
 
     [Fact]
+    public void CandidateAndSeedShareProfessionalNamesFromCabinetAndPoleFacts()
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "EA names");
+        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(
+            Guid.NewGuid(), "辛15KB5",
+            [RingCabinetIntervalDefinition.CreateIntegratedFeeder(4,
+                GroundingStructureKind.UpperIsolationGrounding,
+                SwitchState.Open, SwitchState.Open, SwitchState.Open, "负4"),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(5,
+                 SwitchState.Open, SwitchState.Open, "负5")]));
+        drawing.AddDevice(cabinet);
+        RingCabinetInterval interval = cabinet.Intervals.Single(item =>
+            item.IntervalKind == IntervalKind.IntegratedFeederInterval);
+        SwitchDevice isolator = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.IsolationSwitch);
+        SwitchDevice groundSwitch = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.GroundSwitch);
+        var service = new EnergizationUiService();
+
+        EnergizationBoundaryCandidate cabinetCandidate = service.Candidates(drawing, cabinet.Id)
+            .First(candidate => candidate.DeviceId == isolator.Id);
+        Assert.Equal("辛15KB5负4-4隔离开关", cabinetCandidate.DeviceName);
+        EnergizedSeed cabinetSeed = new(Guid.NewGuid(), isolator.Id, cabinetCandidate.Side);
+        Assert.Equal(cabinetCandidate.DeviceName,
+            service.DescribeSeed(drawing, cabinetSeed).DeviceName);
+
+        EnergizationSeedDisplay groundSeed = service.DescribeSeed(drawing,
+            new EnergizedSeed(Guid.NewGuid(), groundSwitch.Id, EnergizationSide.Bus));
+        Assert.Equal("辛15KB5负4-47接地刀闸", groundSeed.DeviceName);
+        Assert.DoesNotContain("/", groundSeed.DeviceName);
+        Assert.DoesNotContain("GroundSwitch", groundSeed.DeviceName);
+
+        var pole = new Pole(Guid.NewGuid(), "P02");
+        SwitchDevice poleSwitch = SwitchDevice.CreateForPole(Guid.NewGuid(),
+            SwitchKind.IsolationSwitch, Guid.NewGuid(), Guid.NewGuid());
+        drawing.AddDevice(pole);
+        drawing.AddDevice(poleSwitch);
+        drawing.AddPoleAttachment(new PoleAttachment(Guid.NewGuid(), pole.Id,
+            poleSwitch.Id));
+        EnergizationBoundaryCandidate poleCandidate = service.Candidates(drawing, pole.Id)
+            .First();
+        Assert.Equal("P02（柱上开关）", poleCandidate.DeviceName);
+        Assert.DoesNotContain("PoleSwitch", poleCandidate.DeviceName);
+        Assert.Equal(poleCandidate.DeviceName, service.DescribeSeed(drawing,
+            new EnergizedSeed(Guid.NewGuid(), poleSwitch.Id, poleCandidate.Side)).DeviceName);
+    }
+
+    [Fact]
     public void AnalysisStateNeverExposesStaleResultAsCurrent()
     {
         var drawing = new DrawingDocument(Guid.NewGuid(), "EA");

@@ -60,6 +60,7 @@ public sealed class EnergizationPanelTests
                 var close = (Button)panel.FindName("CloseSwitchButton")!;
                 int applied = 0;
                 panel.SwitchOperationApplied += (_, _) => applied++;
+                runtime.Energization.SetOverlayRequested(false);
                 var controller = new SwitchOperationController(() => runtime);
                 EnergizationResult? previous = runtime.Energization.CurrentResult;
                 void AssertLatest(bool closed)
@@ -69,6 +70,7 @@ public sealed class EnergizationPanelTests
                     previous = runtime.Energization.CurrentResult;
                     Assert.NotNull(previous);
                     Assert.Equal(validity, previous.Validity);
+                    Assert.False(runtime.Energization.CanShowOverlay);
                     Assert.Equal(EnergizationState.Energized, previous.Terminals[load.FirstTerminalId].State);
                     Assert.Equal(closed ? EnergizationState.Energized : complete ? EnergizationState.Deenergized : EnergizationState.Unknown,
                         previous.Terminals[load.SecondTerminalId].State);
@@ -108,6 +110,7 @@ public sealed class EnergizationPanelTests
                 Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
                 Assert.Null(runtime.Energization.CurrentResult);
                 runtime.ExecuteEnergizationAnalysis();
+                Assert.True(runtime.Energization.CanShowOverlay);
                 // A layout/structural command still invalidates; it is not marked as a switch operation.
                 runtime.CommandStack.ExecuteCommand(new DeviceCommandFactory().CreateAddRingCabinet(runtime.PersistenceSession.Domain, runtime.Layout,
                     new RingCabinetCreationConfiguration("Other cabinet", new RingCabinetCreationTemplateFactory().Create(
@@ -175,7 +178,7 @@ public sealed class EnergizationPanelTests
                 runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(
                     runtime.PersistenceSession.EnergizationScenario,
                     new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)));
-                Assert.Contains("请重新执行分析", status.Text);
+                Assert.Contains("请重新执行带电分析", status.Text);
                 Assert.Equal(Visibility.Collapsed, legend.Visibility);
                 Assert.False(confirm.IsEnabled);
                 execute.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -213,6 +216,7 @@ public sealed class EnergizationPanelTests
                 panel.Bind(runtime);
                 panel.SetSelection(cabinet.Id);
                 ListBox candidates = (ListBox)panel.FindName("CandidateList")!;
+                ComboBox sides = (ComboBox)panel.FindName("SourceSideComboBox")!;
                 ListBox seeds = (ListBox)panel.FindName("SeedList")!;
                 Button add = (Button)panel.FindName("AddButton")!;
                 Button replace = (Button)panel.FindName("ReplaceButton")!;
@@ -222,14 +226,20 @@ public sealed class EnergizationPanelTests
                 TextBlock status = (TextBlock)panel.FindName("AnalysisText")!;
                 TextBlock confirmation = (TextBlock)panel.FindName("CompletionText")!;
 
-                Assert.Equal(8, candidates.Items.Count);
+                Assert.Equal(4, candidates.Items.Count);
                 candidates.SelectedIndex = 0;
+                Assert.Null(sides.SelectedItem);
+                Assert.False(add.IsEnabled);
+                Assert.Equal(new[] { "母线侧", "线路侧" }, sides.Items.Cast<object>()
+                    .Select(item => item.GetType().GetProperty("DisplayText")!.GetValue(item)!.ToString()));
+                sides.SelectedIndex = 0;
                 Assert.True(add.IsEnabled);
                 add.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 EnergizationScenario scenario = runtime.PersistenceSession.EnergizationScenario;
                 EnergizedSeed original = Assert.Single(scenario.Seeds);
                 panel.SetSelection(original.BoundaryDeviceId);
-                Assert.Equal(2, candidates.Items.Count);
+                Assert.Single(candidates.Items);
+                Assert.Equal(2, sides.Items.Count);
                 panel.SetSelection(cabinet.Id);
                 Assert.True(confirm.IsEnabled);
                 analyze.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -255,7 +265,9 @@ public sealed class EnergizationPanelTests
                 Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
 
                 seeds.SelectedIndex = 0;
-                candidates.SelectedIndex = 1;
+                panel.SetSelection(original.BoundaryDeviceId);
+                candidates.SelectedIndex = 0;
+                sides.SelectedIndex = original.Side == EnergizationSide.Bus ? 1 : 0;
                 Assert.True(replace.IsEnabled);
                 replace.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Equal(original.Id, Assert.Single(scenario.Seeds).Id);
@@ -275,6 +287,62 @@ public sealed class EnergizationPanelTests
                 remove.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Empty(scenario.Seeds);
                 Assert.False(confirm.IsEnabled);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        });
+    }
+
+    [Fact]
+    public void ExitKeepsScenarioAndResultWhileStartAnalysisReenablesDisplayAndRequestsExit()
+    {
+        RunOnSta(() =>
+        {
+            string path = Path.Combine(Path.GetTempPath(),
+                $"wp-ea-actions-{Guid.NewGuid():N}.kvdrawing");
+            try
+            {
+                ProjectRuntimeSession runtime = ProjectRuntimeSession.CreateEmpty(
+                    new ProjectService().CreateProject(path, "EA actions"));
+                var addCabinet = new DeviceCommandFactory().CreateAddRingCabinet(
+                    runtime.PersistenceSession.Domain, runtime.Layout,
+                    new RingCabinetCreationConfiguration("EA actions cabinet",
+                        new RingCabinetCreationTemplateFactory().Create(
+                            RingCabinetTemplateType.Conventional, 4), "10kV"),
+                    new DocumentPoint(20, 20));
+                runtime.CommandStack.ExecuteCommand(addCabinet);
+                runtime.RebuildScene();
+                SwitchDevice source = addCabinet.Cabinet.Intervals[0].SwitchDevices
+                    .Single(device => device.SwitchKind == SwitchKind.LoadSwitch);
+                runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(
+                    runtime.PersistenceSession.EnergizationScenario,
+                    new EnergizedSeed(Guid.NewGuid(), source.Id, EnergizationSide.Bus)));
+                runtime.ExecuteEnergizationAnalysis();
+                EnergizationScenario scenario = runtime.PersistenceSession.EnergizationScenario;
+                EnergizationResult originalResult = runtime.Energization.CurrentResult!;
+                var panel = new EnergizationPanel();
+                panel.Bind(runtime);
+                int exitRequests = 0;
+                panel.ExitRequested += (_, _) => exitRequests++;
+                Button exit = (Button)panel.FindName("ExitButton")!;
+                Button start = (Button)panel.FindName("AnalyzeButton")!;
+
+                exit.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(1, exitRequests);
+                Assert.Same(scenario, runtime.PersistenceSession.EnergizationScenario);
+                Assert.Same(originalResult, runtime.Energization.CurrentResult);
+                Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+
+                runtime.Energization.SetOverlayRequested(false);
+                Assert.False(runtime.Energization.CanShowOverlay);
+                start.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(2, exitRequests);
+                Assert.Same(scenario, runtime.PersistenceSession.EnergizationScenario);
+                Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+                Assert.NotSame(originalResult, runtime.Energization.CurrentResult);
+                Assert.True(runtime.Energization.CanShowOverlay);
             }
             finally
             {

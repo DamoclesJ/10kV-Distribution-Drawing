@@ -74,9 +74,8 @@ public sealed class RingCabinetRenderer
         }
         var selectedSwitch = cabinet.Intervals.SelectMany(item => item.SwitchDevices)
             .FirstOrDefault(device => device.Id == label.TargetId);
-        // Ground-device labels stay neutral along with their Earth branch.
-        return selectedSwitch is not null && selectedSwitch.SwitchKind != SwitchKind.GroundSwitch
-            ? ElectricalVisualIdentity.Association(selectedSwitch.Id, [
+        return selectedSwitch is not null
+            ? ElectricalVisualIdentity.HazardAssociation(selectedSwitch.Id, [
                 ElectricalVisualIdentity.Terminal(selectedSwitch.FirstTerminalId),
                 ElectricalVisualIdentity.Terminal(selectedSwitch.SecondTerminalId)]) : null;
     }

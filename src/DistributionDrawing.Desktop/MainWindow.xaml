@@ -129,6 +129,9 @@
           <Path Data="{StaticResource Icon.Fit}" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                 StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform" />
         </Button>
+        <Separator x:Name="EnergizationDisplaySeparator" Margin="4,3" Visibility="Collapsed" />
+        <Button x:Name="EnergizationDisplayToggle" Content="隐藏带电状态"
+                Click="OnEnergizationDisplayToggle" Padding="10,4" Visibility="Collapsed" />
       </ToolBar>
     </ToolBarTray>
 

@@ -2,7 +2,7 @@ using DistributionDrawing.Application.Topology;
 
 namespace DistributionDrawing.Rendering.Wpf.Scene;
 
-public enum ElectricalVisualIdentityKind { Terminal, Node, Edge, Association }
+public enum ElectricalVisualIdentityKind { Terminal, Node, Edge, Association, Hazard }
 
 public enum ElectricalVisualState { Normal, Energized, Deenergized, Unknown }
 
@@ -13,8 +13,8 @@ public sealed record ElectricalVisualIdentity(
     Guid? FirstTerminalId = null,
     Guid? SecondTerminalId = null)
 {
-    // An association is energized/deenergized only when every explicit member agrees.
-    // Empty or mixed associations are Unknown; there is no proximity or any-side rule.
+    // Exact associations require every explicit member to agree. Hazard associations
+    // summarize device/location identifiers: any energized member is a hazard.
     public IReadOnlyList<ElectricalVisualIdentity> Members { get; init; } = [];
 
     public bool Equals(ElectricalVisualIdentity? other) => other is not null &&
@@ -34,6 +34,11 @@ public sealed record ElectricalVisualIdentity(
     public static ElectricalVisualIdentity Association(Guid ownerId,
         IEnumerable<ElectricalVisualIdentity> members) =>
         new(ElectricalVisualIdentityKind.Association, ownerId)
+        { Members = Array.AsReadOnly(members.Distinct().ToArray()) };
+
+    public static ElectricalVisualIdentity HazardAssociation(Guid ownerId,
+        IEnumerable<ElectricalVisualIdentity> members) =>
+        new(ElectricalVisualIdentityKind.Hazard, ownerId)
         { Members = Array.AsReadOnly(members.Distinct().ToArray()) };
 
     public static ElectricalVisualIdentity SwitchPath(

@@ -66,7 +66,7 @@ public sealed class EnergizationNativeRenderingTests
             connection.StartTerminalId, connection.EndTerminalId);
         foreach (var pole in new[] { first.Pole, second.Pole })
         {
-            var identity = ElectricalVisualIdentity.Association(pole.Id, [edge]);
+            var identity = ElectricalVisualIdentity.HazardAssociation(pole.Id, [edge]);
             Assert.Equal(identity, Assert.Single(scene.Elements.OfType<SceneText>(), text => text.Text == pole.PoleNumber).ElectricalIdentity);
             Assert.Contains(scene.Elements.OfType<SceneEllipse>(), ellipse => ellipse.ElectricalIdentity == identity);
         }
@@ -224,6 +224,30 @@ public sealed class EnergizationNativeRenderingTests
         Assert.All(styled.Where(element => element.ElectricalIdentity == bus), element => Assert.Equal(ElectricalVisualState.Energized, element.ElectricalState));
     }
 
+    [Fact]
+    public void CabinetGroundSwitchDesignationUsesHazardAggregation()
+    {
+        RingCabinet cabinet = Cabinet(new LoadSwitchConfiguration());
+        SwitchDevice ground = cabinet.Intervals[0].SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.GroundSwitch);
+        var scene = new DrawingScene(new RingCabinetRenderer().Render(cabinet,
+            new RingCabinetLayoutFactory().Create(cabinet, new(0, 0))));
+        SceneText label = Assert.Single(scene.Elements.OfType<SceneText>(),
+            text => text.Text == cabinet.Intervals[0].GetSwitchBusinessNumber(ground.Id));
+        Assert.Equal(ElectricalVisualIdentityKind.Hazard, label.ElectricalIdentity!.Kind);
+
+        var result = Result([ground.FirstTerminalId], [], EnergizationState.Energized,
+            extra: new Dictionary<Guid, EnergizationState>
+            {
+                [ground.SecondTerminalId] = EnergizationState.Deenergized
+            });
+        IReadOnlyList<SceneElement> styled = EnergizationSceneStyler.Build(scene, result);
+        SceneText styledLabel = Assert.Single(styled.OfType<SceneText>(),
+            text => text.Text == cabinet.Intervals[0].GetSwitchBusinessNumber(ground.Id));
+
+        Assert.Equal(ElectricalVisualState.Energized, styledLabel.ElectricalState);
+    }
+
     [Theory]
     [InlineData(SwitchKind.IsolationSwitch, 0)]
     [InlineData(SwitchKind.IsolationSwitch, 1)]
@@ -256,7 +280,7 @@ public sealed class EnergizationNativeRenderingTests
         var creation = new PoleCreationFactory().Create("P-09");
         var scene = new DrawingScene(new MixedPoleRenderer().Render(creation.Pole,
             new PoleLayout(creation.Pole.Id, new(20, 20)), [], []));
-        var identity = ElectricalVisualIdentity.Association(creation.Pole.Id,
+        var identity = ElectricalVisualIdentity.HazardAssociation(creation.Pole.Id,
             creation.Pole.OverheadAnchorTerminalIds.Select(ElectricalVisualIdentity.Terminal));
         Assert.Equal(identity, Assert.Single(scene.Elements.OfType<SceneText>()).ElectricalIdentity);
         Assert.Contains(scene.Elements.OfType<SceneEllipse>(), ellipse => ellipse.ElectricalIdentity == identity);
@@ -297,14 +321,43 @@ public sealed class EnergizationNativeRenderingTests
     }
 
     [Fact]
-    public void PoleAndCableTerminationAggregatesBecomeUnknownForMixedOrMissingMembers()
+    public void HazardAssociationPrefersEnergizedThenUnknownAndKeepsElectricalMembersIndependent()
+    {
+        Guid energized = Guid.NewGuid(), deenergized = Guid.NewGuid(), unknown = Guid.NewGuid();
+        ElectricalVisualIdentity hazard = ElectricalVisualIdentity.HazardAssociation(Guid.NewGuid(), [
+            ElectricalVisualIdentity.Terminal(energized),
+            ElectricalVisualIdentity.Terminal(deenergized)]);
+        Assert.Equal(ElectricalVisualState.Energized, EnergizationSceneStyler.Resolve(hazard,
+            Result([energized], [], EnergizationState.Energized, extra: new Dictionary<Guid, EnergizationState>
+            {
+                [deenergized] = EnergizationState.Deenergized
+            })));
+
+        ElectricalVisualIdentity uncertainHazard = ElectricalVisualIdentity.HazardAssociation(Guid.NewGuid(), [
+            ElectricalVisualIdentity.Terminal(deenergized),
+            ElectricalVisualIdentity.Terminal(unknown)]);
+        Assert.Equal(ElectricalVisualState.Unknown, EnergizationSceneStyler.Resolve(uncertainHazard,
+            Result([], [], EnergizationState.Unknown, extra: new Dictionary<Guid, EnergizationState>
+            {
+                [deenergized] = EnergizationState.Deenergized
+            })));
+        Assert.Equal(ElectricalVisualState.Deenergized, EnergizationSceneStyler.Resolve(hazard,
+            Result([], [], EnergizationState.Deenergized, extra: new Dictionary<Guid, EnergizationState>
+            {
+                [energized] = EnergizationState.Deenergized,
+                [deenergized] = EnergizationState.Deenergized
+            })));
+    }
+
+    [Fact]
+    public void PoleHazardAndCableTerminationElectricalAggregateUseDifferentRules()
     {
         Guid poleId = Guid.NewGuid();
         Guid cableSide = Guid.NewGuid(), overheadSide = Guid.NewGuid(), internalNode = Guid.NewGuid();
         Guid edgeAId = Guid.NewGuid(), edgeBId = Guid.NewGuid();
         Guid edgeAFirst = Guid.NewGuid(), edgeASecond = Guid.NewGuid();
         Guid edgeBFirst = Guid.NewGuid(), edgeBSecond = Guid.NewGuid();
-        var pole = ElectricalVisualIdentity.Association(poleId, [
+        var pole = ElectricalVisualIdentity.HazardAssociation(poleId, [
             ElectricalVisualIdentity.Edge(ElectricalConnectivityEdgeType.Connection, edgeAId, edgeAFirst, edgeASecond),
             ElectricalVisualIdentity.Edge(ElectricalConnectivityEdgeType.Connection, edgeBId, edgeBFirst, edgeBSecond)]);
         var termination = new CableTermination(Guid.NewGuid(), cableSide, overheadSide, internalNode, "CT");
@@ -335,7 +388,9 @@ public sealed class EnergizationNativeRenderingTests
             new SceneText(new(0, 0), "P-01", Colors.Black, 3) { ElectricalIdentity = pole }
         ]), result);
 
-        Assert.All(styled, element => Assert.Equal(ElectricalVisualState.Unknown, element.ElectricalState));
+        Assert.Equal(ElectricalVisualState.Energized, styled[0].ElectricalState);
+        Assert.Equal(ElectricalVisualState.Unknown, styled[1].ElectricalState);
+        Assert.Equal(ElectricalVisualState.Energized, styled[2].ElectricalState);
 
         var missingTerminationState = new EnergizationResult(EnergizationValidity.Complete,
             new Dictionary<Guid, EnergizationPointResult>

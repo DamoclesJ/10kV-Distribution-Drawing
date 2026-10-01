@@ -46,6 +46,14 @@ public static class EnergizationSceneStyler
                 ElectricalVisualState[] members = identity.Members.Select(member => Resolve(member, result)).ToArray();
                 return members.Length > 0 && members.All(member => member == members[0])
                     ? members[0] : ElectricalVisualState.Unknown;
+            case ElectricalVisualIdentityKind.Hazard:
+                ElectricalVisualState[] hazardMembers = identity.Members
+                    .Select(member => Resolve(member, result)).ToArray();
+                if (hazardMembers.Contains(ElectricalVisualState.Energized))
+                    return ElectricalVisualState.Energized;
+                if (hazardMembers.Contains(ElectricalVisualState.Unknown) || hazardMembers.Length == 0)
+                    return ElectricalVisualState.Unknown;
+                return ElectricalVisualState.Deenergized;
             case ElectricalVisualIdentityKind.Terminal:
                 state = result.Terminals.TryGetValue(identity.Id, out EnergizationPointResult? terminal)
                     ? terminal.State : EnergizationState.Unknown;

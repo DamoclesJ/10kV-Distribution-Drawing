@@ -43,7 +43,7 @@ public sealed class MixedPoleRenderer
         SwitchAttachmentRenderInput[] switches = switchAttachments.ToArray();
         PoleAttachmentRenderInput[] terminations = cableTerminationAttachments.ToArray();
         var poleMembers = pole.OverheadAnchorTerminalIds.Select(ElectricalVisualIdentity.Terminal).ToArray();
-        ElectricalVisualIdentity poleIdentity = ElectricalVisualIdentity.Association(pole.Id,
+        ElectricalVisualIdentity poleIdentity = ElectricalVisualIdentity.HazardAssociation(pole.Id,
             poleMembers.Length > 0 ? poleMembers : switches.SelectMany(input => new[] {
                 ElectricalVisualIdentity.Terminal(input.SwitchDevice.FirstTerminalId),
                 ElectricalVisualIdentity.Terminal(input.SwitchDevice.SecondTerminalId) })
@@ -107,11 +107,11 @@ public sealed class MixedPoleRenderer
             {
                 ElectricalIdentity = result.Request.TargetKind == LabelTargetKind.Pole ? poleIdentity :
                     result.Request.TargetKind == LabelTargetKind.SwitchDevice
-                        ? ElectricalVisualIdentity.Association(result.TargetId, switches.Where(input => input.SwitchDevice.Id == result.TargetId)
+                        ? ElectricalVisualIdentity.HazardAssociation(result.TargetId, switches.Where(input => input.SwitchDevice.Id == result.TargetId)
                             .SelectMany(input => new[] { ElectricalVisualIdentity.Terminal(input.SwitchDevice.FirstTerminalId),
                                 ElectricalVisualIdentity.Terminal(input.SwitchDevice.SecondTerminalId) }))
                         : terminations.Where(input => input.Attachment.AttachmentId == result.TargetId)
-                            .Select(input => ElectricalVisualIdentity.Association(input.CableTermination.Id, [
+                            .Select(input => ElectricalVisualIdentity.HazardAssociation(input.CableTermination.Id, [
                                 ElectricalVisualIdentity.Terminal(input.CableTermination.CableSideTerminalId),
                                 ElectricalVisualIdentity.Terminal(input.CableTermination.OverheadSideTerminalId),
                                 ElectricalVisualIdentity.Node(input.CableTermination.InternalNodeId)])).SingleOrDefault()

@@ -3,8 +3,16 @@ namespace DistributionDrawing.Desktop.Energization;
 public sealed record DrawingOverlayVisibility(bool ShowEnergization, bool ShowWorkTicket)
 {
     public static DrawingOverlayVisibility Resolve(
-        bool drawingVisible, bool eaPanelOpen, bool eaResultCurrent,
-        bool workTicketRequested) => new(
-            drawingVisible && eaPanelOpen && eaResultCurrent,
-            drawingVisible && !eaPanelOpen && workTicketRequested);
+        bool drawingVisible,
+        bool eaPanelOpen,
+        bool eaResultCurrent,
+        bool energizationDisplayRequested,
+        bool workTicketRequested)
+    {
+        bool showEnergization = drawingVisible && eaResultCurrent &&
+            energizationDisplayRequested;
+        return new DrawingOverlayVisibility(
+            showEnergization,
+            drawingVisible && !eaPanelOpen && workTicketRequested && !showEnergization);
+    }
 }

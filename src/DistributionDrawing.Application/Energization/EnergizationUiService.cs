@@ -78,8 +78,7 @@ public sealed class EnergizationUiService
                     out Guid terminalId, out EnergizationDiagnosticCode issue);
                 if (issue == EnergizationDiagnosticCode.UnsupportedBoundary) continue;
                 candidates.Add(new EnergizationBoundaryCandidate(device.Id,
-                    string.IsNullOrWhiteSpace(device.DisplayName)
-                        ? DeviceKindText(device.SwitchKind) : device.DisplayName,
+                    DeviceDisplayName(drawing, cabinets, device),
                     device.SwitchKind, owner, side, resolved,
                     resolved ? terminalId : null, issue));
             }
@@ -99,9 +98,8 @@ public sealed class EnergizationUiService
         bool resolved = _policy.TryResolve(drawing, seed, out _,
             out EnergizationDiagnosticCode diagnostic);
         return new EnergizationSeedDisplay(seed.Id,
-            device is null ? "已删除设备" :
-                string.IsNullOrWhiteSpace(device.DisplayName)
-                    ? DeviceKindText(device.SwitchKind) : device.DisplayName,
+            device is null ? "已删除设备" : DeviceDisplayName(drawing,
+                drawing.Devices.OfType<RingCabinet>().ToArray(), device),
             device is null ? "未知" : DeviceKindText(device.SwitchKind),
             device is null ? "" : OwnerName(drawing,
                 drawing.Devices.OfType<RingCabinet>().ToArray(), device),
@@ -146,13 +144,45 @@ public sealed class EnergizationUiService
         return pole?.PoleNumber ?? "柱上设备";
     }
 
+    private static string DeviceDisplayName(
+        DrawingDocument drawing,
+        IReadOnlyList<RingCabinet> cabinets,
+        SwitchDevice device)
+    {
+        foreach (RingCabinet cabinet in cabinets)
+        foreach (RingCabinetInterval interval in cabinet.Intervals)
+        {
+            if (!interval.SwitchDevices.Any(item => item.Id == device.Id)) continue;
+            string cabinetName = string.IsNullOrWhiteSpace(cabinet.DisplayName)
+                ? "环网柜" : cabinet.DisplayName;
+            string designation = interval.GetSwitchBusinessNumber(device.Id) ??
+                interval.DisplayName;
+            return $"{cabinetName}{designation}{DeviceKindText(device.SwitchKind)}";
+        }
+
+        PoleAttachment? attachment = drawing.PoleAttachments.FirstOrDefault(item =>
+            item.AttachedDeviceId == device.Id);
+        Pole? pole = attachment is null ? null : drawing.Devices.OfType<Pole>()
+            .FirstOrDefault(item => item.Id == attachment.PoleId);
+        return pole is null
+            ? DeviceKindText(device.SwitchKind)
+            : $"{pole.PoleNumber}（{PoleDeviceKindText(device.SwitchKind)}）";
+    }
+
+    private static string PoleDeviceKindText(SwitchKind kind) => kind switch
+    {
+        SwitchKind.DropoutFuse => "跌落式熔断器",
+        SwitchKind.CircuitBreaker => "柱上断路器",
+        _ => "柱上开关"
+    };
+
     public static string DeviceKindText(SwitchKind kind) => kind switch
     {
         SwitchKind.LoadSwitch => "负荷开关",
         SwitchKind.CircuitBreaker => "断路器",
         SwitchKind.IsolationSwitch => "隔离开关",
         SwitchKind.DropoutFuse => "跌落式熔断器",
-        SwitchKind.GroundSwitch => "接地开关",
+        SwitchKind.GroundSwitch => "接地刀闸",
         _ => "开关设备"
     };
 }
