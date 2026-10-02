@@ -8,9 +8,9 @@ WP-EA-01A Topological Energization Analysis Foundation is **CLOSED / ACCEPTED** 
 
 ## Energization UI & Visualization Closure
 
-**WP-EA-01B — Scenario UI & Energization Visualization: CLOSED / ACCEPTED** at implementation SHA `d5ad046b515c7d90c9ac1511d0a71ba694771b6a`. Windows automated acceptance passed (1523/1523; 0 failed, 0 skipped), and user-completed Windows GUI acceptance was **PASSED / ACCEPTED**. See [WP-EA-01B Closure](WP-EA-01B-CLOSURE.md).
+**WP-EA-01B — Energization Scenario, Binary Analysis, Visualization & Interval Mutation Integrity: CLOSED / ACCEPTED** at final candidate `45125261600a60897e8a7367bd51c1f665557ecc`. Windows automated acceptance passed (1542/1542; 0 failed, 0 skipped), the solution build passed with 0 errors / 0 warnings, and user-completed Windows GUI acceptance was **PASSED / ACCEPTED**. See [WP-EA-01B Closure](WP-EA-01B-CLOSURE.md).
 
-No follow-up Work Package is started or authorized by this closure. The following are proposed for separate project-control planning, in this order:
+No follow-up Work Package is started or authorized by this closure. The following remain candidates for separate project-control planning; this ordering is not an authorization:
 
 1. EA-aware export.
 2. EA Scenario / Result → WorkScope Draft.
