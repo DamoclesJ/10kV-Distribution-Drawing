@@ -1,4 +1,5 @@
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Desktop.GroundingSafety;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Devices.CustomerStations;
@@ -217,8 +218,17 @@ public sealed class SelectionDeletePlanner
         }
 
         if (commands.Count == 0) throw new InvalidOperationException("当前选择中没有可删除的对象。");
-        return new CompositeDeleteCommand(commands, () => WorkTicketReferenceGuard.Validate(
-            document, session.PersistenceSession.WorkTickets));
+        GroundingPointCommandSnapshot[] restoreGroundingPoints = groundingPointIds
+            .Select(id => GroundingPointCommandSnapshot.From(document.GetGroundingPoint(id)))
+            .ToArray();
+        GroundingAccessPoint[] restoreAccessPoints = groundingAccessPointIds
+            .Select(id => document.GetGroundingAccessPoint(id))
+            .ToArray();
+        return new CompositeDeleteCommand(
+            commands,
+            () => WorkTicketReferenceGuard.Validate(document, session.PersistenceSession.WorkTickets),
+            beforeUndo: () => GroundingPointRestorePreflight.EnsureAllowed(
+                session, restoreGroundingPoints, restoreAccessPoints));
     }
 
     private static CustomerStation? FindCustomerStationOwner(
@@ -241,11 +251,16 @@ internal sealed class CompositeDeleteCommand : ICommand
 {
     private readonly IReadOnlyList<ICommand> _commands;
     private readonly Action? _validateAfter;
+    private readonly Action? _beforeUndo;
 
-    public CompositeDeleteCommand(IEnumerable<ICommand> commands, Action? validateAfter = null)
+    public CompositeDeleteCommand(
+        IEnumerable<ICommand> commands,
+        Action? validateAfter = null,
+        Action? beforeUndo = null)
     {
         _commands = commands?.ToArray() ?? throw new ArgumentNullException(nameof(commands));
         _validateAfter = validateAfter;
+        _beforeUndo = beforeUndo;
         if (_commands.Count == 0) throw new ArgumentException("At least one delete command is required.", nameof(commands));
     }
 
@@ -270,6 +285,7 @@ internal sealed class CompositeDeleteCommand : ICommand
 
     public void Undo()
     {
+        _beforeUndo?.Invoke();
         foreach (ICommand command in _commands.Reverse()) command.Undo();
     }
 

@@ -7,17 +7,20 @@ public sealed class RemoveGroundingPointCommand : ICommand
 {
     private readonly DrawingDocument _document;
     private readonly RuntimeLayoutDocument? _layout;
+    private readonly Action<GroundingPointCommandSnapshot>? _beforeRestore;
 
     public RemoveGroundingPointCommand(
         DrawingDocument document,
         GroundingPointCommandSnapshot before,
-        RuntimeLayoutDocument? layout = null)
+        RuntimeLayoutDocument? layout = null,
+        Action<GroundingPointCommandSnapshot>? beforeRestore = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(before);
 
         _document = document;
         _layout = layout;
+        _beforeRestore = beforeRestore;
         Before = before;
         if (layout is not null)
         {
@@ -40,6 +43,7 @@ public sealed class RemoveGroundingPointCommand : ICommand
 
     public void Undo()
     {
+        _beforeRestore?.Invoke(Before);
         _document.CreateGroundingPoint(
             Before.GroundingPointId,
             Before.Target,

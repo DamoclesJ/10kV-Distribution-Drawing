@@ -3233,7 +3233,9 @@ public partial class MainWindow : Window
             ICommand command = _professionalCommandFactory.CreateRemoveGroundingPoint(
                 _activeSource.Document,
                 _workspace.CurrentSession!.Layout,
-                groundingPointId);
+                groundingPointId,
+                snapshot => GroundingPointRestorePreflight.EnsureAllowed(
+                    _workspace.CurrentSession!, [snapshot]));
             _commandStack.ExecuteCommand(GuardTicketDeletion(command));
             _selectionManager.Clear();
             RefreshDrawingScene();

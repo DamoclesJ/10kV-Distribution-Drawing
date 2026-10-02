@@ -38,6 +38,27 @@ public sealed class WorkTicketDeleteCommandTests
     }
 
     [Fact]
+    public void CompositeRestorePreflightRejectsBeforeFirstInverseMutation()
+    {
+        var first = new CounterCommand();
+        var second = new CounterCommand();
+        var stack = new CommandStack();
+        var command = new CompositeDeleteCommand(
+            [first, second],
+            beforeUndo: () => throw new InvalidOperationException("GS rejected"));
+        stack.ExecuteCommand(command);
+        ICommand lastApplied = stack.LastAppliedCommand!;
+
+        Assert.Throws<InvalidOperationException>(() => stack.Undo());
+
+        Assert.Equal(1, first.Value);
+        Assert.Equal(1, second.Value);
+        Assert.Equal(1, stack.CurrentIndex);
+        Assert.True(stack.IsDirty);
+        Assert.Same(lastApplied, stack.LastAppliedCommand);
+    }
+
+    [Fact]
     public void DirectDeletePathRollsBackWhenTicketReferenceBreaks()
     {
         var drawing = new DrawingDocument(Guid.NewGuid(), "删除保护");

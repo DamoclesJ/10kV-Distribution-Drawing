@@ -75,22 +75,25 @@ public sealed class ProfessionalCommandFactory
 
     public ICommand CreateRemoveGroundingPoint(
         DrawingDocument document,
-        Guid groundingPointId)
+        Guid groundingPointId,
+        Action<GroundingPointCommandSnapshot>? beforeRestore = null)
     {
-        return CreateRemoveGroundingPoint(document, null, groundingPointId);
+        return CreateRemoveGroundingPoint(document, null, groundingPointId, beforeRestore);
     }
 
     public ICommand CreateRemoveGroundingPoint(
         DrawingDocument document,
         RuntimeLayoutDocument? layout,
-        Guid groundingPointId)
+        Guid groundingPointId,
+        Action<GroundingPointCommandSnapshot>? beforeRestore = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         return new RemoveGroundingPointCommand(
             document,
             GroundingPointCommandSnapshot.From(
                 document.GetGroundingPoint(groundingPointId)),
-            layout);
+            layout,
+            beforeRestore);
     }
 
     public AddGroundingAccessPointCommand CreateAddGroundingAccessPoint(

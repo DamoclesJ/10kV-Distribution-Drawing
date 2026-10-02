@@ -259,6 +259,41 @@ public sealed class WpEm04GroundingAccessTests
     }
 
     [Fact]
+    public void RemoveGroundingPointUndoSafetyReject_PreservesCursorAndDomain()
+    {
+        SceneFixture fixture = CreateFixture();
+        GroundingPoint grounding = fixture.Document.CreateGroundingPoint(
+            Guid.NewGuid(), GroundingTarget.ForTerminal(fixture.Connection.StartTerminalId),
+            "杆端", "S01");
+        ICommand command = new ProfessionalCommandFactory().CreateRemoveGroundingPoint(
+            fixture.Document,
+            grounding.GroundingPointId,
+            _ => throw new InvalidOperationException("GS rejected"));
+        var stack = new CommandStack();
+        stack.MarkSaved();
+        stack.ExecuteCommand(command);
+        ICommand applied = stack.LastAppliedCommand!;
+        int stateChanged = 0;
+        stack.StateChanged += (_, _) => stateChanged++;
+        int historyCount = stack.History.Count;
+        int currentIndex = stack.CurrentIndex;
+        long currentStateId = stack.CurrentStateId;
+        long savedStateId = stack.SavedStateId;
+        bool dirty = stack.IsDirty;
+
+        Assert.Throws<InvalidOperationException>(() => stack.Undo());
+
+        Assert.Empty(fixture.Document.GroundingPoints);
+        Assert.Equal(historyCount, stack.History.Count);
+        Assert.Equal(currentIndex, stack.CurrentIndex);
+        Assert.Equal(currentStateId, stack.CurrentStateId);
+        Assert.Equal(savedStateId, stack.SavedStateId);
+        Assert.Equal(dirty, stack.IsDirty);
+        Assert.Same(applied, stack.LastAppliedCommand);
+        Assert.Equal(0, stateChanged);
+    }
+
+    [Fact]
     public void DeleteGap_UndoRestoresSameIdentity()
     {
         SceneFixture fixture = CreateFixture();
