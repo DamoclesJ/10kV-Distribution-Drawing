@@ -8,12 +8,14 @@ public sealed class ChangeSwitchStateCommand
     private readonly DrawingDocument _document;
     private readonly Guid _switchDeviceId;
     private readonly SwitchState _targetState;
+    private readonly Action<SwitchState>? _beforeMutation;
     private SwitchState? _originalState;
 
     public ChangeSwitchStateCommand(
         DrawingDocument document,
         Guid switchDeviceId,
-        SwitchState targetState)
+        SwitchState targetState,
+        Action<SwitchState>? beforeMutation = null)
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
         if (switchDeviceId == Guid.Empty)
@@ -30,12 +32,14 @@ public sealed class ChangeSwitchStateCommand
 
         _switchDeviceId = switchDeviceId;
         _targetState = targetState;
+        _beforeMutation = beforeMutation;
     }
 
     public SwitchStateChangeResult? InitialChange { get; private set; }
 
     public void Execute()
     {
+        _beforeMutation?.Invoke(_targetState);
         SwitchStateChangeResult change = _document.ChangeSwitchState(
             _switchDeviceId,
             _targetState);
@@ -51,6 +55,7 @@ public sealed class ChangeSwitchStateCommand
                 "The switch state command has not been executed.");
         }
 
+        _beforeMutation?.Invoke(originalState);
         _document.ChangeSwitchState(_switchDeviceId, originalState);
     }
 
@@ -62,6 +67,7 @@ public sealed class ChangeSwitchStateCommand
                 "The switch state command has not been executed.");
         }
 
+        _beforeMutation?.Invoke(_targetState);
         _document.ChangeSwitchState(_switchDeviceId, _targetState);
     }
 }

@@ -1,4 +1,5 @@
 using DistributionDrawing.Application.Devices;
+using DistributionDrawing.Desktop.GroundingSafety;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
@@ -89,7 +90,9 @@ public sealed class SwitchOperationController
             var applicationCommand = new ChangeSwitchStateCommand(
                 session.PersistenceSession.Domain,
                 switchDevice.Id,
-                targetState);
+                targetState,
+                state => SwitchStateCommandPreflight.EnsureAllowed(
+                    session, switchDevice.Id, state));
             session.CommandStack.ExecuteCommand(
                 new ChangeSwitchStateCommandAdapter(applicationCommand));
             session.RebuildScene();
@@ -106,6 +109,10 @@ public sealed class SwitchOperationController
     private static string ToUserMessage(Exception exception)
     {
         string message = exception.Message;
+        if (message.StartsWith("[GroundingSafety] ", StringComparison.Ordinal))
+        {
+            return message["[GroundingSafety] ".Length..];
+        }
         if (message.Contains("LS-GS-MUTUAL-EXCLUSION", StringComparison.Ordinal))
         {
             return "负荷开关与接地刀闸不能同时合闸。";

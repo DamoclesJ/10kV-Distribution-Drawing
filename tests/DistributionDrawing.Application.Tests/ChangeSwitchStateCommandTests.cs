@@ -63,6 +63,43 @@ public sealed class ChangeSwitchStateCommandTests
         Assert.Same(switchDevice, document.Devices.Single(device => device.Id == stableId));
     }
 
+    [Fact]
+    public void RejectedTargetState_DoesNotMutateOrCaptureInitialChange()
+    {
+        (DrawingDocument document, SwitchDevice switchDevice) = CreatePoleSwitch();
+        var command = new ChangeSwitchStateCommand(
+            document,
+            switchDevice.Id,
+            SwitchState.Closed,
+            _ => throw new InvalidOperationException("rejected"));
+
+        Assert.Throws<InvalidOperationException>(command.Execute);
+
+        Assert.Equal(SwitchState.Open, switchDevice.SwitchState);
+        Assert.Null(command.InitialChange);
+    }
+
+    [Fact]
+    public void ExecuteUndoRedo_PreflightsEachDestinationBeforeMutation()
+    {
+        (DrawingDocument document, SwitchDevice switchDevice) = CreatePoleSwitch();
+        var destinations = new List<SwitchState>();
+        var command = new ChangeSwitchStateCommand(
+            document,
+            switchDevice.Id,
+            SwitchState.Closed,
+            destinations.Add);
+
+        command.Execute();
+        command.Undo();
+        command.Redo();
+
+        Assert.Equal(
+            [SwitchState.Closed, SwitchState.Open, SwitchState.Closed],
+            destinations);
+        Assert.Equal(SwitchState.Closed, switchDevice.SwitchState);
+    }
+
     private static (DrawingDocument Document, SwitchDevice SwitchDevice) CreatePoleSwitch()
     {
         var document = new DrawingDocument(Guid.NewGuid(), "Switch command test");
