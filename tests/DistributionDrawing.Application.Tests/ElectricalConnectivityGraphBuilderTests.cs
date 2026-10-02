@@ -1,9 +1,11 @@
 using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Application.Devices.CustomerStations;
+using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Energization;
 using DistributionDrawing.Domain.Topology;
 using Xunit;
 
@@ -38,6 +40,36 @@ public sealed class ElectricalConnectivityGraphBuilderTests
                 edge.Type == ElectricalConnectivityEdgeType.ClosedSwitch &&
                 edge.SourceId == feeder.IsolationSwitch.Id));
         Assert.Contains(feeder.StationTerminalId, feeder.ElectricalNode.TerminalIds);
+    }
+
+    [Fact]
+    public void Build_UsesCandidateSwitchStateWithoutChangingCurrentState()
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "candidate graph state");
+        CustomerStation station = new CustomerStationCreationFactory().Create(
+            StationKind.BoxStation,
+            ["主供"]);
+        document.AddCustomerStation(station);
+        IncomingFeeder feeder = Assert.Single(station.IncomingFeeders);
+        var candidate = CandidateElectricalState.Create(
+            document,
+            new Dictionary<Guid, SwitchState>
+            {
+                [feeder.IsolationSwitch.Id] = SwitchState.Closed
+            },
+            new EnergizationScenario(Guid.NewGuid()));
+
+        ElectricalConnectivityGraph current = new ElectricalConnectivityGraphBuilder().Build(document);
+        ElectricalConnectivityGraph hypothetical = new ElectricalConnectivityGraphBuilder()
+            .Build(document, candidate);
+
+        Assert.DoesNotContain(current.Edges, edge =>
+            edge.Type == ElectricalConnectivityEdgeType.ClosedSwitch &&
+            edge.SourceId == feeder.IsolationSwitch.Id);
+        Assert.Contains(hypothetical.Edges, edge =>
+            edge.Type == ElectricalConnectivityEdgeType.ClosedSwitch &&
+            edge.SourceId == feeder.IsolationSwitch.Id);
+        Assert.Equal(SwitchState.Open, feeder.IsolationSwitch.SwitchState);
     }
 
     [Fact]

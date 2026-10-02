@@ -8,7 +8,15 @@ public sealed class ElectricalConnectivityGraphBuilder
 {
     public ElectricalConnectivityGraph Build(DrawingDocument document)
     {
+        return Build(document, CurrentSwitchStateView.Instance);
+    }
+
+    public ElectricalConnectivityGraph Build(
+        DrawingDocument document,
+        ISwitchStateView switchStateView)
+    {
         ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(switchStateView);
 
         Guid[] terminalIds = document.Terminals
             .Select(terminal => terminal.Id)
@@ -70,7 +78,7 @@ public sealed class ElectricalConnectivityGraphBuilder
             Guid[] switchTerminalIds = switchDevice.TerminalIds.ToArray();
             EnsureKnownTerminals(switchTerminalIds, terminalIdSet, switchDevice.Id);
 
-            if (switchDevice.SwitchState == SwitchState.Closed)
+            if (switchStateView.GetSwitchState(switchDevice) == SwitchState.Closed)
             {
                 if (switchTerminalIds.Length != 2)
                 {

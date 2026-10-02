@@ -13,8 +13,17 @@ public sealed class EnergizationAnalyzer
 
     public EnergizationResult Analyze(DrawingDocument drawing, EnergizationScenario scenario)
     {
+        return Analyze(drawing, scenario, CurrentSwitchStateView.Instance);
+    }
+
+    public EnergizationResult Analyze(
+        DrawingDocument drawing,
+        EnergizationScenario scenario,
+        ISwitchStateView switchStateView)
+    {
         ArgumentNullException.ThrowIfNull(drawing);
         ArgumentNullException.ThrowIfNull(scenario);
+        ArgumentNullException.ThrowIfNull(switchStateView);
 
         var diagnostics = new List<EnergizationDiagnostic>();
         if (scenario.Seeds.Count == 0)
@@ -25,7 +34,7 @@ public sealed class EnergizationAnalyzer
         try
         {
             ValidateTopology(drawing);
-            graph = _graphBuilder.Build(drawing);
+            graph = _graphBuilder.Build(drawing, switchStateView);
         }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException)
         {
@@ -51,7 +60,7 @@ public sealed class EnergizationAnalyzer
             .ToArray();
         GroundingSwitchConnection[] groundingConnections = switches.Values
             .Where(device => device.SwitchKind == SwitchKind.GroundSwitch &&
-                device.SwitchState == SwitchState.Closed)
+                switchStateView.GetSwitchState(device) == SwitchState.Closed)
             .Select(device => new GroundingSwitchConnection(
                 device.Id,
                 earthTerminalIds.Contains(device.FirstTerminalId)

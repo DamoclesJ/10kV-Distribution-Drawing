@@ -73,6 +73,53 @@ public sealed class EnergizationAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_UsesCandidateStateForPropagationAndGroundingMetadataWithoutMutation()
+    {
+        (DrawingDocument drawing, RingCabinet cabinet) = Cabinet(
+            RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+            RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open));
+        RingCabinetInterval interval = cabinet.Intervals[0];
+        SwitchDevice loadSwitch = LoadSwitch(interval);
+        SwitchDevice groundSwitch = interval.SwitchDevices.Single(device =>
+            device.SwitchKind == SwitchKind.GroundSwitch);
+        EnergizedSeed seed = Seed(loadSwitch, EnergizationSide.Bus);
+        var scenario = new EnergizationScenario(Guid.NewGuid(), [seed]);
+        var closedLoadCandidate = CandidateElectricalState.Create(
+            drawing,
+            new Dictionary<Guid, SwitchState>
+            {
+                [loadSwitch.Id] = SwitchState.Closed
+            },
+            scenario);
+        var closedGroundCandidate = CandidateElectricalState.Create(
+            drawing,
+            new Dictionary<Guid, SwitchState>
+            {
+                [groundSwitch.Id] = SwitchState.Closed
+            },
+            scenario);
+
+        EnergizationResult current = new EnergizationAnalyzer().Analyze(drawing, scenario);
+        EnergizationResult hypotheticalLoad = new EnergizationAnalyzer().Analyze(
+            drawing, closedLoadCandidate.CreateScenarioSnapshot(), closedLoadCandidate);
+        EnergizationResult hypotheticalGround = new EnergizationAnalyzer().Analyze(
+            drawing, closedGroundCandidate.CreateScenarioSnapshot(), closedGroundCandidate);
+
+        Assert.Equal(EnergizationState.Deenergized,
+            current.Terminals[loadSwitch.SecondTerminalId].State);
+        Assert.Equal(EnergizationState.Energized,
+            hypotheticalLoad.Terminals[loadSwitch.SecondTerminalId].State);
+        Assert.Contains(hypotheticalGround.GroundingSwitchConnections, item =>
+            item.SwitchDeviceId == groundSwitch.Id);
+        Assert.DoesNotContain(hypotheticalGround.ConductingEdges, edge =>
+            edge.Type == ElectricalConnectivityEdgeType.ClosedSwitch &&
+            edge.SourceId == groundSwitch.Id);
+        Assert.Equal(SwitchState.Open, loadSwitch.SwitchState);
+        Assert.Equal(SwitchState.Open, groundSwitch.SwitchState);
+        Assert.Equal(seed, Assert.Single(scenario.Seeds));
+    }
+
+    [Fact]
     public void EveryInternalSwitchParticipatesAfterSeedResolution()
     {
         (DrawingDocument drawing, RingCabinet cabinet) = Cabinet(
