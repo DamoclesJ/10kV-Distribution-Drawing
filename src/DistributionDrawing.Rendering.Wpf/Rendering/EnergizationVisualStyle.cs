@@ -9,13 +9,10 @@ public sealed record EnergizationVisualStyle(
 public static class EnergizationVisualStyleResolver
 {
     // Thickness belongs to the original professional geometry and is never overridden here.
-    public static EnergizationVisualStyle Resolve(ElectricalVisualState state,
+    public static EnergizationVisualStyle? Resolve(ElectricalVisualState state,
         SceneStrokeStyle normalStyle = SceneStrokeStyle.Solid) => state switch
     {
         ElectricalVisualState.Energized => new(Colors.Red, normalStyle),
-        ElectricalVisualState.Deenergized => new(Colors.Black, normalStyle),
-        ElectricalVisualState.Unknown => new(Colors.Gray,
-            normalStyle == SceneStrokeStyle.Dashed ? SceneStrokeStyle.DashDot : SceneStrokeStyle.Dotted),
-        _ => throw new ArgumentOutOfRangeException(nameof(state))
+        _ => null
     };
 }

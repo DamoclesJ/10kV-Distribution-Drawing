@@ -14,7 +14,8 @@ public sealed class EnergizationAnalysisState
         EnergizationFreshness.NotAnalyzed;
     public EnergizationResult? LatestResult { get; private set; }
     public EnergizationResult? CurrentResult =>
-        Freshness == EnergizationFreshness.Current ? LatestResult : null;
+        Freshness == EnergizationFreshness.Current && LatestResult?.IsSuccess == true
+            ? LatestResult : null;
     public IReadOnlyList<EnergizationDiagnosticDisplay> LatestDiagnostics { get; private set; } = [];
     public bool OverlayRequested { get; private set; } = true;
     public bool CanShowOverlay => OverlayRequested && CurrentResult is not null;

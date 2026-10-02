@@ -119,7 +119,7 @@ public sealed class EnergizationNativeRenderingTests
         var styled = EnergizationSceneStyler.Build(scene, result);
         Assert.All(styled.Where(element => element.ElectricalIdentity is not null), element =>
             Assert.Equal(ElectricalVisualState.Energized, element.ElectricalState));
-        Assert.Equal(ElectricalVisualState.Unknown, EnergizationSceneStyler.Resolve(path,
+        Assert.Equal(ElectricalVisualState.Normal, EnergizationSceneStyler.Resolve(path,
             Result(device.TerminalIds, [], EnergizationState.Energized)));
     }
 
@@ -160,7 +160,6 @@ public sealed class EnergizationNativeRenderingTests
     [Theory]
     [InlineData(EnergizationState.Energized)]
     [InlineData(EnergizationState.Deenergized)]
-    [InlineData(EnergizationState.Unknown)]
     public void PtCoilsAndLabelReadTheIsolationLoadTerminalWithoutAddingSources(EnergizationState state)
     {
         RingCabinet cabinet = Cabinet(new PTConfiguration());
@@ -363,7 +362,6 @@ public sealed class EnergizationNativeRenderingTests
     [Theory]
     [InlineData(EnergizationState.Energized)]
     [InlineData(EnergizationState.Deenergized)]
-    [InlineData(EnergizationState.Unknown)]
     public void PoleSymbolAndPoleNumberFollowRegisteredAnchorIdentity(EnergizationState state)
     {
         var creation = new PoleCreationFactory().Create("P-09");
@@ -379,23 +377,67 @@ public sealed class EnergizationNativeRenderingTests
     }
 
     [Fact]
-    public void UnknownPreservesCableDashSemanticsAndMarksTextWithoutChangingLabelContent()
+    public void MissingIdentityPreservesAppearanceAndReportsMappingDefectWithoutQuestionMark()
     {
         var identity = ElectricalVisualIdentity.Terminal(Guid.NewGuid());
         var scene = new DrawingScene([
-            new SceneLine(new(0, 0), new(20, 0), Colors.Black, 0.8, SceneStrokeStyle.Dashed) { ElectricalIdentity = identity },
+            new SceneLine(new(0, 0), new(20, 0), Colors.Navy, 0.8, SceneStrokeStyle.Dashed) { ElectricalIdentity = identity },
             new SceneEllipse(new(20, 0, 5, 5), Colors.Black, 0.8) { ElectricalIdentity = identity },
-            new SceneText(new(0, 4), "P-unknown", Colors.Black, 3) { ElectricalIdentity = identity }
+            new SceneText(new(0, 4), "P-01", Colors.Black, 3) { ElectricalIdentity = identity }
         ]);
-        var styled = EnergizationSceneStyler.Build(scene, Result([], [], EnergizationState.Unknown));
-        Assert.Equal(SceneStrokeStyle.DashDot, ((SceneLine)styled[0]).StrokeStyle);
-        Assert.Equal(SceneStrokeStyle.Dotted, ((SceneEllipse)styled[1]).StrokeStyle);
-        Assert.Equal("P-unknown", ((SceneText)styled[2]).Text);
-        Assert.Equal(ElectricalVisualState.Unknown, styled[2].ElectricalState);
-        // Actual WPF rendering adds a non-color text cue and keeps native conductor geometry.
-        DrawingGroup drawing = new DrawingSceneRenderer().RenderDrawing(new DrawingScene(styled), 1);
-        Assert.True(drawing.Children.Count > styled.Count);
-        Assert.Equal(scene.Elements.Count, styled.Count);
+        var styled = EnergizationSceneStyler.Build(scene, Result([], [], EnergizationState.Deenergized), out var diagnostics);
+        Assert.Single(diagnostics);
+        Assert.Equal(identity, diagnostics[0].Identity);
+        Assert.Contains("未找到对应端子", diagnostics[0].Message);
+        for (int index = 0; index < styled.Count; index++)
+            Assert.Equal(scene.Elements[index] with { ElectricalState = ElectricalVisualState.Normal }, styled[index]);
+        var renderer = new DrawingSceneRenderer();
+        DrawingGroup original = renderer.RenderDrawing(scene, 1);
+        DrawingGroup rendered = renderer.RenderDrawing(new DrawingScene(styled), 1);
+        Assert.Equal(original.Children.Count, rendered.Children.Count);
+        Assert.Null(EnergizationVisualStyleResolver.Resolve(ElectricalVisualState.Unknown));
+    }
+
+    [Fact]
+    public void DeenergizedRetainsOriginalColorsFillAndStrokePattern()
+    {
+        Guid id = Guid.NewGuid();
+        var identity = ElectricalVisualIdentity.Terminal(id);
+        var scene = new DrawingScene([
+            new SceneLine(new(0, 0), new(20, 0), Colors.Navy, 0.8, SceneStrokeStyle.Dashed) { ElectricalIdentity = identity },
+            new SceneRectangle(new(0, 0, 5, 5), Colors.DarkGreen, 0.8, Colors.LightGreen) { ElectricalIdentity = identity },
+            new SceneText(new(0, 4), "P-01", Colors.Black, 3) { ElectricalIdentity = identity }
+        ]);
+        var styled = EnergizationSceneStyler.Build(scene, Result([id], [], EnergizationState.Deenergized), out var diagnostics);
+        Assert.Empty(diagnostics);
+        for (int index = 0; index < styled.Count; index++)
+            Assert.Equal(scene.Elements[index] with { ElectricalState = ElectricalVisualState.Deenergized }, styled[index]);
+        Assert.Null(EnergizationVisualStyleResolver.Resolve(ElectricalVisualState.Deenergized));
+    }
+
+    [Theory]
+    [InlineData(GroundingStructureKind.UpperIsolationGrounding)]
+    [InlineData(GroundingStructureKind.UpperLowerGrounding)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding)]
+    public void AnalyzerBackedIntegratedCabinetHasNoUnmatchedIdentities(GroundingStructureKind structure)
+    {
+        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "mixed cabinet",
+            [RingCabinetIntervalDefinition.CreateIntegratedFeeder(1, structure, SwitchState.Closed, SwitchState.Closed, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open)]));
+        var document = new DistributionDrawing.Domain.Documents.DrawingDocument(Guid.NewGuid(), "binary rendering");
+        document.AddDevice(cabinet);
+        SwitchDevice boundary = cabinet.Intervals[0].SwitchDevices.Single(device => device.SwitchKind ==
+            (structure == GroundingStructureKind.LowerLowerGrounding ? SwitchKind.CircuitBreaker : SwitchKind.IsolationSwitch));
+        var result = new EnergizationAnalyzer().Analyze(document, new DistributionDrawing.Domain.Energization.EnergizationScenario(Guid.NewGuid(),
+            [new DistributionDrawing.Domain.Energization.EnergizedSeed(Guid.NewGuid(), boundary.Id, DistributionDrawing.Domain.Energization.EnergizationSide.Bus)]));
+        Assert.True(result.IsSuccess);
+        var scene = new DrawingScene(new RingCabinetRenderer().Render(cabinet,
+            new RingCabinetLayoutFactory().Create(cabinet, new(0, 0))));
+        var styled = EnergizationSceneStyler.Build(scene, result, out var diagnostics);
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(styled, element => element.ElectricalState == ElectricalVisualState.Unknown);
+        Assert.Contains(styled, element => element.ElectricalState == ElectricalVisualState.Energized);
+        Assert.Contains(styled, element => element.ElectricalState == ElectricalVisualState.Deenergized);
     }
 
     [Fact]
@@ -403,16 +445,17 @@ public sealed class EnergizationNativeRenderingTests
     {
         Guid first = Guid.NewGuid(), second = Guid.NewGuid();
         var identity = ElectricalVisualIdentity.Association(Guid.NewGuid(), [ElectricalVisualIdentity.Terminal(first), ElectricalVisualIdentity.Terminal(second)]);
-        Assert.Equal(ElectricalVisualState.Unknown, EnergizationSceneStyler.Resolve(identity,
-            Result([first], [], EnergizationState.Energized, extra: new Dictionary<Guid, EnergizationState> { [second] = EnergizationState.Deenergized })));
+        Assert.Equal(ElectricalVisualState.Normal, EnergizationSceneStyler.Resolve(identity,
+            Result([first], [], EnergizationState.Energized, extra: new Dictionary<Guid, EnergizationState> { [second] = EnergizationState.Deenergized }), out var diagnostics));
+        Assert.Contains("电气状态不一致", Assert.Single(diagnostics).Message);
         Assert.Equal(ElectricalVisualState.Energized, EnergizationSceneStyler.Resolve(identity, Result([first, second], [], EnergizationState.Energized)));
-        Assert.Equal(ElectricalVisualState.Unknown, EnergizationSceneStyler.Resolve(ElectricalVisualIdentity.Association(Guid.NewGuid(), []), Result([], [], EnergizationState.Energized)));
+        Assert.Equal(ElectricalVisualState.Normal, EnergizationSceneStyler.Resolve(ElectricalVisualIdentity.Association(Guid.NewGuid(), []), Result([], [], EnergizationState.Energized)));
     }
 
     [Fact]
-    public void HazardAssociationPrefersEnergizedThenUnknownAndKeepsElectricalMembersIndependent()
+    public void HazardAssociationKeepsKnownEnergizedEmphasisAndDiagnosesMissingMembers()
     {
-        Guid energized = Guid.NewGuid(), deenergized = Guid.NewGuid(), unknown = Guid.NewGuid();
+        Guid energized = Guid.NewGuid(), deenergized = Guid.NewGuid(), missing = Guid.NewGuid();
         ElectricalVisualIdentity hazard = ElectricalVisualIdentity.HazardAssociation(Guid.NewGuid(), [
             ElectricalVisualIdentity.Terminal(energized),
             ElectricalVisualIdentity.Terminal(deenergized)]);
@@ -424,9 +467,9 @@ public sealed class EnergizationNativeRenderingTests
 
         ElectricalVisualIdentity uncertainHazard = ElectricalVisualIdentity.HazardAssociation(Guid.NewGuid(), [
             ElectricalVisualIdentity.Terminal(deenergized),
-            ElectricalVisualIdentity.Terminal(unknown)]);
-        Assert.Equal(ElectricalVisualState.Unknown, EnergizationSceneStyler.Resolve(uncertainHazard,
-            Result([], [], EnergizationState.Unknown, extra: new Dictionary<Guid, EnergizationState>
+            ElectricalVisualIdentity.Terminal(missing)]);
+        Assert.Equal(ElectricalVisualState.Normal, EnergizationSceneStyler.Resolve(uncertainHazard,
+            Result([], [], EnergizationState.Deenergized, extra: new Dictionary<Guid, EnergizationState>
             {
                 [deenergized] = EnergizationState.Deenergized
             })));
@@ -478,7 +521,7 @@ public sealed class EnergizationNativeRenderingTests
         ]), result);
 
         Assert.Equal(ElectricalVisualState.Energized, styled[0].ElectricalState);
-        Assert.Equal(ElectricalVisualState.Unknown, styled[1].ElectricalState);
+        Assert.Equal(ElectricalVisualState.Normal, styled[1].ElectricalState);
         Assert.Equal(ElectricalVisualState.Energized, styled[2].ElectricalState);
 
         var missingTerminationState = new EnergizationResult(EnergizationValidity.Complete,
@@ -487,7 +530,7 @@ public sealed class EnergizationNativeRenderingTests
                 [cableSide] = new(EnergizationState.Energized, []),
                 [overheadSide] = new(EnergizationState.Energized, [])
             }, new Dictionary<Guid, EnergizationPointResult>(), [], [], []);
-        Assert.Equal(ElectricalVisualState.Unknown,
+        Assert.Equal(ElectricalVisualState.Normal,
             EnergizationSceneStyler.Resolve(terminationIdentity, missingTerminationState));
     }
 

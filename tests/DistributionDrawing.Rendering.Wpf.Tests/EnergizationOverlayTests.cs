@@ -68,9 +68,10 @@ public sealed class EnergizationOverlayTests
             edges: [new ElectricalConnectivityEdge(first, second,
                 ElectricalConnectivityEdgeType.Connection, source)]);
 
-        Assert.Equal(ElectricalVisualState.Unknown, EnergizationSceneStyler.Resolve(
+        Assert.Equal(ElectricalVisualState.Normal, EnergizationSceneStyler.Resolve(
             ElectricalVisualIdentity.Edge(ElectricalConnectivityEdgeType.Connection,
-                source, first, third), result));
+                source, first, third), result, out var diagnostics));
+        Assert.Contains("未找到匹配类型和双端子", Assert.Single(diagnostics).Message);
     }
 
     [Fact]
@@ -124,16 +125,16 @@ public sealed class EnergizationOverlayTests
     }
 
     [Fact]
-    public void UnknownUsesDifferentPatternAndNeverBecomesDeenergizedBeforeComplete()
+    public void LegacyNonBinaryPointIsMappingFailureAndHasNoGrayPattern()
     {
         Guid terminal = Guid.NewGuid();
         ElectricalVisualIdentity identity = ElectricalVisualIdentity.Terminal(terminal);
-        EnergizationResult result = Result(EnergizationValidity.ForwardOnly,
-            new Dictionary<Guid, EnergizationState> { [terminal] = EnergizationState.Deenergized });
-        Assert.Equal(ElectricalVisualState.Unknown,
-            EnergizationSceneStyler.Resolve(identity, result));
-        Assert.NotEqual(EnergizationVisualStyleResolver.Resolve(ElectricalVisualState.Unknown).StrokeStyle,
-            EnergizationVisualStyleResolver.Resolve(ElectricalVisualState.Deenergized).StrokeStyle);
+        EnergizationResult result = Result(EnergizationValidity.Complete,
+            new Dictionary<Guid, EnergizationState> { [terminal] = EnergizationState.Unknown });
+        Assert.Equal(ElectricalVisualState.Normal,
+            EnergizationSceneStyler.Resolve(identity, result, out var diagnostics));
+        Assert.Contains("不是有效二元", Assert.Single(diagnostics).Message);
+        Assert.Null(EnergizationVisualStyleResolver.Resolve(ElectricalVisualState.Unknown));
     }
 
     [Fact]

@@ -21,6 +21,7 @@ public sealed class EnergizationScenario
 
     public Guid Id { get; }
     public IReadOnlyList<EnergizedSeed> Seeds => _seeds.AsReadOnly();
+    /// <summary>Legacy V9 compatibility field; it has no analysis or UI meaning.</summary>
     public bool IsSourceSetComplete { get; private set; }
 
     public void SetSourceSetComplete(bool complete) => IsSourceSetComplete = complete;
@@ -31,7 +32,6 @@ public sealed class EnergizationScenario
         if (_seeds.Any(existing => existing.Id == seed.Id))
             throw new InvalidOperationException("Duplicate seed ID.");
         _seeds.Add(seed);
-        IsSourceSetComplete = false;
     }
 
     public void RemoveSeed(Guid seedId)
@@ -39,7 +39,6 @@ public sealed class EnergizationScenario
         int index = _seeds.FindIndex(seed => seed.Id == seedId);
         if (index < 0) throw new InvalidOperationException("Seed does not exist.");
         _seeds.RemoveAt(index);
-        IsSourceSetComplete = false;
     }
 
     public void ReplaceSeed(EnergizedSeed seed)
@@ -49,6 +48,5 @@ public sealed class EnergizationScenario
         if (index < 0) throw new InvalidOperationException("Seed does not exist.");
         if (_seeds[index] == seed) return;
         _seeds[index] = seed;
-        IsSourceSetComplete = false;
     }
 }

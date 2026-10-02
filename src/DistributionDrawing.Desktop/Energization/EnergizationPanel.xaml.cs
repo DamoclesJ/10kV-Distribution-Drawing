@@ -20,7 +20,6 @@ public partial class EnergizationPanel : UserControl
     private readonly EnergizationUiService _service = new();
     private ProjectRuntimeSession? _session;
     private Guid? _selectedObjectId;
-    private bool _everConfirmed;
     private bool _updating;
 
     public EnergizationPanel()
@@ -56,7 +55,7 @@ public partial class EnergizationPanel : UserControl
         }
         _session = session;
         _selectedObjectId = null;
-        _everConfirmed = session?.PersistenceSession.EnergizationScenario.IsSourceSetComplete == true;
+        SetVisualizationDiagnostics([]);
         if (session is not null)
         {
             session.CommandStack.StateChanged += OnSessionChanged;
@@ -87,9 +86,9 @@ public partial class EnergizationPanel : UserControl
             if (_session is null)
             {
                 SeedList.ItemsSource = null;
-                CompletionText.Text = "没有打开的图纸";
                 AnalysisText.Text = "尚未执行带电分析";
                 DiagnosticList.ItemsSource = null;
+                SetVisualizationDiagnostics([]);
                 UpdateButtons();
                 return;
             }
@@ -106,28 +105,20 @@ public partial class EnergizationPanel : UserControl
             }).ToArray();
             SeedList.ItemsSource = seeds;
             SeedList.SelectedItem = seeds.FirstOrDefault(item => item.Seed.Id == selectedSeedId);
-            if (scenario.IsSourceSetComplete) _everConfirmed = true;
-            CompletionText.Text = scenario.IsSourceSetComplete
-                ? "已确认：以上为本图纸全部电源点"
-                : _everConfirmed
-                    ? "电源全集确认已失效，请重新确认"
-                    : "电源全集尚未确认；未确认时只能证明已带电区域";
-
             EnergizationAnalysisState state = _session.Energization;
             AnalysisText.Text = state.Freshness switch
             {
                 EnergizationFreshness.NotAnalyzed => "尚未执行带电分析",
                 EnergizationFreshness.Stale => "图纸或电源配置已发生变化，请重新执行带电分析。",
-                _ => state.CurrentResult?.Validity switch
+                _ => state.LatestResult?.Validity switch
                 {
-                    EnergizationValidity.NoSeeds => "未设置电源点；无法判定无电",
-                    EnergizationValidity.ForwardOnly =>
-                        "电源点尚未确认完整；仅显示已证明带电区域，其他区域为未知",
-                    EnergizationValidity.Complete => "分析完成；可判定带电、无电及异常未知区域",
-                    EnergizationValidity.Incomplete => "分析信息不完整；请处理电源点或拓扑异常",
+                    EnergizationValidity.NoSeeds => "当前未配置电源点",
+                    EnergizationValidity.Complete => "分析完成；红色表示带电，其余保持原图外观",
+                    _ when state.LatestResult is not null => "带电分析失败；请处理电源点或拓扑诊断",
                     _ => "尚未执行带电分析"
                 }
             };
+            if (state.CurrentResult is null) SetVisualizationDiagnostics([]);
             DiagnosticList.ItemsSource = state.Freshness == EnergizationFreshness.Current
                 ? state.LatestDiagnostics.Select(item =>
                     item.SeedId is Guid id
@@ -188,10 +179,6 @@ public partial class EnergizationPanel : UserControl
         ReplaceButton.IsEnabled = AddButton.IsEnabled && SeedList.SelectedItem is SeedItem;
         RemoveButton.IsEnabled = _session is not null && SeedList.SelectedItem is SeedItem;
         AnalyzeButton.IsEnabled = _session is not null;
-        ConfirmButton.IsEnabled = _session is not null &&
-            !_session.PersistenceSession.EnergizationScenario.IsSourceSetComplete &&
-            _service.CanConfirmSources(_session.PersistenceSession.Domain,
-                _session.PersistenceSession.EnergizationScenario);
     }
 
     private void OnCandidateSelected(object sender, SelectionChangedEventArgs e)
@@ -248,18 +235,15 @@ public partial class EnergizationPanel : UserControl
                 candidate.Candidate.Side)));
     }
 
-    private void OnConfirmSources(object sender, RoutedEventArgs e)
-    {
-        if (_session is null || !ConfirmButton.IsEnabled) return;
-        _session.ExecuteScenarioCommand(EnergizationScenarioCommand.SetComplete(
-            _session.PersistenceSession.EnergizationScenario, true));
-    }
+    public void SetVisualizationDiagnostics(IReadOnlyList<string> diagnostics) =>
+        VisualizationDiagnosticList.ItemsSource = diagnostics;
 
     private void OnExecuteAnalysis(object sender, RoutedEventArgs e)
     {
         if (_session is null) return;
         _session.ExecuteEnergizationAnalysis();
-        ExitRequested?.Invoke(this, EventArgs.Empty);
+        if (_session.Energization.CurrentResult is not null)
+            ExitRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnExit(object sender, RoutedEventArgs e) =>

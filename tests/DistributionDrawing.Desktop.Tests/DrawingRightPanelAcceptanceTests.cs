@@ -75,6 +75,8 @@ public sealed class DrawingRightPanelAcceptanceTests
         string render = source[source.IndexOf("private void RenderCurrentScene()", StringComparison.Ordinal)..];
         Assert.Contains("_rightPanelMode == DrawingRightPanelMode.Energization", render);
         Assert.Contains("elements = EnergizationSceneStyler.Build", render);
+        Assert.Contains("out IReadOnlyList<EnergizationVisualizationDiagnostic> diagnostics", render);
+        Assert.Contains("EaPanel.SetVisualizationDiagnostics", render);
         Assert.DoesNotContain("elements.AddRange(EnergizationSceneStyler", render);
     }
 

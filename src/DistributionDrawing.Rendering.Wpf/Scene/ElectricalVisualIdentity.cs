@@ -4,6 +4,7 @@ namespace DistributionDrawing.Rendering.Wpf.Scene;
 
 public enum ElectricalVisualIdentityKind { Terminal, Node, Edge, Association, Hazard }
 
+// Normal includes unmapped visuals. Unknown is a legacy value, never emitted or styled.
 public enum ElectricalVisualState { Normal, Energized, Deenergized, Unknown }
 
 public sealed record ElectricalVisualIdentity(

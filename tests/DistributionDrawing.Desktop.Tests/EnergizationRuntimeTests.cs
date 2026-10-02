@@ -15,7 +15,7 @@ public sealed class EnergizationRuntimeTests : IDisposable
         $"wp-ea-01b-{Guid.NewGuid():N}.kvdrawing");
 
     [Fact]
-    public void ScenarioUsesSharedHistoryAndStalesOnlyAfterSuccessfulDocumentCommand()
+    public void ScenarioUsesSharedHistoryAndReanalyzesAuthoritativeSeedsAfterExecution()
     {
         ProjectRuntimeSession runtime = Create();
         EnergizationScenario scenario = runtime.PersistenceSession.EnergizationScenario;
@@ -24,8 +24,10 @@ public sealed class EnergizationRuntimeTests : IDisposable
 
         EnergizedSeed seed = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
         Assert.True(runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario, seed)));
-        Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
         Assert.False(runtime.Energization.CanShowOverlay);
+        Assert.Equal(EnergizationValidity.Failed, runtime.Energization.LatestResult!.Validity);
+        Assert.Empty(runtime.Energization.LatestResult.Terminals);
         Assert.True(runtime.CommandStack.IsDirty);
         Assert.Single(runtime.CommandStack.History);
         long stateBeforeNoOp = runtime.CommandStack.CurrentStateId;
@@ -36,11 +38,12 @@ public sealed class EnergizationRuntimeTests : IDisposable
         runtime.ExecuteEnergizationAnalysis();
         Assert.True(runtime.CommandStack.Undo());
         Assert.Empty(scenario.Seeds);
-        Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+        Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.LatestResult!.Validity);
+        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
         runtime.ExecuteEnergizationAnalysis();
         Assert.True(runtime.CommandStack.Redo());
         Assert.Equal(seed, Assert.Single(scenario.Seeds));
-        Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
     }
 
     [Fact]
@@ -68,10 +71,11 @@ public sealed class EnergizationRuntimeTests : IDisposable
         runtime.ExecuteEnergizationAnalysis();
         runtime.Energization.SetOverlayRequested(false);
         Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
-        Assert.NotNull(runtime.Energization.CurrentResult);
+        Assert.NotNull(runtime.Energization.LatestResult);
+        Assert.Null(runtime.Energization.CurrentResult);
         Assert.False(runtime.Energization.CanShowOverlay);
         runtime.Energization.SetOverlayRequested(true);
-        Assert.True(runtime.Energization.CanShowOverlay);
+        Assert.False(runtime.Energization.CanShowOverlay);
         runtime.Energization.SetOverlayRequested(false);
         service.SaveProject();
 

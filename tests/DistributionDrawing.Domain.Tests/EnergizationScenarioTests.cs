@@ -6,7 +6,7 @@ namespace DistributionDrawing.Domain.Tests;
 public sealed class EnergizationScenarioTests
 {
     [Fact]
-    public void EditingSourcesRevokesCompletenessButSwitchStateIsNotScenarioInput()
+    public void EditingAuthoritativeSourcesPreservesLegacyV9CompatibilityField()
     {
         var scenario = new EnergizationScenario(Guid.NewGuid());
         EnergizedSeed first = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
@@ -14,19 +14,19 @@ public sealed class EnergizationScenarioTests
 
         scenario.SetSourceSetComplete(true);
         scenario.AddSeed(first);
-        Assert.False(scenario.IsSourceSetComplete);
+        Assert.True(scenario.IsSourceSetComplete);
         scenario.SetSourceSetComplete(true);
         scenario.ReplaceSeed(new EnergizedSeed(first.Id, second.BoundaryDeviceId,
             EnergizationSide.Bus));
-        Assert.False(scenario.IsSourceSetComplete);
+        Assert.True(scenario.IsSourceSetComplete);
         scenario.SetSourceSetComplete(true);
         scenario.ReplaceSeed(new EnergizedSeed(first.Id, second.BoundaryDeviceId,
             EnergizationSide.Line));
-        Assert.False(scenario.IsSourceSetComplete);
+        Assert.True(scenario.IsSourceSetComplete);
         scenario.AddSeed(second);
         scenario.SetSourceSetComplete(true);
         scenario.RemoveSeed(second.Id);
-        Assert.False(scenario.IsSourceSetComplete);
+        Assert.True(scenario.IsSourceSetComplete);
     }
 
     [Fact]

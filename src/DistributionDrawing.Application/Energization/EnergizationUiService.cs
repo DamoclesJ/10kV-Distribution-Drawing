@@ -106,10 +106,6 @@ public sealed class EnergizationUiService
             seed.Side, resolved, diagnostic);
     }
 
-    public bool CanConfirmSources(DrawingDocument drawing, EnergizationScenario scenario) =>
-        scenario.Seeds.Count > 0 &&
-        scenario.Seeds.All(seed => DescribeSeed(drawing, seed).IsResolvable);
-
     public IReadOnlyList<EnergizationDiagnosticDisplay> Diagnostics(EnergizationResult result) =>
         result.Diagnostics.Select(item => new EnergizationDiagnosticDisplay(
             item.SeedId, string.IsNullOrWhiteSpace(item.Detail)
@@ -118,8 +114,7 @@ public sealed class EnergizationUiService
 
     public static string DiagnosticText(EnergizationDiagnosticCode code) => code switch
     {
-        EnergizationDiagnosticCode.SourceSetUnconfirmed => "电源全集尚未确认",
-        EnergizationDiagnosticCode.EmptyScenario => "未设置电源点",
+        EnergizationDiagnosticCode.EmptyScenario => "当前未配置电源点",
         EnergizationDiagnosticCode.MissingBoundaryDevice => "边界设备已不存在",
         EnergizationDiagnosticCode.UnsupportedBoundary => "设备不能作为电源边界",
         EnergizationDiagnosticCode.InvalidSide => "电气侧不合法",

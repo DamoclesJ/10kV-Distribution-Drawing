@@ -32,7 +32,7 @@ public sealed class EnergizationScenarioCommand
         ArgumentNullException.ThrowIfNull(seed);
         if (scenario.Seeds.Any(item => item.Id == seed.Id))
             throw new InvalidOperationException("Duplicate seed ID.");
-        return new(scenario, [.. scenario.Seeds, seed], false);
+        return new(scenario, [.. scenario.Seeds, seed], scenario.IsSourceSetComplete);
     }
 
     public static EnergizationScenarioCommand Remove(EnergizationScenario scenario, Guid seedId)
@@ -40,7 +40,7 @@ public sealed class EnergizationScenarioCommand
         ArgumentNullException.ThrowIfNull(scenario);
         if (!scenario.Seeds.Any(item => item.Id == seedId))
             throw new InvalidOperationException("Seed does not exist.");
-        return new(scenario, scenario.Seeds.Where(item => item.Id != seedId).ToArray(), false);
+        return new(scenario, scenario.Seeds.Where(item => item.Id != seedId).ToArray(), scenario.IsSourceSetComplete);
     }
 
     public static EnergizationScenarioCommand Replace(EnergizationScenario scenario, EnergizedSeed seed)
@@ -51,10 +51,10 @@ public sealed class EnergizationScenarioCommand
         int index = Array.FindIndex(after, item => item.Id == seed.Id);
         if (index < 0) throw new InvalidOperationException("Seed does not exist.");
         if (after[index] != seed) after[index] = seed;
-        return new(scenario, after, after.SequenceEqual(scenario.Seeds)
-            ? scenario.IsSourceSetComplete : false);
+        return new(scenario, after, scenario.IsSourceSetComplete);
     }
 
+    /// <summary>Compatibility edit only; the analyzer does not consume this legacy field.</summary>
     public static EnergizationScenarioCommand SetComplete(
         EnergizationScenario scenario, bool complete)
     {
@@ -68,8 +68,7 @@ public sealed class EnergizationScenarioCommand
 
     private void Apply(IReadOnlyList<EnergizedSeed> seeds, bool complete)
     {
-        // Preserve the stable scenario object and exact seed order. Domain mutations
-        // revoke completeness; restore the captured confirmation only at the end.
+        // Preserve the stable scenario, exact seed order and legacy V9 field.
         foreach (EnergizedSeed seed in _scenario.Seeds.ToArray())
             _scenario.RemoveSeed(seed.Id);
         foreach (EnergizedSeed seed in seeds)

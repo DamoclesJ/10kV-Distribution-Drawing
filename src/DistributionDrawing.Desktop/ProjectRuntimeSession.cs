@@ -150,9 +150,11 @@ public sealed class ProjectRuntimeSession
         long stateId = CommandStack.CurrentStateId;
         if (stateId == _lastCommandStateId) return;
         _lastCommandStateId = stateId;
-        if (CommandStack.LastAppliedCommand is ISwitchStateCommand &&
+        if ((CommandStack.LastAppliedCommand is ScenarioCommandAdapter ||
+                CommandStack.LastAppliedCommand is ISwitchStateCommand &&
+                    PersistenceSession.EnergizationScenario.Seeds.Count > 0) &&
             Energization.Freshness == EnergizationFreshness.Current &&
-            PersistenceSession.EnergizationScenario.Seeds.Count > 0)
+            Energization.LatestResult is not null)
             Energization.Execute(PersistenceSession.Domain,
                 PersistenceSession.EnergizationScenario, showOverlay: false);
         else

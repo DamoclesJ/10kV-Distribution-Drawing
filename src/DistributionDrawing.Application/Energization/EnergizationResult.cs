@@ -4,9 +4,11 @@ using DistributionDrawing.Application.Topology;
 
 namespace DistributionDrawing.Application.Energization;
 
+// Unknown is retained for source compatibility; successful analysis never emits it.
 public enum EnergizationState { Energized, Deenergized, Unknown }
 
-public enum EnergizationValidity { NoSeeds, ForwardOnly, Complete, Incomplete }
+// ForwardOnly/Incomplete are legacy values and are no longer emitted by the analyzer.
+public enum EnergizationValidity { NoSeeds, ForwardOnly, Complete, Incomplete, Failed }
 
 public enum EnergizationDiagnosticCode
 {
@@ -64,6 +66,7 @@ public sealed class EnergizationResult
     }
 
     public EnergizationValidity Validity { get; }
+    public bool IsSuccess => Validity == EnergizationValidity.Complete;
     public bool CanConcludeDeenergized => Validity == EnergizationValidity.Complete;
     public IReadOnlyDictionary<Guid, EnergizationPointResult> Terminals { get; }
     public IReadOnlyDictionary<Guid, EnergizationPointResult> Nodes { get; }

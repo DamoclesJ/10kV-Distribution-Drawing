@@ -4050,8 +4050,11 @@ public partial class MainWindow : Window
         if (overlayVisibility.ShowEnergization &&
             _workspace.CurrentSession?.Energization.CurrentResult is { } result)
         {
-            elements = EnergizationSceneStyler.Build(_currentScene, result).ToList();
+            elements = EnergizationSceneStyler.Build(_currentScene, result,
+                out IReadOnlyList<EnergizationVisualizationDiagnostic> diagnostics).ToList();
+            EaPanel.SetVisualizationDiagnostics(diagnostics.Select(item => item.Message).ToArray());
         }
+        else EaPanel.SetVisualizationDiagnostics([]);
         elements.AddRange(_intervalPreview.Elements);
         elements.AddRange(_drawingTools.CreateTransientElements());
         elements.AddRange(_groundingTargetPicker.CreateAffordance(

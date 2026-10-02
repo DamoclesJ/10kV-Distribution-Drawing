@@ -18,21 +18,20 @@ public sealed class EnergizationAnalyzer
 
         var diagnostics = new List<EnergizationDiagnostic>();
         if (scenario.Seeds.Count == 0)
-            diagnostics.Add(new EnergizationDiagnostic(EnergizationDiagnosticCode.EmptyScenario));
-        if (!scenario.IsSourceSetComplete)
-            diagnostics.Add(new EnergizationDiagnostic(EnergizationDiagnosticCode.SourceSetUnconfirmed));
+            return Failure(EnergizationValidity.NoSeeds,
+                [new EnergizationDiagnostic(EnergizationDiagnosticCode.EmptyScenario)]);
 
         ElectricalConnectivityGraph? graph;
         try
         {
+            ValidateTopology(drawing);
             graph = _graphBuilder.Build(drawing);
         }
         catch (Exception error) when (error is InvalidOperationException or ArgumentException)
         {
             diagnostics.Add(new EnergizationDiagnostic(
                 EnergizationDiagnosticCode.InvalidTopology, Detail: error.Message));
-            return CreateResult(drawing, new Dictionary<Guid, HashSet<Guid>>(), [], [],
-                diagnostics, EnergizationValidity.Incomplete);
+            return Failure(EnergizationValidity.Failed, diagnostics);
         }
 
         var switches = drawing.Devices.OfType<SwitchDevice>()
@@ -70,7 +69,6 @@ public sealed class EnergizationAnalyzer
         }
 
         var pending = new Queue<(Guid TerminalId, Guid SeedId)>();
-        int resolvedSeedCount = 0;
         foreach (EnergizedSeed seed in scenario.Seeds)
         {
             if (!_boundaryPolicy.TryResolve(drawing, seed, out Guid terminalId,
@@ -80,9 +78,11 @@ public sealed class EnergizationAnalyzer
                 continue;
             }
 
-            resolvedSeedCount++;
             if (sources[terminalId].Add(seed.Id)) pending.Enqueue((terminalId, seed.Id));
         }
+
+        // A declared source cannot be silently discarded or produce partial states.
+        if (diagnostics.Count > 0) return Failure(EnergizationValidity.Failed, diagnostics);
 
         while (pending.TryDequeue(out (Guid terminalId, Guid seedId) current))
         {
@@ -91,15 +91,36 @@ public sealed class EnergizationAnalyzer
                     pending.Enqueue((adjacentId, current.seedId));
         }
 
-        EnergizationValidity validity = scenario.Seeds.Count == 0
-            ? EnergizationValidity.NoSeeds
-            : resolvedSeedCount != scenario.Seeds.Count
-                ? EnergizationValidity.Incomplete
-                : scenario.IsSourceSetComplete
-                    ? EnergizationValidity.Complete
-                    : EnergizationValidity.ForwardOnly;
         return CreateResult(drawing, sources, conductingEdges, groundingConnections,
-            diagnostics, validity);
+            diagnostics);
+    }
+
+    private static EnergizationResult Failure(EnergizationValidity validity,
+        IEnumerable<EnergizationDiagnostic> diagnostics) =>
+        new(validity, new Dictionary<Guid, EnergizationPointResult>(),
+            new Dictionary<Guid, EnergizationPointResult>(), diagnostics, [], []);
+
+    private static void ValidateTopology(DrawingDocument drawing)
+    {
+        Dictionary<Guid, Terminal> terminals = drawing.Terminals.ToDictionary(item => item.Id);
+        Dictionary<Guid, ElectricalNode> nodes = drawing.ElectricalNodes.ToDictionary(item => item.Id);
+        foreach (Terminal terminal in terminals.Values)
+            if (terminal.ElectricalNodeId is Guid nodeId &&
+                (!nodes.TryGetValue(nodeId, out ElectricalNode? node) ||
+                    !node.TerminalIds.Contains(terminal.Id)))
+                throw new InvalidOperationException($"Terminal '{terminal.Id}' has an inconsistent electrical node.");
+        foreach (ElectricalNode node in nodes.Values)
+            foreach (Guid terminalId in node.TerminalIds)
+                if (!terminals.TryGetValue(terminalId, out Terminal? terminal) ||
+                    terminal.ElectricalNodeId != node.Id)
+                    throw new InvalidOperationException($"Node '{node.Id}' has an inconsistent terminal membership.");
+        foreach (CableTermination termination in drawing.Devices.OfType<CableTermination>())
+            if (!nodes.TryGetValue(termination.InternalNodeId, out ElectricalNode? node) ||
+                node.OwnerId != termination.Id ||
+                !terminals.TryGetValue(termination.CableSideTerminalId, out Terminal? cable) ||
+                cable.ElectricalNodeId != node.Id ||
+                !terminals.ContainsKey(termination.OverheadSideTerminalId))
+                throw new InvalidOperationException($"Cable termination '{termination.Id}' is missing its required internal path.");
     }
 
     private static EnergizationResult CreateResult(
@@ -107,10 +128,8 @@ public sealed class EnergizationAnalyzer
         IReadOnlyDictionary<Guid, HashSet<Guid>> sources,
         IEnumerable<ElectricalConnectivityEdge> conductingEdges,
         IEnumerable<GroundingSwitchConnection> groundingConnections,
-        IEnumerable<EnergizationDiagnostic> diagnostics,
-        EnergizationValidity validity)
+        IEnumerable<EnergizationDiagnostic> diagnostics)
     {
-        bool canConcludeDeenergized = validity == EnergizationValidity.Complete;
         HashSet<Guid> earthNodeIds = drawing.ElectricalNodes
             .Where(node => node.Type == ElectricalNodeType.Earth)
             .Select(node => node.Id).ToHashSet();
@@ -123,8 +142,7 @@ public sealed class EnergizationAnalyzer
                     ? ids : new HashSet<Guid>();
                 return new EnergizationPointResult(
                     !earth && reached.Count > 0 ? EnergizationState.Energized :
-                    !earth && canConcludeDeenergized ? EnergizationState.Deenergized :
-                    EnergizationState.Unknown,
+                    EnergizationState.Deenergized,
                     earth ? [] : reached);
             });
         Dictionary<Guid, EnergizationPointResult> nodeResults = drawing.ElectricalNodes
@@ -135,14 +153,11 @@ public sealed class EnergizationAnalyzer
                     .SelectMany(id => terminalResults[id].EnergizedBy)
                     .Distinct().ToArray();
                 return new EnergizationPointResult(
-                    node.Type == ElectricalNodeType.Earth || node.TerminalIds.Count == 0
-                        ? EnergizationState.Unknown
-                        : sourceIds.Length > 0 ? EnergizationState.Energized
-                        : canConcludeDeenergized ? EnergizationState.Deenergized
-                        : EnergizationState.Unknown,
+                    node.Type != ElectricalNodeType.Earth && sourceIds.Length > 0
+                        ? EnergizationState.Energized : EnergizationState.Deenergized,
                     sourceIds);
             });
-        return new EnergizationResult(validity, terminalResults, nodeResults,
+        return new EnergizationResult(EnergizationValidity.Complete, terminalResults, nodeResults,
             diagnostics, conductingEdges, groundingConnections);
     }
 }

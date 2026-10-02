@@ -38,12 +38,13 @@ public sealed class DrawingSceneBuilderCableRenderingTests
             DistributionDrawing.Application.Energization.EnergizationState.Energized,
             extra: new Dictionary<Guid, DistributionDrawing.Application.Energization.EnergizationState>
             { [termination.OverheadSideTerminalId] = DistributionDrawing.Application.Energization.EnergizationState.Deenergized });
-        var mixedScene = EnergizationSceneStyler.Build(scene, mixed);
+        var mixedScene = EnergizationSceneStyler.Build(scene, mixed, out var diagnostics);
+        Assert.NotEmpty(diagnostics);
         Assert.Equal(ElectricalVisualState.Energized, Assert.Single(mixedScene.OfType<SceneLine>(), line =>
             line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(termination.CableSideTerminalId)).ElectricalState);
         Assert.Equal(ElectricalVisualState.Deenergized, Assert.Single(mixedScene.OfType<SceneLine>(), line =>
             line.ElectricalIdentity == ElectricalVisualIdentity.Terminal(termination.OverheadSideTerminalId)).ElectricalState);
-        Assert.Equal(ElectricalVisualState.Unknown, Assert.Single(mixedScene.OfType<ScenePolyline>(), icon =>
+        Assert.Equal(ElectricalVisualState.Normal, Assert.Single(mixedScene.OfType<ScenePolyline>(), icon =>
             icon.ElectricalIdentity?.Id == termination.Id).ElectricalState);
     }
 

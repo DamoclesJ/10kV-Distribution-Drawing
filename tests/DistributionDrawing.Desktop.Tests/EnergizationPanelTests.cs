@@ -22,11 +22,10 @@ namespace DistributionDrawing.Desktop.Tests;
 public sealed class EnergizationPanelTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public void EaPanelSwitchOpenCloseUndoRedoReanalyzesLatestDomainAndPreservesCompleteness(
-        bool complete, bool includeUnresolvedSeed)
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EaPanelSwitchOpenCloseUndoRedoReanalyzesBinaryResultAndPreservesLegacyField(
+        bool complete)
     {
         RunOnSta(() =>
         {
@@ -46,12 +45,8 @@ public sealed class EnergizationPanelTests
                 var scenario = runtime.PersistenceSession.EnergizationScenario;
                 runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario, new EnergizedSeed(Guid.NewGuid(), load.Id, EnergizationSide.Bus)));
                 if (complete) runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.SetComplete(scenario, true));
-                if (includeUnresolvedSeed)
-                    runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario,
-                        new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)));
                 runtime.ExecuteEnergizationAnalysis();
-                EnergizationValidity validity = complete ? EnergizationValidity.Complete :
-                    includeUnresolvedSeed ? EnergizationValidity.Incomplete : EnergizationValidity.ForwardOnly;
+                EnergizationValidity validity = EnergizationValidity.Complete;
                 Assert.Equal(validity, runtime.Energization.CurrentResult!.Validity);
                 var panel = new EnergizationPanel();
                 panel.Bind(runtime);
@@ -72,7 +67,7 @@ public sealed class EnergizationPanelTests
                     Assert.Equal(validity, previous.Validity);
                     Assert.False(runtime.Energization.CanShowOverlay);
                     Assert.Equal(EnergizationState.Energized, previous.Terminals[load.FirstTerminalId].State);
-                    Assert.Equal(closed ? EnergizationState.Energized : complete ? EnergizationState.Deenergized : EnergizationState.Unknown,
+                    Assert.Equal(closed ? EnergizationState.Energized : EnergizationState.Deenergized,
                         previous.Terminals[load.SecondTerminalId].State);
                     Assert.Equal(complete, scenario.IsSourceSetComplete);
                     Assert.Equal(selected, runtime.SelectionManager.Selected);
@@ -100,17 +95,26 @@ public sealed class EnergizationPanelTests
                 Assert.False(controller.SetSelectedState(SwitchState.Closed).IsSuccess);
                 Assert.Same(previous, runtime.Energization.CurrentResult);
                 runtime.SelectionManager.Select(selected);
-                // Seed-side edits revoke completeness and require explicit analysis; later switches cannot revive stale facts.
+                // Seed-side edits reanalyze the authoritative list and keep the display preference.
                 var seed = scenario.Seeds[0];
                 runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Replace(scenario,
                     new EnergizedSeed(seed.Id, seed.BoundaryDeviceId, EnergizationSide.Line)));
-                Assert.False(scenario.IsSourceSetComplete);
-                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+                Assert.Equal(complete, scenario.IsSourceSetComplete);
+                Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+                Assert.NotNull(runtime.Energization.CurrentResult);
+                Assert.False(runtime.Energization.CanShowOverlay);
                 Assert.True(controller.SetSelectedState(SwitchState.Open).IsSuccess);
-                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
-                Assert.Null(runtime.Energization.CurrentResult);
+                Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+                Assert.NotNull(runtime.Energization.CurrentResult);
                 runtime.ExecuteEnergizationAnalysis();
                 Assert.True(runtime.Energization.CanShowOverlay);
+                runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario,
+                    new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)));
+                Assert.Equal(EnergizationValidity.Failed, runtime.Energization.LatestResult!.Validity);
+                Assert.Null(runtime.Energization.CurrentResult);
+                Assert.False(runtime.Energization.CanShowOverlay);
+                Assert.True(runtime.CommandStack.Undo());
+                Assert.NotNull(runtime.Energization.CurrentResult);
                 // A layout/structural command still invalidates; it is not marked as a switch operation.
                 runtime.CommandStack.ExecuteCommand(new DeviceCommandFactory().CreateAddRingCabinet(runtime.PersistenceSession.Domain, runtime.Layout,
                     new RingCabinetCreationConfiguration("Other cabinet", new RingCabinetCreationTemplateFactory().Create(
@@ -139,7 +143,8 @@ public sealed class EnergizationPanelTests
                 var load = interval.SwitchDevices.Single(device => device.SwitchKind == SwitchKind.LoadSwitch);
                 runtime.SelectionManager.Select(new SelectionReference(SelectionTargetKind.Device, load.Id, interval.IntervalId));
                 runtime.ExecuteEnergizationAnalysis();
-                Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.CurrentResult!.Validity);
+                Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.LatestResult!.Validity);
+                Assert.Null(runtime.Energization.CurrentResult);
                 Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
 
                 SwitchOperationResult operation = new SwitchOperationController(() => runtime).SetSelectedState(SwitchState.Closed);
@@ -153,7 +158,7 @@ public sealed class EnergizationPanelTests
     }
 
     [Fact]
-    public void PanelExecutesExplicitlyAndWithdrawsStaleStatusWhenScenarioChanges()
+    public void PanelShowsNoSeedAndFailureDiagnosticsWithoutConfirmationOrUnknownUx()
     {
         RunOnSta(() =>
         {
@@ -167,20 +172,21 @@ public sealed class EnergizationPanelTests
                 panel.Bind(runtime);
                 TextBlock status = (TextBlock)panel.FindName("AnalysisText")!;
                 Button execute = (Button)panel.FindName("AnalyzeButton")!;
-                Button confirm = (Button)panel.FindName("ConfirmButton")!;
+                Assert.Null(panel.FindName("ConfirmButton"));
                 Assert.Null(panel.FindName("Legend"));
+                panel.SetVisualizationDiagnostics(["显示映射失败：端子标识缺失"]);
+                Assert.Single(((ItemsControl)panel.FindName("VisualizationDiagnosticList")!).Items);
 
                 Assert.Equal("尚未执行带电分析", status.Text);
-                Assert.False(confirm.IsEnabled);
                 execute.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Assert.Contains("未设置电源点", status.Text);
+                Assert.Contains("当前未配置电源点", status.Text);
+                Assert.Empty(((ItemsControl)panel.FindName("VisualizationDiagnosticList")!).Items);
                 runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(
                     runtime.PersistenceSession.EnergizationScenario,
                     new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)));
-                Assert.Contains("请重新执行带电分析", status.Text);
-                Assert.False(confirm.IsEnabled);
+                Assert.Contains("带电分析失败", status.Text);
                 execute.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Assert.Contains("分析信息不完整", status.Text);
+                Assert.Contains("带电分析失败", status.Text);
                 Assert.NotEmpty(((ItemsControl)panel.FindName("DiagnosticList")!).Items);
             }
             finally
@@ -191,7 +197,7 @@ public sealed class EnergizationPanelTests
     }
 
     [Fact]
-    public void CabinetFallbackSupportsAddConfirmReplaceUndoAndRemove()
+    public void CabinetFallbackSupportsAddAnalyzeReplaceUndoAndRemoveWithoutConfirmation()
     {
         RunOnSta(() =>
         {
@@ -219,10 +225,10 @@ public sealed class EnergizationPanelTests
                 Button add = (Button)panel.FindName("AddButton")!;
                 Button replace = (Button)panel.FindName("ReplaceButton")!;
                 Button remove = (Button)panel.FindName("RemoveButton")!;
-                Button confirm = (Button)panel.FindName("ConfirmButton")!;
+                Assert.Null(panel.FindName("ConfirmButton"));
                 Button analyze = (Button)panel.FindName("AnalyzeButton")!;
                 TextBlock status = (TextBlock)panel.FindName("AnalysisText")!;
-                TextBlock confirmation = (TextBlock)panel.FindName("CompletionText")!;
+                Assert.Null(panel.FindName("CompletionText"));
 
                 Assert.Equal(4, candidates.Items.Count);
                 candidates.SelectedIndex = 0;
@@ -239,13 +245,8 @@ public sealed class EnergizationPanelTests
                 Assert.Single(candidates.Items);
                 Assert.Equal(2, sides.Items.Count);
                 panel.SetSelection(cabinet.Id);
-                Assert.True(confirm.IsEnabled);
                 analyze.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Assert.Contains("电源点尚未确认完整", status.Text);
-                confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Assert.True(scenario.IsSourceSetComplete);
-                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
-                analyze.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.False(scenario.IsSourceSetComplete);
                 Assert.Contains("分析完成", status.Text);
                 Assert.Contains(cabinet.Intervals.SelectMany(interval => interval.SwitchDevices),
                     device => device.Id == original.BoundaryDeviceId);
@@ -259,7 +260,7 @@ public sealed class EnergizationPanelTests
                     new SwitchOperationController(() => runtime).ToggleSelected();
                 Assert.True(switchResult.IsSuccess, switchResult.ErrorMessage);
                 Assert.True(runtime.CommandStack.CanUndo);
-                Assert.True(scenario.IsSourceSetComplete);
+                Assert.False(scenario.IsSourceSetComplete);
                 Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
 
                 seeds.SelectedIndex = 0;
@@ -271,11 +272,11 @@ public sealed class EnergizationPanelTests
                 Assert.Equal(original.Id, Assert.Single(scenario.Seeds).Id);
                 Assert.NotEqual(original.Side, scenario.Seeds[0].Side);
                 Assert.False(scenario.IsSourceSetComplete);
-                Assert.Contains("确认已失效", confirmation.Text);
-                Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+                Assert.Contains("分析完成", status.Text);
+                Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
                 runtime.CommandStack.Undo();
                 Assert.Equal(original, Assert.Single(scenario.Seeds));
-                Assert.True(scenario.IsSourceSetComplete);
+                Assert.False(scenario.IsSourceSetComplete);
 
                 panel.SetSelection(cabinet.Intervals[0].SwitchDevices.Single(device =>
                     device.SwitchKind == SwitchKind.GroundSwitch).Id);
@@ -284,7 +285,8 @@ public sealed class EnergizationPanelTests
                 seeds.SelectedIndex = 0;
                 remove.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Empty(scenario.Seeds);
-                Assert.False(confirm.IsEnabled);
+                Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.LatestResult!.Validity);
+                Assert.Null(runtime.Energization.CurrentResult);
             }
             finally
             {

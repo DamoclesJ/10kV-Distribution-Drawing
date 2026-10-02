@@ -14,8 +14,10 @@ namespace DistributionDrawing.Infrastructure.Tests;
 
 public sealed class EnergizationPersistenceTests
 {
-    [Fact]
-    public void V9RoundTripPreservesScenarioInputsAndRecalculatesResult()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void V9RoundTripPreservesScenarioInputsAndIgnoresLegacyCompleteness(bool legacyComplete)
     {
         string path = NextPath();
         try
@@ -43,17 +45,19 @@ public sealed class EnergizationPersistenceTests
                 device.SwitchKind == SwitchKind.LoadSwitch);
             EnergizedSeed seed = new(Guid.NewGuid(), boundary.Id, EnergizationSide.Bus);
             project.EnergizationScenario.AddSeed(seed);
-            project.EnergizationScenario.SetSourceSetComplete(true);
+            project.EnergizationScenario.SetSourceSetComplete(legacyComplete);
             service.SaveProject();
 
             ProjectSession restored = new ProjectService().LoadProject(path);
             Assert.Equal(ProjectFileFormat.Version9, restored.Manifest.FormatVersion);
             Assert.Equal(ProjectFileFormat.Version9, restored.OpenedFormatVersion);
             Assert.Equal(project.EnergizationScenario.Id, restored.EnergizationScenario.Id);
-            Assert.True(restored.EnergizationScenario.IsSourceSetComplete);
+            Assert.Equal(legacyComplete, restored.EnergizationScenario.IsSourceSetComplete);
             Assert.Equal(seed, Assert.Single(restored.EnergizationScenario.Seeds));
             EnergizationResult result = new EnergizationAnalyzer().Analyze(
                 restored.Domain, restored.EnergizationScenario);
+            Assert.True(result.IsSuccess);
+            Assert.DoesNotContain(result.Terminals.Values, point => point.State == EnergizationState.Unknown);
             Assert.Equal(EnergizationState.Energized,
                 result.Terminals[boundary.FirstTerminalId].State);
             Assert.Equal(EnergizationState.Deenergized,

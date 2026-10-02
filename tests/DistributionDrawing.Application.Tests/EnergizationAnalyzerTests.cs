@@ -49,7 +49,7 @@ public sealed class EnergizationAnalyzerTests
     }
 
     [Fact]
-    public void OrdinaryCabinetBoundaryIsLoadSwitchAndInternalNodesRemainSeparateWhenOpen()
+    public void OneSeedOpenSwitch_DownstreamIsDeenergized()
     {
         (DrawingDocument drawing, RingCabinet cabinet) = Cabinet(
             RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
@@ -100,7 +100,7 @@ public sealed class EnergizationAnalyzerTests
     }
 
     [Fact]
-    public void MultipleSeedsAreAllTrackedAndOpenedSwitchSeparatesTheirSources()
+    public void MultipleSeeds_UnionAndAllContributingSeedIdsArePreserved()
     {
         (DrawingDocument drawing, RingCabinet cabinet) = Cabinet(
             RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
@@ -123,7 +123,7 @@ public sealed class EnergizationAnalyzerTests
     }
 
     [Fact]
-    public void UnconfirmedOrFailedSourceSetProvesOnlyReachedObjects()
+    public void UnreachableAreaIsDeenergizedWithoutSourceSetConfirmationAndInvalidSeedFails()
     {
         (DrawingDocument drawing, RingCabinet cabinet) = Cabinet(
             RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
@@ -134,26 +134,29 @@ public sealed class EnergizationAnalyzerTests
         var analyzer = new EnergizationAnalyzer();
 
         EnergizationResult unconfirmed = analyzer.Analyze(drawing, scenario);
-        Assert.Equal(EnergizationValidity.ForwardOnly, unconfirmed.Validity);
+        Assert.Equal(EnergizationValidity.Complete, unconfirmed.Validity);
         Assert.Equal(EnergizationState.Energized, unconfirmed.Terminals[first.FirstTerminalId].State);
         Assert.Equal([valid.Id], unconfirmed.Terminals[first.FirstTerminalId].EnergizedBy);
-        Assert.Equal(EnergizationState.Unknown, unconfirmed.Terminals[first.SecondTerminalId].State);
+        Assert.Equal(EnergizationState.Deenergized, unconfirmed.Terminals[first.SecondTerminalId].State);
+        Assert.DoesNotContain(unconfirmed.Diagnostics, issue =>
+            issue.Code == EnergizationDiagnosticCode.SourceSetUnconfirmed);
 
         scenario.SetSourceSetComplete(true);
         scenario.AddSeed(new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus));
         scenario.SetSourceSetComplete(true);
         EnergizationResult partial = analyzer.Analyze(drawing, scenario);
-        Assert.Equal(EnergizationValidity.Incomplete, partial.Validity);
-        Assert.Equal(EnergizationState.Energized, partial.Terminals[first.FirstTerminalId].State);
-        Assert.Equal(EnergizationState.Unknown, partial.Terminals[first.SecondTerminalId].State);
+        Assert.Equal(EnergizationValidity.Failed, partial.Validity);
+        Assert.Empty(partial.Terminals);
+        Assert.Empty(partial.Nodes);
+        Assert.Empty(partial.ConductingEdges);
         Assert.Contains(partial.Diagnostics, issue =>
             issue.Code == EnergizationDiagnosticCode.MissingBoundaryDevice);
 
         EnergizationResult empty = analyzer.Analyze(drawing,
             new EnergizationScenario(Guid.NewGuid()));
         Assert.Equal(EnergizationValidity.NoSeeds, empty.Validity);
-        Assert.All(empty.Terminals.Values, item =>
-            Assert.Equal(EnergizationState.Unknown, item.State));
+        Assert.Empty(empty.Terminals);
+        Assert.Empty(empty.Nodes);
     }
 
     [Fact]
@@ -172,8 +175,9 @@ public sealed class EnergizationAnalyzerTests
         EnergizationResult result = new EnergizationAnalyzer().Analyze(drawing, scenario);
 
         Assert.Equal(EnergizationState.Energized, result.Terminals[ground.FirstTerminalId].State);
-        Assert.Equal(EnergizationState.Unknown, result.Terminals[ground.SecondTerminalId].State);
-        Assert.Equal(EnergizationState.Unknown, result.Nodes[interval.EarthNodeId].State);
+        Assert.Equal(EnergizationState.Deenergized, result.Terminals[ground.SecondTerminalId].State);
+        Assert.Equal(EnergizationState.Deenergized, result.Nodes[interval.EarthNodeId].State);
+        Assert.Empty(result.Terminals[ground.SecondTerminalId].EnergizedBy);
         Assert.DoesNotContain(result.ConductingEdges, edge => edge.SourceId == ground.Id);
         Assert.Equal(ground.Id, Assert.Single(result.GroundingSwitchConnections).SwitchDeviceId);
     }
@@ -258,11 +262,11 @@ public sealed class EnergizationAnalyzerTests
             [Seed(device, EnergizationSide.LargerNumber)], true);
 
         EnergizationResult unresolved = new EnergizationAnalyzer().Analyze(drawing, scenario);
-        Assert.Equal(EnergizationValidity.Incomplete, unresolved.Validity);
+        Assert.Equal(EnergizationValidity.Failed, unresolved.Validity);
         Assert.Contains(unresolved.Diagnostics, issue =>
             issue.Code == EnergizationDiagnosticCode.UnresolvedSide);
-        Assert.All(unresolved.Terminals.Values, item =>
-            Assert.Equal(EnergizationState.Unknown, item.State));
+        Assert.Empty(unresolved.Terminals);
+        Assert.Empty(unresolved.Nodes);
 
         var broken = new DrawingDocument(Guid.NewGuid(), "broken topology");
         broken.AddDevice(SwitchDevice.CreateForPole(Guid.NewGuid(), SwitchKind.LoadSwitch,
@@ -271,7 +275,7 @@ public sealed class EnergizationAnalyzerTests
             new EnergizationScenario(Guid.NewGuid(),
                 [new EnergizedSeed(Guid.NewGuid(), broken.Devices[0].Id,
                     EnergizationSide.SmallerNumber)], true));
-        Assert.Equal(EnergizationValidity.Incomplete, invalid.Validity);
+        Assert.Equal(EnergizationValidity.Failed, invalid.Validity);
         Assert.Contains(invalid.Diagnostics, issue =>
             issue.Code == EnergizationDiagnosticCode.InvalidTopology);
     }
