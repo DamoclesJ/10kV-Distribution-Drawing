@@ -174,10 +174,25 @@ public sealed class IntegratedFeederIntervalEvaluationTests
 
         SwitchAssemblyEvaluation evaluation =
             cabinet.EvaluateIntegratedFeederInterval(interval.IntervalId);
+        Dictionary<Guid, SwitchState?> candidateStates = interval.SwitchDevices.ToDictionary(
+            switchDevice => switchDevice.Id,
+            switchDevice => switchDevice.SwitchKind switch
+            {
+                SwitchKind.IsolationSwitch => (SwitchState?)isolationSwitchState,
+                SwitchKind.CircuitBreaker => circuitBreakerState,
+                SwitchKind.GroundSwitch => groundSwitchState,
+                _ => throw new ArgumentOutOfRangeException()
+            });
+        SwitchAssemblyEvaluation candidateEvaluation = cabinet.EvaluateIntegratedFeederInterval(
+            interval.IntervalId,
+            new DictionarySwitchStateView(candidateStates));
 
         Assert.Equal(expectedIsValid, evaluation.IsValid);
         Assert.Equal(expectedOperationalState, evaluation.OperationalState);
         Assert.Equal(expectedIsEffectivelyGrounded, evaluation.IsEffectivelyGrounded);
+        Assert.Equal(evaluation.IsValid, candidateEvaluation.IsValid);
+        Assert.Equal(evaluation.OperationalState, candidateEvaluation.OperationalState);
+        Assert.Equal(evaluation.IsEffectivelyGrounded, candidateEvaluation.IsEffectivelyGrounded);
 
         if (expectedViolationCode is null)
         {
@@ -189,6 +204,64 @@ public sealed class IntegratedFeederIntervalEvaluationTests
                 expectedViolationCode,
                 Assert.Single(evaluation.ViolatedRuleCodes));
         }
+    }
+
+    [Fact]
+    public void EffectiveGroundingLocations_UseCandidateStateWithoutMutatingCurrentFacts()
+    {
+        RingCabinet cabinet = CreateCabinet(
+            GroundingStructureKind.UpperLowerGrounding,
+            SwitchState.Open,
+            SwitchState.Open,
+            SwitchState.Open);
+        RingCabinetInterval interval = cabinet.Intervals[0];
+        SwitchDevice groundSwitch = GetSwitch(interval, SwitchKind.GroundSwitch);
+        Dictionary<Guid, SwitchState?> before = interval.SwitchDevices.ToDictionary(
+            item => item.Id,
+            item => item.SwitchState);
+        var view = new DictionarySwitchStateView(new Dictionary<Guid, SwitchState?>
+        {
+            [groundSwitch.Id] = SwitchState.Closed
+        });
+
+        EffectiveGroundingLocation location = Assert.Single(
+            cabinet.GetEffectiveGroundingLocations(view));
+
+        Assert.Equal(cabinet.Id, location.CabinetId);
+        Assert.Equal(interval.IntervalId, location.IntervalId);
+        Assert.Equal(interval.CircuitNodeId, location.CircuitNodeId);
+        Assert.Equal(interval.CableTerminalId, location.CableTerminalId);
+        Assert.All(interval.SwitchDevices, item => Assert.Equal(before[item.Id], item.SwitchState));
+        Assert.Empty(cabinet.GetEffectiveGroundingLocations());
+
+        SwitchDevice isolationSwitch = GetSwitch(interval, SwitchKind.IsolationSwitch);
+        var invalidView = new DictionarySwitchStateView(new Dictionary<Guid, SwitchState?>
+        {
+            [groundSwitch.Id] = SwitchState.Closed,
+            [isolationSwitch.Id] = SwitchState.Closed
+        });
+        Assert.Throws<InvalidOperationException>(() =>
+            cabinet.GetEffectiveGroundingLocations(invalidView));
+    }
+
+    [Fact]
+    public void EffectiveGroundingLocations_ReuseOrdinaryLoadSwitchAssemblyRule()
+    {
+        RingCabinet cabinet = TestFixtures.CreateLoadSwitchRingCabinet([1, 2]);
+        cabinet.SetIntervalCableTerminal(cabinet.Intervals[0].IntervalId, null);
+        RingCabinetInterval interval = cabinet.Intervals[0];
+        SwitchDevice groundSwitch = GetSwitch(interval, SwitchKind.GroundSwitch);
+        var view = new DictionarySwitchStateView(new Dictionary<Guid, SwitchState?>
+        {
+            [groundSwitch.Id] = SwitchState.Closed
+        });
+
+        EffectiveGroundingLocation location = Assert.Single(
+            cabinet.GetEffectiveGroundingLocations(view));
+
+        Assert.Equal(interval.CircuitNodeId, location.CircuitNodeId);
+        Assert.Null(location.CableTerminalId);
+        Assert.Equal(SwitchState.Open, groundSwitch.SwitchState);
     }
 
     [Theory]
@@ -258,5 +331,14 @@ public sealed class IntegratedFeederIntervalEvaluationTests
         return Assert.Single(
             interval.SwitchDevices,
             switchDevice => switchDevice.SwitchKind == switchKind);
+    }
+
+    private sealed class DictionarySwitchStateView(
+        IReadOnlyDictionary<Guid, SwitchState?> overrides) : ISwitchStateView
+    {
+        public SwitchState? GetSwitchState(SwitchDevice switchDevice) =>
+            overrides.TryGetValue(switchDevice.Id, out SwitchState? state)
+                ? state
+                : switchDevice.SwitchState;
     }
 }

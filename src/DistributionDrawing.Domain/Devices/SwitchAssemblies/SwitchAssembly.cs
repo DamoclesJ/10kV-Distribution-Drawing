@@ -235,7 +235,13 @@ public sealed class SwitchAssembly
 
     public SwitchAssemblyEvaluation Evaluate()
     {
-        return EvaluateStates(GetCurrentStates());
+        return Evaluate(CurrentSwitchStateView.Instance);
+    }
+
+    public SwitchAssemblyEvaluation Evaluate(ISwitchStateView switchStateView)
+    {
+        ArgumentNullException.ThrowIfNull(switchStateView);
+        return EvaluateStates(GetStates(switchStateView));
     }
 
     public SwitchAssemblyEvaluation ChangeSwitchState(Guid switchDeviceId, SwitchState targetState)
@@ -298,9 +304,14 @@ public sealed class SwitchAssembly
 
     private Dictionary<SwitchKind, SwitchState> GetCurrentStates()
     {
+        return GetStates(CurrentSwitchStateView.Instance);
+    }
+
+    private Dictionary<SwitchKind, SwitchState> GetStates(ISwitchStateView switchStateView)
+    {
         return _memberSwitches.ToDictionary(
             member => member.SwitchKind,
-            member => member.SwitchState
+            member => switchStateView.GetSwitchState(member)
                 ?? throw new InvalidOperationException(
                     $"Switch '{member.Id}' does not have a switch state."));
     }
