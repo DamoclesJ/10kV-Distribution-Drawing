@@ -213,7 +213,7 @@ public partial class EnergizationPanel : UserControl
     {
         if (_session is null || SourceSideComboBox.SelectedItem is not SideItem item ||
             !item.Candidate.IsResolvable) return;
-        _session.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(
+        ExecuteSeedCommand(EnergizationScenarioCommand.Add(
             _session.PersistenceSession.EnergizationScenario,
             new EnergizedSeed(Guid.NewGuid(), item.Candidate.DeviceId, item.Candidate.Side)));
     }
@@ -221,7 +221,7 @@ public partial class EnergizationPanel : UserControl
     private void OnRemoveSeed(object sender, RoutedEventArgs e)
     {
         if (_session is null || SeedList.SelectedItem is not SeedItem item) return;
-        _session.ExecuteScenarioCommand(EnergizationScenarioCommand.Remove(
+        ExecuteSeedCommand(EnergizationScenarioCommand.Remove(
             _session.PersistenceSession.EnergizationScenario, item.Seed.Id));
     }
 
@@ -230,10 +230,22 @@ public partial class EnergizationPanel : UserControl
         if (_session is null || SeedList.SelectedItem is not SeedItem seed ||
             SourceSideComboBox.SelectedItem is not SideItem candidate ||
             !candidate.Candidate.IsResolvable) return;
-        _session.ExecuteScenarioCommand(EnergizationScenarioCommand.Replace(
+        ExecuteSeedCommand(EnergizationScenarioCommand.Replace(
             _session.PersistenceSession.EnergizationScenario,
             new EnergizedSeed(seed.Seed.Id, candidate.Candidate.DeviceId,
                 candidate.Candidate.Side)));
+    }
+
+    private void ExecuteSeedCommand(EnergizationScenarioCommand command)
+    {
+        try
+        {
+            _session!.ExecuteScenarioCommand(command);
+        }
+        catch (InvalidOperationException exception)
+        {
+            AnalysisText.Text = exception.Message;
+        }
     }
 
     public void SetVisualizationDiagnostics(IReadOnlyList<string> diagnostics) =>
@@ -242,7 +254,12 @@ public partial class EnergizationPanel : UserControl
     private void OnExecuteAnalysis(object sender, RoutedEventArgs e)
     {
         if (_session is null) return;
-        _session.ExecuteEnergizationAnalysis();
+        string? error = _session.ExecuteEnergizationAnalysis();
+        if (error is not null)
+        {
+            AnalysisText.Text = error;
+            return;
+        }
         if (_session.Energization.CurrentResult is not null)
             ExitRequested?.Invoke(this, EventArgs.Empty);
     }

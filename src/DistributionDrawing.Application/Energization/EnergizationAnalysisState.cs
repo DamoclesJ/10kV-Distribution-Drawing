@@ -26,11 +26,16 @@ public sealed class EnergizationAnalysisState
         EnergizationScenario scenario,
         bool showOverlay = true)
     {
-        EnergizationResult result = _service.Analyze(drawing, scenario);
+        Publish(_service.Analyze(drawing, scenario));
+        if (showOverlay) OverlayRequested = true;
+    }
+
+    public void Publish(EnergizationResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
         LatestResult = result;
         LatestDiagnostics = _service.Diagnostics(result);
         Freshness = EnergizationFreshness.Current;
-        if (showOverlay) OverlayRequested = true;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 

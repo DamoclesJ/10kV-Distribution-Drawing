@@ -11,6 +11,8 @@ using DistributionDrawing.Rendering.Wpf.Rendering;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Application.Energization;
+using DistributionDrawing.Application.GroundingSafety;
+using DistributionDrawing.Domain.Energization;
 
 namespace DistributionDrawing.Desktop;
 
@@ -74,13 +76,27 @@ public sealed class ProjectRuntimeSession
     {
         ArgumentNullException.ThrowIfNull(command);
         if (!command.HasChanges) return false;
-        CommandStack.ExecuteCommand(new ScenarioCommandAdapter(command));
+        CommandStack.ExecuteCommand(new ScenarioCommandAdapter(this, command));
         return true;
     }
 
-    public void ExecuteEnergizationAnalysis() =>
-        Energization.Execute(PersistenceSession.Domain,
-            PersistenceSession.EnergizationScenario);
+    public string? ExecuteEnergizationAnalysis()
+    {
+        EnergizationScenario current = PersistenceSession.EnergizationScenario;
+        var candidateScenario = new EnergizationScenario(
+            current.Id, current.Seeds, current.IsSourceSetComplete);
+        GroundingSafetyAnalysisPreparation preparation =
+            new GroundingSafetyAnalysisSubmission().Prepare(
+                PersistenceSession.Domain, candidateScenario);
+        if (preparation.CandidateResult.IsSuccess &&
+            !preparation.SafetyDecision.IsAllowed)
+        {
+            return DescribeGroundingSafetyRejection(preparation.SafetyDecision);
+        }
+
+        Energization.Publish(preparation.CandidateResult);
+        return null;
+    }
 
     /// <summary>
     /// Runtime edits are tracked by the command-stack save checkpoint. The
@@ -161,19 +177,65 @@ public sealed class ProjectRuntimeSession
         if ((CommandStack.LastAppliedCommand is ScenarioCommandAdapter ||
                 CommandStack.LastAppliedCommand is ISwitchStateCommand &&
                     PersistenceSession.EnergizationScenario.Seeds.Count > 0) &&
-            Energization.Freshness == EnergizationFreshness.Current &&
-            Energization.LatestResult is not null)
+            Energization.CurrentResult is not null)
             Energization.Execute(PersistenceSession.Domain,
                 PersistenceSession.EnergizationScenario, showOverlay: false);
         else
             Energization.Invalidate();
     }
 
-    private sealed class ScenarioCommandAdapter(EnergizationScenarioCommand command) : ICommand
+    private void EnsureScenarioTargetAllowed(
+        IReadOnlyList<EnergizedSeed> seeds,
+        bool complete)
     {
-        public void Execute() => command.Execute();
-        public void Undo() => command.Undo();
-        public void Redo() => command.Redo();
+        if (Energization.CurrentResult is null || seeds.Count == 0)
+        {
+            return;
+        }
+
+        var candidateScenario = new EnergizationScenario(
+            PersistenceSession.EnergizationScenario.Id, seeds, complete);
+        GroundingSafetyAnalysisPreparation preparation =
+            new GroundingSafetyAnalysisSubmission().Prepare(
+                PersistenceSession.Domain, candidateScenario);
+        if (preparation.CandidateResult.IsSuccess &&
+            preparation.SafetyDecision.IsAllowed)
+        {
+            return;
+        }
+
+        string reason = preparation.CandidateResult.IsSuccess
+            ? DescribeGroundingSafetyRejection(preparation.SafetyDecision)
+            : "候选带电分析失败，Seed 修改未应用。";
+        throw new InvalidOperationException(reason);
+    }
+
+    private static string DescribeGroundingSafetyRejection(GroundingSafetyDecision decision)
+    {
+        string details = string.Join("；", decision.Findings.Select(finding =>
+            $"{finding.Location}：{finding.Detail}"));
+        return $"Grounding Safety 阻止带电分析：{details}";
+    }
+
+    private sealed class ScenarioCommandAdapter(
+        ProjectRuntimeSession session,
+        EnergizationScenarioCommand command) : ICommand
+    {
+        public void Execute()
+        {
+            session.EnsureScenarioTargetAllowed(command.AfterSeeds, command.AfterComplete);
+            command.Execute();
+        }
+        public void Undo()
+        {
+            session.EnsureScenarioTargetAllowed(command.BeforeSeeds, command.BeforeComplete);
+            command.Undo();
+        }
+        public void Redo()
+        {
+            session.EnsureScenarioTargetAllowed(command.AfterSeeds, command.AfterComplete);
+            command.Redo();
+        }
     }
 
     public void AcceptSavedSession(ProjectSession persistenceSession)

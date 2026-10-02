@@ -24,10 +24,9 @@ public sealed class EnergizationRuntimeTests : IDisposable
 
         EnergizedSeed seed = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
         Assert.True(runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario, seed)));
-        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
-        Assert.False(runtime.Energization.CanShowOverlay);
-        Assert.Equal(EnergizationValidity.Failed, runtime.Energization.LatestResult!.Validity);
-        Assert.Empty(runtime.Energization.LatestResult.Terminals);
+        Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+        Assert.Null(runtime.Energization.CurrentResult);
+        Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.LatestResult!.Validity);
         Assert.True(runtime.CommandStack.IsDirty);
         Assert.Single(runtime.CommandStack.History);
         long stateBeforeNoOp = runtime.CommandStack.CurrentStateId;
@@ -39,11 +38,29 @@ public sealed class EnergizationRuntimeTests : IDisposable
         Assert.True(runtime.CommandStack.Undo());
         Assert.Empty(scenario.Seeds);
         Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.LatestResult!.Validity);
-        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+        Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
         runtime.ExecuteEnergizationAnalysis();
+        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
         Assert.True(runtime.CommandStack.Redo());
         Assert.Equal(seed, Assert.Single(scenario.Seeds));
-        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
+        Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+        Assert.Null(runtime.Energization.CurrentResult);
+    }
+
+    [Fact]
+    public void AddingSeedAfterNoSeedsWaitsForExplicitAnalysis()
+    {
+        ProjectRuntimeSession runtime = Create();
+        EnergizationScenario scenario = runtime.PersistenceSession.EnergizationScenario;
+        runtime.ExecuteEnergizationAnalysis();
+        EnergizedSeed seed = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
+
+        Assert.True(runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario, seed)));
+
+        Assert.Contains(seed, scenario.Seeds);
+        Assert.Null(runtime.Energization.CurrentResult);
+        Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
+        Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.LatestResult!.Validity);
     }
 
     [Fact]

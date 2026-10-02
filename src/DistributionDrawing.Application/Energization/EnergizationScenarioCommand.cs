@@ -26,6 +26,11 @@ public sealed class EnergizationScenarioCommand
     public bool HasChanges => _beforeComplete != _afterComplete ||
         !_before.SequenceEqual(_after);
 
+    public IReadOnlyList<EnergizedSeed> BeforeSeeds => Array.AsReadOnly(_before);
+    public IReadOnlyList<EnergizedSeed> AfterSeeds => Array.AsReadOnly(_after);
+    public bool BeforeComplete => _beforeComplete;
+    public bool AfterComplete => _afterComplete;
+
     public static EnergizationScenarioCommand Add(EnergizationScenario scenario, EnergizedSeed seed)
     {
         ArgumentNullException.ThrowIfNull(scenario);
