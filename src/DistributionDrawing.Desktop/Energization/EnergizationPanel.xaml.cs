@@ -119,12 +119,13 @@ public partial class EnergizationPanel : UserControl
                 }
             };
             if (state.CurrentResult is null) SetVisualizationDiagnostics([]);
-            DiagnosticList.ItemsSource = state.Freshness == EnergizationFreshness.Current
+            DiagnosticList.ItemsSource = _session.EnergizationReferenceDiagnostics.Concat(
+                state.Freshness == EnergizationFreshness.Current
                 ? state.LatestDiagnostics.Select(item =>
                     item.SeedId is Guid id
                         ? $"电源点 {Array.FindIndex(seeds, seed => seed.Seed.Id == id) + 1}：{item.Message}"
                         : $"图纸：{item.Message}").ToArray()
-                : null;
+                : []).ToArray();
             UpdateButtons();
         }
         finally

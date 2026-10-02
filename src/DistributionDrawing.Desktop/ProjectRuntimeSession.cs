@@ -68,6 +68,7 @@ public sealed class ProjectRuntimeSession
 
     public ISelectionTransitionCoordinator SelectionTransitions { get; }
     public EnergizationAnalysisState Energization { get; } = new();
+    public IReadOnlyList<string> EnergizationReferenceDiagnostics { get; private set; } = [];
 
     public bool ExecuteScenarioCommand(EnergizationScenarioCommand command)
     {
@@ -150,6 +151,13 @@ public sealed class ProjectRuntimeSession
         long stateId = CommandStack.CurrentStateId;
         if (stateId == _lastCommandStateId) return;
         _lastCommandStateId = stateId;
+        if (CommandStack.LastAppliedCommand is ChangeIntervalTypeCommand change)
+            EnergizationReferenceDiagnostics = change.RemovedSeeds
+                .Where(removed => !PersistenceSession.EnergizationScenario.Seeds.Any(seed => seed.Id == removed.Id))
+                .Select(seed => $"电源点 {seed.Id}：原边界设备 {seed.BoundaryDeviceId} 已不存在，电源点已移除，请重新选择电源边界。")
+                .ToArray();
+        else if (CommandStack.LastAppliedCommand is ScenarioCommandAdapter)
+            EnergizationReferenceDiagnostics = [];
         if ((CommandStack.LastAppliedCommand is ScenarioCommandAdapter ||
                 CommandStack.LastAppliedCommand is ISwitchStateCommand &&
                     PersistenceSession.EnergizationScenario.Seeds.Count > 0) &&

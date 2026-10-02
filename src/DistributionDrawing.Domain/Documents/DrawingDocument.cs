@@ -256,6 +256,7 @@ public sealed class DrawingDocument
             .ToArray();
         ElectricalNode[] previousNodes = _electricalNodes
             .Where(node =>
+                node.Id == ringCabinet.MainBusNodeId ||
                 (node.OwnerType == TopologyOwnerType.InternalAggregate &&
                  intervalIds.Contains(node.OwnerId)) ||
                 (node.OwnerType == TopologyOwnerType.Device &&
@@ -276,6 +277,7 @@ public sealed class DrawingDocument
         SwitchAssembly[] replacementAssemblies = ringCabinet.InternalSwitchAssemblies.ToArray();
         ElectricalNode[] replacementNodes = ringCabinet.ElectricalNodes
             .Where(node =>
+                node.Id == ringCabinet.MainBusNodeId ||
                 (node.OwnerType == TopologyOwnerType.InternalAggregate &&
                  intervalIds.Contains(node.OwnerId)) ||
                 (node.OwnerType == TopologyOwnerType.Device &&

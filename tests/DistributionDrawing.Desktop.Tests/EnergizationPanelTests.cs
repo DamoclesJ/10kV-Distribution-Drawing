@@ -14,6 +14,7 @@ using DistributionDrawing.Domain.Energization;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
 
@@ -21,6 +22,66 @@ namespace DistributionDrawing.Desktop.Tests;
 
 public sealed class EnergizationPanelTests
 {
+    [Fact]
+    public void PropertyIntervalEditRepairsSourcesAndShowsNoticeThroughUndoRedo()
+    {
+        RunOnSta(() =>
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"ea-interval-{Guid.NewGuid():N}.kvdrawing");
+            try
+            {
+                var runtime = ProjectRuntimeSession.CreateEmpty(new ProjectService().CreateProject(path, "EA interval"));
+                var add = new DeviceCommandFactory().CreateAddRingCabinet(runtime.PersistenceSession.Domain, runtime.Layout,
+                    new RingCabinetCreationConfiguration("柜 A", new RingCabinetCreationTemplateFactory().Create(
+                        RingCabinetTemplateType.Conventional, 4), "10kV"), new DocumentPoint(20, 20));
+                runtime.CommandStack.ExecuteCommand(add);
+                runtime.RebuildScene();
+                var interval = add.Cabinet.Intervals[0];
+                var source = interval.SwitchDevices.Single(device => device.SwitchKind == SwitchKind.LoadSwitch);
+                var scenario = runtime.PersistenceSession.EnergizationScenario;
+                var seed = new EnergizedSeed(Guid.NewGuid(), source.Id, EnergizationSide.Bus);
+                runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario, seed));
+                runtime.ExecuteEnergizationAnalysis();
+                Assert.NotNull(runtime.Energization.CurrentResult);
+                var panel = new EnergizationPanel();
+                panel.Bind(runtime);
+                var editor = new PropertyEditor(runtime.SelectionResolver, runtime.CommandStack, runtime.Layout,
+                    new PropertyCommandFactory(scenario: scenario));
+                var target = new SelectionReference(SelectionTargetKind.RingCabinetInterval, interval.IntervalId, add.Cabinet.Id);
+                var edit = editor.TryChangeIntervalType(target, IntervalKind.IntegratedFeederInterval,
+                    GroundingStructureKind.UpperLowerGrounding);
+                Assert.True(edit.IsSuccess, edit.ErrorMessage);
+                Assert.Empty(scenario.Seeds);
+                Assert.Contains("请重新选择", Assert.Single(runtime.EnergizationReferenceDiagnostics));
+                Assert.NotEmpty(((ItemsControl)panel.FindName("DiagnosticList")!).Items);
+                runtime.RebuildScene();
+                runtime.ExecuteEnergizationAnalysis();
+                Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.LatestResult!.Validity);
+                Assert.NotEmpty(((ItemsControl)panel.FindName("DiagnosticList")!).Items);
+                Assert.True(runtime.CommandStack.Undo());
+                runtime.RebuildScene();
+                Assert.Equal(seed, Assert.Single(scenario.Seeds));
+                Assert.Empty(runtime.EnergizationReferenceDiagnostics);
+                runtime.ExecuteEnergizationAnalysis();
+                Assert.NotNull(runtime.Energization.CurrentResult);
+                Assert.True(runtime.CommandStack.Redo());
+                runtime.RebuildScene();
+                Assert.Empty(scenario.Seeds);
+                Assert.NotEmpty(runtime.EnergizationReferenceDiagnostics);
+                var replacement = add.Cabinet.Intervals[0].SwitchDevices.Single(device => device.SwitchKind == SwitchKind.IsolationSwitch);
+                runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario,
+                    new EnergizedSeed(Guid.NewGuid(), replacement.Id, EnergizationSide.Bus)));
+                Assert.Empty(runtime.EnergizationReferenceDiagnostics);
+                runtime.ExecuteEnergizationAnalysis();
+                Assert.NotNull(runtime.Energization.CurrentResult);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        });
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

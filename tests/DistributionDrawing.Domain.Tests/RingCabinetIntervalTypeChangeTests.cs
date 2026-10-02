@@ -8,6 +8,54 @@ namespace DistributionDrawing.Domain.Tests;
 
 public sealed class RingCabinetIntervalTypeChangeTests
 {
+    [Theory]
+    [InlineData(GroundingStructureKind.UpperIsolationGrounding)]
+    [InlineData(GroundingStructureKind.UpperLowerGrounding)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding)]
+    public void AggregateSynchronizationReplacesBusMembershipAndLeavesNoOrphanTopology(GroundingStructureKind structure)
+    {
+        var cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "柜 A",
+            [RingCabinetIntervalDefinition.CreateIntegratedFeeder(1, structure, SwitchState.Open, SwitchState.Open, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open)]));
+        var drawing = new DrawingDocument(Guid.NewGuid(), "topology integrity");
+        drawing.AddDevice(cabinet);
+        var before = cabinet.CaptureRestoreDefinition();
+        Guid[] beforeTerminalIds = drawing.Terminals.Select(item => item.Id).ToArray();
+        Guid cableTerminalId = cabinet.Intervals[0].CableTerminalId!.Value;
+        cabinet.ChangeIntervalType(cabinet.Intervals[0].IntervalId, IntervalKind.LoadSwitchInterval);
+        drawing.SynchronizeRingCabinetAggregate(cabinet);
+        Check();
+        Assert.Equal(cableTerminalId, cabinet.Intervals[0].CableTerminalId);
+        cabinet.ChangeIntervalType(cabinet.Intervals[0].IntervalId, IntervalKind.IntegratedFeederInterval, structure);
+        drawing.SynchronizeRingCabinetAggregate(cabinet);
+        Check();
+        cabinet.RestoreState(before);
+        drawing.SynchronizeRingCabinetAggregate(cabinet);
+        Check();
+        Assert.Equal(beforeTerminalIds.Order(), drawing.Terminals.Select(item => item.Id).Order());
+
+        void Check()
+        {
+            cabinet.ValidateStructure();
+            Assert.Equal(cabinet.ElectricalNodes.Single(item => item.Id == cabinet.MainBusNodeId).TerminalIds.Order(),
+                drawing.ElectricalNodes.Single(item => item.Id == cabinet.MainBusNodeId).TerminalIds.Order());
+            Assert.All(drawing.Terminals, terminal =>
+            {
+                if (terminal.ElectricalNodeId is Guid nodeId)
+                    Assert.Contains(drawing.ElectricalNodes, node => node.Id == nodeId && node.TerminalIds.Contains(terminal.Id));
+                if (terminal.OwnerType == TopologyOwnerType.Device)
+                    Assert.Contains(drawing.Devices, device => device.Id == terminal.OwnerId);
+            });
+            Assert.All(drawing.ElectricalNodes, node =>
+            {
+                Assert.All(node.TerminalIds, id => Assert.Contains(drawing.Terminals,
+                    terminal => terminal.Id == id && terminal.ElectricalNodeId == node.Id));
+                if (node.OwnerType == TopologyOwnerType.Device)
+                    Assert.Contains(drawing.Devices, device => device.Id == node.OwnerId);
+            });
+        }
+    }
+
     [Fact]
     public void IntegratedFeederToPT_PreservesSlotAndCreatesPTStructure()
     {

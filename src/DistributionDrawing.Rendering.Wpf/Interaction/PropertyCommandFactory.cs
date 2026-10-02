@@ -2,6 +2,7 @@ using System.Globalization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Devices.CustomerStations;
+using DistributionDrawing.Domain.Energization;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
@@ -13,10 +14,13 @@ namespace DistributionDrawing.Rendering.Wpf.Interaction;
 public sealed class PropertyCommandFactory
 {
     private readonly DeviceCommandFactory _deviceCommandFactory;
+    private readonly EnergizationScenario? _scenario;
 
-    public PropertyCommandFactory(DeviceCommandFactory? deviceCommandFactory = null)
+    public PropertyCommandFactory(DeviceCommandFactory? deviceCommandFactory = null,
+        EnergizationScenario? scenario = null)
     {
         _deviceCommandFactory = deviceCommandFactory ?? new DeviceCommandFactory();
+        _scenario = scenario;
     }
 
     public const string PoleNumberPropertyKey = "Pole.PoleNumber";
@@ -105,7 +109,8 @@ public sealed class PropertyCommandFactory
             selection.RingCabinetInterval.IntervalId,
             targetIntervalKind,
             targetGroundingStructureKind,
-            document: selection.Document);
+            document: selection.Document,
+            scenario: _scenario);
         return true;
     }
 

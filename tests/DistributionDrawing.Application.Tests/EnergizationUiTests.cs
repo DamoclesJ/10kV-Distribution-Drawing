@@ -10,6 +10,38 @@ namespace DistributionDrawing.Application.Tests;
 public sealed class EnergizationUiTests
 {
     [Fact]
+    public void DeletedBoundaryRepairPreservesUnaffectedSeedsOrderAndLegacyFieldThroughHistory()
+    {
+        var a = new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
+        var b = new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Line);
+        var c = new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
+        var scenario = new EnergizationScenario(Guid.NewGuid(), [a, b, c], true);
+        var repair = EnergizationScenarioCommand.RemoveDeletedBoundaries(scenario, new HashSet<Guid> { b.BoundaryDeviceId });
+        repair.Execute();
+        Assert.Equal([a, c], scenario.Seeds);
+        Assert.True(scenario.IsSourceSetComplete);
+        repair.Undo();
+        Assert.Equal([a, b, c], scenario.Seeds);
+        repair.Redo();
+        Assert.Equal([a, c], scenario.Seeds);
+        Assert.True(scenario.IsSourceSetComplete);
+    }
+
+    [Fact]
+    public void RepairDoesNotHideInvalidSeedsUnrelatedToTheDrawingEdit()
+    {
+        var seed = new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
+        var scenario = new EnergizationScenario(Guid.NewGuid(), [seed]);
+        var repair = EnergizationScenarioCommand.RemoveDeletedBoundaries(scenario, new HashSet<Guid> { Guid.NewGuid() });
+        Assert.False(repair.HasChanges);
+        repair.Execute();
+        Assert.Equal(seed, Assert.Single(scenario.Seeds));
+        var result = new EnergizationAnalyzer().Analyze(new DrawingDocument(Guid.NewGuid(), "invalid source"), scenario);
+        Assert.Equal(EnergizationValidity.Failed, result.Validity);
+        Assert.Contains(result.Diagnostics, item => item.Code == EnergizationDiagnosticCode.MissingBoundaryDevice);
+    }
+
+    [Fact]
     public void ScenarioCommandsRestoreSeedOrderIdentityAndLegacyField()
     {
         EnergizedSeed a = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);

@@ -54,6 +54,16 @@ public sealed class EnergizationScenarioCommand
         return new(scenario, after, scenario.IsSourceSetComplete);
     }
 
+    /// <summary>Remove only references retired by this drawing edit; do not guess replacement boundaries.</summary>
+    public static EnergizationScenarioCommand RemoveDeletedBoundaries(
+        EnergizationScenario scenario, IReadOnlySet<Guid> deletedDeviceIds)
+    {
+        ArgumentNullException.ThrowIfNull(scenario);
+        ArgumentNullException.ThrowIfNull(deletedDeviceIds);
+        return new(scenario, scenario.Seeds.Where(seed =>
+            !deletedDeviceIds.Contains(seed.BoundaryDeviceId)).ToArray(), scenario.IsSourceSetComplete);
+    }
+
     /// <summary>Compatibility edit only; the analyzer does not consume this legacy field.</summary>
     public static EnergizationScenarioCommand SetComplete(
         EnergizationScenario scenario, bool complete)

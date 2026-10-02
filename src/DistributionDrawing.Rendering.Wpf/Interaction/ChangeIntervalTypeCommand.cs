@@ -1,5 +1,7 @@
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Energization;
+using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Rendering.Wpf.Layout;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction;
@@ -8,6 +10,8 @@ public sealed class ChangeIntervalTypeCommand : ICommand
 {
     private readonly RingCabinet _cabinet;
     private readonly DrawingDocument? _document;
+    private readonly EnergizationScenario? _scenario;
+    private EnergizationScenarioCommand? _scenarioRepair;
     private readonly RuntimeLayoutDocument _runtimeLayout;
     private readonly RingCabinetLayoutFactory _layoutFactory;
     private readonly Guid _intervalId;
@@ -25,10 +29,12 @@ public sealed class ChangeIntervalTypeCommand : ICommand
         IntervalKind targetIntervalKind,
         GroundingStructureKind? targetGroundingStructureKind,
         RingCabinetLayoutFactory? layoutFactory = null,
-        DrawingDocument? document = null)
+        DrawingDocument? document = null,
+        EnergizationScenario? scenario = null)
     {
         _cabinet = cabinet ?? throw new ArgumentNullException(nameof(cabinet));
         _document = document;
+        _scenario = scenario;
         _runtimeLayout = runtimeLayout ?? throw new ArgumentNullException(nameof(runtimeLayout));
         _layoutFactory = layoutFactory ?? new RingCabinetLayoutFactory();
         if (intervalId == Guid.Empty)
@@ -41,11 +47,14 @@ public sealed class ChangeIntervalTypeCommand : ICommand
         _targetGroundingStructureKind = targetGroundingStructureKind;
     }
 
+    public IReadOnlyList<EnergizedSeed> RemovedSeeds { get; private set; } = [];
+
     public void Execute()
     {
         if (_after is not null && _afterLayout is not null)
         {
             RestoreState(_after, _afterLayout);
+            _scenarioRepair?.Redo();
             return;
         }
 
@@ -69,9 +78,23 @@ public sealed class ChangeIntervalTypeCommand : ICommand
                     affectedIntervalId));
             _runtimeLayout.ReplaceRingCabinet(_afterLayout);
             _after = _cabinet.CaptureRestoreDefinition();
+            if (_scenario is not null)
+            {
+                HashSet<Guid> deletedIds = _before.Intervals.SelectMany(interval => interval.Switches)
+                    .Select(device => device.Id).Except(_cabinet.Intervals.SelectMany(interval => interval.SwitchDevices).Select(device => device.Id))
+                    .ToHashSet();
+                RemovedSeeds = _scenario.Seeds.Where(seed => deletedIds.Contains(seed.BoundaryDeviceId)).ToArray();
+                _scenarioRepair = EnergizationScenarioCommand.RemoveDeletedBoundaries(_scenario, deletedIds);
+                _scenarioRepair.Execute();
+            }
         }
         catch
         {
+            _scenarioRepair?.Undo();
+            _scenarioRepair = null;
+            RemovedSeeds = [];
+            _after = null;
+            _afterLayout = null;
             _cabinet.RestoreState(_before);
             _document?.SynchronizeRingCabinetAggregate(_cabinet);
             _runtimeLayout.ReplaceRingCabinet(_beforeLayout);
@@ -87,6 +110,7 @@ public sealed class ChangeIntervalTypeCommand : ICommand
         }
 
         RestoreState(_before, _beforeLayout);
+        _scenarioRepair?.Undo();
     }
 
     public void Redo() => Execute();

@@ -1249,7 +1249,8 @@ public partial class MainWindow : Window
         _selectionResolver = session.SelectionResolver;
         _propertyProjector = session.PropertyProjector;
         _propertyInspector = session.PropertyInspector;
-        _propertyEditor = new(_selectionResolver, _commandStack, session.Layout);
+        _propertyEditor = new(_selectionResolver, _commandStack, session.Layout,
+            new PropertyCommandFactory(scenario: session.PersistenceSession.EnergizationScenario));
         _currentScene = session.Scene;
         _activeSource = session.InspectionSource;
         _selectionManager.SelectionChanged += OnSelectionChanged;
@@ -1881,6 +1882,9 @@ public partial class MainWindow : Window
 
         _intervalPreview.Cancel();
         RefreshDrawingScene();
+        if (_commandStack.LastAppliedCommand is ChangeIntervalTypeCommand { RemovedSeeds.Count: > 0 } change)
+            MessageBox.Show($"区间修改已移除 {change.RemovedSeeds.Count} 个电源点：原电源边界已不存在，请在带电分析中重新选择。",
+                "电源边界已变更", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void OnApplyCableTerminalPresence(object sender, RoutedEventArgs e)
