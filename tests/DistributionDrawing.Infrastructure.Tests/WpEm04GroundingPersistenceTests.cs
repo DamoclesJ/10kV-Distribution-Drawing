@@ -64,6 +64,33 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
     }
 
     [Fact]
+    public void V9RoundTrip_PreservesManualLineSideWhenPoleNumbersAreUnresolved()
+    {
+        Fixture fixture = CreateFixture(
+            middlePoleNumber: "东支-甲",
+            lineSide: GroundingAccessLineSide.SmallerNumberSide);
+        string path = NextPath();
+        var container = new ProjectFileContainer();
+        var file = new ProjectFileDocument(
+            ProjectFileManifest.Create(
+                fixture.Document.Id, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow),
+            new ProjectFileMetadata(fixture.Document.Title),
+            ProjectDomainMapper.ToDto(fixture.Document),
+            ProjectLayoutDto.Empty(fixture.Document.Id),
+            ProjectProfessionalMapper.ToDto(fixture.Document));
+
+        container.Save(path, file);
+        ProjectFileDocument opened = container.Open(path);
+        DrawingDocument restored = ProjectDomainMapper.ToDomain(opened.Domain!);
+        ProjectProfessionalMapper.ToSnapshot(restored, opened.Professional!);
+
+        GroundingAccessPoint gap = Assert.Single(restored.GroundingAccessPoints);
+        Assert.Equal(GroundingAccessLineSide.SmallerNumberSide, gap.LineSide);
+        Assert.Equal(fixture.Middle.Id, gap.PoleId);
+        Assert.Equal(fixture.End.Id, gap.AdjacentPoleId);
+    }
+
+    [Fact]
     public void Load_RejectsEmptyOrNonAdjacentAdjacentPole()
     {
         Fixture fixture = CreateFixture();
@@ -93,17 +120,17 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
             PlacementSide = null
         };
 
-        foreach (ProjectGroundingAccessLineSide side in new[]
-                 {
-                     ProjectGroundingAccessLineSide.SmallerNumberSide,
-                     ProjectGroundingAccessLineSide.LargerNumberSide
-                 })
+        foreach (ProjectGroundingAccessPointDto validShape in new[] { legacy, typed })
         {
             DrawingDocument restored = ProjectDomainMapper.ToDomain(
                 ProjectDomainMapper.ToDto(fixture.DomainOnlyDocument));
             ProjectProfessionalMapper.ToSnapshot(
                 restored,
-                valid with { GroundingAccessPoints = [legacy with { LineSide = side }] });
+                valid with
+                {
+                    GroundingAccessPoints =
+                    [validShape with { LineSide = ProjectGroundingAccessLineSide.LargerNumberSide }]
+                });
             GroundingAccessPoint point = Assert.Single(restored.GroundingAccessPoints);
             Assert.Equal(legacy.GroundingAccessPointId, point.GroundingAccessPointId);
             Assert.Equal(GroundingAdjacentEndpoint.ForPole(fixture.End.Id), point.AdjacentEndpoint);
@@ -113,11 +140,26 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
                 ProjectDomainMapper.ToDto(fixture.DomainOnlyDocument));
             ProjectProfessionalMapper.ToSnapshot(
                 newShapeRestored,
-                valid with { GroundingAccessPoints = [typed with { LineSide = side }] });
+                valid with
+                {
+                    GroundingAccessPoints =
+                    [validShape with { LineSide = ProjectGroundingAccessLineSide.LargerNumberSide }]
+                });
             Assert.Equal(
                 GroundingAccessPlacementSide.PoleSide,
                 Assert.Single(newShapeRestored.GroundingAccessPoints).PlacementSide);
         }
+
+        AssertInvalid(fixture, valid with
+        {
+            GroundingAccessPoints =
+            [legacy with { LineSide = ProjectGroundingAccessLineSide.SmallerNumberSide }]
+        });
+        AssertInvalid(fixture, valid with
+        {
+            GroundingAccessPoints =
+            [typed with { LineSide = ProjectGroundingAccessLineSide.SmallerNumberSide }]
+        });
 
         AssertInvalid(fixture, valid with
         {
@@ -374,12 +416,15 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
             ProjectProfessionalMapper.ToSnapshot(domain, professional));
     }
 
-    private static Fixture CreateFixture()
+    private static Fixture CreateFixture(
+        string middlePoleNumber = "P-11",
+        string endPoleNumber = "P-12",
+        GroundingAccessLineSide lineSide = GroundingAccessLineSide.LargerNumberSide)
     {
         var document = new DrawingDocument(Guid.NewGuid(), "WP-EM-04 persistence");
         Pole start = AddPole(document, "P-10");
-        Pole middle = AddPole(document, "P-11");
-        Pole end = AddPole(document, "P-12");
+        Pole middle = AddPole(document, middlePoleNumber);
+        Pole end = AddPole(document, endPoleNumber);
         Pole unrelated = AddPole(document, "P-99");
         Terminal startTerminal = start.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
         Terminal endTerminal = end.CreateOverheadAnchorTerminal(Guid.NewGuid(), true);
@@ -398,7 +443,7 @@ public sealed class WpEm04GroundingPersistenceTests : IDisposable
         DrawingDocument domainOnly = ProjectDomainMapper.ToDomain(ProjectDomainMapper.ToDto(document));
         GroundingAccessPoint gap = document.CreateGroundingAccessPoint(
             Guid.NewGuid(), connection.Id, middle.Id, end.Id,
-            GroundingAccessLineSide.LargerNumberSide);
+            lineSide);
         document.CreateGroundingPoint(
             Guid.NewGuid(), GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
             "大号侧", "L01");

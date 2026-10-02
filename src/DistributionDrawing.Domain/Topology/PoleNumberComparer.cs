@@ -1,6 +1,6 @@
-namespace DistributionDrawing.Application.WorkTickets;
+namespace DistributionDrawing.Domain.Topology;
 
-internal enum PoleNumberOrder
+public enum PoleNumberOrder
 {
     Unresolved,
     Less,
@@ -12,7 +12,7 @@ internal enum PoleNumberOrder
 /// Compares the trailing numeric part only when both pole numbers have the same
 /// non-numeric prefix. Formats with multiple numeric segments remain unresolved.
 /// </summary>
-internal static class PoleNumberComparer
+public static class PoleNumberComparer
 {
     public static PoleNumberOrder Compare(string? left, string? right)
     {

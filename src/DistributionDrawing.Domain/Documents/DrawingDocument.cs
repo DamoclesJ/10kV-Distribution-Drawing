@@ -1934,6 +1934,23 @@ public sealed class DrawingDocument
                 throw new InvalidOperationException(
                     $"Pole '{adjacentPoleId}' is not directly adjacent to pole '{point.PoleId}' on overhead line '{point.ConnectionId}'.");
             }
+
+            Pole adjacentPole = (Pole)_devices.Single(device => device.Id == adjacentPoleId);
+            Pole pole = (Pole)_devices.Single(device => device.Id == point.PoleId);
+            PoleNumberOrder numberOrder = PoleNumberComparer.Compare(
+                adjacentPole.PoleNumber,
+                pole.PoleNumber);
+            if (numberOrder is PoleNumberOrder.Less or PoleNumberOrder.Greater)
+            {
+                GroundingAccessLineSide expectedSide = numberOrder == PoleNumberOrder.Less
+                    ? GroundingAccessLineSide.SmallerNumberSide
+                    : GroundingAccessLineSide.LargerNumberSide;
+                if (point.LineSide != expectedSide)
+                {
+                    throw new InvalidOperationException(
+                        $"Grounding access point line side '{point.LineSide}' conflicts with the provable adjacent-pole side '{expectedSide}'.");
+                }
+            }
             return;
         }
 

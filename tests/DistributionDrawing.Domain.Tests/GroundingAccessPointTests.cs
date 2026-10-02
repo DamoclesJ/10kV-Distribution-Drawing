@@ -159,7 +159,7 @@ public sealed class GroundingAccessPointTests
     }
 
     [Fact]
-    public void IntermediatePole_AllowsBothAdjacentHalfEdges_IndependentOfLineSide()
+    public void IntermediatePole_AllowsBothAdjacentHalfEdgesWithConsistentLineSide()
     {
         Scenario scenario = CreateScenario();
         int nodesBefore = scenario.Document.ElectricalNodes.Count;
@@ -168,7 +168,7 @@ public sealed class GroundingAccessPointTests
 
         GroundingAccessPoint first = scenario.Document.CreateGroundingAccessPoint(
             Guid.NewGuid(), scenario.Connection.Id, scenario.Middle.Id, scenario.Start.Id,
-            GroundingAccessLineSide.LargerNumberSide);
+            GroundingAccessLineSide.SmallerNumberSide);
         GroundingAccessPoint second = scenario.Document.CreateGroundingAccessPoint(
             Guid.NewGuid(), scenario.Connection.Id, scenario.Middle.Id, scenario.End.Id,
             GroundingAccessLineSide.LargerNumberSide);
@@ -179,6 +179,29 @@ public sealed class GroundingAccessPointTests
         Assert.Equal(terminalsBefore, scenario.Document.Terminals.Count);
         Assert.Equal(connectionsBefore, scenario.Document.Connections.Count);
         Assert.Single(scenario.Document.OverheadLines);
+    }
+
+    [Fact]
+    public void Add_RejectsOnlyProvableLineSideConflict()
+    {
+        Scenario scenario = CreateScenario();
+
+        Assert.Throws<InvalidOperationException>(() => scenario.Document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), scenario.Connection.Id, scenario.Middle.Id, scenario.Start.Id,
+            GroundingAccessLineSide.LargerNumberSide));
+        Assert.Empty(scenario.Document.GroundingAccessPoints);
+
+        Scenario equalNumbers = CreateScenario("P-11", "P-11", "P-12");
+        GroundingAccessPoint equal = equalNumbers.Document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), equalNumbers.Connection.Id, equalNumbers.Middle.Id,
+            equalNumbers.Start.Id, GroundingAccessLineSide.LargerNumberSide);
+        Assert.Equal(GroundingAccessLineSide.LargerNumberSide, equal.LineSide);
+
+        Scenario differentPrefixes = CreateScenario("A-10", "B-11", "C-12");
+        GroundingAccessPoint unresolved = differentPrefixes.Document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), differentPrefixes.Connection.Id, differentPrefixes.Middle.Id,
+            differentPrefixes.Start.Id, GroundingAccessLineSide.LargerNumberSide);
+        Assert.Equal(GroundingAccessLineSide.LargerNumberSide, unresolved.LineSide);
     }
 
     [Fact]
@@ -348,12 +371,15 @@ public sealed class GroundingAccessPointTests
             new(before.Id, ConnectionType.Cable, replacement.Id, before.EndTerminalId, changedCurrent.DisplayName, before.VoltageLevel), line));
     }
 
-    private static Scenario CreateScenario()
+    private static Scenario CreateScenario(
+        string startNumber = "P-10",
+        string middleNumber = "P-11",
+        string endNumber = "P-12")
     {
         DrawingDocument document = TestFixtures.CreateDocument();
-        Pole start = AddPole(document, "P-10");
-        Pole middle = AddPole(document, "P-11");
-        Pole end = AddPole(document, "P-12");
+        Pole start = AddPole(document, startNumber);
+        Pole middle = AddPole(document, middleNumber);
+        Pole end = AddPole(document, endNumber);
         Terminal startTerminal = TestFixtures.CreatePoleAnchorTerminal(start);
         Terminal endTerminal = TestFixtures.CreatePoleAnchorTerminal(end);
         document.AddTerminal(startTerminal);

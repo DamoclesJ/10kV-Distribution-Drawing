@@ -401,7 +401,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         GroundingAccessCandidateLineSideState transformerState =
             GroundingAccessPointCreationService.ResolveLineSideState(transformerCandidate);
         Assert.Equal(GroundingAccessLineSide.SmallerNumberSide, poleState.SelectedLineSide);
-        Assert.False(poleState.IsLocked);
+        Assert.True(poleState.IsLocked);
         Assert.Equal(GroundingAccessLineSide.TransformerSide, transformerState.SelectedLineSide);
         Assert.True(transformerState.IsLocked);
         Assert.Null(transformerCandidate.AdjacentPoleId);
@@ -463,7 +463,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
     [Theory]
     [InlineData("P-10", "P-11", GroundingAccessLineSide.LargerNumberSide)]
     [InlineData("11#", "10#", GroundingAccessLineSide.SmallerNumberSide)]
-    public void SimplePoleNumbers_ProduceConservativeRecommendation(
+    public void ReliablyComparablePoleNumbers_ProduceSideRecommendation(
         string poleNumber,
         string adjacentPoleNumber,
         GroundingAccessLineSide expected)
@@ -484,7 +484,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
     }
 
     [Fact]
-    public void UserSideOverrideKeepsPhysicalAdjacentPole_AndImmediateGroundingIsOptional()
+    public void ProvableSideSelectionKeepsPhysicalAdjacentPole_AndImmediateGroundingIsOptional()
     {
         Scenario scenario = CreateScenario();
         GroundingAccessCandidate[] candidates = GroundingAccessPointCreationService.GetCandidates(
@@ -493,19 +493,19 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         scenario.Session.CommandStack.ExecuteCommand(
             GroundingAccessPointCreationService.CreateCommand(
                 scenario.Session, candidates[0],
-                GroundingAccessLineSide.LargerNumberSide,
+                GroundingAccessLineSide.SmallerNumberSide,
                 addGroundingPoint: false),
             scenario.Session.RebuildScene);
         GroundingAccessPoint first = Assert.Single(
             scenario.Session.PersistenceSession.Domain.GroundingAccessPoints);
         Assert.Equal(candidates[0].AdjacentPoleId, first.AdjacentPoleId);
-        Assert.Equal(GroundingAccessLineSide.LargerNumberSide, first.LineSide);
+        Assert.Equal(GroundingAccessLineSide.SmallerNumberSide, first.LineSide);
         Assert.Empty(scenario.Session.PersistenceSession.Domain.GroundingPoints);
 
         scenario.Session.CommandStack.ExecuteCommand(
             GroundingAccessPointCreationService.CreateCommand(
                 scenario.Session, candidates[1],
-                GroundingAccessLineSide.SmallerNumberSide,
+                GroundingAccessLineSide.LargerNumberSide,
                 addGroundingPoint: true),
             scenario.Session.RebuildScene);
         Assert.Equal(2, scenario.Session.PersistenceSession.Domain.GroundingAccessPoints.Count);

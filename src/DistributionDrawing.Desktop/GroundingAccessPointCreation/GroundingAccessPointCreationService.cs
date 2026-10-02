@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text.RegularExpressions;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
@@ -39,10 +37,6 @@ public sealed record GroundingAccessCandidateLineSideState(
 
 public static class GroundingAccessPointCreationService
 {
-    private static readonly Regex SimplePoleNumber = new(
-        "^(?:P-)?(?<number>[0-9]+)#$|^(?:P-)?(?<plain>[0-9]+)$",
-        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-
     public static IReadOnlyList<GroundingAccessCandidate> GetCandidates(
         ProjectRuntimeSession session,
         Guid poleId)
@@ -155,13 +149,12 @@ public static class GroundingAccessPointCreationService
         string poleNumber,
         string adjacentPoleNumber)
     {
-        if (!TryParseSimpleNumber(poleNumber, out int pole) ||
-            !TryParseSimpleNumber(adjacentPoleNumber, out int adjacent) ||
-            pole == adjacent)
+        PoleNumberOrder order = PoleNumberComparer.Compare(adjacentPoleNumber, poleNumber);
+        if (order is PoleNumberOrder.Unresolved or PoleNumberOrder.Equal)
         {
             return null;
         }
-        return adjacent < pole
+        return order == PoleNumberOrder.Less
             ? GroundingAccessLineSide.SmallerNumberSide
             : GroundingAccessLineSide.LargerNumberSide;
     }
@@ -183,10 +176,10 @@ public static class GroundingAccessPointCreationService
                 : null;
         return new GroundingAccessCandidateLineSideState(
             recommendation,
-            false,
+            recommendation is not null,
             recommendation is null
                 ? "杆号无法可靠解析，请人工选择小号侧或大号侧。"
-                : "已按简单杆号推荐；可人工覆盖，实际相邻杆方向不会改变。");
+                : "已根据可比较的相邻杆号确定线路侧；不可选择相反侧。");
     }
 
     public static ICommand CreateCommand(
@@ -215,20 +208,6 @@ public static class GroundingAccessPointCreationService
                 candidate.AdjacentEndpoint,
                 effectiveSide,
                 candidate.PlacementSide);
-    }
-
-    private static bool TryParseSimpleNumber(string value, out int number)
-    {
-        number = 0;
-        Match match = SimplePoleNumber.Match(value.Trim());
-        string digits = match.Groups["number"].Success
-            ? match.Groups["number"].Value
-            : match.Groups["plain"].Value;
-        return match.Success && int.TryParse(
-            digits,
-            NumberStyles.None,
-            CultureInfo.InvariantCulture,
-            out number);
     }
 
     private static string ResolveDirection(
