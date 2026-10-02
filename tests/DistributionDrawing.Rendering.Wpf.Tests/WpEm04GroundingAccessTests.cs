@@ -203,6 +203,62 @@ public sealed class WpEm04GroundingAccessTests
     }
 
     [Fact]
+    public void AddGroundingPointSafetyReject_PreservesDomainHistoryAndDirtyState()
+    {
+        SceneFixture fixture = CreateFixture();
+        AddGroundingPointCommand command = (AddGroundingPointCommand)
+            new ProfessionalCommandFactory().CreateAddGroundingPoint(
+                fixture.Document,
+                GroundingTarget.ForTerminal(fixture.Connection.StartTerminalId),
+                beforeExecute: _ => throw new InvalidOperationException("GS rejected"));
+        var stack = new CommandStack();
+        stack.MarkSaved();
+        int stateChanged = 0;
+        stack.StateChanged += (_, _) => stateChanged++;
+
+        Assert.Throws<InvalidOperationException>(() => stack.ExecuteCommand(command));
+
+        Assert.Empty(fixture.Document.GroundingPoints);
+        Assert.Empty(stack.History);
+        Assert.Equal(0, stack.CurrentIndex);
+        Assert.Equal(0, stack.CurrentStateId);
+        Assert.Equal(stack.SavedStateId, stack.CurrentStateId);
+        Assert.False(stack.IsDirty);
+        Assert.Null(stack.LastAppliedCommand);
+        Assert.Equal(0, stateChanged);
+    }
+
+    [Fact]
+    public void CompositeGroundingSafetyRejectRunsBeforeAddingGap()
+    {
+        SceneFixture fixture = CreateFixture();
+        CompositeProfessionalCommand command =
+            new ProfessionalCommandFactory().CreateAddGroundingAccessPointWithGroundingPoint(
+                fixture.Document,
+                fixture.Connection.Id,
+                fixture.Middle.Id,
+                fixture.End.Id,
+                GroundingAccessLineSide.LargerNumberSide,
+                beforeGroundingPointExecute: (_, prospectiveGap) =>
+                {
+                    Assert.NotNull(prospectiveGap);
+                    Assert.Empty(fixture.Document.GroundingAccessPoints);
+                    Assert.Empty(fixture.Document.GroundingPoints);
+                    throw new InvalidOperationException("GS rejected");
+                });
+        var stack = new CommandStack();
+        stack.MarkSaved();
+
+        Assert.Throws<InvalidOperationException>(() => stack.ExecuteCommand(command));
+
+        Assert.Empty(fixture.Document.GroundingAccessPoints);
+        Assert.Empty(fixture.Document.GroundingPoints);
+        Assert.Empty(stack.History);
+        Assert.Equal(0, stack.CurrentIndex);
+        Assert.False(stack.IsDirty);
+    }
+
+    [Fact]
     public void DeleteGap_UndoRestoresSameIdentity()
     {
         SceneFixture fixture = CreateFixture();

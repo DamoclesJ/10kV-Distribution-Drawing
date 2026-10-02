@@ -46,6 +46,7 @@ using DistributionDrawing.Desktop.Export;
 using DistributionDrawing.Desktop.WorkScopeCreation;
 using DistributionDrawing.Desktop.WorkTickets;
 using DistributionDrawing.Desktop.Energization;
+using DistributionDrawing.Desktop.GroundingSafety;
 using System.Windows.Threading;
 
 namespace DistributionDrawing.Desktop;
@@ -416,7 +417,12 @@ public partial class MainWindow : Window
                 candidate,
                 dialog.SelectedLineSide,
                 addGroundingPoint,
-                _professionalCommandFactory);
+                _professionalCommandFactory,
+                addGroundingPoint
+                    ? (snapshot, prospectiveGap) =>
+                        GroundingPointCommandPreflight.EnsureAllowed(
+                            session, snapshot, prospectiveGap)
+                    : null);
             session.CommandStack.ExecuteCommand(command, session.RebuildScene);
             GroundingAccessPoint point = session.PersistenceSession.Domain.GroundingAccessPoints
                 .Single(item => item.ConnectionId == candidate.ConnectionId &&
@@ -482,7 +488,12 @@ public partial class MainWindow : Window
                 candidate,
                 GroundingAccessLineSide.TransformerSide,
                 addGroundingPoint,
-                _professionalCommandFactory);
+                _professionalCommandFactory,
+                addGroundingPoint
+                    ? (snapshot, prospectiveGap) =>
+                        GroundingPointCommandPreflight.EnsureAllowed(
+                            session, snapshot, prospectiveGap)
+                    : null);
             session.CommandStack.ExecuteCommand(command, session.RebuildScene);
             GroundingAccessPoint point = session.PersistenceSession.Domain.GroundingAccessPoints
                 .Single(item => item.ConnectionId == candidate.ConnectionId &&
@@ -3180,7 +3191,12 @@ public partial class MainWindow : Window
                 groundingTarget,
                 null,
                 null,
-                GroundingPointNoteInput.Text);
+                GroundingPointNoteInput.Text,
+                beforeExecute: snapshot =>
+                {
+                    if (_workspace.CurrentSession is { } session)
+                        GroundingPointCommandPreflight.EnsureAllowed(session, snapshot);
+                });
             AddGroundingPointCommand addCommand = (AddGroundingPointCommand)command;
             _commandStack.ExecuteCommand(addCommand);
             _groundingPointPickMode = false;
@@ -3247,7 +3263,12 @@ public partial class MainWindow : Window
             AddGroundingPointCommand command = (AddGroundingPointCommand)
                 _professionalCommandFactory.CreateAddGroundingPoint(
                     document,
-                    GroundingTarget.ForGroundingAccessPoint(accessPointId));
+                    GroundingTarget.ForGroundingAccessPoint(accessPointId),
+                    beforeExecute: snapshot =>
+                    {
+                        if (_workspace.CurrentSession is { } session)
+                            GroundingPointCommandPreflight.EnsureAllowed(session, snapshot);
+                    });
             _commandStack.ExecuteCommand(command);
             RefreshDrawingScene();
             _selectionManager.Select(new SelectionReference(

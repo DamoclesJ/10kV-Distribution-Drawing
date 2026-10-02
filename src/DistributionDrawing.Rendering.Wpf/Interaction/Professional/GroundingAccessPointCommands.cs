@@ -97,18 +97,21 @@ public sealed class RemoveGroundingAccessPointCommand : ICommand
 public sealed class CompositeProfessionalCommand : ICommand
 {
     private readonly IReadOnlyList<ICommand> _commands;
+    private readonly Action? _beforeExecute;
 
-    public CompositeProfessionalCommand(IEnumerable<ICommand> commands)
+    public CompositeProfessionalCommand(IEnumerable<ICommand> commands, Action? beforeExecute = null)
     {
         _commands = commands?.ToArray() ?? throw new ArgumentNullException(nameof(commands));
         if (_commands.Count == 0)
         {
             throw new ArgumentException("At least one command is required.", nameof(commands));
         }
+        _beforeExecute = beforeExecute;
     }
 
     public void Execute()
     {
+        _beforeExecute?.Invoke();
         int executed = 0;
         try
         {

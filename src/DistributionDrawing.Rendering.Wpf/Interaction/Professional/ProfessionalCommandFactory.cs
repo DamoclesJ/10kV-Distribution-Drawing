@@ -17,7 +17,8 @@ public sealed class ProfessionalCommandFactory
         string? location = null,
         string? number = null,
         string? note = null,
-        Guid? groundingPointId = null)
+        Guid? groundingPointId = null,
+        Action<GroundingPointCommandSnapshot>? beforeExecute = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         if (!IsEligibleNewTerminalTarget(document, terminalId))
@@ -32,7 +33,8 @@ public sealed class ProfessionalCommandFactory
             location,
             number,
             note,
-            groundingPointId);
+            groundingPointId,
+            beforeExecute);
     }
 
     public ICommand CreateAddGroundingPoint(
@@ -41,7 +43,8 @@ public sealed class ProfessionalCommandFactory
         string? location = null,
         string? number = null,
         string? note = null,
-        Guid? groundingPointId = null)
+        Guid? groundingPointId = null,
+        Action<GroundingPointCommandSnapshot>? beforeExecute = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(target);
@@ -66,7 +69,8 @@ public sealed class ProfessionalCommandFactory
                 target,
                 normalizedLocation,
                 NormalizeNewNumber(document, target, number),
-                NormalizeOptional(note)));
+                NormalizeOptional(note)),
+            beforeExecute);
     }
 
     public ICommand CreateRemoveGroundingPoint(
@@ -150,7 +154,8 @@ public sealed class ProfessionalCommandFactory
         Guid adjacentPoleId,
         GroundingAccessLineSide lineSide,
         string? location = null,
-        string? note = null)
+        string? note = null,
+        Action<GroundingPointCommandSnapshot, GroundingAccessPoint?>? beforeGroundingPointExecute = null)
     {
         return CreateAddGroundingAccessPointWithGroundingPoint(
             document,
@@ -159,7 +164,8 @@ public sealed class ProfessionalCommandFactory
             GroundingAdjacentEndpoint.ForPole(adjacentPoleId),
             lineSide,
             location: location,
-            note: note);
+            note: note,
+            beforeGroundingPointExecute: beforeGroundingPointExecute);
     }
 
     public CompositeProfessionalCommand CreateAddGroundingAccessPointWithGroundingPoint(
@@ -170,7 +176,8 @@ public sealed class ProfessionalCommandFactory
         GroundingAccessLineSide lineSide,
         GroundingAccessPlacementSide placementSide = GroundingAccessPlacementSide.PoleSide,
         string? location = null,
-        string? note = null)
+        string? note = null,
+        Action<GroundingPointCommandSnapshot, GroundingAccessPoint?>? beforeGroundingPointExecute = null)
     {
         AddGroundingAccessPointCommand addAccessPoint = CreateAddGroundingAccessPoint(
             document,
@@ -183,18 +190,31 @@ public sealed class ProfessionalCommandFactory
             ? GroundingPointLocationResolver.ResolveGroundingAccessPoint(
                 document, poleId, adjacentEndpoint, lineSide, placementSide)
             : location.Trim();
+        var groundingPointSnapshot = new GroundingPointCommandSnapshot(
+            Guid.NewGuid(),
+            GroundingTarget.ForGroundingAccessPoint(
+                addAccessPoint.After.GroundingAccessPointId),
+            normalizedLocation,
+            AllocateGroundingPointNumber(
+                document,
+                GroundingTargetKind.GroundingAccessPoint),
+            NormalizeOptional(note));
         ICommand addGroundingPoint = new AddGroundingPointCommand(
             document,
-            new GroundingPointCommandSnapshot(
-                Guid.NewGuid(),
-                GroundingTarget.ForGroundingAccessPoint(
-                    addAccessPoint.After.GroundingAccessPointId),
-                normalizedLocation,
-                AllocateGroundingPointNumber(
-                    document,
-                    GroundingTargetKind.GroundingAccessPoint),
-                NormalizeOptional(note)));
-        return new CompositeProfessionalCommand([addAccessPoint, addGroundingPoint]);
+            groundingPointSnapshot);
+        Action? preflight = beforeGroundingPointExecute is null
+            ? null
+            : () => beforeGroundingPointExecute(
+                groundingPointSnapshot,
+                new GroundingAccessPoint(
+                    addAccessPoint.After.GroundingAccessPointId,
+                    addAccessPoint.After.ConnectionId,
+                    addAccessPoint.After.PoleId,
+                    addAccessPoint.After.AdjacentEndpoint,
+                    addAccessPoint.After.LineSide,
+                    addAccessPoint.After.PlacementSide));
+        return new CompositeProfessionalCommand(
+            [addAccessPoint, addGroundingPoint], preflight);
     }
 
     public ICommand CreateAddWorkScope(

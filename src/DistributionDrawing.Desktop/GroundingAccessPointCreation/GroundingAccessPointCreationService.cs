@@ -187,7 +187,8 @@ public static class GroundingAccessPointCreationService
         GroundingAccessCandidate candidate,
         GroundingAccessLineSide side,
         bool addGroundingPoint,
-        ProfessionalCommandFactory? factory = null)
+        ProfessionalCommandFactory? factory = null,
+        Action<GroundingPointCommandSnapshot, GroundingAccessPoint?>? beforeGroundingPointExecute = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(candidate);
@@ -200,7 +201,8 @@ public static class GroundingAccessPointCreationService
                 candidate.PoleId,
                 candidate.AdjacentEndpoint,
                 effectiveSide,
-                candidate.PlacementSide)
+                candidate.PlacementSide,
+                beforeGroundingPointExecute: beforeGroundingPointExecute)
             : commands.CreateAddGroundingAccessPoint(
                 session.PersistenceSession.Domain,
                 candidate.ConnectionId,
