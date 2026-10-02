@@ -46,11 +46,15 @@ PoleSwitch 等真实 electrical interruption 继续通过既有 Terminal、Elect
 
 ## 4. GAP Identity — GS-AF-02
 
-GAP 的安全 electrical identity 以真实拓扑为权威：`ConnectionId`、`PoleId`、`AdjacentEndpoint` 共同确定其所在 Connection / physical side。`LineSide` 必须与依据真实相邻杆号 / endpoint 推导出的实际侧别一致。
+GAP 的安全 electrical identity 以真实拓扑为权威：`ConnectionId`、`PoleId`、`AdjacentEndpoint` 共同确定其所在 Connection / physical side。仅当真实拓扑能够可靠推导 LargerNumber / SmallerNumber 时，才校验人工 `LineSide` 与推导结果的一致性。
 
-现有 Domain 允许 `LineSide` 与 `AdjacentEndpoint` 矛盾，属于模型完整性缺口。WP-GS-01 可增加最小必要 Domain integrity validation，防止新建或恢复出矛盾 GAP。
+现有 Domain 允许已能由真实拓扑证明矛盾的 `LineSide` 状态。WP-GS-01 可增加最小必要 Domain integrity validation，拒绝新建或恢复此类可证明矛盾；无法可靠推导时保留人工值并允许。
 
 不得增加新的 persisted GAP identity，也不得依赖单独的 `LineSide` 标签作为 Grounding Safety 的权威来源。
+
+### 产品澄清（2026-10-02）
+
+可靠推导为 LargerNumber / SmallerNumber 且与 `LineSide` 一致时合法；可靠推导明确矛盾时，新建或恢复均作为模型完整性错误拒绝。对于相同杆号、不可比较杆号或其他无法可靠推导侧别的合法 topology，保留人工 `LineSide` 并允许新建 / 恢复；此标签不参与 Energized / Deenergized 判断。OHL 安全粒度仍为 Connection。该澄清落实兼容边界，不增加 identity 或改变 V9。
 
 ## 5. GroundingTarget → EA Resolver
 
@@ -120,6 +124,12 @@ WP-GS-01 不扩展当前 Seed model，当前 Seed 支持范围保持现状。用
 软件不得在用户没有建立有效 EA 的情况下自行推测电源。唯一特殊入口是用户显式点击“带电分析”：此时正在尝试建立新的有效 EA，必须先进行 candidate EA + Grounding Safety validation。
 
 已有有效 EA 时，相关 GroundingPoint / switch operation 才执行 Energized-based safety guard。
+
+### 产品澄清（2026-10-02）
+
+No Valid EA 包括从未成功分析、NoSeeds、Analysis Failed，以及正式结果 stale / invalid 且没有有效 `CurrentResult`。此时允许 Seed 编辑及按既有非 GS 规则执行 switch operation，但 Seed / SwitchState 变化不得自动建立或发布首个 / 新的有效 EA，也不得启用 Energized-based switch guard；用户必须显式执行“带电分析”。
+
+已存在有效 EA 时，受控 switch-state operation 先执行 candidate GS check；通过后执行真实 Command，并继续沿用当前实时 EA 重算生命周期。若该重算令结果进入 No Valid EA（例如 NoSeeds 或 Failed），后续 Seed / SwitchState 变化不自动恢复有效 EA，须再次显式分析。显式分析只在 candidate EA + GS validation 通过后发布正式 Result。
 
 ## 14. Undo / Redo
 
