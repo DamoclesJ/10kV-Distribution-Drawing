@@ -9,7 +9,8 @@ namespace DistributionDrawing.Application.GroundingSafety;
 public enum GroundingElectricalIdentityKind
 {
     Terminal,
-    Connection
+    Connection,
+    ElectricalNode
 }
 
 public sealed record GroundingElectricalIdentity(
