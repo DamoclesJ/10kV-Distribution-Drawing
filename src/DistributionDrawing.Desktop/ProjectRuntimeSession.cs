@@ -12,6 +12,7 @@ using DistributionDrawing.Rendering.Wpf.Scene;
 using DistributionDrawing.Desktop.Selection;
 using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Application.GroundingSafety;
+using DistributionDrawing.Desktop.GroundingSafety;
 using DistributionDrawing.Domain.Energization;
 
 namespace DistributionDrawing.Desktop;
@@ -91,7 +92,8 @@ public sealed class ProjectRuntimeSession
         if (preparation.CandidateResult.IsSuccess &&
             !preparation.SafetyDecision.IsAllowed)
         {
-            return DescribeGroundingSafetyRejection(preparation.SafetyDecision);
+            return GroundingSafetyMessageFormatter.Format(
+                "带电分析", preparation.SafetyDecision);
         }
 
         Energization.Publish(preparation.CandidateResult);
@@ -205,16 +207,10 @@ public sealed class ProjectRuntimeSession
         }
 
         string reason = preparation.CandidateResult.IsSuccess
-            ? DescribeGroundingSafetyRejection(preparation.SafetyDecision)
+            ? GroundingSafetyMessageFormatter.Format(
+                "电源配置", preparation.SafetyDecision)
             : "候选带电分析失败，Seed 修改未应用。";
         throw new InvalidOperationException(reason);
-    }
-
-    private static string DescribeGroundingSafetyRejection(GroundingSafetyDecision decision)
-    {
-        string details = string.Join("；", decision.Findings.Select(finding =>
-            $"{finding.Location}：{finding.Detail}"));
-        return $"Grounding Safety 阻止带电分析：{details}";
     }
 
     private sealed class ScenarioCommandAdapter(

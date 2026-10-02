@@ -39,9 +39,7 @@ internal static class GroundingPointRestorePreflight
             return;
         }
 
-        string details = string.Join("；", decision.Findings.Select(finding =>
-            $"{finding.Location}：{finding.Detail}"));
         throw new InvalidOperationException(
-            $"Grounding Safety 阻止恢复工作地线：{details}");
+            GroundingSafetyMessageFormatter.Format("恢复工作地线", decision));
     }
 }

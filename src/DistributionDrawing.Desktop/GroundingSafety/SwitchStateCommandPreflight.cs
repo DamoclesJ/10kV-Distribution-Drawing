@@ -32,9 +32,7 @@ internal static class SwitchStateCommandPreflight
             return;
         }
 
-        string details = string.Join("；", decision.Findings.Select(finding =>
-            $"{finding.Location}：{finding.Detail}"));
         throw new InvalidOperationException(
-            $"[GroundingSafety] Grounding Safety 阻止开关操作：{details}");
+            $"[GroundingSafety] {GroundingSafetyMessageFormatter.Format("开关操作", decision)}");
     }
 }

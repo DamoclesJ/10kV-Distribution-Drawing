@@ -40,9 +40,7 @@ internal static class GroundingPointCommandPreflight
             return;
         }
 
-        string details = string.Join("；", decision.Findings.Select(finding =>
-            $"{finding.Location}：{finding.Detail}"));
         throw new InvalidOperationException(
-            $"无法添加工作地线，Grounding Safety 校验未通过：{details}");
+            GroundingSafetyMessageFormatter.Format("添加工作地线", decision));
     }
 }
