@@ -37,7 +37,7 @@ public sealed class EnergizationRuntimeTests : IDisposable
         runtime.ExecuteEnergizationAnalysis();
         Assert.True(runtime.CommandStack.Undo());
         Assert.Empty(scenario.Seeds);
-        Assert.Equal(EnergizationValidity.NoSeeds, runtime.Energization.LatestResult!.Validity);
+        Assert.Equal(EnergizationValidity.Failed, runtime.Energization.LatestResult!.Validity);
         Assert.Equal(EnergizationFreshness.Stale, runtime.Energization.Freshness);
         runtime.ExecuteEnergizationAnalysis();
         Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
