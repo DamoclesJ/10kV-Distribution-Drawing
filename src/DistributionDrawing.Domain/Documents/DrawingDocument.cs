@@ -1582,7 +1582,7 @@ public sealed class DrawingDocument
     {
         ArgumentNullException.ThrowIfNull(point);
         EnsureObjectIdIsAvailable(point.GroundingAccessPointId, nameof(GroundingAccessPoint));
-        ValidateGroundingAccessPoint(point);
+        ValidateGroundingAccessPointIntegrity(point);
 
         if (_groundingAccessPoints.Any(existing =>
                 existing.ConnectionId == point.ConnectionId &&
@@ -1595,6 +1595,12 @@ public sealed class DrawingDocument
         }
 
         _groundingAccessPoints.Add(point);
+    }
+
+    public void ValidateGroundingAccessPointIntegrity(GroundingAccessPoint point)
+    {
+        ArgumentNullException.ThrowIfNull(point);
+        ValidateGroundingAccessPoint(point);
     }
 
     public GroundingAccessPoint GetGroundingAccessPoint(Guid groundingAccessPointId)
