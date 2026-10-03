@@ -247,8 +247,11 @@ public sealed class SelectionDeletePlanner
     }
 }
 
-internal sealed class CompositeDeleteCommand : ICommand
+internal sealed class CompositeDeleteCommand : IEnergizationImpactCommand
 {
+    public bool AffectsEnergization => _commands.Any(command =>
+        command is not IEnergizationImpactCommand { AffectsEnergization: false });
+
     private readonly IReadOnlyList<ICommand> _commands;
     private readonly Action? _validateAfter;
     private readonly Action? _beforeUndo;

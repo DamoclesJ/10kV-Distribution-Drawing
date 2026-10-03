@@ -185,7 +185,7 @@ git diff --check
 | --- | --- |
 | No valid EA | GP创建和普通设备操作保留原能力；Seed / Switch变化不自动发布结果；显式分析建立有效EA |
 | Energized Terminal/GAP创建GP | blocking error，facts/history/dirty不变 |
-| Deenergized Target | 正常允许；随后按既有生命周期重建valid EA |
+| Deenergized Target / GS-AF-05 | 正常允许；GroundingPoint / GAP 接地措施操作不改变导电事实时保持同一 valid EA 与 overlay；后续送电仍经过 GS guard |
 | PoleSwitch两侧 / 同Connection多SupportPole | 两侧独立，同Connection GAP继承Connection状态 |
 | 普通LS / UpperLower / LowerLower带电Cable合GS | GS拒绝；原mechanical interlock另行区分 |
 | UpperIsolation | GS Closed+Breaker Open允许；带电时再合Breaker或Breaker已Closed再合GS形成危险时拒绝 |

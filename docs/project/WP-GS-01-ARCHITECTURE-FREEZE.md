@@ -145,6 +145,14 @@ WP-GS-01 不把 Grounding Safety Guard 扩大到所有绘图建模操作。例�
 
 拓扑变化按现有 EA lifecycle 使结果 stale / invalid。用户下一次显式建立有效 EA 时再经过 candidate EA Grounding Safety validation。
 
+### GS-AF-05 — Grounding-only mutations are EA-neutral
+
+Windows GUI acceptance clarified that GroundingPoint and GroundingAccessPoint do not participate in ordinary Energization propagation. Add/remove GroundingPoint, add/remove GAP where Domain rules allow, their non-electrical property/layout changes, and their Undo/Redo must preserve an existing valid CurrentResult and overlay request. They change no Seed, SwitchState, Terminal/ElectricalNode relationship, OHL/Cable conductive connectivity, or EA reachability.
+
+Runtime must classify these commands by EA impact, including composition: a composite is neutral only when every child is explicitly neutral. Unclassified commands retain the conservative existing lifecycle. Conductive topology, electrical relationships, device electrical structure, Seed lifecycle, and SwitchState changes retain their established stale/recompute policy. Neutral commands cannot establish or restore unavailable EA.
+
+The existing GS pre-mutation guards remain active against the preserved valid result, including later operations that would energize grounding. This acceptance-driven clarification adds no business feature, persisted fact, Seed capability, Requirements Freeze change, or FormatVersion upgrade. Do not copy cached results or restore old colors in Desktop as a workaround.
+
 ## 16. UI
 
 不新增 Safety panel、Warning / Hard Conflict 列表、canvas alarm 或 conflict locator。复用现有 `ShowCommandError` / `IDesktopMessageService.ShowError` 等 blocking error mechanism。

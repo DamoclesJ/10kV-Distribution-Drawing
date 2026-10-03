@@ -40,8 +40,10 @@ public sealed record GroundingAccessPointCommandSnapshot(
         point.PlacementSide);
 }
 
-public sealed class AddGroundingAccessPointCommand : ICommand
+public sealed class AddGroundingAccessPointCommand : IEnergizationImpactCommand
 {
+    public bool AffectsEnergization => false;
+
     private readonly DrawingDocument _document;
 
     public AddGroundingAccessPointCommand(
@@ -67,8 +69,10 @@ public sealed class AddGroundingAccessPointCommand : ICommand
     public void Redo() => Execute();
 }
 
-public sealed class RemoveGroundingAccessPointCommand : ICommand
+public sealed class RemoveGroundingAccessPointCommand : IEnergizationImpactCommand
 {
+    public bool AffectsEnergization => false;
+
     private readonly DrawingDocument _document;
 
     public RemoveGroundingAccessPointCommand(
@@ -94,8 +98,11 @@ public sealed class RemoveGroundingAccessPointCommand : ICommand
     public void Redo() => Execute();
 }
 
-public sealed class CompositeProfessionalCommand : ICommand
+public sealed class CompositeProfessionalCommand : IEnergizationImpactCommand
 {
+    public bool AffectsEnergization => _commands.Any(command =>
+        command is not IEnergizationImpactCommand { AffectsEnergization: false });
+
     private readonly IReadOnlyList<ICommand> _commands;
     private readonly Action? _beforeExecute;
 

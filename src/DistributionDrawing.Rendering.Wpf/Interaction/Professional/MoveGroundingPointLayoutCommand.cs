@@ -3,8 +3,10 @@ using DistributionDrawing.Rendering.Wpf.Layout;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 
-public sealed class MoveGroundingPointLayoutCommand : ICommand
+public sealed class MoveGroundingPointLayoutCommand : IEnergizationImpactCommand
 {
+    public bool AffectsEnergization => false;
+
     private readonly DrawingDocument _document;
     private readonly RuntimeLayoutDocument _layout;
 

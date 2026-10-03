@@ -2,8 +2,10 @@ using DistributionDrawing.Domain.Documents;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 
-public sealed class ChangeGroundingPointCommand : ICommand
+public sealed class ChangeGroundingPointCommand : IEnergizationImpactCommand
 {
+    public bool AffectsEnergization => false;
+
     private readonly DrawingDocument _document;
 
     public ChangeGroundingPointCommand(

@@ -3,8 +3,10 @@ using DistributionDrawing.Rendering.Wpf.Layout;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 
-public sealed class RemoveGroundingPointCommand : ICommand
+public sealed class RemoveGroundingPointCommand : IEnergizationImpactCommand
 {
+    public bool AffectsEnergization => false;
+
     private readonly DrawingDocument _document;
     private readonly RuntimeLayoutDocument? _layout;
     private readonly Action<GroundingPointCommandSnapshot>? _beforeRestore;

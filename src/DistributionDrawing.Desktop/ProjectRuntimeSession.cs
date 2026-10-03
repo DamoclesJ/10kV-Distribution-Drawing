@@ -178,6 +178,9 @@ public sealed class ProjectRuntimeSession
                 .ToArray();
         else if (CommandStack.LastAppliedCommand is ScenarioCommandAdapter)
             EnergizationReferenceDiagnostics = [];
+        if (CommandStack.LastAppliedCommand is IEnergizationImpactCommand
+            { AffectsEnergization: false })
+            return;
         if ((CommandStack.LastAppliedCommand is ScenarioCommandAdapter ||
                 CommandStack.LastAppliedCommand is ISwitchStateCommand &&
                     PersistenceSession.EnergizationScenario.Seeds.Count > 0) &&
