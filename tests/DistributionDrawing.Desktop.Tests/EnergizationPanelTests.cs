@@ -169,13 +169,15 @@ public sealed class EnergizationPanelTests
                 Assert.NotNull(runtime.Energization.CurrentResult);
                 runtime.ExecuteEnergizationAnalysis();
                 Assert.True(runtime.Energization.CanShowOverlay);
-                runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(scenario,
-                    new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)));
-                Assert.Equal(EnergizationValidity.Failed, runtime.Energization.LatestResult!.Validity);
-                Assert.Null(runtime.Energization.CurrentResult);
-                Assert.False(runtime.Energization.CanShowOverlay);
-                Assert.True(runtime.CommandStack.Undo());
+                EnergizedSeed invalidSeed = new(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus);
+                EnergizedSeed[] seedsBeforeRejectedEdit = scenario.Seeds.ToArray();
+                int historyBeforeRejectedEdit = runtime.CommandStack.CurrentIndex;
+                Assert.Throws<InvalidOperationException>(() => runtime.ExecuteScenarioCommand(
+                    EnergizationScenarioCommand.Add(scenario, invalidSeed)));
+                Assert.Equal(seedsBeforeRejectedEdit, scenario.Seeds);
+                Assert.Equal(historyBeforeRejectedEdit, runtime.CommandStack.CurrentIndex);
                 Assert.NotNull(runtime.Energization.CurrentResult);
+                Assert.True(runtime.Energization.CanShowOverlay);
                 // A layout/structural command still invalidates; it is not marked as a switch operation.
                 runtime.CommandStack.ExecuteCommand(new DeviceCommandFactory().CreateAddRingCabinet(runtime.PersistenceSession.Domain, runtime.Layout,
                     new RingCabinetCreationConfiguration("Other cabinet", new RingCabinetCreationTemplateFactory().Create(
@@ -245,7 +247,8 @@ public sealed class EnergizationPanelTests
                 runtime.ExecuteScenarioCommand(EnergizationScenarioCommand.Add(
                     runtime.PersistenceSession.EnergizationScenario,
                     new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)));
-                Assert.Contains("带电分析失败", status.Text);
+                Assert.Equal("图纸或电源配置已发生变化，请重新执行带电分析。", status.Text);
+                Assert.Null(runtime.Energization.CurrentResult);
                 execute.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Contains("带电分析失败", status.Text);
                 Assert.NotEmpty(((ItemsControl)panel.FindName("DiagnosticList")!).Items);

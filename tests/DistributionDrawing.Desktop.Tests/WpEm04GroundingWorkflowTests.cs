@@ -512,7 +512,7 @@ public sealed class WpEm04GroundingWorkflowTests : IDisposable
         GroundingPoint grounding = Assert.Single(
             scenario.Session.PersistenceSession.Domain.GroundingPoints);
         Assert.Equal(GroundingTargetKind.GroundingAccessPoint, grounding.Target.Kind);
-        Assert.Equal("P-11杆小号侧", grounding.Location);
+        Assert.Equal("P-11杆大号侧", grounding.Location);
     }
 
     [Fact]

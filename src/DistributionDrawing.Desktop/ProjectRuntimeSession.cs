@@ -97,6 +97,8 @@ public sealed class ProjectRuntimeSession
         }
 
         Energization.Publish(preparation.CandidateResult);
+        if (preparation.CandidateResult.IsSuccess)
+            Energization.SetOverlayRequested(true);
         return null;
     }
 

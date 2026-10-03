@@ -98,6 +98,9 @@ public sealed class WpEm04GroundingAccessTests
     public void Marker_UsesAdjacentHalfEdge_NotLineSideOrPoleNumber()
     {
         SceneFixture fixture = CreateFixture();
+        fixture.Start.RenamePoleNumber("东支-丙");
+        fixture.Middle.RenamePoleNumber("东支-甲");
+        fixture.End.RenamePoleNumber("东支-乙");
         GroundingAccessPoint first = fixture.Document.CreateGroundingAccessPoint(
             Guid.NewGuid(), fixture.Connection.Id, fixture.Middle.Id, fixture.End.Id,
             GroundingAccessLineSide.SmallerNumberSide);
@@ -206,10 +209,13 @@ public sealed class WpEm04GroundingAccessTests
     public void AddGroundingPointSafetyReject_PreservesDomainHistoryAndDirtyState()
     {
         SceneFixture fixture = CreateFixture();
+        GroundingAccessPoint gap = fixture.Document.CreateGroundingAccessPoint(
+            Guid.NewGuid(), fixture.Connection.Id, fixture.Middle.Id, fixture.End.Id,
+            GroundingAccessLineSide.LargerNumberSide);
         AddGroundingPointCommand command = (AddGroundingPointCommand)
             new ProfessionalCommandFactory().CreateAddGroundingPoint(
                 fixture.Document,
-                GroundingTarget.ForTerminal(fixture.Connection.StartTerminalId),
+                GroundingTarget.ForGroundingAccessPoint(gap.GroundingAccessPointId),
                 beforeExecute: _ => throw new InvalidOperationException("GS rejected"));
         var stack = new CommandStack();
         stack.MarkSaved();

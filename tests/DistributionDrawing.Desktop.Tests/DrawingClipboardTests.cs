@@ -972,6 +972,9 @@ public sealed class DrawingClipboardTests : IDisposable
         AddPoleCommand start = AddPole(session, new DocumentPoint(10, 10));
         AddPoleCommand middle = AddPole(session, new DocumentPoint(90, 50));
         AddPoleCommand end = AddPole(session, new DocumentPoint(170, 10));
+        start.Pole.RenamePoleNumber("东支-甲");
+        middle.Pole.RenamePoleNumber("东支-乙");
+        end.Pole.RenamePoleNumber("东支-丙");
         AddOverhead(session, start, end, [start.Pole.Id, middle.Pole.Id, end.Pole.Id]);
         Connection connection = Assert.Single(session.PersistenceSession.Domain.Connections);
         GroundingAccessPoint sourceGap = session.PersistenceSession.Domain.CreateGroundingAccessPoint(
