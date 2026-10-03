@@ -11,7 +11,8 @@
 - **Implementation base:** `main = origin/main = 70c321c1faa6c4c67c01d4d942d8ad5e596bd15d`
 - **FormatVersion at package opening:** V9
 - **Phase 1:** VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`
-- **Phase 2:** NOT STARTED
+- **Phase 2:** IMPLEMENTED / CANDIDATE; Windows automated verification PENDING
+- **Phase 3:** NOT STARTED
 
 This document records the approved package boundary. Opening the package does not start an implementation phase.
 
@@ -24,7 +25,17 @@ Phase 1 — Domain + V10 is VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233
 - Full solution build: 0 errors.
 - Current FormatVersion: V10. V8/V9 migration is not supported. Windows GUI acceptance is NOT RUN and remains Phase 6; it is not part of Phase 1 acceptance.
 - STOP-P1-01 through STOP-P1-06: NONE.
-- WP-WS-01 stays OPEN / IN PROGRESS. Phase 2 — EA → Candidate Projector is NOT STARTED.
+- WP-WS-01 stays OPEN / IN PROGRESS. Phase 3 — Confirmation + CommandStack is NOT STARTED.
+
+## Phase 2 candidate progress
+
+Phase 2 — EA → WorkScope Candidate Projector is IMPLEMENTED / CANDIDATE. The transient Application model contains normalized Regions, switch transition facts, and diagnostics; it is derived only from `EnergizationAnalysisState.CurrentResult` plus current drawing topology. The projector reuses `ElectricalConnectivityGraphBuilder`, verifies current point identities and conducting-edge identity against the EA result, excludes Earth and GroundSwitch-to-Earth identities, and finds Deenergized connected components including isolated terminals. Transition facts retain switch identity/kind/installation, energized and Deenergized terminal identities, parent/pole identity, and related connection identities. The projector does not mutate `DrawingDocument.WorkScopes`, WorkTicket data, EA state, CommandStack, or persistence, and does not invoke WorkTicketAnalyzer.
+
+- Added Application projector coverage: 16 cases including validity gates, empty candidate, disconnected components, isolated terminals, Earth exclusion, conducting-edge consistency, RingCabinet load switch/breaker/isolator, pole switch and OHL topology, Cable and CableTermination, Transformer HV leaf, independent CustomerStation feeders, historical WorkScope independence, multi-Seed ordering, and read-only behavior.
+- macOS Release verification: Domain 236/236, Application 259/259, Infrastructure 151/151; full solution build passed with 0 errors.
+- Rendering.Wpf and Desktop full test execution could not start because this macOS host has no `Microsoft.WindowsDesktop.App` runtime. Their projects compile in the full solution build. Windows automated verification remains PENDING; this candidate is not Phase 2 acceptance. Windows GUI acceptance remains NOT RUN / Phase 6.
+- FormatVersion remains V10. No Candidate persistence, confirmation, WorkTicket mutation, Analyzer handoff, EA propagation change, or GS authority change was introduced.
+- STOP-P2-01 through STOP-P2-08: NONE. WP-WS-01 remains OPEN / IN PROGRESS; Phase 3 is NOT STARTED.
 
 ## Goal and normal flow
 
