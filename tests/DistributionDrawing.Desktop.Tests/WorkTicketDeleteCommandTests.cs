@@ -1,3 +1,7 @@
+using DistributionDrawing.Domain.Professional;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 using DistributionDrawing.Desktop.DrawingTools;
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Domain.Documents;
@@ -70,6 +74,34 @@ public sealed class WorkTicketDeleteCommandTests
             new WorkTicketGuardedDeleteCommand(counter, drawing, tickets)));
         Assert.Equal(0, counter.Value);
         Assert.Empty(stack.History);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConfirmedScopeReferencedByTicketCannotBeDeleted(bool electricalRangeAdapter)
+    {
+        var document = new DrawingDocument(Guid.NewGuid(), "scope refs");
+        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "c",
+            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open)]));
+        document.AddDevice(cabinet);
+        WorkScope scope = document.CreateWorkScope(Guid.NewGuid(), [new([], [cabinet.MainBusNodeId])], [], null);
+        WorkTicketSession ticket = WorkTicketSession.Create() with
+        {
+            WorkScopeIds = electricalRangeAdapter ? [] : [scope.WorkScopeId],
+            WorkScopeItems = electricalRangeAdapter ? [new(WorkScopeItemKind.ElectricalRange, scope.WorkScopeId)] : []
+        };
+        var root = new WorkTicketDataRoot(document.Id, [ticket]);
+        var stack = new CommandStack();
+        var delete = new RemoveWorkScopeCommand(document, WorkScopeCommandSnapshot.From(scope));
+        Assert.Throws<InvalidOperationException>(() => stack.ExecuteCommand(new WorkTicketGuardedDeleteCommand(delete, document, root)));
+        Assert.Empty(stack.History);
+        WorkScope restored = Assert.Single(document.WorkScopes);
+        Assert.Equal(scope.WorkScopeId, restored.WorkScopeId);
+        Assert.Null(restored.Description);
+        Assert.Equal(scope.Regions[0].ElectricalNodeIds, restored.Regions[0].ElectricalNodeIds);
+        WorkTicketReferenceGuard.Validate(document, root);
     }
 
     private sealed class CounterCommand : ICommand

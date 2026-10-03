@@ -2,30 +2,28 @@ using DistributionDrawing.Domain.Professional;
 
 namespace DistributionDrawing.Rendering.Wpf.Interaction.Professional;
 
-/// <summary>
-/// Complete scalar snapshot used by Add, Remove and Change WorkScope
-/// commands. GroundingPointIds are references only; their data is not copied.
-/// </summary>
-public sealed record WorkScopeCommandSnapshot(
-    Guid WorkScopeId,
-    BoundaryPointCommandValue StartBoundary,
-    BoundaryPointCommandValue EndBoundary,
-    string Description,
-    IReadOnlyList<Guid> GroundingPointIds)
+/// <summary>Complete immutable snapshot; replay never consults EA or UI selection.</summary>
+public sealed class WorkScopeCommandSnapshot
 {
-    public static WorkScopeCommandSnapshot From(WorkScope workScope)
+    public WorkScopeCommandSnapshot(Guid workScopeId, IEnumerable<WorkScopeRegion> regions,
+        IEnumerable<WorkScopeBoundary> boundaries, string? description = null)
     {
-        ArgumentNullException.ThrowIfNull(workScope);
-        return new WorkScopeCommandSnapshot(
-            workScope.WorkScopeId,
-            BoundaryPointCommandValue.From(workScope.StartBoundary),
-            BoundaryPointCommandValue.From(workScope.EndBoundary),
-            workScope.Description,
-            workScope.GroundingPointIds.ToArray());
+        WorkScope validated = WorkScope.Create(workScopeId, regions, boundaries, description);
+        WorkScope copy = WorkScope.Create(workScopeId,
+            validated.Regions.Select(region => new WorkScopeRegion(region.TerminalIds, region.ElectricalNodeIds)),
+            validated.Boundaries.Select(boundary => new WorkScopeBoundary(boundary.DeviceId, boundary.Side,
+                boundary.TerminalId, boundary.ConnectionId)), description);
+        WorkScopeId = copy.WorkScopeId;
+        Regions = copy.Regions;
+        Boundaries = copy.Boundaries;
+        Description = copy.Description;
     }
 
-    public IReadOnlyList<Guid> CopyGroundingPointIds()
-    {
-        return GroundingPointIds.ToArray();
-    }
+    public Guid WorkScopeId { get; }
+    public IReadOnlyList<WorkScopeRegion> Regions { get; }
+    public IReadOnlyList<WorkScopeBoundary> Boundaries { get; }
+    public string? Description { get; }
+
+    public static WorkScopeCommandSnapshot From(WorkScope scope) =>
+        new(scope.WorkScopeId, scope.Regions, scope.Boundaries, scope.Description);
 }

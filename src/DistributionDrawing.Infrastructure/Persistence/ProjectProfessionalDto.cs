@@ -18,16 +18,20 @@ public sealed record ProjectProfessionalDto(
 }
 
 public sealed record ProjectWorkScopeDto(
-    Guid WorkScopeId,
-    ProjectBoundaryPointDto StartBoundary,
-    ProjectBoundaryPointDto EndBoundary,
-    string Description,
-    IReadOnlyList<Guid> GroundingPointIds);
+    [property: JsonRequired] Guid WorkScopeId,
+    [property: JsonRequired] IReadOnlyList<ProjectWorkScopeRegionDto> Regions,
+    [property: JsonRequired] IReadOnlyList<ProjectWorkScopeBoundaryDto> Boundaries,
+    string? Description = null);
 
-public sealed record ProjectBoundaryPointDto(
-    Guid DeviceId,
-    Guid TerminalId,
-    string Side);
+public sealed record ProjectWorkScopeRegionDto(
+    [property: JsonRequired] IReadOnlyList<Guid> TerminalIds,
+    [property: JsonRequired] IReadOnlyList<Guid> ElectricalNodeIds);
+
+public sealed record ProjectWorkScopeBoundaryDto(
+    [property: JsonRequired] Guid DeviceId,
+    [property: JsonRequired, JsonConverter(typeof(StrictStringEnumConverter<BoundarySide>))] BoundarySide Side,
+    Guid? TerminalId = null,
+    Guid? ConnectionId = null);
 
 public sealed record ProjectGroundingPointDto(
     Guid GroundingPointId,
@@ -108,16 +112,18 @@ internal static class ProjectProfessionalMapper
     public static ProjectProfessionalDto ToDto(DrawingDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
+        foreach (WorkScope scope in document.WorkScopes) document.ValidateWorkScopeReferences(scope);
 
         return new ProjectProfessionalDto(
             document.Id,
             document.WorkScopes
                 .Select(workScope => new ProjectWorkScopeDto(
                     workScope.WorkScopeId,
-                    ToDto(workScope.StartBoundary),
-                    ToDto(workScope.EndBoundary),
-                    workScope.Description,
-                    workScope.GroundingPointIds.ToArray()))
+                    workScope.Regions.Select(region => new ProjectWorkScopeRegionDto(
+                        region.TerminalIds.ToArray(), region.ElectricalNodeIds.ToArray())).ToArray(),
+                    workScope.Boundaries.Select(boundary => new ProjectWorkScopeBoundaryDto(
+                        boundary.DeviceId, boundary.Side, boundary.TerminalId, boundary.ConnectionId)).ToArray(),
+                    workScope.Description))
                 .ToArray(),
             document.GroundingPoints
                 .Select(groundingPoint => new ProjectGroundingPointDto(
@@ -194,12 +200,7 @@ internal static class ProjectProfessionalMapper
 
         foreach (ProjectWorkScopeDto workScope in professional.WorkScopes)
         {
-            document.CreateWorkScope(
-                workScope.WorkScopeId,
-                ToDomain(workScope.StartBoundary),
-                ToDomain(workScope.EndBoundary),
-                workScope.Description,
-                workScope.GroundingPointIds);
+            document.AddWorkScope(ToDomain(workScope));
         }
 
         return new ProjectProfessionalSnapshot(professional);
@@ -234,6 +235,8 @@ internal static class ProjectProfessionalMapper
             professional.GroundingAccessPoints ?? throw new InvalidDataException(
                 "Professional grounding access points are required.");
 
+        if (workScopes.Any(scope => scope is null))
+            throw new InvalidDataException("Professional work scopes cannot contain null items.");
         EnsureUnique(
             workScopes.Select(workScope => workScope.WorkScopeId),
             "work scope");
@@ -244,9 +247,6 @@ internal static class ProjectProfessionalMapper
             groundingAccessPoints.Select(point => point.GroundingAccessPointId),
             "grounding access point");
 
-        HashSet<Guid> groundingPointIds = groundingPoints
-            .Select(groundingPoint => groundingPoint.GroundingPointId)
-            .ToHashSet();
         HashSet<(ProjectGroundingTargetKind Kind, Guid TargetId)> groundingTargets = [];
         HashSet<string> groundingNumbers = new(StringComparer.OrdinalIgnoreCase);
         foreach (ProjectGroundingPointDto groundingPoint in groundingPoints)
@@ -307,49 +307,16 @@ internal static class ProjectProfessionalMapper
 
         foreach (ProjectWorkScopeDto workScope in workScopes)
         {
-            if (workScope.StartBoundary is null || workScope.EndBoundary is null)
+            try
             {
-                throw new InvalidDataException(
-                    $"Work scope '{workScope.WorkScopeId}' requires two boundaries.");
+                document.ValidateWorkScopeReferences(ToDomain(workScope));
             }
-
-            if (workScope.GroundingPointIds is null)
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
                 throw new InvalidDataException(
-                    $"Work scope '{workScope.WorkScopeId}' grounding point IDs are required.");
-            }
-
-            if (workScope.GroundingPointIds.Distinct().Count() !=
-                workScope.GroundingPointIds.Count)
-            {
-                throw new InvalidDataException(
-                    $"Work scope '{workScope.WorkScopeId}' has duplicate grounding point IDs.");
-            }
-
-            if (workScope.GroundingPointIds.Any(id => !groundingPointIds.Contains(id)))
-            {
-                throw new InvalidDataException(
-                    $"Work scope '{workScope.WorkScopeId}' references a missing grounding point.");
-            }
-
-            ValidateBoundaryStructure(workScope.StartBoundary, workScope.WorkScopeId);
-            ValidateBoundaryStructure(workScope.EndBoundary, workScope.WorkScopeId);
-            if (workScope.StartBoundary.TerminalId == workScope.EndBoundary.TerminalId)
-            {
-                throw new InvalidDataException(
-                    $"Work scope '{workScope.WorkScopeId}' has duplicate boundary terminals.");
-            }
-
-            if (string.IsNullOrWhiteSpace(workScope.Description))
-            {
-                throw new InvalidDataException(
-                    $"Work scope '{workScope.WorkScopeId}' description is required.");
+                    $"Work scope '{workScope.WorkScopeId}' is invalid: {exception.Message}", exception);
             }
         }
-
-        // Domain-level creation performs the authoritative Device/Terminal
-        // ownership and global ID checks when the candidate is restored.
-        _ = document;
     }
 
     private static ProjectGroundingTargetKind ToDto(GroundingTargetKind kind) => kind switch
@@ -498,34 +465,22 @@ internal static class ProjectProfessionalMapper
         _ => throw new InvalidDataException($"Unsupported grounding access placement side '{side}'.")
     };
 
-    private static void ValidateBoundaryStructure(
-        ProjectBoundaryPointDto boundary,
-        Guid workScopeId)
+    private static WorkScope ToDomain(ProjectWorkScopeDto scope)
     {
-        if (boundary.DeviceId == Guid.Empty || boundary.TerminalId == Guid.Empty)
-        {
-            throw new InvalidDataException(
-                $"Work scope '{workScopeId}' contains an empty boundary reference.");
-        }
-
-        if (string.IsNullOrWhiteSpace(boundary.Side))
-        {
-            throw new InvalidDataException(
-                $"Work scope '{workScopeId}' contains an empty boundary side.");
-        }
-    }
-
-    private static BoundaryPoint ToDomain(ProjectBoundaryPointDto boundary)
-    {
-        return new BoundaryPoint(boundary.DeviceId, boundary.TerminalId, boundary.Side);
-    }
-
-    private static ProjectBoundaryPointDto ToDto(BoundaryPoint boundary)
-    {
-        return new ProjectBoundaryPointDto(
-            boundary.DeviceId,
-            boundary.TerminalId,
-            boundary.Side);
+        ArgumentNullException.ThrowIfNull(scope.Regions);
+        ArgumentNullException.ThrowIfNull(scope.Boundaries);
+        return WorkScope.Create(scope.WorkScopeId,
+            scope.Regions.Select(region =>
+            {
+                ArgumentNullException.ThrowIfNull(region);
+                return new WorkScopeRegion(region.TerminalIds, region.ElectricalNodeIds);
+            }),
+            scope.Boundaries.Select(boundary =>
+            {
+                ArgumentNullException.ThrowIfNull(boundary);
+                return new WorkScopeBoundary(boundary.DeviceId, boundary.Side,
+                    boundary.TerminalId, boundary.ConnectionId);
+            }), scope.Description);
     }
 
     private static void EnsureUnique(IEnumerable<Guid> ids, string objectName)

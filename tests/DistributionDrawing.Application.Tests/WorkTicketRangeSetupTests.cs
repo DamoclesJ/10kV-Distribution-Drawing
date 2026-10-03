@@ -1,3 +1,4 @@
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;

@@ -43,7 +43,6 @@ public sealed class DesktopToolboxRuntimeTests
     [InlineData(DesktopToolMode.AddCableTermination)]
     [InlineData(DesktopToolMode.AddPoleSwitch)]
     [InlineData(DesktopToolMode.AddGroundingPoint)]
-    [InlineData(DesktopToolMode.AddWorkScope)]
     public void ToolboxExposesOneActiveProfessionalTool(DesktopToolMode mode)
     {
         var toolbox = new ToolboxViewModel();
@@ -62,10 +61,7 @@ public sealed class DesktopToolboxRuntimeTests
             toolbox.IsPoleSwitchActive,
             toolbox.IsGroundingPointActive
         ];
-        if (mode == DesktopToolMode.AddWorkScope)
-            Assert.DoesNotContain(true, states);
-        else
-            Assert.Single(states, active => active);
+        Assert.Single(states, active => active);
     }
 
     [Fact]

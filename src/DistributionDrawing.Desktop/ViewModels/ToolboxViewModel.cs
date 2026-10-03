@@ -13,8 +13,7 @@ public enum DesktopToolMode
     CreateCable,
     AddCableTermination,
     AddPoleSwitch,
-    AddGroundingPoint,
-    AddWorkScope
+    AddGroundingPoint
 }
 
 public sealed class ToolboxViewModel : INotifyPropertyChanged

@@ -1,3 +1,4 @@
+using DistributionDrawing.Domain.Professional;
 using System.Windows;
 using System.Windows.Controls;
 using DistributionDrawing.Application.WorkTickets;
@@ -85,7 +86,7 @@ public partial class WorkTicketWorkspace : UserControl
             TicketList.SelectedItem = (TicketList.ItemsSource as IEnumerable<Choice>)?
                 .FirstOrDefault(item => item.Id == _ticketId);
             ScopeList.ItemsSource = drawing?.WorkScopes
-                .Select(scope => new ScopeChoice(scope.WorkScopeId, scope.Description)).ToArray() ?? [];
+                .Select(scope => new ScopeChoice(scope.WorkScopeId, string.IsNullOrWhiteSpace(scope.Description) ? "已确认工作范围" : scope.Description)).ToArray() ?? [];
             EquipmentScopeList.ItemsSource = drawing?.Devices
                 .OrderBy(device => device.DisplayName)
                 .Select(device => new ScopeChoice(device.Id, $"设备：{DescribeSwitchOrDevice(drawing, device)}")).ToArray() ?? [];
@@ -181,14 +182,14 @@ public partial class WorkTicketWorkspace : UserControl
     private static string DescribeSwitchOrDevice(DrawingDocument drawing, Device device) =>
         device is SwitchDevice switchDevice ? DescribeSwitch(drawing, switchDevice) : device.DisplayName ?? "未命名设备";
 
-    public static string BoundarySideName(DistributionDrawing.Application.WorkTickets.BoundarySide side) => side switch
+    public static string BoundarySideName(DistributionDrawing.Domain.Professional.BoundarySide side) => side switch
     {
-        DistributionDrawing.Application.WorkTickets.BoundarySide.Bus => "母线侧",
-        DistributionDrawing.Application.WorkTickets.BoundarySide.Line => "线路侧",
-        DistributionDrawing.Application.WorkTickets.BoundarySide.SmallerNumber => "小号侧",
-        DistributionDrawing.Application.WorkTickets.BoundarySide.LargerNumber => "大号侧",
-        DistributionDrawing.Application.WorkTickets.BoundarySide.Source => "电源侧",
-        DistributionDrawing.Application.WorkTickets.BoundarySide.Load => "负荷侧",
+        DistributionDrawing.Domain.Professional.BoundarySide.Bus => "母线侧",
+        DistributionDrawing.Domain.Professional.BoundarySide.Line => "线路侧",
+        DistributionDrawing.Domain.Professional.BoundarySide.SmallerNumber => "小号侧",
+        DistributionDrawing.Domain.Professional.BoundarySide.LargerNumber => "大号侧",
+        DistributionDrawing.Domain.Professional.BoundarySide.Source => "电源侧",
+        DistributionDrawing.Domain.Professional.BoundarySide.Load => "负荷侧",
         _ => "待确认"
     };
 

@@ -325,8 +325,10 @@ public sealed class WorkTicketAnalyzerTests
         drawing.AddDevice(cabinet);
         Guid first = cabinet.Intervals[0].CableTerminalId!.Value;
         Guid second = cabinet.Intervals[1].CableTerminalId!.Value;
-        WorkScope scope = WorkScope.Create(Guid.NewGuid(), new BoundaryPoint(cabinet.Id, first, "线路侧"),
-            new BoundaryPoint(cabinet.Id, second, "线路侧"), "检修范围", []);
+        WorkScope scope = WorkScope.Create(Guid.NewGuid(), [new WorkScopeRegion([first, second], [])],
+            [new WorkScopeBoundary(cabinet.Id, BoundarySide.Line, first),
+             new WorkScopeBoundary(cabinet.Id, BoundarySide.Line, second)],
+            "检修范围");
         drawing.AddWorkScope(scope);
         Assert.True(WorkTicketRangeSetup.TryResolve(drawing,
             cabinet.Intervals[0].SwitchDevices[0].Id, BoundarySide.Line,
@@ -487,8 +489,10 @@ public sealed class WorkTicketAnalyzerTests
         GroundingPoint point = GroundingPoint.Create(Guid.NewGuid(), firstTerminal, "负1电缆侧", "S01");
         drawing.AddGroundingPoint(point);
         WorkScope scope = WorkScope.Create(Guid.NewGuid(),
-            new BoundaryPoint(cabinet.Id, firstTerminal, "线路侧"),
-            new BoundaryPoint(cabinet.Id, secondTerminal, "线路侧"), "负1至负2", [point.GroundingPointId]);
+            [new WorkScopeRegion([firstTerminal, secondTerminal], [])],
+            [new WorkScopeBoundary(cabinet.Id, BoundarySide.Line, firstTerminal),
+             new WorkScopeBoundary(cabinet.Id, BoundarySide.Line, secondTerminal)],
+            "负1至负2");
         drawing.AddWorkScope(scope);
         Assert.True(WorkTicketRangeSetup.TryResolve(drawing,
             cabinet.Intervals[0].SwitchDevices[0].Id, BoundarySide.Line,

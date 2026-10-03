@@ -23,10 +23,9 @@ public sealed class AddWorkScopeCommand : ICommand
     {
         _document.CreateWorkScope(
             After.WorkScopeId,
-            After.StartBoundary.ToDomain(),
-            After.EndBoundary.ToDomain(),
-            After.Description,
-            After.CopyGroundingPointIds());
+            After.Regions,
+            After.Boundaries,
+            After.Description);
     }
 
     public void Undo()

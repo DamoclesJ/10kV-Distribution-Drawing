@@ -345,8 +345,7 @@ public sealed class PropertyEditor
 
     public PropertyEditResult TryEditWorkScope(
         SelectionReference target,
-        string description,
-        IEnumerable<Guid>? groundingPointIds)
+        string? description)
     {
         ArgumentNullException.ThrowIfNull(target);
 
@@ -361,7 +360,6 @@ public sealed class PropertyEditor
         if (!_commandFactory.TryCreateWorkScope(
                 selection,
                 description,
-                groundingPointIds,
                 out ICommand? command,
                 out PropertyEditError? error))
         {

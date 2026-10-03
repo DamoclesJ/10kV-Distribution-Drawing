@@ -318,7 +318,7 @@ public sealed class WpEm09ElectricalModelClosureTests : IDisposable
             Assert.Contains(start.Position, route.Points);
             Assert.Contains(end.Position, route.Points);
         }
-        Assert.Equal(ProjectFileFormat.Version9,
+        Assert.Equal(ProjectFileFormat.Version10,
             reopened.PersistenceSession.Manifest.FormatVersion);
     }
 

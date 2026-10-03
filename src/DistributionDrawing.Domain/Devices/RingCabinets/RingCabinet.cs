@@ -38,6 +38,9 @@ public sealed class RingCabinet : Device
         CompositionKind = DetermineCompositionKind(_intervals);
     }
 
+    // Registered documents preflight identity retirement before changing aggregate state.
+    internal Action<RingCabinet>? ValidateReplacement { get; set; }
+
     public Guid MainBusNodeId { get; }
 
     public CabinetCompositionKind CompositionKind { get; private set; }
@@ -89,6 +92,7 @@ public sealed class RingCabinet : Device
         }
 
         RingCabinet candidate = Restore(definition);
+        ValidateReplacement?.Invoke(candidate);
         _intervals = candidate._intervals;
         _electricalNodes = candidate._electricalNodes;
         _terminals = candidate._terminals;
@@ -170,6 +174,7 @@ public sealed class RingCabinet : Device
             definitions,
             LineName));
 
+        ValidateReplacement?.Invoke(candidate);
         _intervals = candidate._intervals;
         _electricalNodes = candidate._electricalNodes;
         _terminals = candidate._terminals;

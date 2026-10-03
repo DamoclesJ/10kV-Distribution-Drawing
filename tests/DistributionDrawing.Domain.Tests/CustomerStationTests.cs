@@ -386,8 +386,10 @@ public sealed class CustomerStationTests
         Assert.Contains(grounding, document.GroundingPoints);
     }
 
-    [Fact]
-    public void RemoveCustomerStation_WithFeederSwitchWorkScopeBoundary_IsAtomic()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RemoveCustomerStation_WithFeederWorkScopeReferences_IsAtomic(bool nodeOnly)
     {
         DrawingDocument document = TestFixtures.CreateDocument();
         CustomerStation station = CreateStation(StationKind.IndoorStation, 2);
@@ -396,14 +398,10 @@ public sealed class CustomerStationTests
         IncomingFeeder second = station.IncomingFeeders[1];
         WorkScope workScope = document.CreateWorkScope(
             Guid.NewGuid(),
-            new BoundaryPoint(
-                first.IsolationSwitch.Id,
-                first.CableTerminalId,
-                "主供侧"),
-            new BoundaryPoint(
-                second.IsolationSwitch.Id,
-                second.CableTerminalId,
-                "备供侧"),
+            [nodeOnly ? new WorkScopeRegion([], [first.ElectricalNodeId, second.ElectricalNodeId])
+                : new WorkScopeRegion([first.CableTerminalId, second.CableTerminalId], [])],
+            nodeOnly ? [] : [new WorkScopeBoundary(first.IsolationSwitch.Id, BoundarySide.Line, first.CableTerminalId),
+             new WorkScopeBoundary(second.IsolationSwitch.Id, BoundarySide.Line, second.CableTerminalId)],
             "双电源用户站工作范围");
 
         Assert.Throws<InvalidOperationException>(() =>

@@ -1,3 +1,4 @@
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Desktop.WorkTickets;

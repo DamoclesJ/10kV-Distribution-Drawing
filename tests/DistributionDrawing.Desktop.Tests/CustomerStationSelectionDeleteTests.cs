@@ -319,8 +319,9 @@ public sealed class CustomerStationSelectionDeleteTests : IDisposable
         IncomingFeeder second = station.IncomingFeeders[1];
         var workScope = session.PersistenceSession.Domain.CreateWorkScope(
             Guid.NewGuid(),
-            new BoundaryPoint(first.IsolationSwitch.Id, first.CableTerminalId, "主供侧"),
-            new BoundaryPoint(second.IsolationSwitch.Id, second.CableTerminalId, "备供侧"),
+            [new WorkScopeRegion([first.CableTerminalId, second.CableTerminalId], [])],
+            [new WorkScopeBoundary(first.IsolationSwitch.Id, BoundarySide.Line, first.CableTerminalId),
+             new WorkScopeBoundary(second.IsolationSwitch.Id, BoundarySide.Line, second.CableTerminalId)],
             "双电源站工作范围");
         session.SelectionManager.Replace([
             StationReference(station),

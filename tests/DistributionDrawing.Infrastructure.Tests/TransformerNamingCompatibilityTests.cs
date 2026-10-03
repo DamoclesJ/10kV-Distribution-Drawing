@@ -108,7 +108,7 @@ public sealed class TransformerNamingCompatibilityTests : IDisposable
 
         Assert.Equal(1, payload[MarkerProperty]!.GetValue<int>());
         Assert.Equal("配变一号", transformer["displayName"]!.GetValue<string>());
-        Assert.Equal(ProjectFileFormat.Version9,
+        Assert.Equal(ProjectFileFormat.Version10,
             new ProjectFileContainer().Open(path).Manifest.FormatVersion);
     }
 
@@ -203,7 +203,7 @@ public sealed class TransformerNamingCompatibilityTests : IDisposable
         Assert.Equal(
             "补录后的真实名称",
             GetTransformer(payload)["displayName"]!.GetValue<string>());
-        Assert.Equal(ProjectFileFormat.Version9, saved.Manifest.FormatVersion);
+        Assert.Equal(ProjectFileFormat.Version10, saved.Manifest.FormatVersion);
         Assert.Equal(TransformerNamingContractMode.Current, saved.TransformerNamingMode);
         Assert.False(saved.IsDirty);
 

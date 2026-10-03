@@ -10,9 +10,20 @@
 - **Implementation branch:** `wp-ws-01`
 - **Implementation base:** `main = origin/main = 70c321c1faa6c4c67c01d4d942d8ad5e596bd15d`
 - **FormatVersion at package opening:** V9
-- **Phase 1:** NOT STARTED
+- **Phase 1:** IMPLEMENTED / CANDIDATE
+- **Phase 2:** NOT STARTED
 
 This document records the approved package boundary. Opening the package does not start an implementation phase.
+
+## Phase 1 candidate progress
+
+Domain + V10 is implemented as a candidate: immutable Regions with Terminal/Node membership, structural typed Boundaries, optional Description, complete command snapshots, V10-only persistence, and Domain identity-retirement guards. The existing WTA `BoundarySide` contract is shared from Domain without changing its values. WorkScope grounding ownership and the legacy A/B creation path are removed; Inspector membership is read-only and rendering uses boundary/summary markers. WorkTicket references and Equipment semantics remain intact.
+
+- Current development FormatVersion: V10; V8/V9 and future versions reject, with no migration.
+- macOS automated results: Domain 236/236; Application 243/243; Infrastructure 151/151. A temporary harness using the same production command sources and test sources passed 19/19 pure command/deletion tests; this supplements the Windows suites.
+- Full solution and both Windows test projects compile on macOS. Rendering.Wpf/Desktop test execution requires WindowsDesktop and remains PENDING; Windows GUI acceptance is NOT RUN.
+- STOP-P1-01 through STOP-P1-06: NONE.
+- WP-WS-01 stays OPEN / IN PROGRESS. Phase 2 and later phases have not started; no Candidate, Confirmation, automatic projection, or Analyzer handoff is implemented here.
 
 ## Goal and normal flow
 

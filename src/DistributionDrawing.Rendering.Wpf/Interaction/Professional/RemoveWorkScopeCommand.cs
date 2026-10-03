@@ -28,10 +28,9 @@ public sealed class RemoveWorkScopeCommand : ICommand
     {
         _document.CreateWorkScope(
             Before.WorkScopeId,
-            Before.StartBoundary.ToDomain(),
-            Before.EndBoundary.ToDomain(),
-            Before.Description,
-            Before.CopyGroundingPointIds());
+            Before.Regions,
+            Before.Boundaries,
+            Before.Description);
     }
 
     public void Redo()

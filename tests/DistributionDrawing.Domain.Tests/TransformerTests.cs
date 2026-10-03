@@ -337,11 +337,9 @@ public sealed class TransformerTests
         Device otherDevice = document.Devices.Single(device => device.Id == other.OwnerId);
         WorkScope workScope = WorkScope.Create(
             Guid.NewGuid(),
-            new BoundaryPoint(
-                aggregate.Transformer.Id,
-                aggregate.HvTerminal.Id,
-                "HV"),
-            new BoundaryPoint(otherDevice.Id, other.Id, "Other"),
+            [new WorkScopeRegion([aggregate.HvTerminal.Id, other.Id], [])],
+            [new WorkScopeBoundary(aggregate.Transformer.Id, BoundarySide.Line, aggregate.HvTerminal.Id),
+             new WorkScopeBoundary(otherDevice.Id, BoundarySide.Line, other.Id)],
             "测试范围");
         document.AddWorkScope(workScope);
 

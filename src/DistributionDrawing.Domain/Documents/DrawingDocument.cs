@@ -298,13 +298,13 @@ public sealed class DrawingDocument
             .Select(terminal => terminal.Id)
             .Where(id => !replacementTerminalIds.Contains(id))
             .ToHashSet();
+        EnsureWorkScopeReferencesRemain(
+            previousSwitchIds.Except(replacementSwitchIds), retiredTerminalIds,
+            previousNodes.Select(node => node.Id).Except(replacementNodes.Select(node => node.Id)));
         if (_connections.Any(connection =>
                 retiredTerminalIds.Contains(connection.StartTerminalId) ||
                 retiredTerminalIds.Contains(connection.EndTerminalId)) ||
-            _groundingPoints.Any(point => TargetsAnyTerminal(point, retiredTerminalIds)) ||
-            _workScopes.Any(scope =>
-                retiredTerminalIds.Contains(scope.StartBoundary.TerminalId) ||
-                retiredTerminalIds.Contains(scope.EndBoundary.TerminalId)))
+            _groundingPoints.Any(point => TargetsAnyTerminal(point, retiredTerminalIds)))
         {
             throw new InvalidOperationException(
                 "The ring-cabinet cable terminal is still referenced and cannot be removed or replaced.");
@@ -385,6 +385,10 @@ public sealed class DrawingDocument
             .Select(terminal => terminal.Id)
             .ToHashSet();
 
+        EnsureWorkScopeReferencesRemain(aggregateDeviceIds, terminalIds,
+            _electricalNodes.Where(node => aggregateOwnerIds.Contains(node.OwnerId) ||
+                aggregateDeviceIds.Contains(node.OwnerId)).Select(node => node.Id));
+
         if (device is Transformer transformer)
         {
             Terminal hvTerminal = _terminals.SingleOrDefault(terminal =>
@@ -424,12 +428,7 @@ public sealed class DrawingDocument
                 $"Pole '{deviceId}' is still referenced by an overhead line.");
         }
 
-        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)) ||
-            _workScopes.Any(scope =>
-                aggregateDeviceIds.Contains(scope.StartBoundary.DeviceId) ||
-                aggregateDeviceIds.Contains(scope.EndBoundary.DeviceId) ||
-                terminalIds.Contains(scope.StartBoundary.TerminalId) ||
-                terminalIds.Contains(scope.EndBoundary.TerminalId)))
+        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)))
         {
             throw new InvalidOperationException(
                 $"Device '{deviceId}' is still referenced by Professional data.");
@@ -437,6 +436,7 @@ public sealed class DrawingDocument
 
         if (device is RingCabinet ringCabinet)
         {
+            ringCabinet.ValidateReplacement = null;
             _terminals.RemoveAll(terminal => terminalIds.Contains(terminal.Id));
             _electricalNodes.RemoveAll(node =>
                 aggregateOwnerIds.Contains(node.OwnerId) ||
@@ -484,6 +484,8 @@ public sealed class DrawingDocument
             .Select(feeder => feeder.IncomingFeederId)
             .ToHashSet();
 
+        EnsureWorkScopeReferencesRemain(aggregateDeviceIds, terminalIds, nodeIds);
+
         ValidateRegisteredCustomerStationAggregate(
             customerStation,
             switchIds,
@@ -499,12 +501,7 @@ public sealed class DrawingDocument
                 $"Customer station '{customerStationId}' is still referenced by a connection.");
         }
 
-        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)) ||
-            _workScopes.Any(scope =>
-                aggregateDeviceIds.Contains(scope.StartBoundary.DeviceId) ||
-                aggregateDeviceIds.Contains(scope.EndBoundary.DeviceId) ||
-                terminalIds.Contains(scope.StartBoundary.TerminalId) ||
-                terminalIds.Contains(scope.EndBoundary.TerminalId)))
+        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)))
         {
             throw new InvalidOperationException(
                 $"Customer station '{customerStationId}' is still referenced by Professional data.");
@@ -620,6 +617,7 @@ public sealed class DrawingDocument
             ?? throw new InvalidOperationException(
                 $"Intermediate terminal '{intermediateTerminalId}' does not exist.");
         Guid terminalId = intermediateTerminal.TerminalId;
+        EnsureWorkScopeReferencesRemain(terminalIds: [terminalId]);
         HashSet<Guid> referencedConnectionIds = _connections
             .Where(connection => connection.UsesTerminal(terminalId))
             .Select(connection => connection.Id)
@@ -858,6 +856,8 @@ public sealed class DrawingDocument
             ?? throw new InvalidOperationException(
                 $"Cable segment '{cableSegmentId}' connection is missing.");
 
+        EnsureWorkScopeReferencesRemain(connectionIds: [cableSegment.ConnectionId]);
+
         _cableSegments.Remove(cableSegment);
         try
         {
@@ -916,7 +916,9 @@ public sealed class DrawingDocument
                 "The reconnect before state does not match the document.");
         }
 
-        RemoveCableSegment(beforeCableSegment.Id);
+        ValidateWorkScopeConnectionReplacement(afterConnection);
+        _cableSegments.Remove(currentCableSegment);
+        _connections.Remove(currentConnection);
         try
         {
             AddCableSegment(afterCableSegment, afterConnection);
@@ -1020,6 +1022,8 @@ public sealed class DrawingDocument
         Connection connection = _connections.SingleOrDefault(existing => existing.Id == connectionId)
             ?? throw new InvalidOperationException(
                 $"Connection '{connectionId}' does not exist.");
+        EnsureWorkScopeReferencesRemain(connectionIds: [connectionId]);
+
         if (_overheadLines.Any(line => line.ConnectionId == connectionId))
         {
             throw new InvalidOperationException(
@@ -1174,6 +1178,8 @@ public sealed class DrawingDocument
                 $"Attachment '{attachmentId}' does not reference a switch.");
 
         Guid[] terminalIds = [.. switchDevice.TerminalIds];
+        EnsureWorkScopeReferencesRemain([switchDevice.Id], terminalIds,
+            _electricalNodes.Where(node => node.OwnerId == switchDevice.Id).Select(node => node.Id));
         if (_connections.Any(connection =>
                 terminalIds.Contains(connection.StartTerminalId) ||
                 terminalIds.Contains(connection.EndTerminalId)))
@@ -1182,9 +1188,7 @@ public sealed class DrawingDocument
                 $"Switch '{switchDevice.Id}' is still referenced by a connection.");
         }
 
-        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)) ||
-            _workScopes.Any(scope => terminalIds.Contains(scope.StartBoundary.TerminalId) ||
-                terminalIds.Contains(scope.EndBoundary.TerminalId)))
+        if (_groundingPoints.Any(point => TargetsAnyTerminal(point, terminalIds)))
         {
             throw new InvalidOperationException(
                 $"Switch '{switchDevice.Id}' is still referenced by professional data.");
@@ -1215,6 +1219,8 @@ public sealed class DrawingDocument
             ?? throw new InvalidOperationException(
                 $"Pole '{attachment.PoleId}' does not exist.");
         Guid[] switchTerminalIds = [.. switchDevice.TerminalIds];
+        EnsureWorkScopeReferencesRemain([switchDevice.Id], switchTerminalIds,
+            _electricalNodes.Where(node => node.OwnerId == switchDevice.Id).Select(node => node.Id));
         Terminal[] poleTerminals = _terminals
             .Where(item => pole.OverheadAnchorTerminalIds.Contains(item.Id))
             .ToArray();
@@ -1306,6 +1312,7 @@ public sealed class DrawingDocument
             throw new InvalidOperationException("架空线端点状态与预期不一致。");
         }
 
+        ValidateWorkScopeConnectionReplacement(after);
         // Endpoint substitution is not deletion: retain the line and all GAP facts.
         _connections.Remove(current);
         try
@@ -1470,15 +1477,7 @@ public sealed class DrawingDocument
                 $"Cable termination '{cableTermination.Id}' is still referenced by a grounding point.");
         }
 
-        if (_workScopes.Any(scope =>
-                scope.StartBoundary.DeviceId == cableTermination.Id ||
-                scope.EndBoundary.DeviceId == cableTermination.Id ||
-                terminalIds.Contains(scope.StartBoundary.TerminalId) ||
-                terminalIds.Contains(scope.EndBoundary.TerminalId)))
-        {
-            throw new InvalidOperationException(
-                $"Cable termination '{cableTermination.Id}' is still referenced by a work scope.");
-        }
+        EnsureWorkScopeReferencesRemain([cableTermination.Id], terminalIds, [internalNode.Id]);
 
         _poleAttachments.Remove(attachment);
         _terminals.Remove(cableSideTerminal);
@@ -1524,6 +1523,8 @@ public sealed class DrawingDocument
                 existing => existing.ConnectionId == connectionId)
             ?? throw new InvalidOperationException(
                 $"Overhead line '{connectionId}' does not exist.");
+
+        EnsureWorkScopeReferencesRemain(connectionIds: [connectionId]);
 
         GroundingAccessPoint[] accessPoints = _groundingAccessPoints
             .Where(point => point.ConnectionId == connectionId)
@@ -1625,19 +1626,10 @@ public sealed class DrawingDocument
         _groundingAccessPoints.Remove(point);
     }
 
-    public WorkScope CreateWorkScope(
-        Guid workScopeId,
-        BoundaryPoint startBoundary,
-        BoundaryPoint endBoundary,
-        string description,
-        IEnumerable<Guid>? groundingPointIds = null)
+    public WorkScope CreateWorkScope(Guid workScopeId, IEnumerable<WorkScopeRegion> regions,
+        IEnumerable<WorkScopeBoundary> boundaries, string? description = null)
     {
-        WorkScope workScope = WorkScope.Create(
-            workScopeId,
-            startBoundary,
-            endBoundary,
-            description,
-            groundingPointIds);
+        WorkScope workScope = WorkScope.Create(workScopeId, regions, boundaries, description);
         AddWorkScope(workScope);
         return workScope;
     }
@@ -1645,38 +1637,18 @@ public sealed class DrawingDocument
     public void AddWorkScope(WorkScope workScope)
     {
         ArgumentNullException.ThrowIfNull(workScope);
-
         EnsureObjectIdIsAvailable(workScope.WorkScopeId, nameof(WorkScope));
-        ValidateBoundaryPoint(workScope.StartBoundary);
-        ValidateBoundaryPoint(workScope.EndBoundary);
-        EnsureGroundingPointReferencesExist(workScope.GroundingPointIds);
-
+        ValidateWorkScopeReferences(workScope);
         _workScopes.Add(workScope);
     }
 
-    public void UpdateWorkScope(
-        Guid workScopeId,
-        BoundaryPoint startBoundary,
-        BoundaryPoint endBoundary,
-        string description,
-        IEnumerable<Guid>? groundingPointIds = null)
+    public void UpdateWorkScope(Guid workScopeId, IEnumerable<WorkScopeRegion> regions,
+        IEnumerable<WorkScopeBoundary> boundaries, string? description = null)
     {
         WorkScope workScope = GetWorkScope(workScopeId);
-        WorkScope replacement = WorkScope.Create(
-            workScopeId,
-            startBoundary,
-            endBoundary,
-            description,
-            groundingPointIds);
-
-        ValidateBoundaryPoint(replacement.StartBoundary);
-        ValidateBoundaryPoint(replacement.EndBoundary);
-        EnsureGroundingPointReferencesExist(replacement.GroundingPointIds);
-        workScope.Update(
-            replacement.StartBoundary,
-            replacement.EndBoundary,
-            replacement.Description,
-            replacement.GroundingPointIds);
+        WorkScope replacement = WorkScope.Create(workScopeId, regions, boundaries, description);
+        ValidateWorkScopeReferences(replacement);
+        workScope.Update(replacement);
     }
 
     public void RemoveWorkScope(Guid workScopeId)
@@ -1810,13 +1782,6 @@ public sealed class DrawingDocument
     public void RemoveGroundingPoint(Guid groundingPointId)
     {
         GroundingPoint groundingPoint = GetGroundingPoint(groundingPointId);
-        if (_workScopes.Any(workScope =>
-                workScope.GroundingPointIds.Contains(groundingPointId)))
-        {
-            throw new InvalidOperationException(
-                $"Grounding point '{groundingPointId}' is still referenced by a work scope.");
-        }
-
         _groundingPoints.Remove(groundingPoint);
     }
 
@@ -1841,42 +1806,89 @@ public sealed class DrawingDocument
                 $"Grounding point '{groundingPointId}' does not exist.");
     }
 
-    private void ValidateBoundaryPoint(BoundaryPoint boundaryPoint)
+    public void ValidateWorkScopeReferences(WorkScope scope)
     {
-        ArgumentNullException.ThrowIfNull(boundaryPoint);
-
-        Device device = _devices.FirstOrDefault(candidate =>
-                candidate.Id == boundaryPoint.DeviceId)
-            ?? throw new InvalidOperationException(
-                $"Boundary device '{boundaryPoint.DeviceId}' does not exist.");
-
-        Terminal terminal = GetTerminal(boundaryPoint.TerminalId);
-        if (terminal.OwnerType == TopologyOwnerType.Device)
+        ArgumentNullException.ThrowIfNull(scope);
+        foreach (WorkScopeRegion region in scope.Regions)
         {
-            if (terminal.OwnerId != device.Id)
-            {
-                throw new InvalidOperationException(
-                    $"Boundary terminal '{terminal.Id}' is not owned by device '{device.Id}'.");
-            }
-
-            return;
+            foreach (Guid id in region.TerminalIds) _ = GetTerminal(id);
+            foreach (Guid id in region.ElectricalNodeIds)
+                if (!_electricalNodes.Any(node => node.Id == id))
+                    throw new InvalidOperationException($"Work scope '{scope.WorkScopeId}' references missing node '{id}'.");
         }
-
-        if (terminal.OwnerType == TopologyOwnerType.InternalAggregate)
+        foreach (WorkScopeBoundary boundary in scope.Boundaries)
         {
-            RingCabinetInterval? interval = _devices
-                .OfType<RingCabinet>()
-                .SelectMany(cabinet => cabinet.Intervals)
-                .SingleOrDefault(candidate => candidate.IntervalId == terminal.OwnerId);
-
-            if (interval is not null && interval.ParentCabinetId == device.Id)
+            if (!_devices.Any(device => device.Id == boundary.DeviceId))
+                throw new InvalidOperationException($"Boundary device '{boundary.DeviceId}' does not exist.");
+            if (boundary.TerminalId is Guid terminalId && !TerminalBelongsToDevice(GetTerminal(terminalId), boundary.DeviceId))
+                throw new InvalidOperationException($"Boundary terminal '{terminalId}' is not contained in device '{boundary.DeviceId}'.");
+            if (boundary.ConnectionId is Guid connectionId)
             {
-                return;
+                Connection connection = _connections.SingleOrDefault(item => item.Id == connectionId)
+                    ?? throw new InvalidOperationException($"Boundary connection '{connectionId}' does not exist.");
+                ValidateBoundaryConnection(boundary, connection);
             }
         }
+    }
 
-        throw new InvalidOperationException(
-            $"Boundary terminal '{terminal.Id}' is not owned by or contained in device '{device.Id}'.");
+    private bool TerminalBelongsToDevice(Terminal terminal, Guid deviceId)
+    {
+        if (terminal.OwnerType == TopologyOwnerType.Device && terminal.OwnerId == deviceId) return true;
+        if (_devices.OfType<RingCabinet>().Any(cabinet => cabinet.Id == deviceId &&
+            cabinet.Terminals.Any(item => item.Id == terminal.Id))) return true;
+        return CustomerStations.Any(station => station.Id == deviceId && station.IncomingFeeders.Any(feeder =>
+            feeder.CableTerminalId == terminal.Id || feeder.StationTerminalId == terminal.Id));
+    }
+
+    private void ValidateBoundaryConnection(WorkScopeBoundary boundary, Connection connection)
+    {
+        bool valid = boundary.TerminalId is Guid terminalId
+            ? connection.UsesTerminal(terminalId)
+            : TerminalBelongsToDevice(GetTerminal(connection.StartTerminalId), boundary.DeviceId) ||
+              TerminalBelongsToDevice(GetTerminal(connection.EndTerminalId), boundary.DeviceId);
+        if (!valid)
+            throw new InvalidOperationException($"Boundary connection '{connection.Id}' is not incident to boundary device/terminal '{boundary.DeviceId}/{boundary.TerminalId}'.");
+    }
+
+    private void EnsureWorkScopeReferencesRemain(IEnumerable<Guid>? deviceIds = null,
+        IEnumerable<Guid>? terminalIds = null, IEnumerable<Guid>? nodeIds = null,
+        IEnumerable<Guid>? connectionIds = null)
+    {
+        HashSet<Guid> devices = (deviceIds ?? []).ToHashSet();
+        HashSet<Guid> terminals = (terminalIds ?? []).ToHashSet();
+        HashSet<Guid> nodes = (nodeIds ?? []).ToHashSet();
+        HashSet<Guid> connections = (connectionIds ?? []).ToHashSet();
+        foreach (WorkScope scope in _workScopes)
+        {
+            Guid? referenced = scope.Regions.SelectMany(region => region.TerminalIds).Where(terminals.Contains)
+                .Concat(scope.Regions.SelectMany(region => region.ElectricalNodeIds).Where(nodes.Contains))
+                .Concat(scope.Boundaries.Select(boundary => boundary.DeviceId).Where(devices.Contains))
+                .Concat(scope.Boundaries.Where(boundary => boundary.TerminalId is Guid id && terminals.Contains(id))
+                    .Select(boundary => boundary.TerminalId!.Value))
+                .Concat(scope.Boundaries.Where(boundary => boundary.ConnectionId is Guid id && connections.Contains(id))
+                    .Select(boundary => boundary.ConnectionId!.Value))
+                .Cast<Guid?>().FirstOrDefault();
+            if (referenced is Guid id)
+                throw new InvalidOperationException($"Work scope '{scope.WorkScopeId}' still references identity '{id}'; it cannot be retired.");
+        }
+    }
+
+    private void ValidateWorkScopeConnectionReplacement(Connection replacement)
+    {
+        foreach (WorkScope scope in _workScopes)
+            foreach (WorkScopeBoundary boundary in scope.Boundaries.Where(item => item.ConnectionId == replacement.Id))
+                ValidateBoundaryConnection(boundary, replacement);
+    }
+
+    private void ValidateRingCabinetWorkScopeReplacement(RingCabinet current, RingCabinet replacement)
+    {
+        EnsureWorkScopeReferencesRemain(
+            deviceIds: current.InternalSwitchDevices.Select(device => device.Id)
+                .Except(replacement.InternalSwitchDevices.Select(device => device.Id)),
+            terminalIds: current.Terminals.Select(terminal => terminal.Id)
+                .Except(replacement.Terminals.Select(terminal => terminal.Id)),
+            nodeIds: current.ElectricalNodes.Select(node => node.Id)
+                .Except(replacement.ElectricalNodes.Select(node => node.Id)));
     }
 
     private void ValidateGroundingTarget(GroundingTarget target)
@@ -2006,28 +2018,6 @@ public sealed class DrawingDocument
                terminalIds.Contains(groundingPoint.Target.TargetId);
     }
 
-    private void EnsureGroundingPointReferencesExist(IEnumerable<Guid> groundingPointIds)
-    {
-        ArgumentNullException.ThrowIfNull(groundingPointIds);
-
-        Guid[] ids = groundingPointIds.ToArray();
-        if (ids.Distinct().Count() != ids.Length)
-        {
-            throw new InvalidOperationException(
-                "A work scope cannot reference the same grounding point more than once.");
-        }
-
-        foreach (Guid groundingPointId in ids)
-        {
-            if (!_groundingPoints.Any(point =>
-                    point.GroundingPointId == groundingPointId))
-            {
-                throw new InvalidOperationException(
-                    $"Grounding point '{groundingPointId}' does not exist.");
-            }
-        }
-    }
-
     private void AddRingCabinet(RingCabinet ringCabinet)
     {
         ringCabinet.ValidateStructure();
@@ -2063,6 +2053,8 @@ public sealed class DrawingDocument
         }
 
         _devices.Add(ringCabinet);
+        ringCabinet.ValidateReplacement = replacement =>
+            ValidateRingCabinetWorkScopeReplacement(ringCabinet, replacement);
 
         foreach (RingCabinetInterval interval in ringCabinet.Intervals)
         {

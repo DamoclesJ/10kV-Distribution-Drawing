@@ -175,44 +175,34 @@ public sealed class ProfessionalSceneBuilder
             }
         }
 
+        int summaryIndex = 0;
         foreach (WorkScope workScope in document.WorkScopes)
         {
-            if (!anchors.TryGet(
-                    workScope.StartBoundary.TerminalId,
-                    out TerminalAnchor startAnchor) ||
-                !anchors.TryGet(
-                    workScope.EndBoundary.TerminalId,
-                    out TerminalAnchor endAnchor))
+            SelectionReference target = new(SelectionTargetKind.WorkScope, workScope.WorkScopeId);
+            int markers = 0;
+            foreach (WorkScopeBoundary boundary in workScope.Boundaries)
             {
-                continue;
+                Guid? terminalId = boundary.TerminalId;
+                if (terminalId is Guid id && anchors.TryGet(id, out TerminalAnchor anchor))
+                {
+                    elements.AddRange(CreateBoundaryElements(anchor.Position, boundary.Side.ToString(), "界", Colors.OrangeRed));
+                    hitTestEntries.Add(new SelectionHitTestEntry(target, MarkerBounds(anchor.Position, 7), 65));
+                    markers++;
+                }
             }
-
-            elements.AddRange(
-                CreateBoundaryElements(
-                    startAnchor.Position,
-                    workScope.StartBoundary.Side,
-                    "起",
-                    Colors.OrangeRed));
-            elements.AddRange(
-                CreateBoundaryElements(
-                    endAnchor.Position,
-                    workScope.EndBoundary.Side,
-                    "止",
-                    Colors.OrangeRed));
-
-            SelectionReference target = new(
-                SelectionTargetKind.WorkScope,
-                workScope.WorkScopeId);
-            hitTestEntries.Add(
-                new SelectionHitTestEntry(
-                    target,
-                    MarkerBounds(startAnchor.Position, 7),
-                    65));
-            hitTestEntries.Add(
-                new SelectionHitTestEntry(
-                    target,
-                    MarkerBounds(endAnchor.Position, 7),
-                    65));
+            if (markers == 0)
+            {
+                Guid[] membership = workScope.Regions.SelectMany(region => region.TerminalIds)
+                    .Concat(document.Terminals.Where(terminal => terminal.ElectricalNodeId is Guid nodeId &&
+                        workScope.Regions.Any(region => region.ElectricalNodeIds.Contains(nodeId))).Select(terminal => terminal.Id))
+                    .ToArray();
+                TerminalAnchor? anchor = membership.Select(id => anchors.TryGet(id, out TerminalAnchor found) ? (TerminalAnchor?)found : null)
+                    .FirstOrDefault(found => found is not null);
+                // A summary marker also keeps zero-boundary/node-only snapshots selectable.
+                DocumentPoint position = anchor?.Position ?? new DocumentPoint(10, 10 + summaryIndex++ * 10);
+                elements.AddRange(CreateBoundaryElements(position, $"{workScope.Regions.Count} 区域", "域", Colors.OrangeRed));
+                hitTestEntries.Add(new SelectionHitTestEntry(target, MarkerBounds(position, 7), 65));
+            }
         }
 
         return new ProfessionalSceneResult(elements, hitTestEntries, diagnostics);

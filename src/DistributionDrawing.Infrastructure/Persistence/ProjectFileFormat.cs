@@ -22,7 +22,9 @@ public static class ProjectFileFormat
 
     public const int Version9 = 9;
 
-    public const int CurrentVersion = Version9;
+    public const int Version10 = 10;
+
+    public const int CurrentVersion = Version10;
 
     public const string ManifestEntryName = "manifest.json";
 
@@ -30,6 +32,6 @@ public static class ProjectFileFormat
 
     public static bool IsSupportedVersion(int version)
     {
-        return version is Version8 or Version9;
+        return version == CurrentVersion;
     }
 }

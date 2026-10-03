@@ -50,9 +50,8 @@ public sealed class ChangeWorkScopeCommand : ICommand
     {
         _document.UpdateWorkScope(
             snapshot.WorkScopeId,
-            snapshot.StartBoundary.ToDomain(),
-            snapshot.EndBoundary.ToDomain(),
-            snapshot.Description,
-            snapshot.CopyGroundingPointIds());
+            snapshot.Regions,
+            snapshot.Boundaries,
+            snapshot.Description);
     }
 }

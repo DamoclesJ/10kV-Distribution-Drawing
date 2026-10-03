@@ -51,7 +51,7 @@ public sealed class PTIntervalPersistenceTests
                 restoredDocument.Devices.OfType<RingCabinet>());
             RingCabinetInterval restoredInterval = Assert.Single(restoredCabinet.Intervals);
 
-            Assert.Equal(ProjectFileFormat.Version9, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version10, opened.Manifest.FormatVersion);
             Assert.Equal("pt-interval", savedInterval["intervalKind"]!.GetValue<string>());
             Assert.Equal(originalCabinet.Id, restoredCabinet.Id);
             Assert.Equal(originalInterval.IntervalId, restoredInterval.IntervalId);

@@ -1,3 +1,4 @@
+using DistributionDrawing.Domain.Professional;
 using System.IO;
 using DistributionDrawing.Desktop.PoleAttachmentManagement;
 using DistributionDrawing.Application.WorkTickets;

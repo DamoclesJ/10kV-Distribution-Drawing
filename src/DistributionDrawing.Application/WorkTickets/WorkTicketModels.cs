@@ -6,7 +6,6 @@ public enum TicketReferenceKind { Device, Terminal, Connection, RingInterval, Gr
 public sealed record TicketReference(TicketReferenceKind Kind, Guid Id);
 public enum WorkScopeItemKind { ElectricalRange, Equipment }
 public sealed record WorkScopeItem(WorkScopeItemKind Kind, Guid TargetId);
-public enum BoundarySide { Unknown, Bus, Line, SmallerNumber, LargerNumber, Source, Load }
 public sealed record IsolationBoundary(Guid DeviceId, BoundarySide Side, Guid? TerminalId = null, Guid? ConnectionId = null);
 public sealed record IsolationScope(IReadOnlyList<IsolationBoundary> Boundaries);
 public sealed record WorkTask(string Content, string WorkObject);

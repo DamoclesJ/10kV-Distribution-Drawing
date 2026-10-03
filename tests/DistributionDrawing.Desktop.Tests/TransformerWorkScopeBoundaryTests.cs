@@ -1,4 +1,4 @@
-using DistributionDrawing.Desktop.WorkScopeCreation;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
@@ -12,7 +12,7 @@ namespace DistributionDrawing.Desktop.Tests;
 public sealed class TransformerWorkScopeBoundaryTests
 {
     [Fact]
-    public void WorkScopePicker_ExcludesTransformerHvTerminalButKeepsPoleTerminalEligible()
+    public void ConfirmedMembershipCanIncludeTransformerHvAndPoleTerminals()
     {
         var document = new DrawingDocument(Guid.NewGuid(), "WorkScope eligibility");
         var runtime = new RuntimeLayoutDocument(
@@ -38,12 +38,10 @@ public sealed class TransformerWorkScopeBoundaryTests
             runtime.TransformerLayouts);
 
         Assert.True(anchors.TryGet(transformer.HvTerminal.Id, out _));
-        Assert.False(WorkScopeBoundaryTerminalEligibility.IsEligible(
-            document,
-            transformer.HvTerminal.Id));
-        Assert.True(anchors.TryGet(pole.Terminal.Id, out _));
-        Assert.True(WorkScopeBoundaryTerminalEligibility.IsEligible(
-            document,
-            pole.Terminal.Id));
+        WorkScope scope = document.CreateWorkScope(Guid.NewGuid(),
+            [new WorkScopeRegion([transformer.HvTerminal.Id, pole.Terminal.Id], [])], [], null);
+        Assert.Equal(new[] { transformer.HvTerminal.Id, pole.Terminal.Id }, scope.Regions[0].TerminalIds);
+        Assert.Empty(scope.Boundaries);
+
     }
 }

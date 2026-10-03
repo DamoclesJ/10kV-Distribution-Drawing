@@ -169,8 +169,10 @@ public sealed class CableTerminationAttachmentAggregateTests
         AssertAggregatePresent(document, aggregate);
     }
 
-    [Fact]
-    public void Removal_is_rejected_when_a_work_scope_references_the_device_and_terminals()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Removal_is_rejected_when_a_work_scope_references_aggregate_identities(bool nodeOnly)
     {
         DrawingDocument document = TestFixtures.CreateDocument();
         var pole = new Pole(Guid.NewGuid(), "P-48");
@@ -179,14 +181,10 @@ public sealed class CableTerminationAttachmentAggregateTests
         Add(document, aggregate);
         document.AddWorkScope(WorkScope.Create(
             Guid.NewGuid(),
-            new BoundaryPoint(
-                aggregate.Termination.Id,
-                aggregate.CableSideTerminal.Id,
-                "电缆侧"),
-            new BoundaryPoint(
-                aggregate.Termination.Id,
-                aggregate.OverheadSideTerminal.Id,
-                "架空侧"),
+            [nodeOnly ? new WorkScopeRegion([], [aggregate.Termination.InternalNodeId])
+                : new WorkScopeRegion([aggregate.CableSideTerminal.Id, aggregate.OverheadSideTerminal.Id], [])],
+            nodeOnly ? [] : [new WorkScopeBoundary(aggregate.Termination.Id, BoundarySide.Line, aggregate.CableSideTerminal.Id),
+             new WorkScopeBoundary(aggregate.Termination.Id, BoundarySide.Line, aggregate.OverheadSideTerminal.Id)],
             "测试工作范围"));
 
         Assert.Throws<InvalidOperationException>(() =>

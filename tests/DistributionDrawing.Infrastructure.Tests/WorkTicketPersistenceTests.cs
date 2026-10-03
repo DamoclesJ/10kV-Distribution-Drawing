@@ -33,7 +33,7 @@ public sealed class WorkTicketPersistenceTests
             project.WorkTickets.Add(ticket);
             service.SaveProject();
             ProjectSession opened = new ProjectService().LoadProject(path);
-            Assert.Equal(9, opened.OpenedFormatVersion);
+            Assert.Equal(10, opened.OpenedFormatVersion);
             WorkTicketSession restored = Assert.Single(opened.WorkTickets.Tickets);
             Assert.Equal(ticket.Id, restored.Id);
             Assert.Equal("检修设备", restored.Task.Content);
@@ -95,7 +95,9 @@ public sealed class WorkTicketPersistenceTests
     [Theory]
     [InlineData(7)]
     [InlineData(6)]
-    [InlineData(10)]
+    [InlineData(8)]
+    [InlineData(9)]
+    [InlineData(11)]
     public void UnsupportedProjectVersionsAreRejected(int version)
     {
         string path = Path.Combine(Path.GetTempPath(), $"wta-version-{Guid.NewGuid():N}.kvdrawing");

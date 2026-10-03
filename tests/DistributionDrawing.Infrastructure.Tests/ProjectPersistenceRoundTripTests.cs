@@ -40,7 +40,7 @@ public sealed class ProjectPersistenceRoundTripTests
             DrawingDocument restoredDocument = ProjectDomainMapper.ToDomain(opened.Domain!);
             RingCabinet restored = GetCabinet(restoredDocument);
 
-            Assert.Equal(ProjectFileFormat.Version9, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version10, opened.Manifest.FormatVersion);
             Assert.Equal(
                 original.Intervals.Select(x => x.Sequence),
                 restored.Intervals.Select(x => x.Sequence));
@@ -78,7 +78,7 @@ public sealed class ProjectPersistenceRoundTripTests
             RingCabinetInterval restoredTarget = restored.Intervals.Single(interval =>
                 interval.IntervalId == target.IntervalId);
 
-            Assert.Equal(ProjectFileFormat.Version9, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version10, opened.Manifest.FormatVersion);
             Assert.Null(Assert.Single(opened.Domain!.RingCabinets).Intervals
                 .Single(interval => interval.IntervalId == target.IntervalId).CableTerminalId);
             Assert.Null(restoredTarget.CableTerminalId);
@@ -117,7 +117,7 @@ public sealed class ProjectPersistenceRoundTripTests
             RingCabinet restored = GetCabinet(
                 ProjectDomainMapper.ToDomain(opened.Domain!));
 
-            Assert.Equal(ProjectFileFormat.Version9, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version10, opened.Manifest.FormatVersion);
             Assert.Equal(string.Empty, restored.LineName);
             AssertStableIds(original, restored);
         }
@@ -218,7 +218,7 @@ public sealed class ProjectPersistenceRoundTripTests
             SwitchDevice restoredSwitch = Assert.Single(
                 restored.Devices.OfType<SwitchDevice>());
 
-            Assert.Equal(ProjectFileFormat.Version9, opened.Manifest.FormatVersion);
+            Assert.Equal(ProjectFileFormat.Version10, opened.Manifest.FormatVersion);
             Assert.Equal(originalPole.Id, restoredPole.Id);
             Assert.Equal(originalSwitch.Id, restoredSwitch.Id);
             Assert.Equal(originalSwitch.SwitchKind, restoredSwitch.SwitchKind);

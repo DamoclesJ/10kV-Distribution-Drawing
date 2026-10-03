@@ -232,15 +232,16 @@ public sealed class PropertyProjector
         WorkScope workScope = selection.WorkScope!;
         var rows = new List<PropertyRowViewModel>
         {
-            DomainRow("Description", "说明", workScope.Description),
-            DomainRow("StartBoundary.Side", "起始侧别", workScope.StartBoundary.Side),
-            DomainRow("EndBoundary.Side", "终止侧别", workScope.EndBoundary.Side),
-            DomainRow("GroundingPointCount", "关联工作地线", $"{workScope.GroundingPointIds.Count} 个")
+            EditableDomainRow(PropertyCommandFactory.WorkScopeDescriptionPropertyKey, "说明", workScope.Description ?? ""),
+            DomainRow("RegionCount", "区域数", workScope.Regions.Count),
+            DomainRow("TerminalCount", "端子成员数", workScope.Regions.Sum(region => region.TerminalIds.Count)),
+            DomainRow("NodeCount", "节点成员数", workScope.Regions.Sum(region => region.ElectricalNodeIds.Count)),
+            DomainRow("BoundaryCount", "边界数", workScope.Boundaries.Count)
         };
         return Snapshot(
             selection,
             "工作范围",
-            workScope.Description,
+            string.IsNullOrWhiteSpace(workScope.Description) ? "已确认工作范围" : workScope.Description,
             [new PropertySectionViewModel("专业属性", rows)]);
     }
 

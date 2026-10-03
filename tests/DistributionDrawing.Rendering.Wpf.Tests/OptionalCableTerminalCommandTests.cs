@@ -164,8 +164,9 @@ public sealed class OptionalCableTerminalCommandTests
         Guid terminalId = interval.CableTerminalId!.Value;
         document.CreateWorkScope(
             Guid.NewGuid(),
-            new BoundaryPoint(cabinet.Id, terminalId, "起始"),
-            new BoundaryPoint(other.Id, other.Intervals[0].CableTerminalId!.Value, "终止"),
+            [new WorkScopeRegion([terminalId, other.Intervals[0].CableTerminalId!.Value], [])],
+            [new WorkScopeBoundary(cabinet.Id, BoundarySide.Line, terminalId),
+             new WorkScopeBoundary(other.Id, BoundarySide.Line, other.Intervals[0].CableTerminalId!.Value)],
             "检修范围");
 
         Assert.Throws<InvalidOperationException>(() =>
