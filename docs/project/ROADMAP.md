@@ -10,7 +10,7 @@ WP-EA-01A Topological Energization Analysis Foundation is **CLOSED / ACCEPTED** 
 
 **WP-EA-01B — Energization Scenario, Binary Analysis, Visualization & Interval Mutation Integrity: CLOSED / ACCEPTED** at final candidate `45125261600a60897e8a7367bd51c1f665557ecc`. Windows automated acceptance passed (1542/1542; 0 failed, 0 skipped), the solution build passed with 0 errors / 0 warnings, and user-completed Windows GUI acceptance was **PASSED / ACCEPTED**. See [WP-EA-01B Closure](WP-EA-01B-CLOSURE.md).
 
-The EA-01B closure itself starts no follow-up Work Package and creates no formal WP-EA-01C. WP-GS-01 is independently authorized below for requirements and architecture freeze documentation and governance only. The following remain candidates for separate project-control planning; this ordering is not an authorization:
+The EA-01B closure itself started no follow-up Work Package and created no formal WP-EA-01C. WP-GS-01 was subsequently authorized and is now CLOSED / ACCEPTED as recorded below. The following remain candidates for separate project-control planning; this ordering is not an authorization:
 
 1. EA-aware export.
 2. EA Scenario / Result → WorkScope Draft.
@@ -21,9 +21,9 @@ These proposals remain deferred and must not be treated as active implementation
 
 ## Grounding Safety & Energization Conflict
 
-**WP-GS-01 — OPEN / REQUIREMENTS FROZEN / ARCHITECTURE FROZEN / NOT IMPLEMENTED / WINDOWS ACCEPTANCE PENDING.** The product owner has frozen all 23 requirements in [WP-GS-01 Requirements Freeze](WP-GS-01-REQUIREMENTS-FREEZE.md), and the implementation architecture is recorded in [WP-GS-01 Architecture Freeze](WP-GS-01-ARCHITECTURE-FREEZE.md). The starting baseline is `main = origin/main = 2162ed17a0ee264ea3e211c2193fd29e3099af57`, FormatVersion V9, on work branch `wp-gs-01`. WP-WTA-01, WP-EA-01A, and WP-EA-01B remain CLOSED / ACCEPTED.
+**WP-GS-01 — CLOSED / ACCEPTED.** Closure Review PASSED. Requirements and Architecture are FROZEN; Implementation is COMPLETE; Windows automated and GUI acceptance PASSED. The implementation was completed on `wp-gs-01` from `main = origin/main = 2162ed17a0ee264ea3e211c2193fd29e3099af57`; FormatVersion remains V9. The Release solution build and five Windows suites passed (1,583 passed, 0 failed, 0 skipped). The GAP/OHL composite deletion Undo integrity issue remains a non-blocking follow-up outside this Work Package. See [WP-GS-01 Closure](WP-GS-01-CLOSURE.md), [Implementation Report](WP-GS-01-IMPLEMENTATION-REPORT.md), and [Windows Acceptance Report](WP-GS-01-WINDOWS-ACCEPTANCE-REPORT.md). WP-WTA-01, WP-EA-01A, and WP-EA-01B remain CLOSED / ACCEPTED.
 
-This round authorizes only the Architecture Freeze document and minimal STATUS / ROADMAP updates. Production implementation has not started; automated verification and Windows GUI acceptance remain pending for the subsequent implementation candidate. Completion of this documentation round does not authorize implementation or create a release version.
+This closure records WP-GS-01 as CLOSED / ACCEPTED. It does not merge `wp-gs-01` into `main` or create a release version. The composite GAP/OHL deletion Undo integrity issue remains a non-blocking Known Issue outside WP-GS-01.
 
 The frozen package covers precise Terminal / GAP-to-EA mapping, GroundingPoint creation rejection on Energized targets, reusable derived Effective Grounding and RingCabinet structure rules, independent pole-switch sides, candidate safety checks before switch / Seed operations and Undo / Redo, minimal rejection prompts, automated tests, and Windows GUI acceptance. Candidate calculations and rejection must preserve real facts, history/cursor, rendering, persistence, and dirty state. FormatVersion remains V9 unless a later code audit proves persisted facts insufficient and a separate format discussion is authorized.
 
