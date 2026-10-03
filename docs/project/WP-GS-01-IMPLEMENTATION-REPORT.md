@@ -5,14 +5,15 @@
 ## Current state
 
 - Branch: `wp-gs-01`
-- Implementation candidate: `2805057` (includes the final Seed lifecycle regression expectation)
+- Implementation fix commit: `fb0e0333edd38984f7679ca7dbd2ac33dbd66949`
+- Windows test source: tracked code/test content of the fix commit, run locally before the commit was created
 - Requirements Freeze: FROZEN
 - Architecture Freeze: FROZEN
 - FormatVersion: V9
 - Slices 1–11: implementation committed
-- Slice 12: partially verified on macOS; Windows-only test execution remains pending
-- Slice 13: Windows GUI checklist prepared; execution pending
-- Governance: OPEN / IMPLEMENTED / AUTOMATED ACCEPTANCE PARTIAL / WINDOWS ACCEPTANCE PENDING
+- Slice 12: all five Windows test suites passed locally against the exact tracked code/test content now committed in `fb0e033`; clean pushed-candidate rerun remains pending
+- Slice 13: GUI acceptance not run; desktop automation approval was denied by the host
+- Governance: OPEN / IMPLEMENTED / WINDOWS AUTOMATED TESTS PASSED ON WORKING TREE / GUI ACCEPTANCE PENDING
 
 ## Slice status and implementation commits
 
@@ -29,8 +30,8 @@
 | 9. Seed / Analysis Guard | Implemented | `656b72c` — `feat(gs): validate seed scenarios before EA publication` |
 | 10. Undo / Redo Safety Integration | Implemented | `a054d41` — `fix(gs): enforce grounding safety before undo and redo` |
 | 11. Minimal Desktop Messaging | Implemented | `541bcb7` — `fix(desktop): unify grounding safety blocking messages` |
-| 12. Full Automated Acceptance | Partial | `2805057` — `test(gs): align stale EA lifecycle expectations`; complete Windows run pending |
-| 13. Windows GUI Acceptance | Prepared, not executed | Windows acceptance pending |
+| 12. Full Automated Acceptance | Windows run passed on source content committed in `fb0e033`; clean pushed-candidate rerun pending | `fb0e0333edd38984f7679ca7dbd2ac33dbd66949` |
+| 13. Windows GUI Acceptance | Not run | Host returned `Computer Use was not approved to use desktop`; see [Windows Acceptance Report](WP-GS-01-WINDOWS-ACCEPTANCE-REPORT.md) |
 
 ## Implemented architecture
 
@@ -48,26 +49,20 @@ Blocking messages use the existing Desktop error/text flows and include the affe
 | --- | --- |
 | Domain | 183 passed, 0 failed, 0 skipped |
 | Application | 243 passed, 0 failed, 0 skipped |
-| Infrastructure | 115 passed, 0 failed, 0 skipped |
-| Rendering.Wpf | Test assembly compiled; testhost could not start on macOS because `Microsoft.WindowsDesktop.App 10.0` is unavailable |
-| Desktop | Test assembly compiled; testhost could not start on macOS because `Microsoft.WindowsDesktop.App 10.0` is unavailable |
-| Full solution Release build | Passed, 0 errors, 26 warnings |
+| Infrastructure (includes ProjectPersistence) | 115 passed, 0 failed, 0 skipped |
+| Rendering.Wpf | 669 passed, 0 failed, 0 skipped |
+| Desktop | 362 passed, 0 failed, 0 skipped |
+| Total | 1,572 passed, 0 failed, 0 skipped |
+| Full solution Release build | Passed, 0 errors, 0 warnings on final incremental build |
 
-The executable TRX files are under `artifacts/wp-gs-01/macos/`. The Rendering.Wpf and Desktop TRX runs were attempted and aborted before test execution; they are not reported as passed. The build confirms cross-target compilation only, not Windows runtime behavior.
+The final Windows test runs were executed locally with `--no-restore` against tracked source/test content identical to fix commit `fb0e0333edd38984f7679ca7dbd2ac33dbd66949`; TRX files are under `TestResults/WP-GS-01-Windows/`. The run preceded commit and push, so a clean pushed-candidate rerun remains required. The initial full build before the fix also passed with 22 existing nullable warnings; the final incremental solution build passed with 0 warnings.
 
-`git diff --check` passed at each committed implementation boundary. Review of `ProjectFileFormat` confirms `CurrentVersion = Version9`. No DTO contract, persisted business fact, or persistence migration changed. V9 persistence regression tests passed in the Infrastructure suite. Rendering behavior and the newly added Windows-targeted command tests still require Windows execution.
+The Windows run exposed one Desktop behavior gap and stale test fixtures. Explicit successful EA analysis now restores the EA overlay. Tests now reflect the frozen contracts: a provably contradictory GAP `LineSide` is rejected, a Seed edit after `NoSeeds` leaves EA stale until explicit analysis, and an invalid candidate Seed is rejected atomically. No Requirements/Architecture Freeze, FormatVersion, persisted fact, Transformer Seed, or terminal-seed boundary changed. `ProjectFileFormat.CurrentVersion` remains `Version9`.
+
+Fix commit `fb0e0333edd38984f7679ca7dbd2ac33dbd66949` updates `ProjectRuntimeSession.ExecuteEnergizationAnalysis` to enable the overlay after successful explicit analysis and updates the corresponding WPF/Desktop regression tests. The docs/governance update is pending a separate commit.
 
 ## Windows GUI checklist
 
-Run against the committed implementation candidate after Windows automated regression passes:
+No GUI case was executed. The host rejected desktop automation with `Computer Use was not approved to use desktop`; no UI workaround was attempted. Every case remains NOT RUN in the [Windows Acceptance Report](WP-GS-01-WINDOWS-ACCEPTANCE-REPORT.md).
 
-1. With no valid EA, create a GroundingPoint and edit Seed / switch state; confirm these edits do not establish a valid EA until explicit analysis.
-2. With valid EA, reject GroundingPoint creation on an energized Terminal and GAP without changing Domain, history, savepoint, dirty state, or current result; allow deenergized targets.
-3. Verify both PoleSwitch sides and multiple supports on one OHL Connection, including GAP inheritance from the Connection.
-4. Verify ordinary LoadSwitch, UpperLowerGrounding, LowerLowerGrounding, and UpperIsolationGrounding effective grounding, including `GroundSwitch Closed + Breaker Open` and the later energized Breaker-close rejection.
-5. Verify upstream energization is rejected when it would energize an existing work grounding point or effective grounding location.
-6. Verify complete candidate Seed analysis is rejected atomically when any grounded location would become energized; verify an accepted analysis publishes its result.
-7. Verify Undo / Redo and composite delete restoration cannot bypass checks and rejected actions preserve facts, history cursor, and dirty state.
-8. Verify deenergizing and grounding-removal directions remain operable, Save / reopen remains V9, the existing red EA rendering remains correct, and no new safety panel or locator appears.
-
-Do not mark WP-GS-01 CLOSED / ACCEPTED until full Windows automated acceptance and this GUI checklist pass on the final candidate SHA.
+Do not mark WP-GS-01 CLOSED / ACCEPTED until the fix is pushed, the full Windows automated acceptance is rerun on a clean pushed candidate, and the GUI checklist passes on the same final candidate SHA.
