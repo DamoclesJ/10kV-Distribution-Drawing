@@ -14,7 +14,7 @@ The EA-01B closure itself started no follow-up Work Package and created no forma
 
 ## EA-derived WorkScope & Confirmation
 
-**WP-WS-01 — OPEN / IN PROGRESS.** Requirements Freeze and Architecture / Data Model Freeze are COMPLETE. Implementation Plan Freeze v1.0 is APPROVED; STOP-01 through STOP-08 are NONE. The package is opened on branch `wp-ws-01` from `main = origin/main = 70c321c1faa6c4c67c01d4d942d8ad5e596bd15d`. Phase 1 has not started. See [WP-WS-01 Implementation Plan](WP-WS-01-IMPLEMENTATION-PLAN.md).
+**WP-WS-01 — OPEN / IN PROGRESS.** Requirements Freeze and Architecture / Data Model Freeze are COMPLETE. Implementation Plan Freeze v1.0 is APPROVED; STOP-01 through STOP-08 are NONE. The package is opened on branch `wp-ws-01` from `main = origin/main = 70c321c1faa6c4c67c01d4d942d8ad5e596bd15d`. Phase 1 — Domain + V10 is VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`; Windows automated verification passed 1678/1678 (0 failed, 0 skipped), and the full solution build had 0 errors. Phase 2 — EA → Candidate Projector is NOT STARTED. Windows GUI acceptance remains NOT RUN and is scheduled for Phase 6. See [WP-WS-01 Implementation Plan](WP-WS-01-IMPLEMENTATION-PLAN.md).
 
 The frozen normal flow is:
 
@@ -25,7 +25,7 @@ EA → WorkScope Candidate → User Confirm → Confirmed WorkScope
 
 The normal flow does not ask the user to manually choose Boundary A / Boundary B again. Confirmed WorkScope is a persisted snapshot built from the current valid EA result; Candidate is transient. Scope membership supports 1..N Regions, Terminal / ElectricalNode membership, multiple disconnected regions, and 0..N boundaries. Earth terminals/nodes and GroundSwitch-to-Earth paths are excluded from Candidate. GroundingPoint authority remains with GS and is not owned by WorkScope. Existing WTA `IsolationBoundary` remains an adapter input, not WorkScope authority. A transition that cannot be mapped deterministically must produce a diagnostic without guessing or rolling back the confirmed snapshot.
 
-The package is fixed at six phases: (1) Domain + V10; (2) EA → Candidate Projector; (3) Confirmation + CommandStack; (4) IsolationBoundary Projection; (5) WorkTicket Handoff; and (6) Windows GUI Acceptance. Current FormatVersion remains V9; the breaking V10 schema change belongs to Phase 1. No V8/V9 migration is planned, development fixtures may be rebuilt, and correctness takes priority over legacy compatibility. The governance opening does not start Phase 1.
+The package is fixed at six phases: (1) Domain + V10; (2) EA → Candidate Projector; (3) Confirmation + CommandStack; (4) IsolationBoundary Projection; (5) WorkTicket Handoff; and (6) Windows GUI Acceptance. Current FormatVersion is V10; the breaking schema change was implemented and accepted in Phase 1. V8/V9 migration is not supported; development fixtures may be rebuilt, and correctness takes priority over legacy compatibility. The Phase 1 accepted model includes multiple Regions, 0..N Boundaries, optional Description, no WorkScope GroundingPoint ownership, and referential-integrity protection. Windows GUI acceptance is reserved for Phase 6.
 
 WP-WTA-01, WP-EA-01A, WP-EA-01B, and WP-GS-01 remain CLOSED / ACCEPTED. No WP-EA-01C exists. The WP-GS-01 GAP/OHL composite deletion Undo issue remains outside WP-WS-01.
 

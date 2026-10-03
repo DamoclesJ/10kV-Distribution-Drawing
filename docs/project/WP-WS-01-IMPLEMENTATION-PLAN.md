@@ -10,20 +10,21 @@
 - **Implementation branch:** `wp-ws-01`
 - **Implementation base:** `main = origin/main = 70c321c1faa6c4c67c01d4d942d8ad5e596bd15d`
 - **FormatVersion at package opening:** V9
-- **Phase 1:** IMPLEMENTED / CANDIDATE
+- **Phase 1:** VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`
 - **Phase 2:** NOT STARTED
 
 This document records the approved package boundary. Opening the package does not start an implementation phase.
 
-## Phase 1 candidate progress
+## Phase 1 acceptance
 
-Domain + V10 is implemented as a candidate: immutable Regions with Terminal/Node membership, structural typed Boundaries, optional Description, complete command snapshots, V10-only persistence, and Domain identity-retirement guards. The existing WTA `BoundarySide` contract is shared from Domain without changing its values. WorkScope grounding ownership and the legacy A/B creation path are removed; Inspector membership is read-only and rendering uses boundary/summary markers. WorkTicket references and Equipment semantics remain intact.
+Phase 1 — Domain + V10 is VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`. The accepted model includes immutable multi-Region snapshots with Terminal/Node membership, 0..N structural typed Boundaries, optional Description, complete command snapshots, V10-only persistence, and Domain referential-integrity protection. The existing WTA `BoundarySide` contract is shared from Domain without changing its values. WorkScope does not own GroundingPoint; WorkTicket references and Equipment semantics remain intact.
 
-- Current development FormatVersion: V10; V8/V9 and future versions reject, with no migration.
-- macOS automated results: Domain 236/236; Application 243/243; Infrastructure 151/151. A temporary harness using the same production command sources and test sources passed 19/19 pure command/deletion tests; this supplements the Windows suites.
-- Full solution and both Windows test projects compile on macOS. Rendering.Wpf/Desktop test execution requires WindowsDesktop and remains PENDING; Windows GUI acceptance is NOT RUN.
+- Accepted SHA: `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`.
+- Windows automated verification: PASSED — Domain 236/236, Application 243/243, Infrastructure 151/151, Rendering.Wpf 674/674, Desktop 374/374; total 1678/1678, 0 failed, 0 skipped.
+- Full solution build: 0 errors.
+- Current FormatVersion: V10. V8/V9 migration is not supported. Windows GUI acceptance is NOT RUN and remains Phase 6; it is not part of Phase 1 acceptance.
 - STOP-P1-01 through STOP-P1-06: NONE.
-- WP-WS-01 stays OPEN / IN PROGRESS. Phase 2 and later phases have not started; no Candidate, Confirmation, automatic projection, or Analyzer handoff is implemented here.
+- WP-WS-01 stays OPEN / IN PROGRESS. Phase 2 — EA → Candidate Projector is NOT STARTED.
 
 ## Goal and normal flow
 
@@ -68,10 +69,10 @@ After EA completes, the normal flow does not ask the user to manually select Bou
 
 ## Schema policy
 
-- The formal project baseline remains FormatVersion V9 when this package opens.
-- The audit confirmed that the frozen WorkScope contract requires a breaking V10 schema, implemented in Phase 1.
+- The formal project baseline was FormatVersion V9 when this package opened; current accepted FormatVersion is V10.
+- The audit confirmed that the frozen WorkScope contract requires a breaking V10 schema, implemented and accepted in Phase 1.
 - This governance commit does not change `ProjectFileFormat`, production code, DTOs, tests, or the format version.
-- No V8/V9 migration is required or planned. Older development project files may be rejected; old development fixtures may be rebuilt.
+- V8/V9 migration is not supported. Older development project files may be rejected; old development fixtures may be rebuilt.
 - Correctness takes priority over legacy compatibility.
 
 ## Fixed implementation phases
