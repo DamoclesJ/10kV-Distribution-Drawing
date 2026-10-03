@@ -35,6 +35,12 @@ Stable project facts belong in repository documentation. Chat history and old Co
 14. Close the Work Package only after it passes its defined acceptance checks.
 15. Update `STATUS.md` or `ROADMAP.md` when the project state or committed plan changes.
 
+## Approved Work Package Phases
+
+- An opened Work Package and its approved implementation plan are recorded in `STATUS.md`, `ROADMAP.md`, and the package plan. Treat that frozen phase sequence and its exclusions as the implementation boundary.
+- A governance-only opening records the package branch and plan; it does not authorize Phase 1. Begin implementation only after the product owner explicitly directs the next phase.
+- When a package changes project schema, keep the current `FormatVersion` in governance until its authorized schema phase is implemented. Record migration and legacy-compatibility policy in the package plan.
+
 ## Operating Rules
 
 - One Codex thread should correspond to one Work Package.
