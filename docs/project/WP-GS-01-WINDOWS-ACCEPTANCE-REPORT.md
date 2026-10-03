@@ -2,7 +2,7 @@
 
 ## State
 
-- Governance: **OPEN / IMPLEMENTED / AUTOMATED ACCEPTANCE PASSED / WINDOWS GUI ACCEPTANCE PENDING**. No CLOSED / ACCEPTED declaration.
+- Governance: **OPEN / IMPLEMENTED / AUTOMATED ACCEPTANCE PASSED / WINDOWS GUI ACCEPTANCE PASSED / READY FOR CLOSURE REVIEW**. No CLOSED / ACCEPTED declaration.
 - Branch: `wp-gs-01`.
 - GS-AF-05 implementation and clean pushed evidence candidate: `0ca64ae4beba77e34614d6e1dc36c67ac57db3ab` — `fix(ea): preserve valid analysis for grounding-only mutations`.
 - FormatVersion: V9. Requirements Freeze and existing GS safety semantics are unchanged.
@@ -38,34 +38,23 @@ Regression covers same-result identity and freshness through GP/GAP add/remove/h
 
 Historical evidence remains under `TestResults/WP-GS-01-Windows/`: previous candidate `9e16ffb3b998659eadf6a5710bf1d42997483728` passed 1,572 tests before these 11 additional regressions.
 
-## GUI evidence and final-candidate rechecks
+## Windows GUI acceptance — PASS
 
-The user manually confirmed the following core behavior before the GS-AF-05 fix. These confirmations are recorded as prior evidence, not as final-candidate GUI PASS:
+The product owner reports personally completing the following core Windows GUI acceptance, including the prior WP-GS-01 core cases and the three GS-AF-05 rechecks. These are recorded as user-performed results; Computer Use automation was not used for this report.
 
-| Core case | Prior evidence | Final candidate |
+| Case | Result | Observed behavior |
 | --- | --- | --- |
-| Valid EA rejects GroundingPoint at Energized locations | USER-CONFIRMED PASS | RECHECK PENDING |
-| Energized device Effective Grounding is blocked | USER-CONFIRMED PASS | RECHECK PENDING |
-| Seed analysis reaching existing grounding is rejected | USER-CONFIRMED PASS | RECHECK PENDING |
-| PoleSwitch sides are judged independently | USER-CONFIRMED PASS | RECHECK PENDING |
-| A switch operation that reaches existing grounding is rejected | USER-CONFIRMED PASS | RECHECK PENDING |
-| Simple blocking messages match the frozen requirements | USER-CONFIRMED PASS | RECHECK PENDING |
+| Valid EA; create GAP / 验电接地环 on a Deenergized OHL | **PASS** | Creation succeeded; EA remained valid; red/normal overlay stayed visible. |
+| Create an allowed GroundingPoint on that GAP | **PASS** | Creation succeeded; EA remained valid; overlay remained visible. |
+| With GroundingPoint present, attempt switch operation that would energize it | **PASS** | GS rejected the operation with the established blocking message; no hazardous switch state was entered; overlay remained normal. |
+| Prior core WP-GS-01 GUI acceptance | **PASS — previously completed by product owner** | Energized GroundingPoint/effective grounding prevention, Seed-analysis conflict rejection, independent PoleSwitch-side judgment, rejection of switch operation that would energize existing grounding, and the frozen blocking-message behavior. |
 
-After candidate automation passed, Computer Use launch returned `Computer Use was not approved to use desktop`. No GUI actions or alternative UI automation route were used. The new lifecycle case failed before the fix; its final-candidate GUI result remains PENDING.
+**Combined Windows GUI Acceptance: PASS.** Automated and GUI acceptance gates are passed. WP-GS-01 is OPEN / READY FOR CLOSURE REVIEW; this report does not close or accept the Work Package.
 
-Required GS-AF-05 manual recheck on the newly built candidate:
+## Separate Known Issue — outside WP-GS-01
 
-1. Open a drawing with a real Seed and an open upstream switch. Explicitly analyze; verify both red energized and normal deenergized conductors are displayed.
-2. Create GAP / 验电接地环 on an existing OHL Connection in the deenergized working area. **PASS criterion:** EA remains valid and red/normal overlay remains visible.
-3. Create an allowed GroundingPoint on that GAP. **PASS criterion:** current EA is used for GS validation, creation succeeds, and EA/overlay remain valid and visible. Check corresponding Undo/Redo and allowed grounding removal too.
-4. Attempt the upstream switch close that would energize the grounding location. **PASS criterion:** the existing GS blocking message rejects the operation; switch, grounding, history cursor, and overlay remain unchanged.
-
-The remaining original checklist must also be completed/confirmed on the final candidate: no-valid-EA behavior; Energized Terminal/GAP rejection and Deenergized grounding; ordinary cabinet GroundSwitch; UpperLower/LowerLower; UpperIsolation GS Closed + Breaker Open and energized Breaker rejection; existing Effective Grounding upstream rejection; atomic Seed rejection; NoSeeds then new Seed requiring explicit analysis; Undo/Redo safety; release operations; simple messages/no panel/locator; Save/reopen; V9. Unspecified cases are **NOT RUN / PENDING**, not inferred from the user’s grouped confirmations.
-
-## Separate issue discovered during regression construction
-
-A mixed selection deleting a GAP together with its own OHL Connection has a pre-existing Undo defect: the line removal snapshot and explicit GAP removal both restore the same GAP, causing `GroundingAccessPoint ID ... is already in use`. Reproduction: select the GAP and its parent Connection, delete, then Undo. This is outside the grounding-only EA lifecycle change; it is recorded for separate resolution. Mixed topology classification is tested using independent GAP/Connection targets.
+A mixed selection deleting a GAP together with its own OHL Connection has a pre-existing Undo integrity defect: the line removal snapshot and explicit GAP removal both restore the same GAP, causing `GroundingAccessPoint ID ... is already in use`. Reproduction: select the GAP and its parent Connection, delete, then Undo. This is a **Known Issue in composite deletion / Undo integrity**, outside WP-GS-01. It has not been observed to bypass Grounding Safety or violate a frozen WP-GS-01 rule. Mixed topology classification is tested using independent GAP/Connection targets.
 
 ## Closure gate
 
-WP-GS-01 remains OPEN. GUI rechecks and the remaining acceptance checklist are pending; the separate overlapping-delete Undo defect remains recorded. Closure Review conditions are **not met**.
+WP-GS-01 is **OPEN / READY FOR CLOSURE REVIEW**. Automated and Windows GUI Acceptance have passed. Closure Review may begin; this report does not mark WP-GS-01 CLOSED / ACCEPTED.

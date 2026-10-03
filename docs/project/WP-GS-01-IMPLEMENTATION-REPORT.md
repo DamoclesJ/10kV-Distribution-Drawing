@@ -6,14 +6,14 @@
 
 - Branch: `wp-gs-01`
 - Implementation fix commit: `fb0e0333edd38984f7679ca7dbd2ac33dbd66949`
-- Clean pushed GS-AF-05 evidence candidate: `0ca64ae4beba77e34614d6e1dc36c67ac57db3ab`
+- GS-AF-05 implementation candidate: `0ca64ae4beba77e34614d6e1dc36c67ac57db3ab`; acceptance records are committed on its documentation descendant.
 - Requirements Freeze: FROZEN
 - Architecture Freeze: FROZEN
 - FormatVersion: V9
 - Slices 1–11: implementation committed
 - Slice 12: full Windows Release build and all five test suites passed on the clean pushed candidate
-- Slice 13: user manually confirmed core GS behavior; GS-AF-05 GUI rechecks remain pending. Latest Computer Use launch was not approved.
-- Governance: OPEN / IMPLEMENTED / AUTOMATED ACCEPTANCE PASSED / WINDOWS GUI ACCEPTANCE PENDING
+- Slice 13: Windows GUI Acceptance PASSED, including the product-owner-reported GS-AF-05 rechecks.
+- Governance: OPEN / IMPLEMENTED / AUTOMATED ACCEPTANCE PASSED / WINDOWS GUI ACCEPTANCE PASSED / READY FOR CLOSURE REVIEW
 
 ## Slice status and implementation commits
 
@@ -31,7 +31,7 @@
 | 10. Undo / Redo Safety Integration | Implemented | `a054d41` — `fix(gs): enforce grounding safety before undo and redo` |
 | 11. Minimal Desktop Messaging | Implemented | `541bcb7` — `fix(desktop): unify grounding safety blocking messages` |
 | 12. Full Automated Acceptance | PASS, 1,583 tests on clean pushed GS-AF-05 candidate | `0ca64ae4beba77e34614d6e1dc36c67ac57db3ab` |
-| 13. Windows GUI Acceptance | Partial prior manual evidence; final rechecks pending | Latest Computer Use launch not approved; see [Windows Acceptance Report](WP-GS-01-WINDOWS-ACCEPTANCE-REPORT.md) |
+| 13. Windows GUI Acceptance | PASS — prior core checks plus three GS-AF-05 rechecks reported by the product owner | See [Windows Acceptance Report](WP-GS-01-WINDOWS-ACCEPTANCE-REPORT.md) |
 
 ## Implemented architecture
 
@@ -63,14 +63,14 @@ Fix commit `fb0e0333edd38984f7679ca7dbd2ac33dbd66949` updates `ProjectRuntimeSes
 
 ## Windows GUI checklist
 
-The user manually confirmed the core GS rejection, side judgment, and blocking-message behavior before this fix, and found the GS-AF-05 lifecycle defect. The latest post-fix Computer Use launch returned `Computer Use was not approved to use desktop`. Final-candidate GUI rechecks remain PENDING; prior manual evidence and the full checklist are recorded in the [Windows Acceptance Report](WP-GS-01-WINDOWS-ACCEPTANCE-REPORT.md).
+The product owner reports completing the prior core WP-GS-01 GUI checks and all three GS-AF-05 GUI rechecks on Windows. GAP creation and allowed GroundingPoint creation retained valid EA and the red/normal overlay; a subsequent hazardous switch operation was rejected with the established message and did not enter the hazardous state. The [Windows Acceptance Report](WP-GS-01-WINDOWS-ACCEPTANCE-REPORT.md) records the reported outcomes.
 
-Do not mark WP-GS-01 CLOSED / ACCEPTED until every GUI checklist case passes on the final candidate SHA.
+Automated and Windows GUI Acceptance have passed. WP-GS-01 is OPEN / READY FOR CLOSURE REVIEW. Do not mark it CLOSED / ACCEPTED until Closure Review is separately completed.
 
 ## GS-AF-05 acceptance-driven lifecycle clarification
 
 Fix commit `0ca64ae4beba77e34614d6e1dc36c67ac57db3ab` explicitly classifies GP/GAP add/remove and non-electrical GP properties/layout as EA-neutral. Both professional and selection-delete composites preserve EA only when all children are explicitly neutral. Runtime retains the exact CurrentResult and overlay request, with no cached copy, recompute, or visual workaround. True electrical mutations retain their established lifecycle; the GS guard is unchanged. Architecture Freeze has a minimal GS-AF-05 clarification; Requirements Freeze and V9 are unchanged.
 
-Eleven added Desktop runtime regressions passed targeted validation, and the clean pushed candidate passed all 1,583 Windows tests. Recheck on the final candidate: overlay after GAP creation, overlay after allowed GroundingPoint creation, and GS rejection of a subsequent operation that energizes grounding. Keep WP-GS-01 OPEN.
+Eleven added Desktop runtime regressions passed targeted validation, and the clean pushed candidate passed all 1,583 Windows tests. The product owner reports all three corresponding GUI rechecks PASS. Governance is OPEN / READY FOR CLOSURE REVIEW; closure has not been declared.
 
-A separate pre-existing mixed-selection deletion issue was found while constructing topology-control tests: deleting a GAP and its own OHL then Undo restores the GAP twice. Reproduction and follow-up are recorded in the Windows Acceptance Report; this lifecycle fix does not change cascade deletion.
+A pre-existing mixed-selection GAP/OHL deletion Undo integrity issue remains a Known Issue outside WP-GS-01; it has not been observed to bypass GS or violate a frozen rule. See the Windows Acceptance Report.
