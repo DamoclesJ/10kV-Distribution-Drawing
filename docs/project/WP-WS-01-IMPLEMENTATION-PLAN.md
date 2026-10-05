@@ -12,7 +12,7 @@
 - **FormatVersion at package opening:** V9
 - **Phase 1:** VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`
 - **Phase 2:** VERIFIED / ACCEPTED at `4f50bc134ab1f556340ecf0225594edaa2117e5e`; Windows automated verification PASSED (1697/1697, 0 failed, 0 skipped), full solution build 0 errors
-- **Phase 3:** NOT STARTED
+- **Phase 3:** IMPLEMENTED / CANDIDATE; Windows fixed-SHA verification PENDING
 
 This document records the approved package boundary. Opening the package does not start an implementation phase.
 
@@ -56,6 +56,12 @@ Windows acceptance evidence verified:
 - Phase 1 regression and EA / GS / WTA regression.
 
 The final Application suite includes the three completed acceptance coverage cases: one Region with multiple Boundaries, CustomerStation single feeder, and device creation-order determinism. `FormatVersion` remains V10; V8/V9 migration is not supported. Phase 1 and Phase 2 acceptance do not include Windows GUI acceptance, which remains NOT RUN and is reserved for Phase 6. STOP-P2-01 through STOP-P2-08 remain NONE. No Phase 3 work is authorized by this acceptance record.
+
+## Phase 3 implementation candidate
+
+Phase 3 — Confirmation + CommandStack is IMPLEMENTED / CANDIDATE. The Application planner validates current valid EA, reprojections and compares the reviewed Candidate, rejects empty or diagnostic candidates and ambiguous ticket/scope states, then captures stable Before / After snapshots. It materializes Candidate Regions and deterministic WorkScope Boundaries without creating WTA `IsolationBoundary` values or invoking the Analyzer. The dedicated `ConfirmWorkScopeCommand` applies the scope and ticket linkage in one CommandStack history entry; it supports first confirmation, no-ticket creation, exclusive replacement, shared-scope relinking, Undo / Redo, partial-failure rollback, and `AffectsEnergization = false`.
+
+Local verification passed: Domain 236/236, Application 273/273, Infrastructure 151/151, and full solution Release build with 0 errors. The Desktop test assembly compiles, but WindowsDesktop-dependent test execution is unavailable on macOS; Rendering.Wpf and Desktop full execution remain pending Windows fixed-SHA verification. Windows GUI acceptance remains NOT RUN and is reserved for Phase 6. STOP-P3-01 through STOP-P3-08: NONE. Phase 4 — IsolationBoundary Projection remains NOT STARTED. FormatVersion remains V10; no persistence schema change was made.
 
 ## Goal and normal flow
 
