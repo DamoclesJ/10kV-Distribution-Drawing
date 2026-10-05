@@ -11,7 +11,7 @@
 - **Implementation base:** `main = origin/main = 70c321c1faa6c4c67c01d4d942d8ad5e596bd15d`
 - **FormatVersion at package opening:** V9
 - **Phase 1:** VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`
-- **Phase 2:** IMPLEMENTED / CANDIDATE; Windows automated verification PENDING
+- **Phase 2:** VERIFIED / ACCEPTED at `4f50bc134ab1f556340ecf0225594edaa2117e5e`; Windows automated verification PASSED (1697/1697, 0 failed, 0 skipped), full solution build 0 errors
 - **Phase 3:** NOT STARTED
 
 This document records the approved package boundary. Opening the package does not start an implementation phase.
@@ -27,15 +27,35 @@ Phase 1 — Domain + V10 is VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233
 - STOP-P1-01 through STOP-P1-06: NONE.
 - WP-WS-01 stays OPEN / IN PROGRESS. Phase 3 — Confirmation + CommandStack is NOT STARTED.
 
-## Phase 2 candidate progress
+## Phase 2 acceptance
 
-Phase 2 — EA → WorkScope Candidate Projector is IMPLEMENTED / CANDIDATE. The transient Application model contains normalized Regions, switch transition facts, and diagnostics; it is derived only from `EnergizationAnalysisState.CurrentResult` plus current drawing topology. The projector reuses `ElectricalConnectivityGraphBuilder`, verifies current point identities and conducting-edge identity against the EA result, excludes Earth and GroundSwitch-to-Earth identities, and finds Deenergized connected components including isolated terminals. Transition facts retain switch identity/kind/installation, energized and Deenergized terminal identities, parent/pole identity, and related connection identities. The projector does not mutate `DrawingDocument.WorkScopes`, WorkTicket data, EA state, CommandStack, or persistence, and does not invoke WorkTicketAnalyzer.
+Phase 2 — EA → WorkScope Candidate Projector is VERIFIED / ACCEPTED at `4f50bc134ab1f556340ecf0225594edaa2117e5e`. WP-WS-01 remains OPEN / IN PROGRESS. Phase 3 — Confirmation + CommandStack is NOT STARTED.
 
-- Added Application projector coverage: 16 cases including validity gates, empty candidate, disconnected components, isolated terminals, Earth exclusion, conducting-edge consistency, RingCabinet load switch/breaker/isolator, pole switch and OHL topology, Cable and CableTermination, Transformer HV leaf, independent CustomerStation feeders, historical WorkScope independence, multi-Seed ordering, and read-only behavior.
-- macOS Release verification: Domain 236/236, Application 259/259, Infrastructure 151/151; full solution build passed with 0 errors.
-- Rendering.Wpf and Desktop full test execution could not start because this macOS host has no `Microsoft.WindowsDesktop.App` runtime. Their projects compile in the full solution build. Windows automated verification remains PENDING; this candidate is not Phase 2 acceptance. Windows GUI acceptance remains NOT RUN / Phase 6.
-- FormatVersion remains V10. No Candidate persistence, confirmation, WorkTicket mutation, Analyzer handoff, EA propagation change, or GS authority change was introduced.
-- STOP-P2-01 through STOP-P2-08: NONE. WP-WS-01 remains OPEN / IN PROGRESS; Phase 3 is NOT STARTED.
+Windows automated verification PASSED on the accepted candidate:
+
+- Domain: 236/236.
+- Application: 262/262.
+- Infrastructure: 151/151.
+- Rendering.Wpf: 674/674.
+- Desktop: 374/374.
+- Total: 1697/1697 passed, 0 failed, 0 skipped.
+- Full solution build: 0 errors.
+
+The accepted `WorkScopeCandidate` contract is Application transient derived state. It comes only from the current valid `EnergizationAnalysisState.CurrentResult` and current drawing topology. It is not persisted, does not create a formal WorkScope, does not modify WorkTicket data, does not use CommandStack, and does not invoke WorkTicketAnalyzer. Regions are the connected components derived from EA Deenergized state and current conducting topology; the model supports one or more disconnected Regions, isolated terminals, branch topology, multi-Seed analysis, a fully Deenergized business graph, and an empty business candidate. Earth Terminals and ElectricalNodes are excluded, and GroundSwitch-to-Earth does not form an ordinary WorkScope Boundary. A Candidate Boundary is derived from an open, non-conducting SwitchDevice whose sides transition between Energized and Deenergized; it is not inferred by taking the inverse of `ConductingEdges`.
+
+Structurally equivalent Candidates are deterministic across Seed ordering, dictionary/hash iteration, device and connection creation order, and UI selection. Boundary facts retain switch identity, kind and installation, Energized and Deenergized terminal identities, parent/pole identity, and related connection identities. The projector validates current EA point identities and conducting-edge identity against the current drawing, and does not mutate WorkScope, WorkTicket, or EA state.
+
+Windows acceptance evidence verified:
+
+- EA authority and stale / failed / no-seed input gates.
+- Earth exclusion and GroundSwitch-to-Earth exclusion.
+- Disconnected components, isolated Deenergized terminals, multi-Seed analysis, whole-business-graph Deenergized state, and empty business Candidate.
+- One Deenergized Region surrounded by multiple Boundaries.
+- CustomerStation single-feeder projection and dual-feeder isolation.
+- Device creation-order determinism and Candidate read-only behavior.
+- Phase 1 regression and EA / GS / WTA regression.
+
+The final Application suite includes the three completed acceptance coverage cases: one Region with multiple Boundaries, CustomerStation single feeder, and device creation-order determinism. `FormatVersion` remains V10; V8/V9 migration is not supported. Phase 1 and Phase 2 acceptance do not include Windows GUI acceptance, which remains NOT RUN and is reserved for Phase 6. STOP-P2-01 through STOP-P2-08 remain NONE. No Phase 3 work is authorized by this acceptance record.
 
 ## Goal and normal flow
 
