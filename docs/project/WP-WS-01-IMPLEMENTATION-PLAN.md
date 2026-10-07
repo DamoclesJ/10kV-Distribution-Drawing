@@ -12,7 +12,7 @@
 - **FormatVersion at package opening:** V9
 - **Phase 1:** VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`
 - **Phase 2:** VERIFIED / ACCEPTED at `4f50bc134ab1f556340ecf0225594edaa2117e5e`; Windows automated verification PASSED (1697/1697, 0 failed, 0 skipped), full solution build 0 errors
-- **Phase 3:** IMPLEMENTED / CANDIDATE; Windows fixed-SHA verification PENDING
+- **Phase 3:** VERIFIED / ACCEPTED at `2444fdf8a7e4e19440a3054fcc3fa0bcfae9c4ab`; Windows automated verification PASSED (1717/1717, 0 failed, 0 skipped)
 
 This document records the approved package boundary. Opening the package does not start an implementation phase.
 
@@ -57,11 +57,54 @@ Windows acceptance evidence verified:
 
 The final Application suite includes the three completed acceptance coverage cases: one Region with multiple Boundaries, CustomerStation single feeder, and device creation-order determinism. `FormatVersion` remains V10; V8/V9 migration is not supported. Phase 1 and Phase 2 acceptance do not include Windows GUI acceptance, which remains NOT RUN and is reserved for Phase 6. STOP-P2-01 through STOP-P2-08 remain NONE. No Phase 3 work is authorized by this acceptance record.
 
-## Phase 3 implementation candidate
+## Phase 3 acceptance — Confirmation + CommandStack
 
-Phase 3 — Confirmation + CommandStack is IMPLEMENTED / CANDIDATE. The Application planner validates current valid EA, reprojections and compares the reviewed Candidate, rejects empty or diagnostic candidates and ambiguous ticket/scope states, then captures stable Before / After snapshots. It materializes Candidate Regions and deterministic WorkScope Boundaries without creating WTA `IsolationBoundary` values or invoking the Analyzer. The dedicated `ConfirmWorkScopeCommand` applies the scope and ticket linkage in one CommandStack history entry; it supports first confirmation, no-ticket creation, exclusive replacement, shared-scope relinking, Undo / Redo, partial-failure rollback, and `AffectsEnergization = false`.
+**Status: VERIFIED / ACCEPTED.** Accepted candidate: `2444fdf8a7e4e19440a3054fcc3fa0bcfae9c4ab`. Phase 3 confirms a persisted WorkScope snapshot only from current valid EA through the Phase 2 Candidate. This acceptance does not start Phase 4. `FormatVersion` remains V10; no persistence schema change was made.
 
-Local verification passed: Domain 236/236, Application 273/273, Infrastructure 151/151, and full solution Release build with 0 errors. The Desktop test assembly compiles, but WindowsDesktop-dependent test execution is unavailable on macOS; Rendering.Wpf and Desktop full execution remain pending Windows fixed-SHA verification. Windows GUI acceptance remains NOT RUN and is reserved for Phase 6. STOP-P3-01 through STOP-P3-08: NONE. Phase 4 — IsolationBoundary Projection remains NOT STARTED. FormatVersion remains V10; no persistence schema change was made.
+### Confirmation authority and freshness
+
+- The confirmation authority is the current valid `EnergizationAnalysisState.CurrentResult` projected to a transient WorkScope Candidate. Manual legacy Boundary A/B selection is not a fallback.
+- The planner reprojects at preparation time and allows confirmation only when the reviewed and current Candidates are structurally equivalent.
+- No-current, stale, failed, no-seed, empty Candidate, reviewed/current mismatch, blocking diagnostic, and ambiguous ticket/scope states are rejected.
+- Rejection does not mutate Domain WorkScope state, WorkTicket state, or CommandStack history.
+
+### Candidate materialization and linkage
+
+- Candidate Region `TerminalIds` and `ElectricalNodeIds` are materialized into persisted WorkScope Regions.
+- Candidate Boundaries are materialized as Domain `WorkScopeBoundary` values, not WTA `IsolationBoundary` values.
+- The accepted cases include multi-Region, zero Boundary, multiple Boundaries, RingCabinet, Pole, and CustomerStation.
+- The normal confirmed linkage is one WorkTicket to one WorkScope (`WorkScopeIds.Count = 1`), with the WorkScope containing 1..N Regions.
+- First confirmation supports an existing ticket with no scope and the no-ticket case; no-ticket creation captures TicketId, WorkScopeId, and linkage in the same command.
+
+### Re-confirmation and ticket preservation
+
+- Exclusive re-confirmation keeps the existing WorkScopeId, replaces its Regions/Boundaries snapshot, preserves Description, and preserves all other ticket facts.
+- Shared re-confirmation forks a new WorkScope Y for Ticket A while Ticket B and shared WorkScope X remain unchanged. Undo restores A → X and removes Y; Redo restores A → the same Y ID.
+- `WorkScopeIds.Count > 1` is rejected; Phase 3 does not guess, merge, or clear existing scope references.
+- Phase 3 changes only `WorkScopeIds` and the corresponding Domain WorkScope aggregate. It preserves `IsolationBoundaries`, `WorkScopeItems`, `GroundingPointIds`, Task, Analysis, Draft, UserFacts, rule/phrase versions, analyzed fingerprint, and other existing ticket facts.
+
+### Atomic command, Undo/Redo, and EA impact
+
+- One Confirm is one atomic `ConfirmWorkScopeCommand` and exactly one CommandStack history entry.
+- The command captures complete Before/After snapshots. Undo/Redo replay those snapshots and stable TicketId/WorkScopeId identities; they do not rerun EA, reproject Candidate, or regenerate identifiers.
+- Injected partial Execute, Undo, and Redo failures restore the corresponding full Domain/Ticket state without partial mutation.
+- `ConfirmWorkScopeCommand.AffectsEnergization = false`. Windows runtime acceptance verified that CurrentResult remains current and the same instance through Confirm/Undo/Redo, with no EA `Changed` event.
+
+### Phase boundary and exclusions
+
+Phase 3 does not implement automatic IsolationBoundary projection, WTA boundary resolver integration, Analyzer invocation, Analysis/Draft/Fingerprint regeneration, WorkTicket navigation, or 6.x rule changes. These remain outside this acceptance. Phase 4 — WorkScopeBoundary → IsolationBoundary Projection is **NOT STARTED**. Windows GUI acceptance is **NOT RUN** and remains Phase 6.
+
+### Windows acceptance evidence
+
+- Domain: 236/236.
+- Application: 274/274.
+- Infrastructure: 151/151.
+- Rendering.Wpf: 674/674.
+- Desktop: 382/382.
+- Total: 1717/1717 passed, 0 failed, 0 skipped.
+- Full solution Release build: 0 errors, 22 nullable warnings.
+- Freshness, first confirmation, no-ticket creation, exclusive/shared re-confirmation, multiple-scope rejection, Candidate materialization, ticket preservation, one history entry, failure atomicity, `AffectsEnergization = false`, snapshot Redo, and Phase 1 / Phase 2 / EA / GS / WTA regression coverage: **PASSED**.
+- STOP-P3-01 through STOP-P3-08: NONE.
 
 ## Goal and normal flow
 
