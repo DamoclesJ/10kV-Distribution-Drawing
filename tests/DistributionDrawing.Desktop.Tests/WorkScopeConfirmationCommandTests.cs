@@ -1,4 +1,6 @@
 using DistributionDrawing.Application.Energization;
+using DistributionDrawing.Application.Templates.RingCabinets;
+using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Application.WorkScopes;
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Desktop.WorkTickets;
@@ -7,9 +9,13 @@ using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Energization;
 using DistributionDrawing.Domain.Professional;
+using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Infrastructure.Persistence;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Interaction.Devices;
+using DistributionDrawing.Rendering.Wpf.Scene;
 using System.IO;
+using System.Text.Json;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -124,7 +130,8 @@ public sealed class WorkScopeConfirmationCommandTests
     public void Confirm_ExclusiveReconfirmReplacesSnapshotPreservesIdAndDescriptionAcrossUndoRedo()
     {
         Fixture fixture = CreateFixture();
-        WorkScope firstSnapshot = MaterializeForSetup(fixture.Candidate, Guid.NewGuid(), "人工描述");
+        WorkScope firstSnapshot = MaterializeForSetup(
+            fixture.Drawing, fixture.Candidate, Guid.NewGuid(), "人工描述");
         fixture.Drawing.AddWorkScope(firstSnapshot);
         WorkTicketSession ticket = WorkTicketSession.Create() with
         { WorkScopeIds = [firstSnapshot.WorkScopeId] };
@@ -163,45 +170,69 @@ public sealed class WorkScopeConfirmationCommandTests
     public void Confirm_SharedScopeRelinksOnlyCurrentTicketAndRedoReusesNewId()
     {
         Fixture fixture = CreateFixture();
-        WorkScope shared = MaterializeForSetup(fixture.Candidate, Guid.NewGuid(), "共享描述");
+        fixture.State.Execute(fixture.Drawing, new EnergizationScenario(Guid.NewGuid(),
+            [Seed(fixture.Switch, EnergizationSide.Line)], true));
+        EnergizationResult currentEa = Assert.IsType<EnergizationResult>(fixture.State.CurrentResult);
+        WorkScopeCandidate beforeSnapshotMutation = Project(fixture.Drawing, fixture.State);
+        WorkScope shared = MaterializeForSetup(
+            fixture.Drawing, beforeSnapshotMutation, Guid.NewGuid(), "共享描述");
         fixture.Drawing.AddWorkScope(shared);
         WorkTicketSession first = WorkTicketSession.Create() with { WorkScopeIds = [shared.WorkScopeId] };
         WorkTicketSession second = WorkTicketSession.Create() with { WorkScopeIds = [shared.WorkScopeId] };
         var tickets = new WorkTicketDataRoot(fixture.Drawing.Id, [first, second]);
-        fixture.State.Execute(fixture.Drawing, new EnergizationScenario(Guid.NewGuid(),
-            [Seed(fixture.Switch, EnergizationSide.Line)], true));
+        WorkScopeCandidate reviewed = Project(fixture.Drawing, fixture.State);
         WorkScopeCandidate current = Project(fixture.Drawing, fixture.State);
+        Assert.Equal(CandidateSignature(beforeSnapshotMutation), CandidateSignature(reviewed));
+        Assert.Equal(CandidateSignature(reviewed), CandidateSignature(current));
+        Assert.Equal(EnergizationFreshness.Current, fixture.State.Freshness);
+        Assert.Same(currentEa, fixture.State.CurrentResult);
         Guid newScopeId = Guid.NewGuid();
-        WorkScopeConfirmationPlan plan = Prepare(fixture, tickets, first.Id, newScopeId);
+        var planning = new WorkScopeConfirmationPlanner(() => newScopeId).Prepare(
+            fixture.Drawing, fixture.State, reviewed, tickets, first.Id);
+        Assert.True(planning.CanConfirm, planning.Diagnostic?.Message);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(planning.Plan);
         var command = new ConfirmWorkScopeCommand(fixture.Drawing, tickets, plan);
         var stack = new CommandStack();
-        WorkScope beforeShared = MaterializeForSetup(fixture.Candidate, shared.WorkScopeId, shared.Description);
+        WorkScope beforeShared = CloneForAssertion(shared);
 
         stack.ExecuteCommand(command);
 
-        Assert.Equal(newScopeId, Assert.Single(tickets.Selected(first.Id)!.WorkScopeIds));
-        Assert.Equal(shared.WorkScopeId, Assert.Single(tickets.Selected(second.Id)!.WorkScopeIds));
+        WorkTicketSession confirmedFirst = Assert.IsType<WorkTicketSession>(tickets.Selected(first.Id));
+        WorkTicketSession confirmedSecond = Assert.IsType<WorkTicketSession>(tickets.Selected(second.Id));
+        Assert.Equal(newScopeId, Assert.Single(confirmedFirst.WorkScopeIds));
+        Assert.Equal(TicketSignature(first with { WorkScopeIds = [newScopeId] }),
+            TicketSignature(confirmedFirst));
+        Assert.Equal(shared.WorkScopeId, Assert.Single(confirmedSecond.WorkScopeIds));
+        Assert.Equal(TicketSignature(second), TicketSignature(confirmedSecond));
         Assert.Same(second, tickets.Selected(second.Id));
         Assert.Same(shared, fixture.Drawing.GetWorkScope(shared.WorkScopeId));
-        Assert.Equal(beforeShared.Description, shared.Description);
-        Assert.Equal(beforeShared.Regions.Select(item => string.Join(',', item.TerminalIds)),
-            shared.Regions.Select(item => string.Join(',', item.TerminalIds)));
+        Assert.Equal(WorkScopeSignature(beforeShared), WorkScopeSignature(shared));
         WorkScope newScope = fixture.Drawing.GetWorkScope(newScopeId);
-        Assert.Equal(current.Regions.Select(item => string.Join(',', item.TerminalIds)),
-            newScope.Regions.Select(item => string.Join(',', item.TerminalIds)));
+        Assert.NotEqual(shared.WorkScopeId, newScope.WorkScopeId);
+        Assert.Equal(CandidateRegionSignature(current), WorkScopeRegionSignature(newScope));
+        Assert.Equal(ExpectedWorkScopeBoundarySignature(fixture.Drawing, current),
+            WorkScopeBoundarySignature(newScope));
         Assert.Equal("共享描述", newScope.Description);
+        Assert.Single(stack.History);
 
         Assert.True(stack.Undo());
         Assert.Same(first, tickets.Selected(first.Id));
         Assert.Same(second, tickets.Selected(second.Id));
         Assert.Throws<InvalidOperationException>(() => fixture.Drawing.GetWorkScope(newScopeId));
         Assert.Same(shared, fixture.Drawing.GetWorkScope(shared.WorkScopeId));
+        Assert.Equal(WorkScopeSignature(beforeShared),
+            WorkScopeSignature(fixture.Drawing.GetWorkScope(shared.WorkScopeId)));
 
         Assert.True(stack.Redo());
         Assert.Same(plan.AfterTicket, tickets.Selected(first.Id));
         Assert.Same(second, tickets.Selected(second.Id));
         Assert.Equal(newScopeId, Assert.Single(tickets.Selected(first.Id)!.WorkScopeIds));
         Assert.Equal(newScopeId, fixture.Drawing.GetWorkScope(newScopeId).WorkScopeId);
+        Assert.Equal(CandidateRegionSignature(current),
+            WorkScopeRegionSignature(fixture.Drawing.GetWorkScope(newScopeId)));
+        Assert.Equal(ExpectedWorkScopeBoundarySignature(fixture.Drawing, current),
+            WorkScopeBoundarySignature(fixture.Drawing.GetWorkScope(newScopeId)));
+        Assert.Equal(currentEa, fixture.State.CurrentResult);
     }
 
     [Theory]
@@ -258,27 +289,64 @@ public sealed class WorkScopeConfirmationCommandTests
     [Fact]
     public void Confirm_UndoRedoKeepRuntimeEaResultCurrentAndDoNotReanalyze()
     {
-        Fixture fixture = CreateFixture();
         ProjectSession persistence = new ProjectService().CreateProject(
             Path.Combine(Path.GetTempPath(), $"wp-ws-confirm-{Guid.NewGuid():N}.kvdrawing"),
             "Confirm runtime");
-        persistence.Domain.AddDevice(fixture.Cabinet);
         ProjectRuntimeSession runtime = ProjectRuntimeSession.CreateEmpty(persistence);
+        AddRingCabinetCommand addCabinet = new DeviceCommandFactory().CreateAddRingCabinet(
+            persistence.Domain,
+            runtime.Layout,
+            new RingCabinetCreationConfiguration(
+                "Confirm runtime cabinet",
+                new RingCabinetCreationTemplateFactory().Create(RingCabinetTemplateType.Conventional, 4),
+                "10kV"),
+            new DocumentPoint(20, 20));
+        runtime.CommandStack.ExecuteCommand(addCabinet);
+        SwitchDevice seedSwitch = addCabinet.Cabinet.Intervals[0].SwitchDevices[0];
         runtime.Energization.Execute(persistence.Domain,
-            new EnergizationScenario(Guid.NewGuid(), [Seed(fixture.Switch, EnergizationSide.Bus)], true));
-        EnergizationResult before = runtime.Energization.CurrentResult!;
-        WorkScopeCandidate candidate = Project(persistence.Domain, runtime.Energization);
-        var plan = Assert.IsType<WorkScopeConfirmationPlan>(new WorkScopeConfirmationPlanner().Prepare(
-            persistence.Domain, runtime.Energization, candidate, persistence.WorkTickets).Plan);
+            new EnergizationScenario(Guid.NewGuid(), [Seed(seedSwitch, EnergizationSide.Bus)], true));
+        EnergizationResult before = Assert.IsType<EnergizationResult>(runtime.Energization.CurrentResult);
+        WorkScopeCandidateProjection reviewedProjection = new WorkScopeCandidateProjector()
+            .Project(persistence.Domain, runtime.Energization);
+        Assert.True(reviewedProjection.IsValid);
+        WorkScopeCandidate reviewedCandidate = Assert.IsType<WorkScopeCandidate>(reviewedProjection.Candidate);
+        Assert.NotEmpty(reviewedCandidate.Regions);
+        Assert.Empty(reviewedProjection.Diagnostics);
+        WorkScopeCandidate currentCandidate = Project(persistence.Domain, runtime.Energization);
+        Assert.Equal(CandidateSignature(reviewedCandidate), CandidateSignature(currentCandidate));
+        var tickets = persistence.WorkTickets;
+        var planResult = new WorkScopeConfirmationPlanner().Prepare(
+            persistence.Domain, runtime.Energization, reviewedCandidate, tickets);
+        Assert.True(planResult.CanConfirm, planResult.Diagnostic?.Message);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(planResult.Plan);
         var command = new ConfirmWorkScopeCommand(persistence.Domain, persistence.WorkTickets, plan);
+        int eaChangedEvents = 0;
+        runtime.Energization.Changed += (_, _) => eaChangedEvents++;
 
         Assert.False(command.AffectsEnergization);
         runtime.CommandStack.ExecuteCommand(command);
+        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
         Assert.Same(before, runtime.Energization.CurrentResult);
+        Guid ticketId = plan.TicketId;
+        Guid workScopeId = plan.AfterWorkScope.WorkScopeId;
+        Assert.Equal([workScopeId], tickets.Selected(ticketId)!.WorkScopeIds);
+        Assert.Equal(workScopeId, persistence.Domain.GetWorkScope(workScopeId).WorkScopeId);
+        Assert.Equal(0, eaChangedEvents);
+
         Assert.True(runtime.CommandStack.Undo());
+        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
         Assert.Same(before, runtime.Energization.CurrentResult);
+        Assert.Null(tickets.Selected(ticketId));
+        Assert.Throws<InvalidOperationException>(() => persistence.Domain.GetWorkScope(workScopeId));
+        Assert.Equal(0, eaChangedEvents);
+
         Assert.True(runtime.CommandStack.Redo());
+        Assert.Equal(EnergizationFreshness.Current, runtime.Energization.Freshness);
         Assert.Same(before, runtime.Energization.CurrentResult);
+        Assert.Same(plan.AfterTicket, tickets.Selected(ticketId));
+        Assert.Equal(workScopeId, persistence.Domain.GetWorkScope(workScopeId).WorkScopeId);
+        Assert.Equal(ticketId, tickets.Selected(ticketId)!.Id);
+        Assert.Equal(0, eaChangedEvents);
     }
 
     private static Fixture CreateFixture()
@@ -311,11 +379,75 @@ public sealed class WorkScopeConfirmationCommandTests
     private static WorkScopeCandidate Project(DrawingDocument drawing, EnergizationAnalysisState state) =>
         new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
 
-    private static WorkScope MaterializeForSetup(WorkScopeCandidate candidate, Guid id, string? description) =>
+    private static WorkScope MaterializeForSetup(
+        DrawingDocument drawing,
+        WorkScopeCandidate candidate,
+        Guid id,
+        string? description) =>
         WorkScope.Create(id,
             candidate.Regions.Select(region => new WorkScopeRegion(region.TerminalIds, region.ElectricalNodeIds)),
             candidate.Boundaries.Select(boundary => new WorkScopeBoundary(boundary.SwitchDeviceId,
-                BoundarySide.Line, boundary.DeenergizedTerminalId)), description);
+                drawing.Terminals.Single(item => item.Id == boundary.DeenergizedTerminalId).Role switch
+                {
+                    "BusSide" => BoundarySide.Bus,
+                    "CircuitSide" => BoundarySide.Line,
+                    _ => BoundarySide.Unknown
+                }, boundary.DeenergizedTerminalId)), description);
+
+    private static WorkScope CloneForAssertion(WorkScope scope) => WorkScope.Create(
+        scope.WorkScopeId,
+        scope.Regions.Select(region => new WorkScopeRegion(region.TerminalIds, region.ElectricalNodeIds)),
+        scope.Boundaries,
+        scope.Description);
+
+    private static string CandidateSignature(WorkScopeCandidate candidate) =>
+        $"{string.Join(";", CandidateRegionSignature(candidate))}|" +
+        $"{string.Join(";", CandidateBoundarySignature(candidate))}|" +
+        string.Join(";", candidate.Diagnostics.Select(item => $"{item.Code}:{item.Identity}:{item.Detail}"));
+
+    private static string[] CandidateRegionSignature(WorkScopeCandidate candidate) => candidate.Regions
+        .Select(region => $"{string.Join(',', region.TerminalIds)} / {string.Join(',', region.ElectricalNodeIds)}")
+        .ToArray();
+
+    private static string[] CandidateBoundarySignature(WorkScopeCandidate candidate) => candidate.Boundaries
+        .Select(item => $"{item.SwitchDeviceId:N}:{item.SwitchKind}:{item.InstallationType}:" +
+            $"{item.DeenergizedTerminalId:N}:{item.EnergizedTerminalId:N}:{item.TopologyParentId:N}:" +
+            $"{item.AttachedPoleId:N}:{string.Join(',', item.RelatedConnectionIds)}")
+        .ToArray();
+
+    private static string[] WorkScopeRegionSignature(WorkScope scope) => scope.Regions
+        .Select(region => $"{string.Join(',', region.TerminalIds)} / {string.Join(',', region.ElectricalNodeIds)}")
+        .ToArray();
+
+    private static string[] WorkScopeBoundarySignature(WorkScope scope) => scope.Boundaries
+        .Select(item => $"{item.DeviceId:N}:{item.Side}:{item.TerminalId:N}:{item.ConnectionId:N}")
+        .ToArray();
+
+    private static string[] ExpectedWorkScopeBoundarySignature(
+        DrawingDocument drawing,
+        WorkScopeCandidate candidate) => candidate.Boundaries.Select(item =>
+        {
+            Terminal deenergized = drawing.Terminals.Single(terminal =>
+                terminal.Id == item.DeenergizedTerminalId);
+            BoundarySide side = deenergized.Role switch
+            {
+                "BusSide" => BoundarySide.Bus,
+                "CircuitSide" => BoundarySide.Line,
+                _ => BoundarySide.Unknown
+            };
+            Guid? connectionId = item.RelatedConnectionIds.Select(id =>
+                    drawing.Connections.SingleOrDefault(connection => connection.Id == id))
+                .SingleOrDefault(connection => connection?.UsesTerminal(deenergized.Id) == true)?.Id;
+            return $"{item.SwitchDeviceId:N}:{side}:{deenergized.Id:N}:{connectionId:N}";
+        }).ToArray();
+
+    private static string WorkScopeSignature(WorkScope scope) =>
+        $"{scope.WorkScopeId:N}|{scope.Description}|" +
+        $"{string.Join(";", WorkScopeRegionSignature(scope))}|" +
+        string.Join(";", WorkScopeBoundarySignature(scope));
+
+    private static string TicketSignature(WorkTicketSession ticket) =>
+        JsonSerializer.Serialize(ticket);
 
     private static EnergizedSeed Seed(SwitchDevice device, EnergizationSide side) =>
         new(Guid.NewGuid(), device.Id, side);
