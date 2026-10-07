@@ -106,6 +106,14 @@ Phase 3 does not implement automatic IsolationBoundary projection, WTA boundary 
 - Freshness, first confirmation, no-ticket creation, exclusive/shared re-confirmation, multiple-scope rejection, Candidate materialization, ticket preservation, one history entry, failure atomicity, `AffectsEnergization = false`, snapshot Redo, and Phase 1 / Phase 2 / EA / GS / WTA regression coverage: **PASSED**.
 - STOP-P3-01 through STOP-P3-08: NONE.
 
+## Phase 4 — WorkScopeBoundary → WTA IsolationBoundary Projection
+
+**Status: IMPLEMENTED / CANDIDATE.** This phase is a read-only Application projection from one persisted Confirmed WorkScope plus current persisted drawing topology. The WorkScope snapshot is authoritative; the projector does not read EA `CurrentResult`, WorkTicket state, CommandStack, or Analyzer, and it does not mutate production state. `FormatVersion` remains V10.
+
+The projection reports `Complete`, `Unrepresentable`, or `Invalid`, per-boundary A/B/C/Invalid classifications, stable diagnostic codes, deterministic ordering, normalized WTA outputs with source attribution, and an empty safe handoff collection unless the whole result is Complete. Zero-boundary WorkScopes produce Complete with an empty output. Any C-class boundary makes the whole result Unrepresentable; no guessed WTA boundary is emitted for Pole Equal/Unresolved directions or CustomerStation incoming isolators. GroundSwitch-to-Earth is rejected as grounding authority, and unsupported device boundaries do not invent isolation devices. Existing WTA `WorkTicketRangeSetup.TryResolve` and `FirstKindRulePack.BoundaryIssue` validate representable mappings.
+
+macOS verification passed: Domain 236/236, Application 288/288, Infrastructure 151/151; full solution Release build completed with 0 errors. Windows `Rendering.Wpf` and `Desktop` full suites and fixed-SHA Windows automated verification remain PENDING. Windows GUI acceptance remains NOT RUN and belongs to Phase 6. `STOP-P4-01` through `STOP-P4-08`: NONE. Phase 5 — WorkTicket Handoff is NOT STARTED.
+
 ## Goal and normal flow
 
 ```text
