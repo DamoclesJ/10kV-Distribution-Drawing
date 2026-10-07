@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Reflection;
 using DistributionDrawing.Application.Devices.CustomerStations;
 using DistributionDrawing.Application.WorkScopes;
 using DistributionDrawing.Application.WorkTickets;
@@ -147,6 +149,78 @@ public sealed class WorkScopeIsolationBoundaryProjectorTests
         Assert.True(result.IsComplete);
         Assert.Equal(2, result.IsolationBoundaries.Count);
         WorkTicketRangeSetup.ValidateBoundaries(drawing, result.IsolationBoundaries);
+    }
+
+    [Theory]
+    [InlineData("device", WorkScopeBoundaryProjectionDiagnosticCode.MissingDevice)]
+    [InlineData("terminal", WorkScopeBoundaryProjectionDiagnosticCode.MissingTerminal)]
+    [InlineData("connection", WorkScopeBoundaryProjectionDiagnosticCode.MissingConnection)]
+    [InlineData("ownership", WorkScopeBoundaryProjectionDiagnosticCode.InvalidBoundaryOwnership)]
+    public void Project_InvalidPersistedBoundaryReferenceReturnsInvalidWithStableDiagnostic(
+        string invalidReference, WorkScopeBoundaryProjectionDiagnosticCode expectedDiagnostic)
+    {
+        DrawingDocument drawing;
+        WorkScope scope;
+
+        if (invalidReference == "connection")
+        {
+            (DrawingDocument poleDrawing, SwitchDevice poleSwitch, Guid smallerConnection, _) = PoleDrawing();
+            drawing = poleDrawing;
+            scope = AddScope(drawing,
+                [new WorkScopeRegion([poleSwitch.FirstTerminalId], [])],
+                [new WorkScopeBoundary(poleSwitch.Id, BoundarySide.SmallerNumber,
+                    poleSwitch.FirstTerminalId, smallerConnection)]);
+            RemoveBackingItem(drawing, "_connections", (Connection item) => item.Id == smallerConnection);
+        }
+        else
+        {
+            (DrawingDocument cabinetDrawing, RingCabinet cabinet) = Cabinet(
+                RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+                RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open));
+            drawing = cabinetDrawing;
+            SwitchDevice[] switches = cabinet.Intervals.Select(interval => interval.SwitchDevices.Single(item =>
+                item.SwitchKind == SwitchKind.LoadSwitch)).ToArray();
+            SwitchDevice target = switches[0];
+            SwitchDevice unrelated = switches[1];
+            scope = AddScope(drawing,
+                [new WorkScopeRegion([unrelated.FirstTerminalId], [])],
+                [new WorkScopeBoundary(target.Id, BoundarySide.Bus, target.FirstTerminalId)]);
+
+            if (invalidReference == "ownership")
+            {
+                ReplaceBackingItem(drawing, "_workScopes", scope,
+                    WorkScope.Create(scope.WorkScopeId, scope.Regions,
+                        [new WorkScopeBoundary(target.Id, BoundarySide.Bus, unrelated.FirstTerminalId)]));
+            }
+            else if (invalidReference == "device")
+                RemoveBackingItem(drawing, "_devices", (Device item) => item.Id == target.Id);
+            else
+                RemoveBackingItem(drawing, "_terminals", (Terminal item) => item.Id == target.FirstTerminalId);
+        }
+
+        WorkScopeIsolationBoundaryProjection result = new WorkScopeIsolationBoundaryProjector()
+            .Project(drawing, scope.WorkScopeId);
+
+        Assert.Equal(WorkScopeIsolationBoundaryProjectionStatus.Invalid, result.Status);
+        Assert.False(result.IsComplete);
+        Assert.Empty(result.IsolationBoundaries);
+        Assert.Equal(expectedDiagnostic, Assert.Single(result.Diagnostics).Code);
+    }
+
+    [Fact]
+    public void Project_IsDeterministicAcrossDeviceAndConnectionCreationOrder()
+    {
+        (DrawingDocument drawingA, WorkScope scopeA) = PoleProjectionDrawing(reverseCreationOrder: false);
+        (DrawingDocument drawingB, WorkScope scopeB) = PoleProjectionDrawing(reverseCreationOrder: true);
+
+        WorkScopeIsolationBoundaryProjection resultA = new WorkScopeIsolationBoundaryProjector()
+            .Project(drawingA, scopeA.WorkScopeId);
+        WorkScopeIsolationBoundaryProjection resultB = new WorkScopeIsolationBoundaryProjector()
+            .Project(drawingB, scopeB.WorkScopeId);
+
+        Assert.Equal(WorkScopeIsolationBoundaryProjectionStatus.Complete, resultA.Status);
+        Assert.Equal(WorkScopeIsolationBoundaryProjectionStatus.Complete, resultB.Status);
+        Assert.Equal(FullProjectionSignature(resultA), FullProjectionSignature(resultB));
     }
 
     [Theory]
@@ -421,6 +495,100 @@ public sealed class WorkScopeIsolationBoundaryProjectorTests
         WorkTicketRangeSetup.ValidateBoundaries(drawing, [boundary]);
         Assert.Null(new FirstKindRulePack().BoundaryIssue(drawing, boundary));
     }
+
+    private static void RemoveBackingItem<T>(DrawingDocument drawing, string fieldName, Func<T, bool> predicate)
+    {
+        IList items = BackingList(drawing, fieldName);
+        object item = Assert.Single(items.Cast<object>(), value => value is T typed && predicate(typed));
+        int previousCount = items.Count;
+        items.Remove(item);
+        Assert.Equal(previousCount - 1, items.Count);
+    }
+
+    private static void ReplaceBackingItem<T>(DrawingDocument drawing, string fieldName, T existing, T replacement)
+    {
+        IList items = BackingList(drawing, fieldName);
+        int index = items.IndexOf(existing);
+        Assert.True(index >= 0);
+        items[index] = replacement;
+    }
+
+    private static IList BackingList(DrawingDocument drawing, string fieldName)
+    {
+        FieldInfo field = typeof(DrawingDocument).GetField(fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return Assert.IsAssignableFrom<IList>(field.GetValue(drawing));
+    }
+
+    private static (DrawingDocument Drawing, WorkScope Scope) PoleProjectionDrawing(bool reverseCreationOrder)
+    {
+        Guid smallerId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+        Guid currentId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+        Guid largerId = Guid.Parse("10000000-0000-0000-0000-000000000003");
+        Guid switchId = Guid.Parse("10000000-0000-0000-0000-000000000004");
+        Guid smallerAnchorId = Guid.Parse("10000000-0000-0000-0000-000000000005");
+        Guid largerAnchorId = Guid.Parse("10000000-0000-0000-0000-000000000006");
+        Guid firstTerminalId = Guid.Parse("10000000-0000-0000-0000-000000000007");
+        Guid secondTerminalId = Guid.Parse("10000000-0000-0000-0000-000000000008");
+        Guid leftConnectionId = Guid.Parse("10000000-0000-0000-0000-000000000009");
+        Guid rightConnectionId = Guid.Parse("10000000-0000-0000-0000-00000000000a");
+        Guid scopeId = Guid.Parse("10000000-0000-0000-0000-00000000000b");
+
+        Pole smaller = new(smallerId, "P01");
+        Pole current = new(currentId, "P02");
+        Pole larger = new(largerId, "P03");
+        SwitchDevice poleSwitch = SwitchDevice.CreateForPole(switchId, SwitchKind.IsolationSwitch,
+            firstTerminalId, secondTerminalId);
+        Device[] devices = [smaller, current, larger, poleSwitch];
+        var drawing = new DrawingDocument(Guid.Parse("10000000-0000-0000-0000-00000000000c"),
+            "Pole creation order");
+        foreach (Device device in reverseCreationOrder ? devices.Reverse() : devices)
+            drawing.AddDevice(device);
+
+        Terminal smallerAnchor = smaller.CreateOverheadAnchorTerminal(smallerAnchorId);
+        Terminal largerAnchor = larger.CreateOverheadAnchorTerminal(largerAnchorId);
+        Terminal firstTerminal = new(firstTerminalId, TopologyOwnerType.Device, poleSwitch.Id,
+            "SwitchLeftTerminal", "10kV", true, true, null, [ConnectionType.OverheadLine]);
+        Terminal secondTerminal = new(secondTerminalId, TopologyOwnerType.Device, poleSwitch.Id,
+            "SwitchRightTerminal", "10kV", true, false, null, [ConnectionType.OverheadLine]);
+        Terminal[] terminals = [smallerAnchor, largerAnchor, firstTerminal, secondTerminal];
+        foreach (Terminal terminal in reverseCreationOrder ? terminals.Reverse() : terminals)
+            drawing.AddTerminal(terminal);
+
+        drawing.AddPoleAttachment(new PoleAttachment(Guid.Parse("10000000-0000-0000-0000-00000000000d"),
+            current.Id, poleSwitch.Id));
+        Connection left = new(leftConnectionId, ConnectionType.OverheadLine,
+            smallerAnchor.Id, firstTerminal.Id, "P01-P02", "10kV");
+        Connection right = new(rightConnectionId, ConnectionType.OverheadLine,
+            secondTerminal.Id, largerAnchor.Id, "P02-P03", "10kV");
+        Connection[] connections = [left, right];
+        foreach (Connection connection in reverseCreationOrder ? connections.Reverse() : connections)
+            drawing.AddConnection(connection);
+        OverheadLine[] lines =
+        [
+            new(left.Id, "JKLYJ", [smaller.Id, current.Id]),
+            new(right.Id, "JKLYJ", [current.Id, larger.Id])
+        ];
+        foreach (OverheadLine line in reverseCreationOrder ? lines.Reverse() : lines)
+            drawing.AddOverheadLine(line);
+
+        WorkScope scope = AddScope(drawing,
+            [new WorkScopeRegion([firstTerminal.Id], [])],
+            [new WorkScopeBoundary(poleSwitch.Id, BoundarySide.SmallerNumber,
+                firstTerminal.Id, left.Id)]);
+        return (drawing, scope);
+    }
+
+    private static string FullProjectionSignature(WorkScopeIsolationBoundaryProjection result) =>
+        ProjectionSignature(result) + "|" +
+        string.Join('|', result.ProjectedBoundaries.Select(item =>
+            $"{item.IsolationBoundary.DeviceId:N}:{item.IsolationBoundary.Side}:" +
+            $"{item.IsolationBoundary.TerminalId:N}:{item.IsolationBoundary.ConnectionId:N}:" +
+            string.Join(',', item.SourceBoundaries.Select(boundary =>
+                $"{boundary.DeviceId:N}:{boundary.Side}:{boundary.TerminalId:N}:{boundary.ConnectionId:N}")))) + "|" +
+        string.Join('|', result.Diagnostics.Select(item =>
+            $"{item.Code}:{item.SourceBoundary?.DeviceId:N}:{item.SourceBoundary?.Side}:" +
+            $"{item.SourceBoundary?.TerminalId:N}:{item.SourceBoundary?.ConnectionId:N}"));
 
     private static (DrawingDocument Drawing, SwitchDevice Device, Guid SmallerConnection,
         Guid LargerConnection) PoleDrawing(
