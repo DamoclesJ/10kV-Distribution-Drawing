@@ -10,4 +10,8 @@
     <ProjectReference Include="..\DistributionDrawing.Domain\DistributionDrawing.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="DistributionDrawing.Application.Tests" />
+  </ItemGroup>
+
 </Project>

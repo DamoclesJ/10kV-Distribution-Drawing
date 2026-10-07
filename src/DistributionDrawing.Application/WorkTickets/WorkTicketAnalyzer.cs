@@ -26,6 +26,11 @@ public interface IRiskRulePack
     IEnumerable<RiskItem> Risks(DrawingDocument drawing, WorkTicketSession ticket);
 }
 
+public interface IWorkTicketHandoffAnalyzer
+{
+    WorkTicketSession AnalyzeConfirmedWorkScopeHandoff(DrawingDocument drawing, WorkTicketSession ticket);
+}
+
 public sealed class FirstKindRulePack : IWorkTicketRulePack, IRiskRulePack
 {
     public string Version => "first-kind-v0.1";
@@ -327,7 +332,7 @@ public sealed class FirstKindPhraseLibrary : IWorkTicketPhraseLibrary
 
 public sealed class WorkTicketAnalyzer(
     IWorkTicketRulePack? rules = null, IWorkTicketPhraseLibrary? phrases = null,
-    IRiskRulePack? riskRules = null)
+    IRiskRulePack? riskRules = null) : IWorkTicketHandoffAnalyzer
 {
     private readonly IWorkTicketRulePack _rules = rules ?? new FirstKindRulePack();
     private readonly IWorkTicketPhraseLibrary _phrases = phrases ?? new FirstKindPhraseLibrary();
@@ -335,10 +340,21 @@ public sealed class WorkTicketAnalyzer(
     private string GenerationRuleVersion => $"{_rules.Version}|{_riskRules.Version}";
 
     public WorkTicketSession Analyze(DrawingDocument drawing, WorkTicketSession ticket)
+        => AnalyzeCore(drawing, ticket, allowEmptyConfirmedScopeBoundaries: false);
+
+    public WorkTicketSession AnalyzeConfirmedWorkScopeHandoff(
+        DrawingDocument drawing, WorkTicketSession ticket) =>
+        AnalyzeCore(drawing, ticket, allowEmptyConfirmedScopeBoundaries: true);
+
+    private WorkTicketSession AnalyzeCore(
+        DrawingDocument drawing,
+        WorkTicketSession ticket,
+        bool allowEmptyConfirmedScopeBoundaries)
     {
         ArgumentNullException.ThrowIfNull(drawing);
         ArgumentNullException.ThrowIfNull(ticket);
-        WorkTicketRangeSetup.ValidateBoundaries(drawing, ticket.IsolationBoundaries);
+        if (!allowEmptyConfirmedScopeBoundaries || ticket.IsolationBoundaries.Count > 0)
+            WorkTicketRangeSetup.ValidateBoundaries(drawing, ticket.IsolationBoundaries);
         if (ticket.UserFacts.Any(item => item.Kind == "OtherReversible" && item.Confirmed &&
                 string.IsNullOrWhiteSpace(item.RestorationText)))
             throw new InvalidOperationException("可恢复措施需要填写对应的现场恢复文字。");

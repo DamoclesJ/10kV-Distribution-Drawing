@@ -13,6 +13,9 @@
 - **Phase 1:** VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`
 - **Phase 2:** VERIFIED / ACCEPTED at `4f50bc134ab1f556340ecf0225594edaa2117e5e`; Windows automated verification PASSED (1697/1697, 0 failed, 0 skipped), full solution build 0 errors
 - **Phase 3:** VERIFIED / ACCEPTED at `2444fdf8a7e4e19440a3054fcc3fa0bcfae9c4ab`; Windows automated verification PASSED (1717/1717, 0 failed, 0 skipped)
+- **Phase 4:** VERIFIED / ACCEPTED at `3f4a5fea1827f22abee39c18dda980357368dd91`; Windows automated verification PASSED (1738/1738, 0 failed, 0 skipped)
+- **Phase 5:** IMPLEMENTED / CANDIDATE from formal baseline `55819811c3883c16e185b84a61d42ca4a41c869e`; current-platform Domain, Application, Infrastructure, and full solution Release build passed. Windows fixed-SHA verification is PENDING.
+- **Phase 6:** NOT STARTED. Windows GUI acceptance is NOT RUN.
 
 This document records the approved package boundary. Opening the package does not start an implementation phase.
 
@@ -127,6 +130,16 @@ The Phase 4 whole-set validation fix is committed as `e1fa3fbdb2af513fbd6e4a1b51
 ### Phase 4 acceptance evidence
 
 Automated coverage verifies A/B/C classification; direct RingCabinet A; RingCabinet adapter, integrated breaker, integrated isolator, and representable Pole B; Equal/Unresolved Pole C; CustomerStation C; Transformer C; Ground/Earth Invalid; zero Boundaries; mixed A/B/C safe-handoff blocking; per-boundary and whole-set resolver validation; the `WtaBoundarySetRejected` regression fix; deduplication and source attribution; invalid persisted references; projection without EA; creation-order determinism; read-only behavior; and Phase 1–3, EA, GS, and WTA regressions.
+
+## Phase 5 — WorkTicket Handoff + Analyzer Exactly Once (IMPLEMENTED / CANDIDATE)
+
+Implemented from the formal Phase 5 baseline `55819811c3883c16e185b84a61d42ca4a41c869e`. Preparation composes the Phase 3 confirmation planner, the accepted Phase 4 projection service, and the existing `WorkTicketAnalyzer`, then captures the final Ticket Before/After snapshot in the existing single atomic `ConfirmWorkScopeCommand`. Execute, Undo, and Redo replay snapshots and call neither projection nor Analyzer; `AffectsEnergization` remains false.
+
+For a complete projection, the safe Phase 4 boundary collection replaces the Ticket boundaries and the existing Analyzer runs once during Prepare. A dedicated confirmed-WorkScope Analyzer entry allows a legal zero-boundary Complete projection to produce its normal NeedsInput result while the legacy manual range entry continues rejecting an empty boundary list. Analyzer NeedsInput is persisted as a valid snapshot. Analyzer exception or a fresh Invalid projection fails preparation without an executable plan. For Unrepresentable projection, confirmation remains executable, the safe boundary collection remains empty, Analyzer is skipped, and stale derived boundaries/analysis/fingerprint/rule versions are cleared while user draft content is marked stale and preserved. Phase 4 diagnostics, including C-class and whole-set WTA rejection, remain available in the handoff result. Phase 4 remains the sole mapping authority.
+
+Coverage includes complete non-empty and zero-boundary handoff; one command history entry; Analyzer and Phase 4 invocation counts across Execute/Undo/Redo; Analyzer NeedsInput and technical exception; confirmation rejection and fresh Invalid short-circuiting; CustomerStation C-class handoff; whole-set rejection without partial output; Complete→Complete replacement; Complete↔Unrepresentable re-confirmation; shared-scope Ticket B isolation; injected Execute rollback; and V10 Save/Open of an analyzed zero-boundary snapshot without EA state. Independent Ticket facts such as UserFacts, GroundingPointIds, and WorkScopeItems are preserved. No V10 schema change was made.
+
+Current-platform Release suites passed: Domain 236/236, Application 306/306, Infrastructure 152/152. The full solution Release build succeeded with 0 errors; the Desktop test project also cross-built with 0 errors. Rendering.Wpf and Desktop runtime suites were not executable on macOS and are not counted as passed. Windows fixed-SHA automated verification is PENDING. Windows GUI acceptance remains NOT RUN and belongs to Phase 6. Phase 1–4 remain VERIFIED / ACCEPTED; Phase 6 is NOT STARTED. `FormatVersion` remains V10. STOP-P5-01 through STOP-P5-08: NONE.
 
 ## Goal and normal flow
 

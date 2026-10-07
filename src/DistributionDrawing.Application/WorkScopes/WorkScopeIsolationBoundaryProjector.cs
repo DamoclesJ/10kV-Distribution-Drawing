@@ -84,8 +84,13 @@ public sealed class WorkScopeIsolationBoundaryProjection
     public IReadOnlyList<WorkScopeBoundaryProjectionDiagnostic> Diagnostics { get; }
 }
 
-/// <summary>Projects one persisted WorkScope snapshot to the existing WTA boundary contract without mutation.</summary>
-public sealed class WorkScopeIsolationBoundaryProjector
+public interface IWorkScopeIsolationBoundaryProjectionService
+{
+    WorkScopeIsolationBoundaryProjection Project(DrawingDocument drawing, WorkScope confirmedSnapshot);
+}
+
+/// <summary>Projects a confirmed or prepared immutable WorkScope snapshot to the WTA contract without mutation.</summary>
+public sealed class WorkScopeIsolationBoundaryProjector : IWorkScopeIsolationBoundaryProjectionService
 {
     private readonly FirstKindRulePack _rules = new();
 
@@ -99,6 +104,16 @@ public sealed class WorkScopeIsolationBoundaryProjector
                 [Diagnostic(WorkScopeBoundaryProjectionDiagnosticCode.MissingWorkScope,
                     $"WorkScope '{workScopeId}' does not exist.")]);
         }
+
+        return Project(drawing, scope);
+    }
+
+    /// <summary>Projects an immutable planned confirmation snapshot before its atomic commit.</summary>
+    public WorkScopeIsolationBoundaryProjection Project(DrawingDocument drawing, WorkScope confirmedSnapshot)
+    {
+        ArgumentNullException.ThrowIfNull(drawing);
+        ArgumentNullException.ThrowIfNull(confirmedSnapshot);
+        WorkScope scope = confirmedSnapshot;
 
         if (scope.Regions.Count == 0)
         {

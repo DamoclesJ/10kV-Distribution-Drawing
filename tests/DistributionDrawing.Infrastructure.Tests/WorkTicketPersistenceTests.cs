@@ -1,5 +1,7 @@
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Infrastructure.Persistence;
 using System.IO.Compression;
 using System.Text.Json;
@@ -10,6 +12,57 @@ namespace DistributionDrawing.Infrastructure.Tests;
 
 public sealed class WorkTicketPersistenceTests
 {
+    [Fact]
+    public void ConfirmedWorkScopeHandoffSnapshotRoundTripsInV10WithoutEaState()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"ws-handoff-{Guid.NewGuid():N}.kvdrawing");
+        try
+        {
+            var service = new ProjectService();
+            ProjectSession project = service.CreateProject(path, "Confirmed WorkScope handoff");
+            RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "Handoff ring",
+                [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
+                 RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Closed, SwitchState.Open)]));
+            project.Domain.AddDevice(cabinet);
+            var zero = new ProjectPointDto(0, 0);
+            service.SetLayout(new ProjectLayoutSnapshot(ProjectLayoutDto.Empty(project.Domain.Id) with
+            {
+                RingCabinets = [new(cabinet.Id, zero, 100, 100, 20, zero,
+                    cabinet.Intervals.Select(interval => new ProjectRingCabinetIntervalLayoutDto(interval.IntervalId,
+                        zero, 40, 80, zero, zero, interval.SwitchDevices.Select(device =>
+                            new ProjectRingCabinetSwitchLayoutDto(device.Id, zero, 10, 10, zero)).ToArray())).ToArray())]
+            }));
+            Guid terminalId = cabinet.Intervals[0].CableTerminalId!.Value;
+            WorkScope scope = project.Domain.CreateWorkScope(Guid.NewGuid(),
+                [new WorkScopeRegion([terminalId], [cabinet.Intervals[0].CircuitNodeId])], []);
+            WorkTicketSession ticket = WorkTicketSession.Create() with
+            {
+                WorkScopeIds = [scope.WorkScopeId],
+                IsolationBoundaries = []
+            };
+            ticket = new WorkTicketAnalyzer().AnalyzeConfirmedWorkScopeHandoff(project.Domain, ticket);
+            project.WorkTickets.Add(ticket);
+
+            service.SaveProject();
+            ProjectSession reopened = new ProjectService().LoadProject(path);
+
+            Assert.Equal(10, reopened.OpenedFormatVersion);
+            WorkScope restoredScope = Assert.Single(reopened.Domain.WorkScopes);
+            WorkTicketSession restored = Assert.Single(reopened.WorkTickets.Tickets);
+            Assert.Equal(scope.WorkScopeId, Assert.Single(restored.WorkScopeIds));
+            Assert.Equal(restoredScope.WorkScopeId, restored.WorkScopeIds[0]);
+            Assert.Empty(restored.IsolationBoundaries);
+            Assert.NotNull(restored.Analysis);
+            Assert.Equal(ticket.Analysis!.Issues, restored.Analysis!.Issues);
+            Assert.Equal(ticket.Draft!.Sections.Select(item => (item.Code, item.Completion, item.Text)),
+                restored.Draft!.Sections.Select(item => (item.Code, item.Completion, item.Text)));
+            Assert.Equal(ticket.AnalyzedFingerprint, restored.AnalyzedFingerprint);
+            Assert.Equal(ticket.RulePackVersion, restored.RulePackVersion);
+            Assert.Equal(ticket.PhraseLibraryVersion, restored.PhraseLibraryVersion);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
     [Fact]
     public void RequiredWorkTicketSectionRoundTripsManualDraftAndKeepsFormatVersion()
     {

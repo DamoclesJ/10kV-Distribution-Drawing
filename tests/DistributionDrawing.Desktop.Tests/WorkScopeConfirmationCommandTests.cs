@@ -1,10 +1,12 @@
 using DistributionDrawing.Application.Energization;
+using DistributionDrawing.Application.Devices.CustomerStations;
 using DistributionDrawing.Application.Templates.RingCabinets;
 using DistributionDrawing.Application.Templates.RingCabinets.BuiltIn;
 using DistributionDrawing.Application.WorkScopes;
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Desktop.WorkTickets;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Energization;
@@ -349,13 +351,231 @@ public sealed class WorkScopeConfirmationCommandTests
         Assert.Equal(0, eaChangedEvents);
     }
 
-    private static Fixture CreateFixture()
+    [Fact]
+    public void Handoff_CompleteConfirmUsesOneHistoryEntryAndRedoDoesNotReanalyze()
+    {
+        Fixture fixture = CreateFixture();
+        var tickets = new WorkTicketDataRoot(fixture.Drawing.Id);
+        var analyzer = new CountingHandoffAnalyzer();
+        var projection = new CountingProjectionService(new WorkScopeIsolationBoundaryProjector());
+        WorkScopeHandoffPlanningResult prepared = new WorkScopeHandoffPlanner(
+            new WorkScopeConfirmationPlanner(), projection, analyzer)
+            .Prepare(fixture.Drawing, fixture.State, fixture.Candidate, tickets);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(prepared.Plan);
+        var command = new ConfirmWorkScopeCommand(fixture.Drawing, tickets, plan);
+        var stack = new CommandStack();
+        EnergizationResult eaResult = Assert.IsType<EnergizationResult>(fixture.State.CurrentResult);
+
+        Assert.False(command.AffectsEnergization);
+        Assert.True(prepared.CanExecute);
+        Assert.Equal(1, analyzer.Calls);
+        Assert.Equal(1, projection.Calls);
+        Assert.NotNull(analyzer.LastInput);
+        Assert.Equal(plan.AfterTicket.IsolationBoundaries, analyzer.LastInput!.IsolationBoundaries);
+        Assert.Null(analyzer.LastInput.Analysis);
+
+        stack.ExecuteCommand(command);
+
+        Assert.Single(stack.History);
+        WorkTicketSession committed = Assert.IsType<WorkTicketSession>(tickets.Selected(plan.TicketId));
+        Assert.Equal(plan.AfterWorkScope.WorkScopeId, Assert.Single(committed.WorkScopeIds));
+        Assert.Equal(prepared.Projection!.IsolationBoundaries, committed.IsolationBoundaries);
+        Assert.NotNull(committed.Analysis);
+        Assert.Equal(1, analyzer.Calls);
+        Assert.Equal(1, projection.Calls);
+        Assert.Same(eaResult, fixture.State.CurrentResult);
+
+        Assert.True(stack.Undo());
+        Assert.Empty(tickets.Tickets);
+        Assert.Empty(fixture.Drawing.WorkScopes);
+        Assert.Equal(1, analyzer.Calls);
+        Assert.Equal(1, projection.Calls);
+        Assert.Same(eaResult, fixture.State.CurrentResult);
+
+        Assert.True(stack.Redo());
+        Assert.Same(plan.AfterTicket, tickets.Selected(plan.TicketId));
+        Assert.Equal(plan.AfterWorkScope.WorkScopeId,
+            fixture.Drawing.GetWorkScope(plan.AfterWorkScope.WorkScopeId).WorkScopeId);
+        Assert.Equal(1, analyzer.Calls);
+        Assert.Equal(1, projection.Calls);
+        Assert.Same(eaResult, fixture.State.CurrentResult);
+    }
+
+    [Fact]
+    public void Handoff_ZeroBoundaryConfirmsAndAnalyzesNormallyInOneHistoryEntry()
+    {
+        Fixture fixture = CreateFixture(withOpenBoundary: false);
+        var tickets = new WorkTicketDataRoot(fixture.Drawing.Id);
+        var analyzer = new CountingHandoffAnalyzer();
+        WorkScopeHandoffPlanningResult prepared = new WorkScopeHandoffPlanner(
+            new WorkScopeConfirmationPlanner(), new WorkScopeIsolationBoundaryProjector(), analyzer)
+            .Prepare(fixture.Drawing, fixture.State, fixture.Candidate, tickets);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(prepared.Plan);
+        var command = new ConfirmWorkScopeCommand(fixture.Drawing, tickets, plan);
+        var stack = new CommandStack();
+
+        stack.ExecuteCommand(command);
+
+        Assert.Single(stack.History);
+        WorkTicketSession committed = Assert.IsType<WorkTicketSession>(tickets.Selected(plan.TicketId));
+        Assert.Empty(committed.IsolationBoundaries);
+        Assert.Equal(1, analyzer.Calls);
+        Assert.Equal(SectionCompletion.NeedsInput, committed.Draft!.Section("6.1").Completion);
+        Assert.Throws<InvalidOperationException>(() => new WorkTicketAnalyzer().Analyze(
+            fixture.Drawing, WorkTicketSession.Create()));
+    }
+
+    [Fact]
+    public void Handoff_SharedScopeReconfirmUpdatesOnlyTargetTicketAndUndoRedoPreservesOtherTicket()
+    {
+        Fixture fixture = CreateFixture();
+        WorkScope shared = MaterializeForSetup(fixture.Drawing, fixture.Candidate, Guid.NewGuid(), "shared scope");
+        fixture.Drawing.AddWorkScope(shared);
+        WorkTicketSession first = WorkTicketSession.Create() with { WorkScopeIds = [shared.WorkScopeId] };
+        WorkTicketSession second = WorkTicketSession.Create() with
+        {
+            WorkScopeIds = [shared.WorkScopeId],
+            UserFacts = [new UserTicketFact("other-ticket", "untouched", [], true)]
+        };
+        var tickets = new WorkTicketDataRoot(fixture.Drawing.Id, [first, second]);
+        var analyzer = new CountingHandoffAnalyzer();
+        WorkScopeHandoffPlanningResult prepared = new WorkScopeHandoffPlanner(
+            new WorkScopeConfirmationPlanner(), new WorkScopeIsolationBoundaryProjector(), analyzer)
+            .Prepare(fixture.Drawing, fixture.State, fixture.Candidate, tickets, first.Id);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(prepared.Plan);
+        Assert.NotEqual(shared.WorkScopeId, plan.AfterWorkScope.WorkScopeId);
+        var command = new ConfirmWorkScopeCommand(fixture.Drawing, tickets, plan);
+        var stack = new CommandStack();
+
+        stack.ExecuteCommand(command);
+
+        Assert.Single(stack.History);
+        Assert.Same(plan.AfterTicket, tickets.Selected(first.Id));
+        Assert.Same(second, tickets.Selected(second.Id));
+        Assert.Equal(shared.WorkScopeId, Assert.Single(second.WorkScopeIds));
+        Assert.Same(shared, fixture.Drawing.GetWorkScope(shared.WorkScopeId));
+        Assert.NotNull(tickets.Selected(first.Id)!.Analysis);
+        Assert.Equal(1, analyzer.Calls);
+
+        Assert.True(stack.Undo());
+        Assert.Same(first, tickets.Selected(first.Id));
+        Assert.Same(second, tickets.Selected(second.Id));
+        Assert.Throws<InvalidOperationException>(() => fixture.Drawing.GetWorkScope(plan.AfterWorkScope.WorkScopeId));
+
+        Assert.True(stack.Redo());
+        Assert.Same(plan.AfterTicket, tickets.Selected(first.Id));
+        Assert.Same(second, tickets.Selected(second.Id));
+        Assert.Equal(1, analyzer.Calls);
+    }
+
+    [Fact]
+    public void Handoff_ExecuteFailureRollsBackFullAnalyzedAfterSnapshotAndDoesNotRecordHistory()
+    {
+        Fixture fixture = CreateFixture();
+        var tickets = new WorkTicketDataRoot(fixture.Drawing.Id);
+        var analyzer = new CountingHandoffAnalyzer();
+        WorkScopeHandoffPlanningResult prepared = new WorkScopeHandoffPlanner(
+            new WorkScopeConfirmationPlanner(), new WorkScopeIsolationBoundaryProjector(), analyzer)
+            .Prepare(fixture.Drawing, fixture.State, fixture.Candidate, tickets);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(prepared.Plan);
+        var command = new ConfirmWorkScopeCommand(fixture.Drawing, tickets, plan, stage =>
+        {
+            if (stage == ConfirmWorkScopeCommandStage.ExecuteAfterScope)
+                throw new InvalidOperationException("injected handoff command failure");
+        });
+        var stack = new CommandStack();
+
+        Assert.NotNull(plan.AfterTicket.Analysis);
+        Assert.NotNull(plan.AfterTicket.Draft);
+        Assert.Throws<InvalidOperationException>(() => stack.ExecuteCommand(command));
+
+        Assert.Empty(tickets.Tickets);
+        Assert.Empty(fixture.Drawing.WorkScopes);
+        Assert.Empty(stack.History);
+        Assert.Equal(0, stack.CurrentIndex);
+        Assert.Equal(1, analyzer.Calls);
+    }
+
+    [Fact]
+    public void Handoff_UnrepresentableConfirmClearsStaleDerivedStateAndUndoRestoresBeforeSnapshot()
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "Unrepresentable handoff");
+        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "Source",
+            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Closed, SwitchState.Open)]));
+        drawing.AddDevice(cabinet);
+        CustomerStation station = new DistributionDrawing.Application.Devices.CustomerStations.CustomerStationCreationFactory()
+            .Create(StationKind.BoxStation,
+            ["Feeder A"]);
+        drawing.AddCustomerStation(station);
+        IncomingFeeder feeder = Assert.Single(station.IncomingFeeders);
+        drawing.AddConnection(new Connection(Guid.NewGuid(), ConnectionType.Cable,
+            cabinet.Intervals[0].CableTerminalId!.Value, feeder.CableTerminalId, "C1", "10kV"));
+        SwitchDevice seedSwitch = cabinet.Intervals[0].SwitchDevices.Single(item =>
+            item.SwitchKind == SwitchKind.LoadSwitch);
+        var state = new EnergizationAnalysisState();
+        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+            [Seed(seedSwitch, EnergizationSide.Bus)], true));
+        WorkScopeCandidate candidate = Project(drawing, state);
+        Assert.Contains(candidate.Boundaries, item => item.SwitchDeviceId == feeder.IsolationSwitch.Id);
+        var oldAnalysis = new WorkTicketAnalysis([], [], [], [], [], ["stale"]);
+        var oldDraft = new WorkTicketDraft([new SectionDraft("6.1",
+            [new DraftItem(Guid.NewGuid(), "generated", "edited", DraftOrigin.UserEdited, [])
+                { IsUserEdited = true, Source = FactOrigin.UserAdded }], SectionCompletion.Completed)]);
+        WorkTicketSession before = WorkTicketSession.Create() with
+        {
+            IsolationBoundaries = [new IsolationBoundary(seedSwitch.Id, BoundarySide.Bus)],
+            Analysis = oldAnalysis,
+            Draft = oldDraft,
+            AnalyzedFingerprint = "stale fingerprint",
+            RulePackVersion = "stale rules",
+            PhraseLibraryVersion = "stale phrases",
+            UserFacts = [new UserTicketFact("note", "preserve", [], true)],
+            GroundingPointIds = [Guid.NewGuid()]
+        };
+        var tickets = new WorkTicketDataRoot(drawing.Id, [before]);
+        var analyzer = new CountingHandoffAnalyzer();
+        WorkScopeHandoffPlanningResult prepared = new WorkScopeHandoffPlanner(
+            new WorkScopeConfirmationPlanner(), new WorkScopeIsolationBoundaryProjector(), analyzer)
+            .Prepare(drawing, state, candidate, tickets, before.Id);
+        Assert.Equal(WorkScopeHandoffStatus.ConfirmedButUnrepresentable, prepared.Status);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(prepared.Plan);
+        var command = new ConfirmWorkScopeCommand(drawing, tickets, plan);
+        var stack = new CommandStack();
+
+        stack.ExecuteCommand(command);
+
+        Assert.Single(stack.History);
+        Assert.Same(plan.AfterTicket, tickets.Selected(before.Id));
+        Assert.Single(plan.AfterTicket.WorkScopeIds);
+        Assert.Empty(plan.AfterTicket.IsolationBoundaries);
+        Assert.Null(plan.AfterTicket.Analysis);
+        Assert.Null(plan.AfterTicket.AnalyzedFingerprint);
+        Assert.Equal(SectionCompletion.Stale, plan.AfterTicket.Draft!.Section("6.1").Completion);
+        Assert.Equal(oldDraft.Section("6.1").Items, plan.AfterTicket.Draft.Section("6.1").Items);
+        Assert.Equal(before.UserFacts, plan.AfterTicket.UserFacts);
+        Assert.Equal(before.GroundingPointIds, plan.AfterTicket.GroundingPointIds);
+        Assert.Equal(0, analyzer.Calls);
+
+        Assert.True(stack.Undo());
+        Assert.Same(before, tickets.Selected(before.Id));
+        Assert.Empty(drawing.WorkScopes);
+        Assert.Same(oldAnalysis, tickets.Selected(before.Id)!.Analysis);
+
+        Assert.True(stack.Redo());
+        Assert.Same(plan.AfterTicket, tickets.Selected(before.Id));
+        Assert.Equal(0, analyzer.Calls);
+    }
+
+    private static Fixture CreateFixture(bool withOpenBoundary = true)
     {
         var drawing = new DrawingDocument(Guid.NewGuid(), "Confirm command fixture");
         RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "Confirm command",
-            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+            [RingCabinetIntervalDefinition.CreateLoadSwitch(1,
+                 withOpenBoundary ? SwitchState.Open : SwitchState.Closed, SwitchState.Open),
              RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Closed, SwitchState.Open)]));
         drawing.AddDevice(cabinet);
+        if (!withOpenBoundary) _ = AddIsolatedOpenSwitch(drawing);
         SwitchDevice seedSwitch = cabinet.Intervals[0].SwitchDevices[0];
         var state = new EnergizationAnalysisState();
         state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
@@ -449,8 +669,47 @@ public sealed class WorkScopeConfirmationCommandTests
     private static string TicketSignature(WorkTicketSession ticket) =>
         JsonSerializer.Serialize(ticket);
 
+    private static SwitchDevice AddIsolatedOpenSwitch(DrawingDocument drawing)
+    {
+        SwitchDevice device = SwitchDevice.CreateForPole(Guid.NewGuid(), SwitchKind.LoadSwitch,
+            Guid.NewGuid(), Guid.NewGuid());
+        drawing.AddDevice(device);
+        drawing.AddTerminal(new Terminal(device.FirstTerminalId, TopologyOwnerType.Device,
+            device.Id, "First", "10kV", true, false, null, [ConnectionType.OverheadLine]));
+        drawing.AddTerminal(new Terminal(device.SecondTerminalId, TopologyOwnerType.Device,
+            device.Id, "Second", "10kV", true, false, null, [ConnectionType.OverheadLine]));
+        return device;
+    }
+
     private static EnergizedSeed Seed(SwitchDevice device, EnergizationSide side) =>
         new(Guid.NewGuid(), device.Id, side);
+
+    private sealed class CountingHandoffAnalyzer : IWorkTicketHandoffAnalyzer
+    {
+        private readonly WorkTicketAnalyzer _inner = new();
+        public int Calls { get; private set; }
+        public WorkTicketSession? LastInput { get; private set; }
+
+        public WorkTicketSession AnalyzeConfirmedWorkScopeHandoff(
+            DrawingDocument drawing, WorkTicketSession ticket)
+        {
+            Calls++;
+            LastInput = ticket;
+            return _inner.AnalyzeConfirmedWorkScopeHandoff(drawing, ticket);
+        }
+    }
+
+    private sealed class CountingProjectionService(IWorkScopeIsolationBoundaryProjectionService inner)
+        : IWorkScopeIsolationBoundaryProjectionService
+    {
+        public int Calls { get; private set; }
+
+        public WorkScopeIsolationBoundaryProjection Project(DrawingDocument drawing, WorkScope confirmedSnapshot)
+        {
+            Calls++;
+            return inner.Project(drawing, confirmedSnapshot);
+        }
+    }
 
     private sealed record Fixture(
         DrawingDocument Drawing,

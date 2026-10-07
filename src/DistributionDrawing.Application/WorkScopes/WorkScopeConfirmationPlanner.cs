@@ -51,6 +51,15 @@ public sealed class WorkScopeConfirmationPlan
     public WorkTicketSession AfterTicket { get; }
     public WorkScope? BeforeWorkScope { get; }
     public WorkScope AfterWorkScope { get; }
+
+    internal WorkScopeConfirmationPlan WithAfterTicket(WorkTicketSession afterTicket)
+    {
+        ArgumentNullException.ThrowIfNull(afterTicket);
+        if (afterTicket.Id != TicketId)
+            throw new ArgumentException("The prepared ticket snapshot has a different identity.", nameof(afterTicket));
+        return new WorkScopeConfirmationPlan(TicketId, BeforeTicket, afterTicket,
+            BeforeWorkScope, AfterWorkScope);
+    }
 }
 
 public sealed record WorkScopeConfirmationPlanningResult(
