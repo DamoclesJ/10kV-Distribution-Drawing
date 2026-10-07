@@ -42,6 +42,8 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,4">
+        <Button x:Name="ConfirmWorkScopeButton" Content="确认工作范围" Click="OnRequestWorkRange"
+                Padding="12,6" Margin="0,0,8,0" IsEnabled="False" />
         <Button x:Name="ExitButton" Content="退出" Click="OnExit" Padding="12,6" />
         <Button x:Name="AnalyzeButton" Content="开始分析" Click="OnExecuteAnalysis"
                 Padding="12,6" Margin="8,0,0,0" />

@@ -15,9 +15,9 @@
 - **Phase 3:** VERIFIED / ACCEPTED at `2444fdf8a7e4e19440a3054fcc3fa0bcfae9c4ab`; Windows automated verification PASSED (1717/1717, 0 failed, 0 skipped)
 - **Phase 4:** VERIFIED / ACCEPTED at `3f4a5fea1827f22abee39c18dda980357368dd91`; Windows automated verification PASSED (1738/1738, 0 failed, 0 skipped)
 - **Phase 5:** VERIFIED / ACCEPTED at `10cb9187c37abe7dab55bed012b008030c952823`; Windows fixed-SHA verification PASSED (1755/1755, 0 failed, 0 skipped), full solution Release build 0 errors (22 nullable warnings).
-- **Phase 6:** NOT STARTED. Windows GUI acceptance is NOT RUN.
+- **Phase 6:** IMPLEMENTED / CANDIDATE. Windows automated runtime verification and GUI acceptance remain PENDING.
 
-This document records the approved package boundary. Opening the package does not start an implementation phase.
+This document records the approved package boundary and phase acceptance history; the current phase status above controls implementation and acceptance state.
 
 ## Phase 1 acceptance
 
@@ -156,6 +156,15 @@ Windows fixed-SHA automated verification PASSED: Domain 236/236, Application 306
 ### Phase 5 Windows acceptance evidence
 
 At accepted SHA `10cb9187c37abe7dab55bed012b008030c952823`: Domain 236/236, Application 306/306, Infrastructure 152/152, Rendering.Wpf 674/674, Desktop 387/387; total 1755/1755, 0 failed, 0 skipped. Full solution Release build: 0 errors (22 nullable warnings). The full suites verify one history entry; no-ticket and shared-scope behavior; zero-boundary and legacy manual guard; Unrepresentable and WtaBoundarySetRejected no-partial handoff; Analyzer exactly once and replay call counts; NeedsInput and technical exception; confirmation rejection and Invalid short-circuit; all three re-confirm transitions; derived-state invalidation and user-fact preservation; rollback atomicity; V10 persistence without EA; and Phase 1-4, EA, GS, and WTA regressions.
+
+## Phase 6 — Windows GUI Integration & End-to-End Acceptance (IMPLEMENTED / CANDIDATE)
+
+Phase 6 implementation is based on the accepted Phase 5 baseline `c2433292455c7684f4ef8be6d59461e02cd9de79`. Work Range now reviews the transient EA-derived Candidate, displays Region and Boundary counts and membership summaries, blocks invalid and empty candidates, and confirms all Regions through the existing integrated handoff planner and one `ConfirmWorkScopeCommand`. The EA panel shortcut enters the same review flow. The WorkTicket page displays its confirmed WorkScope link, isolation boundaries, analysis state, and handoff diagnostic. Complete, NeedsInput, and Unrepresentable outcomes navigate to the WorkTicket page; diagnostics use Chinese business-facing text. A reviewed Candidate is retained until Confirm so the accepted freshness gate rejects a stale snapshot rather than silently replacing it.
+
+No Domain schema, FormatVersion, EA, GS, WorkScope, Phase 4 mapping, or Analyzer contract was changed. Phase 5 planner gained only an optional WorkTask input so the task displayed in Work Range is part of the same prepared ticket snapshot before the existing Analyzer runs. Confirm, Undo, and Redo continue through the existing single atomic snapshot command.
+
+macOS portable verification PASSED: Domain 236/236, Application 306/306, Infrastructure 152/152. Full solution Release build succeeded with 0 errors. Desktop and Rendering.Wpf test assemblies build successfully. Desktop test execution was attempted but could not start because this macOS host has no `Microsoft.WindowsDesktop.App`; this is unavailable platform execution, not a test failure or pass. Windows Domain/Application/Infrastructure/Rendering.Wpf/Desktop fixed-SHA verification, manual GUI scenarios 1–14, Save/Open, and GUI Undo/Redo remain PENDING. Phase 6 is not ACCEPTED; WP-WS-01 remains OPEN / IN PROGRESS; Phase 1–5 remain VERIFIED / ACCEPTED; FormatVersion remains V10.
+
 
 ## Goal and normal flow
 

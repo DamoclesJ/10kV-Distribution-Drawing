@@ -23,9 +23,10 @@ public sealed class WorkScopeHandoffPlannerTests
         var projection = new CountingProjectionService(new WorkScopeIsolationBoundaryProjector());
         var analyzer = new CountingAnalyzer(new WorkTicketAnalyzer());
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(), projection, analyzer);
+        var task = new WorkTask("校验集成确认任务", "测试工作对象");
 
         WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State,
-            fixture.Candidate, tickets);
+            fixture.Candidate, tickets, task: task);
 
         Assert.Equal(WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput, result.Status);
         Assert.True(result.CanExecute);
@@ -39,6 +40,7 @@ public sealed class WorkScopeHandoffPlannerTests
         Assert.NotNull(plan.AfterTicket.Draft);
         Assert.NotNull(analyzer.LastInput);
         Assert.Equal(plan.AfterTicket.Id, analyzer.LastInput!.Id);
+        Assert.Equal(task, analyzer.LastInput.Task);
         Assert.Equal(plan.AfterTicket.WorkScopeIds, analyzer.LastInput.WorkScopeIds);
         Assert.Null(analyzer.LastInput.Analysis);
         Assert.Equal(plan.AfterTicket.IsolationBoundaries, analyzer.LastInput!.IsolationBoundaries);

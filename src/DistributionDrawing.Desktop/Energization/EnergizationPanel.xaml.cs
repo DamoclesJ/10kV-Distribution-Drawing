@@ -31,6 +31,9 @@ public partial class EnergizationPanel : UserControl
     public event EventHandler? VisualStateChanged;
     public event EventHandler? SwitchOperationApplied;
     public event EventHandler? ExitRequested;
+    public event EventHandler? WorkRangeRequested;
+    private void OnRequestWorkRange(object sender, RoutedEventArgs e) =>
+        WorkRangeRequested?.Invoke(this, EventArgs.Empty);
     private void OnOpenSwitch(object sender, RoutedEventArgs e) => OperateSwitch(SwitchState.Open);
     private void OnCloseSwitch(object sender, RoutedEventArgs e) => OperateSwitch(SwitchState.Closed);
 
@@ -180,6 +183,7 @@ public partial class EnergizationPanel : UserControl
         ReplaceButton.IsEnabled = AddButton.IsEnabled && SeedList.SelectedItem is SeedItem;
         RemoveButton.IsEnabled = _session is not null && SeedList.SelectedItem is SeedItem;
         AnalyzeButton.IsEnabled = _session is not null;
+        ConfirmWorkScopeButton.IsEnabled = _session?.Energization.CurrentResult is not null;
     }
 
     private void OnCandidateSelected(object sender, SelectionChangedEventArgs e)

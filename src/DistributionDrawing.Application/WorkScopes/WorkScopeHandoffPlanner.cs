@@ -66,13 +66,17 @@ public sealed class WorkScopeHandoffPlanner
         EnergizationAnalysisState analysisState,
         WorkScopeCandidate reviewedCandidate,
         WorkTicketDataRoot tickets,
-        Guid? targetTicketId = null)
+        Guid? targetTicketId = null,
+        WorkTask? task = null)
     {
         WorkScopeConfirmationPlanningResult confirmation = _confirmationPlanner.Prepare(
             drawing, analysisState, reviewedCandidate, tickets, targetTicketId);
         if (confirmation.Plan is not WorkScopeConfirmationPlan confirmationPlan)
             return new WorkScopeHandoffPlanningResult(WorkScopeHandoffStatus.ConfirmationRejected,
                 null, confirmation.Diagnostic, null, null);
+
+        if (task is not null)
+            confirmationPlan = confirmationPlan.WithAfterTicket(confirmationPlan.AfterTicket with { Task = task });
 
         WorkScopeIsolationBoundaryProjection projection;
         try

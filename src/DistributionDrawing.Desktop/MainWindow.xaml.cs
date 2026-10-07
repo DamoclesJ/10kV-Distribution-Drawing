@@ -123,9 +123,11 @@ public partial class MainWindow : Window
         TicketWorkspace.LocateRequested += OnTicketLocateRequested;
         TicketWorkspace.SelectionChanged += OnTicketWorkspaceSelectionChanged;
         TicketWorkspace.RangeEditRequested += OnTicketRangeEditRequested;
-        EaPanel.VisualStateChanged += (_, _) => RenderCurrentScene();
+        EaPanel.VisualStateChanged += OnEnergizationVisualStateChanged;
         EaPanel.SwitchOperationApplied += OnSwitchOperationSceneChanged;
         EaPanel.ExitRequested += OnExitEnergizationMode;
+        EaPanel.WorkRangeRequested += (_, _) =>
+            OnOpenTicketRange(this, new RoutedEventArgs());
         _messageService = new DesktopMessageService(this);
         _propertyEditor = new(_selectionResolver, _commandStack);
         _selectionRectangle = new SelectionRectangleController(_selectionManager);
@@ -805,8 +807,7 @@ public partial class MainWindow : Window
                !_groundingPointDrag.IsActive &&
                !_selectionRectangle.IsActive &&
                !_viewport.IsPanning &&
-               !_groundingPointPickMode &&
-               _ticketRangePicker.Mode == TicketRangePickMode.Idle;
+               !_groundingPointPickMode;
     }
 
     private bool CanRotateCurrentSelection()
@@ -1031,7 +1032,6 @@ public partial class MainWindow : Window
             return;
         }
         TicketWorkspace.CommitPendingEdits();
-        CancelTicketRangePicking();
         _drawingTools.Cancel();
         CancelProfessionalPicking();
         _shellViewModel.Toolbox.SetSelectedMode(DesktopToolMode.Select);
@@ -1043,6 +1043,11 @@ public partial class MainWindow : Window
 
     private void OnExitEnergizationMode(object? sender, EventArgs e) =>
         SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
+
+    private void OnEnergizationVisualStateChanged(object? sender, EventArgs e)
+    {
+        RenderCurrentScene();
+    }
 
     private void OnEnergizationDisplayToggle(object sender, RoutedEventArgs e)
     {
@@ -1079,7 +1084,6 @@ public partial class MainWindow : Window
 
     private void OnShowTicketWorkspace(object sender, RoutedEventArgs e)
     {
-        CancelTicketRangePicking();
         ApplyDrawingContextPanel();
         TicketWorkspace.CommitPendingEdits();
         TicketWorkspace.Refresh();
@@ -1106,8 +1110,6 @@ public partial class MainWindow : Window
 
     private void OnTicketWorkspaceSelectionChanged()
     {
-        if (_ticketRangePicker.Mode != TicketRangePickMode.Idle)
-            CancelTicketRangePicking();
         RenderCurrentScene();
     }
 
@@ -1393,7 +1395,6 @@ public partial class MainWindow : Window
             SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
         else
             ApplyDrawingContextPanel();
-        CancelTicketRangePicking();
         DiscardTicketRangeBuffer();
         DrawingSurface.Clear();
         _viewport.Reset();
@@ -1480,10 +1481,6 @@ public partial class MainWindow : Window
                 _ when _poleSwitchAttachment.IsSelectingControlledConnection =>
                     _poleSwitchAttachment.StatusText,
                 _ when _groundingPointPickMode => "添加工作地线：请选择端子",
-                _ when _ticketRangePicker.Mode == TicketRangePickMode.ChoosingBoundarySide =>
-                    "工作范围：请在右侧选择专业电气侧，Esc 取消",
-                _ when _ticketRangePicker.Mode == TicketRangePickMode.PickingBoundaryDevice =>
-                    $"工作范围：请选择 Boundary {WorkTicketRangeSetup.SlotName(_ticketRangePicker.BoundaryIndex!.Value)} 的设备，Esc 取消",
                 DesktopToolMode.CreateRingCabinet =>
                     "环网柜：单击图面放置，Esc 或右键退出",
                 DesktopToolMode.CreatePole =>
@@ -1599,8 +1596,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_groundingPointPickMode ||
-            _ticketRangePicker.Mode != TicketRangePickMode.Idle)
+        if (_groundingPointPickMode)
         {
             CancelProfessionalPicking();
             SyncToolboxModeFromInteraction();
@@ -2160,12 +2156,6 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(ToolboxViewModel.SelectedMode))
         {
-            if (_ticketRangePicker.Mode != TicketRangePickMode.Idle &&
-                _shellViewModel.Toolbox.SelectedMode != DesktopToolMode.Select)
-            {
-                CancelTicketRangePicking();
-                SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
-            }
             UpdateCanvasStatus();
         }
     }
@@ -2210,15 +2200,6 @@ public partial class MainWindow : Window
 
         System.Windows.Point point = e.GetPosition(DrawingSurface);
         DocumentPoint documentPoint = _viewport.Transform.ViewToDocument(point);
-
-        if (_ticketRangePicker.Mode != TicketRangePickMode.Idle)
-        {
-            SelectionReference? picked = _currentScene.HitTestIndex.HitTest(
-                documentPoint, _viewport.Transform.ViewDistanceToDocument(4));
-            HandleTicketRangePick(picked);
-            e.Handled = true;
-            return;
-        }
 
         if (_drawingTools.IsActive)
         {
@@ -2290,11 +2271,6 @@ public partial class MainWindow : Window
             documentPoint,
             _viewport.Transform.ViewDistanceToDocument(4));
         SelectionReference? target = hit?.Target;
-        WorkRangeCanvasActivation.ActivateOrdinaryObject(
-            _ticketRangePicker.Mode,
-            _rightPanelMode,
-            target,
-            () => SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector));
 
         if (e.ClickCount == 2)
         {
@@ -2421,11 +2397,6 @@ public partial class MainWindow : Window
 
     private void CancelProfessionalPicking()
     {
-        if (_ticketRangePicker.Mode != TicketRangePickMode.Idle)
-        {
-            CancelTicketRangePicking();
-            TicketRangeStatus.Text = "选择已取消；范围内容未改变。";
-        }
         _groundingPointPickMode = false;
         _pendingGroundingTarget = null;
         _hoveredGroundingTarget = null;
@@ -2624,11 +2595,6 @@ public partial class MainWindow : Window
 
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
-        if (_ticketRangePicker.Mode == TicketRangePickMode.Idle &&
-            _rightPanelMode == DrawingRightPanelMode.WorkRange)
-        {
-            SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
-        }
         EaPanel.SetSelection(_selectionManager.Selected?.ObjectId);
         DrawingPerformanceTrace.PhaseOperation selectionRefresh =
             DrawingPerformanceTrace.Measure("InspectorSelectionRefresh");
@@ -3716,13 +3682,6 @@ public partial class MainWindow : Window
                 ticket = ticket with { Analysis = null };
             elements.AddRange(WorkTicketOverlayBuilder.Build(_currentScene.HitTestIndex, ticket));
         }
-        if (_ticketRangeDraftOwner is { } owner)
-            elements.AddRange(WorkTicketOverlayBuilder.BuildBoundarySelection(
-                _currentScene.HitTestIndex,
-                owner,
-                _workspace.CurrentSession?.PersistenceSession.Domain.Id,
-                TicketWorkspace.SelectedTicket?.Id,
-                _ticketBoundarySlots.Slots.Select(slot => slot.Resolved).ToArray()));
         elements.AddRange(
             SelectionOverlayBuilder.CreateElements(
                 _currentScene.HitTestIndex,

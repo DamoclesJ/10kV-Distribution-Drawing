@@ -25,15 +25,22 @@ public sealed class WorkRangeEntryAcceptanceTests
 
         Assert.Equal("OnOpenTicketRangeFromDrawing", (string?)leftEntry.Attribute("Click"));
         Assert.Equal("OnOpenTicketRangeFromDrawing", (string?)topEntry.Attribute("Click"));
+        XDocument eaPanel = LoadXaml("EnergizationPanel.xaml");
+        XElement eaEntry = Assert.Single(eaPanel.Descendants(Presentation + "Button"),
+            button => (string?)button.Attribute("Content") == "确认工作范围");
+        Assert.Equal("OnRequestWorkRange", (string?)eaEntry.Attribute("Click"));
         string windowCode = File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs"));
         string drawingEntry = HandlerBody(windowCode,
             "private void OnOpenTicketRangeFromDrawing",
             "private void OnTicketWorkspaceSelectionChanged");
         Assert.Contains("OnOpenTicketRange(sender, e);", drawingEntry);
+        Assert.Contains("EaPanel.WorkRangeRequested +=", windowCode);
+        Assert.Contains("OnOpenTicketRange(this, new RoutedEventArgs())", windowCode);
         string rangeHandler = HandlerBody(
             File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs")),
-            "private void OnOpenTicketRange", "private void OnAddTicketBoundarySlot");
+            "private void OnOpenTicketRange", "private void RefreshWorkScopeCandidateReview");
         Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.WorkRange);", rangeHandler);
+        Assert.Contains("RefreshWorkScopeCandidateReview(session);", rangeHandler);
         Assert.DoesNotContain("DrawingRightPanelHost.Visibility", rangeHandler);
         Assert.Contains("TicketOverlayToggle.IsEnabled = _rightPanelMode != DrawingRightPanelMode.Energization;",
             File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs")));
@@ -62,7 +69,7 @@ public sealed class WorkRangeEntryAcceptanceTests
     }
 
     [Fact]
-    public void WorkRangePanelIsBoundaryOnlyAndSharesTheInspectorHost()
+    public void WorkRangePanelReviewsTheCandidateAndSharesTheInspectorHost()
     {
         XDocument mainWindowXaml = LoadXaml("MainWindow.xaml");
         XElement rangePanel = Assert.Single(mainWindowXaml.Descendants(Presentation + "ScrollViewer"), element =>
@@ -77,8 +84,15 @@ public sealed class WorkRangeEntryAcceptanceTests
         Assert.DoesNotContain("添加已有电气区段", rangePanel.ToString());
         Assert.DoesNotContain("新建电气区段", rangePanel.ToString());
         Assert.Contains(rangePanel.Descendants(Presentation + "Button"), button =>
-            (string?)button.Attribute("Content") == "确定" &&
+            (string?)button.Attribute("Content") == "确认工作范围" &&
             (string?)button.Attribute("Click") == "OnConfirmTicketRange");
+        Assert.Contains(rangePanel.Descendants(), element =>
+            (string?)element.Attribute(Xaml + "Name") == "TicketRangeRegions");
+        Assert.Contains(rangePanel.Descendants(), element =>
+            (string?)element.Attribute(Xaml + "Name") == "TicketRangeBoundaries");
+        Assert.Contains("确认时将整体纳入", rangePanel.ToString());
+        Assert.DoesNotContain("Boundary A", rangePanel.ToString());
+        Assert.DoesNotContain("Boundary B", rangePanel.ToString());
         Assert.Contains(rangeHost.Elements(Presentation + "ScrollViewer"), element =>
             (string?)element.Attribute(Xaml + "Name") == "TicketRangePanel");
         Assert.Contains(rangePanel, rangeHost.Elements());
@@ -93,35 +107,35 @@ public sealed class WorkRangeEntryAcceptanceTests
     }
 
     [Fact]
-    public void OpeningAndLeavingRangePreservesTransientDraftUntilConfirm()
+    public void CandidateConfirmationUsesIntegratedHandoffAndDoesNotExposeLegacyPicking()
     {
         string ticketRangeCode = File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs"));
         string windowCode = File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs"));
-        string openHandler = HandlerBody(ticketRangeCode, "private void OnOpenTicketRange", "private void OnAddTicketBoundarySlot");
-        string confirmHandler = HandlerBody(ticketRangeCode, "private void OnConfirmTicketRange", "private void DiscardTicketRangeBuffer");
+        string openHandler = HandlerBody(ticketRangeCode, "private void OnOpenTicketRange", "private void RefreshWorkScopeCandidateReview");
+        string confirmHandler = HandlerBody(ticketRangeCode, "private void OnConfirmTicketRange", "private static string ConfirmationFailureText");
         string selectionHandler = HandlerBody(windowCode, "private void OnSelectionChanged", "private void CollapseSingleSelectionEditors");
-        string ticketNavigation = HandlerBody(windowCode, "private void OnShowTicketWorkspace", "private void OnTicketOverlayChanged");
         string projectSwitch = HandlerBody(windowCode, "private void OnActiveDocumentSessionChanging", "private void BindActiveSession");
 
         Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.WorkRange);", openHandler);
-        Assert.DoesNotContain("OnShowDrawingWorkspace(", openHandler);
-        Assert.DoesNotContain("CommitPendingEdits(", openHandler);
-        Assert.DoesNotContain("CommandStack", openHandler);
-        Assert.Contains("_ticketRangeDraftOwner", openHandler);
-        Assert.Contains("session.PersistenceSession.Domain.Id", openHandler);
-        Assert.Contains("ApplyRange(", confirmHandler);
+        Assert.Contains("RefreshWorkScopeCandidateReview(session);", openHandler);
+        Assert.Contains("_workScopeHandoffPlanner.Prepare(", confirmHandler);
+        Assert.Contains("new ConfirmWorkScopeCommand(", confirmHandler);
+        Assert.Contains("session.CommandStack.ExecuteCommand", confirmHandler);
         Assert.Contains("OnShowTicketWorkspace(", confirmHandler);
-        Assert.Contains("DrawingRightPanelMode.WorkRange", selectionHandler);
-        Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector)", selectionHandler);
-        Assert.DoesNotContain("DiscardTicketRangeBuffer();", selectionHandler);
-        Assert.DoesNotContain("DiscardTicketRangeBuffer();", ticketNavigation);
+        Assert.Contains("TicketRangeTaskContent.Text.Trim()", confirmHandler);
+        Assert.Contains("TicketRangeTaskObject.Text.Trim()", confirmHandler);
+        Assert.DoesNotContain("ApplyRange(", confirmHandler);
+        Assert.Contains("OnShowTicketWorkspace(", confirmHandler);
+        Assert.DoesNotContain("DrawingRightPanelMode.WorkRange", selectionHandler);
         string workspaceCode = File.ReadAllText(AcceptanceFile("WorkTicketWorkspace.xaml.cs"));
-        Assert.Contains("WorkRangeCanvasActivation.ActivateOrdinaryObject(", windowCode);
-        Assert.Contains("_ticketRangeDraftOwner is { } owner", windowCode);
-        Assert.Contains("TicketWorkspace.SelectedTicket?.Id", windowCode);
+        Assert.DoesNotContain("WorkRangeCanvasActivation.ActivateOrdinaryObject(", windowCode);
+        Assert.DoesNotContain("TicketRangePickerState", windowCode + ticketRangeCode);
+        Assert.DoesNotContain("ApplyRange(", workspaceCode);
+        Assert.Contains("TicketWorkspace.SelectedTicket?.Id", confirmHandler);
         Assert.Contains("DiscardTicketRangeBuffer();", projectSwitch);
         Assert.Contains("Refresh();", workspaceCode);
-        Assert.Contains("CaptureSetup(before)", workspaceCode);
+        Assert.Contains("FormatWorkScopeSummary", workspaceCode);
+        Assert.Contains("AnalyzeConfirmedWorkScopeHandoff", workspaceCode);
     }
 
     [Fact]
@@ -131,6 +145,24 @@ public sealed class WorkRangeEntryAcceptanceTests
 
         Assert.Contains("_session?.PersistenceSession.WorkTickets.Selected(_ticketId)", code);
         Assert.Contains("_session.PersistenceSession.WorkTickets,", code);
+    }
+
+    [Fact]
+    public void HandoffDiagnosticsUseBusinessLanguageAndNavigateToTicket()
+    {
+        string range = File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs"));
+        string workspace = File.ReadAllText(AcceptanceFile("WorkTicketWorkspace.xaml.cs"));
+        string workspaceXaml = File.ReadAllText(AcceptanceFile("WorkTicketWorkspace.xaml"));
+
+        Assert.Contains("杆上开关边界方向无法由现有工作票模型确定", range);
+        Assert.Contains("客户站进线隔离边界暂不能由现有工作票分析模型完整表示", range);
+        Assert.Contains("多个隔离边界组合不满足现有工作票分析模型的约束", range);
+        Assert.Contains("TicketWorkspace.SelectTicket(plan.TicketId)", range);
+        Assert.Contains("OnShowTicketWorkspace(this, new RoutedEventArgs())", range);
+        Assert.Contains("HandoffStatus", workspaceXaml);
+        Assert.Contains("工作范围已确认，但当前工作票分析模型无法完整表示部分隔离边界", workspace);
+        Assert.DoesNotContain("WtaBoundarySetRejected", workspaceXaml);
+        Assert.DoesNotContain("UnresolvedPoleDirection", workspaceXaml);
     }
 
     private static XDocument LoadXaml(string fileName) => XDocument.Load(AcceptanceFile(fileName));

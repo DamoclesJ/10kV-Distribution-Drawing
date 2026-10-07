@@ -1,25 +1,26 @@
-using DistributionDrawing.Domain.Professional;
-using System.Windows;
-using System.Windows.Controls;
+using DistributionDrawing.Application.WorkScopes;
 using DistributionDrawing.Application.WorkTickets;
-using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Desktop.ViewModels;
 using DistributionDrawing.Desktop.WorkTickets;
-using DistributionDrawing.Rendering.Wpf.Interaction;
+using System.Windows;
 
 namespace DistributionDrawing.Desktop;
 
 public partial class MainWindow
 {
-    private sealed record TicketSideChoice(BoundarySide Side, string Display);
-    private readonly TicketBoundarySlotCollection _ticketBoundarySlots = new();
-    private readonly TicketRangePickerState _ticketRangePicker = new();
+    private sealed record WorkScopeReviewLine(string Display);
+
+    private readonly WorkScopeCandidateProjector _workScopeCandidateProjector = new();
+    private readonly WorkScopeHandoffPlanner _workScopeHandoffPlanner = new();
+    private WorkScopeCandidate? _reviewedWorkScopeCandidate;
     private WorkTicketRangeOwner? _ticketRangeDraftOwner;
 
     private void OnOpenTicketRange(object sender, RoutedEventArgs e)
     {
         if (_workspace.CurrentSession is not { } session) return;
+        TicketWorkspace.CommitPendingEdits();
         DrawingWorkspace.Visibility = Visibility.Visible;
         TicketWorkspace.Visibility = Visibility.Collapsed;
         _drawingTools.Cancel();
@@ -31,181 +32,171 @@ public partial class MainWindow
         {
             TicketRangeTaskContent.Text = ticket?.Task.Content ?? "";
             TicketRangeTaskObject.Text = ticket?.Task.WorkObject ?? "";
-            _ticketBoundarySlots.Load(ticket?.IsolationBoundaries ?? [], boundary =>
-                WorkTicketRangeSetup.TryResolve(session.PersistenceSession.Domain,
-                    boundary.DeviceId, boundary.Side, out IsolationBoundary? resolved, out _)
-                    ? resolved : null);
             _ticketRangeDraftOwner = owner;
         }
         SetDrawingRightPanelMode(DrawingRightPanelMode.WorkRange);
-        TicketRangeStatus.Text = "选择边界开关和侧别。";
-        RefreshTicketRangePanel();
+        RefreshWorkScopeCandidateReview(session);
     }
 
-    private void OnAddTicketBoundarySlot(object sender, RoutedEventArgs e)
+    private void RefreshWorkScopeCandidateReview(ProjectRuntimeSession session)
     {
-        _ticketBoundarySlots.Add();
-        RefreshTicketRangePanel();
-    }
+        WorkScopeCandidateProjection projection = _workScopeCandidateProjector.Project(
+            session.PersistenceSession.Domain, session.Energization);
+        _reviewedWorkScopeCandidate = projection.Candidate;
+        TicketRangeRegions.ItemsSource = null;
+        TicketRangeBoundaries.ItemsSource = null;
+        ConfirmWorkScopeButton.IsEnabled = false;
 
-    private void OnRemoveTicketBoundarySlot(object sender, RoutedEventArgs e)
-    {
-        RemoveTicketBoundarySlot(_ticketBoundarySlots.Count - 1);
-    }
-
-    private void RemoveTicketBoundarySlot(int index)
-    {
-        if (_ticketBoundarySlots.Count <= 1 || index < 0) return;
-        CancelTicketRangePicking();
-        _ticketBoundarySlots.Remove(index);
-        RefreshTicketRangePanel();
-    }
-
-    private void RefreshTicketRangePanel()
-    {
-        DrawingDocument? drawing = _workspace.CurrentSession?.PersistenceSession.Domain;
-        TicketBoundaryRows.Children.Clear();
-        for (int index = 0; index < _ticketBoundarySlots.Count; index++)
+        if (!projection.IsValid || projection.Candidate is null)
         {
-            TicketBoundarySlot slot = _ticketBoundarySlots[index];
-            var row = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
-            row.Children.Add(new TextBlock
-            {
-                Text = $"Boundary {WorkTicketRangeSetup.SlotName(index)}",
-                FontWeight = FontWeights.SemiBold
-            });
-            var actions = new WrapPanel { Margin = new Thickness(0, 3, 0, 2) };
-            var select = new Button { Content = "选择", Tag = index, Margin = new Thickness(0, 0, 4, 0) };
-            select.Click += OnPickTicketBoundary;
-            actions.Children.Add(select);
-            var remove = new Button { Content = "－", Tag = index,
-                IsEnabled = _ticketBoundarySlots.Count > 1 };
-            remove.Click += (sender, args) => RemoveTicketBoundarySlot((int)((Button)sender).Tag);
-            actions.Children.Add(remove);
-            row.Children.Add(actions);
-            if (slot.DeviceId is Guid deviceId && drawing?.Devices.OfType<SwitchDevice>()
-                    .SingleOrDefault(device => device.Id == deviceId) is { } device)
-            {
-                row.Children.Add(new TextBlock
-                {
-                    Text = WorkTicketWorkspace.FormatBoundaryDisplay(drawing,
-                        slot.Resolved ?? new IsolationBoundary(deviceId, BoundarySide.Unknown)),
-                    TextWrapping = TextWrapping.Wrap
-                });
-                TicketSideChoice[] choices = TicketRangeSideSelection.ResolvableSides(drawing, device)
-                    .Select(value => new TicketSideChoice(value,
-                        WorkTicketWorkspace.BoundarySideName(value))).ToArray();
-                if (choices.Length > 0)
-                {
-                    var side = new ComboBox { Tag = index, DisplayMemberPath = "Display",
-                        Margin = new Thickness(0, 3, 0, 0) };
-                    side.ItemsSource = choices;
-                    side.SelectedItem = choices.FirstOrDefault(value => value.Side == slot.Side);
-                    side.SelectionChanged += OnTicketBoundarySideChanged;
-                    row.Children.Add(side);
-                }
-                if (slot.Resolved is null)
-                    row.Children.Add(new TextBlock
-                    {
-                        Text = choices.Length == 0
-                            ? "待确认 / 当前拓扑无法证明电气侧"
-                            : "待确认 / 请选择已解析的电气侧",
-                        TextWrapping = TextWrapping.Wrap });
-            }
-            else row.Children.Add(new TextBlock { Text = "未选择" });
-            TicketBoundaryRows.Children.Add(row);
+            TicketRangeCounts.Text = "";
+            TicketRangeCandidateStatus.Text = CandidateUnavailableText(
+                projection.Diagnostics.FirstOrDefault()?.Code);
+            TicketRangeStatus.Text = "请先完成带电范围分析后再确认。";
+            return;
         }
 
-        RenderCurrentScene();
-    }
-
-    private void OnPickTicketBoundary(object sender, RoutedEventArgs e)
-    {
-        CancelTicketRangePicking();
-        int index = (int)((Button)sender).Tag;
-        _ticketRangePicker.BeginBoundary(index, _ticketBoundarySlots[index]);
-        TicketRangeStatus.Text = $"请在图纸中点击 Boundary {WorkTicketRangeSetup.SlotName(index)} 的开关设备；Esc 或右键取消。";
-        UpdateCanvasStatus();
-    }
-
-    private void OnTicketBoundarySideChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (sender is not ComboBox { SelectedItem: TicketSideChoice choice, Tag: int index } ||
-            _workspace.CurrentSession is not { } session ||
-            _ticketBoundarySlots[index].DeviceId is not Guid deviceId) return;
-        bool resolved = TicketRangeSideSelection.TryChoose(_ticketBoundarySlots,
-            _ticketRangePicker, session.PersistenceSession.Domain, index, choice.Side,
-            out string issue);
-        TicketRangeStatus.Text = resolved ? "电气侧已解析。" : issue;
-        if (resolved)
-            UpdateCanvasStatus();
-        RefreshTicketRangePanel();
-    }
-
-    private bool HandleTicketRangePick(SelectionReference? target)
-    {
-        if (_ticketRangePicker.Mode == TicketRangePickMode.Idle) return false;
-        DrawingDocument? drawing = _workspace.CurrentSession?.PersistenceSession.Domain;
-        if (drawing is null) return true;
-        var selected = _selectionResolver.Resolve(target);
-        if (_ticketRangePicker.Mode == TicketRangePickMode.PickingBoundaryDevice)
+        WorkScopeCandidate candidate = projection.Candidate;
+        TicketRangeCounts.Text = $"停电区域：{candidate.Regions.Count}    隔离边界：{candidate.Boundaries.Count}";
+        TicketRangeRegions.ItemsSource = candidate.Regions.Select((region, index) =>
+            new WorkScopeReviewLine($"区域 {index + 1}：{region.TerminalIds.Count} 个端子，" +
+                $"{region.ElectricalNodeIds.Count} 个电气节点（确认时全部纳入）")).ToArray();
+        DrawingDocument drawing = session.PersistenceSession.Domain;
+        TicketRangeBoundaries.ItemsSource = candidate.Boundaries.Select((boundary, index) =>
         {
-            SwitchDevice? device = selected?.SwitchDevice ?? selected?.AttachedDevice as SwitchDevice;
-            if (device is null || WorkTicketRangeSetup.AvailableSides(device).Count == 0)
-            {
-                TicketRangeStatus.Text = "请选择受支持的开关或隔离刀闸。";
-                return true;
-            }
-            int index = _ticketRangePicker.BoundaryIndex!.Value;
-            _ticketBoundarySlots.Replace(index, new TicketBoundarySlot(device.Id));
-            _ticketRangePicker.DevicePicked();
-            TicketRangeStatus.Text = TicketRangeSideSelection.ResolvableSides(drawing, device).Count > 0
-                ? "请选择该设备已解析的专业电气侧。"
-                : "当前拓扑无法证明该设备的电气侧；请取消选择或修正拓扑。";
-        }
-        else if (_ticketRangePicker.Mode == TicketRangePickMode.ChoosingBoundarySide)
+            string deviceName = drawing.Devices.FirstOrDefault(item =>
+                item.Id == boundary.SwitchDeviceId)?.DisplayName ?? "开关设备";
+            return new WorkScopeReviewLine(
+                $"边界 {index + 1}：{deviceName}（带电侧 / 停电侧已由分析识别）");
+        }).ToArray();
+
+        bool hasBlockingDiagnostic = candidate.Diagnostics.Count > 0;
+        if (candidate.IsEmpty)
         {
-            TicketRangeStatus.Text = "请在右侧选择该设备的专业电气侧；画布设备拾取已结束。";
-            return true;
+            TicketRangeCandidateStatus.Text = "当前分析结果中没有可确认的停电工作范围。";
+            TicketRangeStatus.Text = "不会回退到手工选择边界。";
         }
-        RefreshTicketRangePanel();
-        UpdateCanvasStatus();
-        return true;
+        else if (hasBlockingDiagnostic)
+        {
+            TicketRangeCandidateStatus.Text = "候选工作范围需要先处理分析诊断。";
+            TicketRangeStatus.Text = CandidateUnavailableText(candidate.Diagnostics[0].Code);
+        }
+        else
+        {
+            TicketRangeCandidateStatus.Text = "候选有效：当前分析推导出一个或多个停电区域。";
+            TicketRangeStatus.Text = "确认将创建或更新一个工作票及其已确认工作范围。";
+            ConfirmWorkScopeButton.IsEnabled = true;
+        }
     }
+
+    private static string CandidateUnavailableText(WorkScopeCandidateDiagnosticCode? code) => code switch
+    {
+        WorkScopeCandidateDiagnosticCode.StaleAnalysis => "带电范围已变化，请重新执行带电分析。",
+        WorkScopeCandidateDiagnosticCode.NoSeeds => "当前没有配置电源点，请先完成带电范围分析。",
+        WorkScopeCandidateDiagnosticCode.FailedAnalysis => "带电分析未成功，请检查诊断并重新分析。",
+        WorkScopeCandidateDiagnosticCode.IdentityMismatch => "分析结果与当前图纸不一致，请重新执行带电分析。",
+        WorkScopeCandidateDiagnosticCode.EmptyCandidate => "当前分析结果中没有可确认的停电工作范围。",
+        _ => "请先完成带电范围分析。"
+    };
 
     private void OnConfirmTicketRange(object sender, RoutedEventArgs e)
     {
+        if (_workspace.CurrentSession is not { } session || _reviewedWorkScopeCandidate is not { } candidate)
+        {
+            TicketRangeStatus.Text = "请先完成带电范围分析并检查候选工作范围。";
+            return;
+        }
+
+        WorkTask task = new(TicketRangeTaskContent.Text.Trim(), TicketRangeTaskObject.Text.Trim());
+        WorkScopeHandoffPlanningResult prepared = _workScopeHandoffPlanner.Prepare(
+            session.PersistenceSession.Domain,
+            session.Energization,
+            candidate,
+            session.PersistenceSession.WorkTickets,
+            TicketWorkspace.SelectedTicket?.Id,
+            task);
+        if (!prepared.CanExecute || prepared.Plan is not { } plan)
+        {
+            TicketRangeStatus.Text = ConfirmationFailureText(prepared);
+            if (prepared.ConfirmationDiagnostic?.Code is
+                WorkScopeConfirmationFailureCode.ReviewedCandidateMismatch or
+                WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable)
+            {
+                _reviewedWorkScopeCandidate = null;
+                ConfirmWorkScopeButton.IsEnabled = false;
+            }
+            return;
+        }
+
         try
         {
-            if (_ticketRangePicker.Mode != TicketRangePickMode.Idle)
-                throw new InvalidOperationException("请先完成或取消当前选择。");
-            TicketWorkspace.ApplyRange(_ticketBoundarySlots.Slots.Select(slot => slot.Resolved).ToArray(),
-                new WorkTask(TicketRangeTaskContent.Text.Trim(), TicketRangeTaskObject.Text.Trim()));
-            _ticketRangeDraftOwner = null;
-            TicketRangeStatus.Text = "工作范围已确认。";
-            UpdateCanvasStatus();
-            OnShowTicketWorkspace(this, new RoutedEventArgs());
-            RenderCurrentScene();
+            session.CommandStack.ExecuteCommand(new ConfirmWorkScopeCommand(
+                session.PersistenceSession.Domain,
+                session.PersistenceSession.WorkTickets,
+                plan));
         }
-        catch (InvalidOperationException error)
+        catch (Exception)
         {
-            TicketRangeStatus.Text = error.Message;
+            TicketRangeStatus.Text = "工作范围确认未完成，请检查当前工程状态后重试。";
+            return;
         }
+
+        TicketWorkspace.SelectTicket(plan.TicketId);
+        _ticketRangeDraftOwner = null;
+        OnShowTicketWorkspace(this, new RoutedEventArgs());
+        string notice = prepared.Status switch
+        {
+            WorkScopeHandoffStatus.ConfirmedButUnrepresentable => FormatHandoffDiagnostic(prepared),
+            WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput =>
+                "工作范围已确认，工作票分析已生成；请补充或复核待输入信息。",
+            _ => "工作范围已确认，工作票分析已完成。"
+        };
+        TicketWorkspace.SetHandoffNotice(plan.TicketId, plan.AfterTicket, notice);
+        TicketWorkspace.Refresh();
+        RenderCurrentScene();
+    }
+
+    private static string ConfirmationFailureText(WorkScopeHandoffPlanningResult result)
+    {
+        if (result.Status == WorkScopeHandoffStatus.PreparationFailed)
+            return "工作范围确认未完成，请检查当前工程状态后重试。";
+        return result.ConfirmationDiagnostic?.Code switch
+        {
+            WorkScopeConfirmationFailureCode.EmptyCandidate => "当前分析结果中没有可确认的停电工作范围。",
+            WorkScopeConfirmationFailureCode.ReviewedCandidateMismatch => "带电范围已发生变化，请重新检查工作范围。",
+            WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable => "请先完成或重新运行带电范围分析。",
+            _ => "当前工作范围无法确认，请检查工作票关联和分析诊断。"
+        };
+    }
+
+    private void OnCancelWorkRange(object sender, RoutedEventArgs e)
+    {
+        _reviewedWorkScopeCandidate = null;
+        SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
     }
 
     private void DiscardTicketRangeBuffer()
     {
-        _ticketBoundarySlots.Discard();
+        _reviewedWorkScopeCandidate = null;
         TicketRangeTaskContent.Clear();
         TicketRangeTaskObject.Clear();
         _ticketRangeDraftOwner = null;
     }
 
-    private void CancelTicketRangePicking()
+    private static string FormatHandoffDiagnostic(WorkScopeHandoffPlanningResult result)
     {
-        (int Index, TicketBoundarySlot Previous)? rollback = _ticketRangePicker.Cancel();
-        if (rollback is { } value && value.Index < _ticketBoundarySlots.Count)
-            _ticketBoundarySlots.Replace(value.Index, value.Previous);
-        if (_rightPanelMode == DrawingRightPanelMode.WorkRange) RefreshTicketRangePanel();
+        WorkScopeBoundaryProjectionDiagnosticCode? code = result.Projection?.Diagnostics
+            .Select(item => (WorkScopeBoundaryProjectionDiagnosticCode?)item.Code)
+            .FirstOrDefault();
+        return code switch
+        {
+            WorkScopeBoundaryProjectionDiagnosticCode.UnsupportedCustomerStationBoundary =>
+                "工作范围已经确认，但当前客户站进线隔离边界暂不能由现有工作票分析模型完整表示。",
+            WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedPoleDirection =>
+                "工作范围已经确认，但当前杆上开关边界方向无法由现有工作票模型确定，请检查拓扑或边界条件。",
+            WorkScopeBoundaryProjectionDiagnosticCode.WtaBoundarySetRejected =>
+                "工作范围已经确认，但其中多个隔离边界组合不满足现有工作票分析模型的约束。",
+            _ => "工作范围已经确认，但当前工作票分析模型无法完整表示部分隔离边界。"
+        };
     }
 }

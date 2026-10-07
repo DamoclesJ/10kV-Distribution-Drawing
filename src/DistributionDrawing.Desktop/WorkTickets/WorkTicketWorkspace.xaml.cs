@@ -23,6 +23,9 @@ public partial class WorkTicketWorkspace : UserControl
     private readonly IWorkTicketTextExporter _exporter = new WorkTicketTextExporter();
     private ProjectRuntimeSession? _session;
     private Guid? _ticketId;
+    private Guid? _handoffNoticeTicketId;
+    private WorkTicketSession? _handoffNoticeSnapshot;
+    private string? _handoffNoticeText;
     private List<IsolationBoundary> _boundaries = [];
     private List<UserTicketFact> _facts = [];
     private bool _binding;
@@ -49,6 +52,24 @@ public partial class WorkTicketWorkspace : UserControl
     public event Action? SelectionChanged;
     public event Action? RangeEditRequested;
     public WorkTicketSession? SelectedTicket => CurrentTicket();
+
+    public void SelectTicket(Guid ticketId)
+    {
+        if (_session?.PersistenceSession.WorkTickets.Selected(ticketId) is null)
+            throw new InvalidOperationException("Work ticket does not exist.");
+        _ticketId = ticketId;
+        Refresh();
+        SelectionChanged?.Invoke();
+    }
+
+    public void SetHandoffNotice(Guid ticketId, WorkTicketSession snapshot, string text)
+    {
+        _handoffNoticeTicketId = ticketId;
+        _handoffNoticeSnapshot = snapshot;
+        _handoffNoticeText = text;
+        Refresh();
+    }
+
     public void Bind(ProjectRuntimeSession? session)
     {
         if (_session is not null) _session.CommandStack.StateChanged -= OnCommandStateChanged;
@@ -56,19 +77,6 @@ public partial class WorkTicketWorkspace : UserControl
         _ticketId = null;
         if (_session is not null) _session.CommandStack.StateChanged += OnCommandStateChanged;
         Refresh();
-    }
-
-    public WorkTicketSession? ApplyRange(IReadOnlyList<IsolationBoundary?> boundaries, WorkTask task)
-    {
-        if (_session is null) return null;
-        CommitPendingEdits();
-        WorkTicketSession after = WorkTicketRangeCommit.Apply(
-            _session.PersistenceSession.Domain, _session.PersistenceSession.WorkTickets,
-            _session.CommandStack, _ticketId, boundaries, task);
-        _ticketId = after.Id;
-        Refresh();
-        SelectionChanged?.Invoke();
-        return after;
     }
 
     public void Refresh()
@@ -105,9 +113,8 @@ public partial class WorkTicketWorkspace : UserControl
             _boundaries = ticket?.IsolationBoundaries.ToList() ?? [];
             RefreshBoundaries();
             RangeSummary.Text = ticket is null ? "尚无范围" :
-                "停电边界：\n" +
-                string.Join("\n", ticket.IsolationBoundaries.Select((item, index) =>
-                    $"{WorkTicketRangeSetup.SlotName(index)}  {FormatBoundaryDisplay(drawing, item)}"));
+                FormatWorkScopeSummary(drawing, ticket);
+            HandoffStatus.Text = ticket is null ? "" : HandoffNotice(ticket);
             _facts = ticket?.UserFacts.ToList() ?? [];
             RefreshFacts();
             foreach (ScopeChoice choice in ScopeList.Items)
@@ -135,7 +142,7 @@ public partial class WorkTicketWorkspace : UserControl
             ShowSection("16.1", Status161, Text161, ticket, stale);
             IssueSummary.Text = ticket is null ? "请在图纸页打开“工作范围”，确认后生成工作票。" : stale
                 ? "图纸或工作票准备内容发生变化；六栏需重新分析。"
-                : draft is null ? "请确认有效的停电边界，然后运行分析。"
+                : draft is null ? "请先在图纸页确认有效工作范围，然后运行分析。"
                 : string.Join("   ", draft.Sections.Select(section =>
                     $"{section.Code} {Label(ticket!.EffectiveCompletion(section.Code, stale))}")) +
                   (ticket.Analysis?.Issues.Count > 0 ? "\n待现场核实：" +
@@ -162,6 +169,33 @@ public partial class WorkTicketWorkspace : UserControl
         SectionCompletion.Stale => "需重新分析",
         _ => state.ToString()
     };
+
+    private string HandoffNotice(WorkTicketSession ticket)
+    {
+        if (_handoffNoticeTicketId == ticket.Id && ReferenceEquals(ticket, _handoffNoticeSnapshot))
+            return _handoffNoticeText ?? "";
+        bool staleDraft = ticket.Draft?.Sections.Any(section =>
+            section.Completion == SectionCompletion.Stale) == true;
+        return ticket.WorkScopeIds.Count == 1 && ticket.IsolationBoundaries.Count == 0 &&
+            ticket.Analysis is null && staleDraft
+            ? "工作范围已确认，但当前工作票分析模型无法完整表示部分隔离边界。"
+            : "";
+    }
+
+    private static string FormatWorkScopeSummary(DrawingDocument? drawing, WorkTicketSession ticket)
+    {
+        string scopeSummary = ticket.WorkScopeIds.Count == 0 ? "未关联已确认工作范围" :
+            string.Join("、", ticket.WorkScopeIds.Select(id =>
+            {
+                WorkScope? scope = drawing?.WorkScopes.FirstOrDefault(item => item.WorkScopeId == id);
+                return scope is null ? "工作范围关联无效" :
+                    string.IsNullOrWhiteSpace(scope.Description) ? "已确认工作范围" : scope.Description;
+            }));
+        string boundaries = ticket.IsolationBoundaries.Count == 0 ? "（无隔离边界）" :
+            string.Join("\n", ticket.IsolationBoundaries.Select((item, index) =>
+                $"{WorkTicketRangeSetup.SlotName(index)}  {FormatBoundaryDisplay(drawing, item)}"));
+        return $"工作范围：{scopeSummary}\n隔离边界：\n{boundaries}";
+    }
 
     private static string DescribeSwitch(DrawingDocument drawing, SwitchDevice device)
     {
@@ -347,7 +381,9 @@ public partial class WorkTicketWorkspace : UserControl
         try
         {
             WorkTicketSession setup = CaptureEdits(CaptureSetup(before));
-            WorkTicketSession after = _analyzer.Analyze(_session.PersistenceSession.Domain, setup);
+            WorkTicketSession after = setup.WorkScopeIds.Count == 1
+                ? _analyzer.AnalyzeConfirmedWorkScopeHandoff(_session.PersistenceSession.Domain, setup)
+                : _analyzer.Analyze(_session.PersistenceSession.Domain, setup);
             _session.CommandStack.ExecuteCommand(new WorkTicketChangeCommand(
                 _session.PersistenceSession.WorkTickets, before, after));
             Refresh();

@@ -23,6 +23,8 @@
           <TextBlock Text="停电边界和工作任务请在图纸页的“工作范围”设置；下方为同一工作票的高级编辑。"
                      TextWrapping="Wrap" Margin="0,0,0,6" />
           <TextBlock x:Name="RangeSummary" TextWrapping="Wrap" Margin="0,0,0,8" />
+          <TextBlock x:Name="HandoffStatus" TextWrapping="Wrap" FontWeight="SemiBold"
+                     Foreground="#855C00" Margin="0,0,0,8" />
           <Expander Header="高级范围编辑（可选）" IsExpanded="False" Margin="0,0,0,8">
             <StackPanel>
           <TextBlock Text="停电 / 隔离边界（只读；由图纸范围面板统一校验和修改）"/>

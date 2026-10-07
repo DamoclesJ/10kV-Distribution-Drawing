@@ -32,7 +32,7 @@ public sealed class DrawingRightPanelAcceptanceTests
     }
 
     [Fact]
-    public void SelectionRefreshesCandidatesAndHiddenInspectorWithoutChangingEaMode()
+    public void SelectionRefreshesInspectorWhileCandidateRefreshTracksEaChanges()
     {
         string source = File.ReadAllText(AcceptanceFile("MainWindow.xaml.cs"));
         string selection = Between(source, "private void OnSelectionChanged(",
@@ -40,12 +40,20 @@ public sealed class DrawingRightPanelAcceptanceTests
         Assert.Contains("EaPanel.SetSelection(_selectionManager.Selected?.ObjectId)", selection);
         Assert.Contains("_propertyInspector.Apply(", selection);
         Assert.DoesNotMatch(@"_rightPanelMode\s*=(?!=)", selection);
-        Assert.Contains("_rightPanelMode == DrawingRightPanelMode.WorkRange", selection);
+        Assert.DoesNotContain("DrawingRightPanelMode.WorkRange", selection);
         Assert.DoesNotContain("InspectorContent.Visibility", selection);
         string canvasSelection = Between(source, "private void OnDrawingSurfaceMouseUp(",
             "private void OnDrawingSurfaceMouseLeave(");
-        Assert.Contains("WorkRangeCanvasActivation.ActivateOrdinaryObject(", canvasSelection);
-        Assert.Contains("_rightPanelMode", canvasSelection);
+        Assert.DoesNotContain("WorkRangeCanvasActivation.ActivateOrdinaryObject(", canvasSelection);
+        Assert.DoesNotContain("_rightPanelMode", canvasSelection);
+        string eaRefresh = Between(source, "private void OnEnergizationVisualStateChanged(",
+            "private void OnEnergizationDisplayToggle(");
+        Assert.DoesNotContain("RefreshWorkScopeCandidateReview", eaRefresh);
+        string range = File.ReadAllText(AcceptanceFile("MainWindow.TicketRange.cs"));
+        string confirm = Between(range, "private void OnConfirmTicketRange(",
+            "private static string ConfirmationFailureText(");
+        Assert.Contains("_workScopeHandoffPlanner.Prepare(", confirm);
+        Assert.Contains("ReviewedCandidateMismatch", confirm);
         string mode = Between(source, "private void OnEnterEnergizationMode(", "private void OnShowTicketWorkspace(");
         Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Energization)", mode);
         Assert.Contains("SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector)", mode);
