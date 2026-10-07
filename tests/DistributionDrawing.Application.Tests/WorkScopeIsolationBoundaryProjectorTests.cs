@@ -80,6 +80,75 @@ public sealed class WorkScopeIsolationBoundaryProjectorTests
         AssertWtaAccepted(drawing, line.IsolationBoundary!);
     }
 
+    [Fact]
+    public void Project_WtaSetValidationRejectionDoesNotReturnComplete()
+    {
+        (DrawingDocument drawing, RingCabinet cabinet) = Cabinet(
+            RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+            RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open));
+        SwitchDevice device = cabinet.Intervals[0].SwitchDevices.Single(item =>
+            item.SwitchKind == SwitchKind.LoadSwitch);
+        drawing.AddConnection(new Connection(Guid.NewGuid(), ConnectionType.Cable,
+            cabinet.Intervals[0].CableTerminalId!.Value,
+            cabinet.Intervals[1].CableTerminalId!.Value, "C1", "10kV"));
+
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing, device.Id, BoundarySide.Bus,
+            out IsolationBoundary? busBoundary, out string issue), issue);
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing, device.Id, BoundarySide.Line,
+            out IsolationBoundary? lineBoundary, out issue), issue);
+        IsolationBoundary[] wtaBoundaries = [busBoundary!, lineBoundary!];
+        Assert.Throws<InvalidOperationException>(() =>
+            WorkTicketRangeSetup.ValidateBoundaries(drawing, wtaBoundaries));
+
+        WorkScope scope = AddScope(drawing,
+            [new WorkScopeRegion([device.FirstTerminalId, device.SecondTerminalId], [])],
+            [new WorkScopeBoundary(device.Id, BoundarySide.Bus, busBoundary!.TerminalId),
+             new WorkScopeBoundary(device.Id, BoundarySide.Line, lineBoundary!.TerminalId)]);
+
+        WorkScopeIsolationBoundaryProjection result = new WorkScopeIsolationBoundaryProjector()
+            .Project(drawing, scope.WorkScopeId);
+
+        Assert.NotEqual(WorkScopeIsolationBoundaryProjectionStatus.Complete, result.Status);
+        Assert.Equal(WorkScopeIsolationBoundaryProjectionStatus.Unrepresentable, result.Status);
+        Assert.False(result.IsComplete);
+        Assert.Empty(result.IsolationBoundaries);
+        Assert.Equal(2, result.BoundaryResults.Count);
+        Assert.Equal(WorkScopeBoundaryClassification.A,
+            Assert.Single(result.BoundaryResults, item => item.SourceBoundary.Side == BoundarySide.Bus)
+                .Classification);
+        Assert.Equal(WorkScopeBoundaryClassification.B,
+            Assert.Single(result.BoundaryResults, item => item.SourceBoundary.Side == BoundarySide.Line)
+                .Classification);
+        Assert.Equal(2, result.ProjectedBoundaries.Count);
+        Assert.Contains(result.ProjectedBoundaries, item =>
+            item.SourceBoundaries.Contains(scope.Boundaries.Single(boundary => boundary.Side == BoundarySide.Bus)));
+        Assert.Contains(result.ProjectedBoundaries, item =>
+            item.SourceBoundaries.Contains(scope.Boundaries.Single(boundary => boundary.Side == BoundarySide.Line)));
+        Assert.Contains(result.Diagnostics, item =>
+            item.Code == WorkScopeBoundaryProjectionDiagnosticCode.WtaBoundarySetRejected);
+    }
+
+    [Fact]
+    public void Project_MultipleDistinctDeviceBoundariesPassWtaSetValidation()
+    {
+        (DrawingDocument drawing, RingCabinet cabinet) = Cabinet(
+            RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+            RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open));
+        SwitchDevice[] devices = cabinet.Intervals.Select(interval => interval.SwitchDevices.Single(item =>
+            item.SwitchKind == SwitchKind.LoadSwitch)).ToArray();
+        WorkScope scope = AddScope(drawing,
+            [new WorkScopeRegion(devices.Select(item => item.FirstTerminalId), [])],
+            devices.Select(item => new WorkScopeBoundary(item.Id, BoundarySide.Bus, item.FirstTerminalId)));
+
+        WorkScopeIsolationBoundaryProjection result = new WorkScopeIsolationBoundaryProjector()
+            .Project(drawing, scope.WorkScopeId);
+
+        Assert.Equal(WorkScopeIsolationBoundaryProjectionStatus.Complete, result.Status);
+        Assert.True(result.IsComplete);
+        Assert.Equal(2, result.IsolationBoundaries.Count);
+        WorkTicketRangeSetup.ValidateBoundaries(drawing, result.IsolationBoundaries);
+    }
+
     [Theory]
     [InlineData(SwitchKind.CircuitBreaker)]
     [InlineData(SwitchKind.IsolationSwitch)]

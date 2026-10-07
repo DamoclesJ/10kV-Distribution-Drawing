@@ -36,7 +36,8 @@ public enum WorkScopeBoundaryProjectionDiagnosticCode
     WtaResolverRejected,
     GroundingBoundary,
     UnsupportedInstallationType,
-    DuplicateNormalizedOutput
+    DuplicateNormalizedOutput,
+    WtaBoundarySetRejected
 }
 
 public sealed record WorkScopeBoundaryProjectionDiagnostic(
@@ -162,6 +163,29 @@ public sealed class WorkScopeIsolationBoundaryProjector
             : boundaryResults.Any(item => item.Classification == WorkScopeBoundaryClassification.C)
                 ? WorkScopeIsolationBoundaryProjectionStatus.Unrepresentable
                 : WorkScopeIsolationBoundaryProjectionStatus.Complete;
+
+        if (status == WorkScopeIsolationBoundaryProjectionStatus.Complete && projected.Length > 0)
+        {
+            IsolationBoundary[] handoff = projected.Select(item => item.IsolationBoundary).ToArray();
+            try
+            {
+                WorkTicketRangeSetup.ValidateBoundaries(drawing, handoff);
+            }
+            catch (InvalidOperationException error)
+            {
+                status = WorkScopeIsolationBoundaryProjectionStatus.Unrepresentable;
+                diagnostics = diagnostics.Append(Diagnostic(
+                        WorkScopeBoundaryProjectionDiagnosticCode.WtaBoundarySetRejected,
+                        $"The existing WTA boundary-set validation rejected the normalized projection: {error.Message}"))
+                    .OrderBy(item => item.Code)
+                    .ThenBy(item => item.SourceBoundary?.DeviceId)
+                    .ThenBy(item => item.SourceBoundary?.Side)
+                    .ThenBy(item => item.SourceBoundary?.TerminalId)
+                    .ThenBy(item => item.SourceBoundary?.ConnectionId)
+                    .ToArray();
+            }
+        }
+
         return Result(status, boundaryResults, projected, diagnostics);
     }
 
