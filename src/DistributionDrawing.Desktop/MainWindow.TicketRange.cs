@@ -1,20 +1,17 @@
+using System.Diagnostics;
+using System.Windows;
+using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Application.WorkScopes;
 using DistributionDrawing.Application.WorkTickets;
-using DistributionDrawing.Domain.Documents;
-using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Desktop.ViewModels;
 using DistributionDrawing.Desktop.WorkTickets;
-using System.Windows;
+using DistributionDrawing.Domain.Energization;
 
 namespace DistributionDrawing.Desktop;
 
 public partial class MainWindow
 {
-    private sealed record WorkScopeReviewLine(string Display);
-
-    private readonly WorkScopeCandidateProjector _workScopeCandidateProjector = new();
     private readonly WorkScopeHandoffPlanner _workScopeHandoffPlanner = new();
-    private WorkScopeCandidate? _reviewedWorkScopeCandidate;
     private WorkTicketRangeOwner? _ticketRangeDraftOwner;
 
     private void OnOpenTicketRange(object sender, RoutedEventArgs e)
@@ -35,149 +32,108 @@ public partial class MainWindow
             _ticketRangeDraftOwner = owner;
         }
         SetDrawingRightPanelMode(DrawingRightPanelMode.WorkRange);
-        RefreshWorkScopeCandidateReview(session);
+        RefreshWorkRange(session);
     }
 
-    private void RefreshWorkScopeCandidateReview(ProjectRuntimeSession session)
+    private void RefreshWorkRange(ProjectRuntimeSession session)
     {
-        WorkScopeCandidateProjection projection = _workScopeCandidateProjector.Project(
-            session.PersistenceSession.Domain, session.Energization);
-        _reviewedWorkScopeCandidate = projection.Candidate;
-        TicketRangeRegions.ItemsSource = null;
-        TicketRangeBoundaries.ItemsSource = null;
-        ConfirmWorkScopeButton.IsEnabled = false;
-
-        if (!projection.IsValid || projection.Candidate is null)
+        EnergizationAnalysisState state = session.Energization;
+        var service = new EnergizationUiService();
+        TicketRangeSelectedDevices.ItemsSource = session.PersistenceSession.EnergizationScenario.Seeds
+            .Select(seed => $"{service.DescribeSeed(session.PersistenceSession.Domain, seed).DeviceName}（EA {SeedSideText(seed.Side)}）")
+            .ToArray();
+        bool available = state.CurrentResult is not null &&
+            session.PersistenceSession.EnergizationScenario.Seeds.Count > 0;
+        ConfirmWorkScopeButton.IsEnabled = available;
+        TicketRangeAnalysisStatus.Text = available ? "带电分析：已完成" : state.Freshness switch
         {
-            TicketRangeCounts.Text = "";
-            TicketRangeCandidateStatus.Text = CandidateUnavailableText(
-                projection.Diagnostics.FirstOrDefault()?.Code);
-            TicketRangeStatus.Text = "请先完成带电范围分析后再确认。";
-            return;
-        }
-
-        WorkScopeCandidate candidate = projection.Candidate;
-        TicketRangeCounts.Text = $"停电区域：{candidate.Regions.Count}    隔离边界：{candidate.Boundaries.Count}";
-        TicketRangeRegions.ItemsSource = candidate.Regions.Select((region, index) =>
-            new WorkScopeReviewLine($"区域 {index + 1}：{region.TerminalIds.Count} 个端子，" +
-                $"{region.ElectricalNodeIds.Count} 个电气节点（确认时全部纳入）")).ToArray();
-        DrawingDocument drawing = session.PersistenceSession.Domain;
-        TicketRangeBoundaries.ItemsSource = candidate.Boundaries.Select((boundary, index) =>
-        {
-            string deviceName = drawing.Devices.FirstOrDefault(item =>
-                item.Id == boundary.SwitchDeviceId)?.DisplayName ?? "开关设备";
-            return new WorkScopeReviewLine(
-                $"边界 {index + 1}：{deviceName}（带电侧 / 停电侧已由分析识别）");
-        }).ToArray();
-
-        bool hasBlockingDiagnostic = candidate.Diagnostics.Count > 0;
-        if (candidate.IsEmpty)
-        {
-            TicketRangeCandidateStatus.Text = "当前分析结果中没有可确认的停电工作范围。";
-            TicketRangeStatus.Text = "不会回退到手工选择边界。";
-        }
-        else if (hasBlockingDiagnostic)
-        {
-            TicketRangeCandidateStatus.Text = "候选工作范围需要先处理分析诊断。";
-            TicketRangeStatus.Text = CandidateUnavailableText(candidate.Diagnostics[0].Code);
-        }
-        else
-        {
-            TicketRangeCandidateStatus.Text = "候选有效：当前分析推导出一个或多个停电区域。";
-            TicketRangeStatus.Text = "确认将创建或更新一个工作票及其已确认工作范围。";
-            ConfirmWorkScopeButton.IsEnabled = true;
-        }
+            EnergizationFreshness.Stale => "带电分析：已过期，请重新分析。",
+            _ when state.LatestResult?.Validity == EnergizationValidity.Failed => "带电分析：未成功，请处理分析诊断。",
+            _ => "请先选择设备和侧别并完成带电分析。"
+        };
+        TicketRangeStatus.Text = available ? "代入将使用当前分析结果的不带电部分，无需再次选择设备。" : "";
     }
 
-    private static string CandidateUnavailableText(WorkScopeCandidateDiagnosticCode? code) => code switch
+    private static string SeedSideText(EnergizationSide side) => side switch
     {
-        WorkScopeCandidateDiagnosticCode.StaleAnalysis => "带电范围已变化，请重新执行带电分析。",
-        WorkScopeCandidateDiagnosticCode.NoSeeds => "当前没有配置电源点，请先完成带电范围分析。",
-        WorkScopeCandidateDiagnosticCode.FailedAnalysis => "带电分析未成功，请检查诊断并重新分析。",
-        WorkScopeCandidateDiagnosticCode.IdentityMismatch => "分析结果与当前图纸不一致，请重新执行带电分析。",
-        WorkScopeCandidateDiagnosticCode.EmptyCandidate => "当前分析结果中没有可确认的停电工作范围。",
-        _ => "请先完成带电范围分析。"
+        EnergizationSide.Bus => "母线侧",
+        EnergizationSide.Line => "线路侧",
+        EnergizationSide.SmallerNumber => "小号侧",
+        EnergizationSide.LargerNumber => "大号侧",
+        _ => "未确定侧别"
     };
 
     private void OnConfirmTicketRange(object sender, RoutedEventArgs e)
     {
-        if (_workspace.CurrentSession is not { } session || _reviewedWorkScopeCandidate is not { } candidate)
-        {
-            TicketRangeStatus.Text = "请先完成带电范围分析并检查候选工作范围。";
-            return;
-        }
-
+        if (_workspace.CurrentSession is not { } session) return;
         WorkTask task = new(TicketRangeTaskContent.Text.Trim(), TicketRangeTaskObject.Text.Trim());
-        WorkScopeHandoffPlanningResult prepared = _workScopeHandoffPlanner.Prepare(
+        WorkScopeHandoffPlanningResult prepared = _workScopeHandoffPlanner.PrepareFromAnalysis(
             session.PersistenceSession.Domain,
             session.Energization,
-            candidate,
+            session.PersistenceSession.EnergizationScenario,
             session.PersistenceSession.WorkTickets,
             TicketWorkspace.SelectedTicket?.Id,
             task);
         if (!prepared.CanExecute || prepared.Plan is not { } plan)
         {
+            Trace.TraceWarning("WorkRange apply rejected: status={0}, confirmation={1}, candidate={2}, projection={3}, detail={4}",
+                prepared.Status, prepared.ConfirmationDiagnostic?.Code,
+                string.Join(",", prepared.ConfirmationDiagnostic?.CandidateDiagnostics.Select(item => item.Code) ?? []),
+                string.Join(",", prepared.Projection?.Diagnostics.Select(item => item.Code) ?? []),
+                prepared.ConfirmationDiagnostic?.Message ?? prepared.Diagnostic?.Message);
             TicketRangeStatus.Text = ConfirmationFailureText(prepared);
-            if (prepared.ConfirmationDiagnostic?.Code is
-                WorkScopeConfirmationFailureCode.ReviewedCandidateMismatch or
-                WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable)
-            {
-                _reviewedWorkScopeCandidate = null;
-                ConfirmWorkScopeButton.IsEnabled = false;
-            }
             return;
         }
 
         try
         {
             session.CommandStack.ExecuteCommand(new ConfirmWorkScopeCommand(
-                session.PersistenceSession.Domain,
-                session.PersistenceSession.WorkTickets,
-                plan));
+                session.PersistenceSession.Domain, session.PersistenceSession.WorkTickets, plan));
         }
-        catch (Exception)
+        catch (InvalidOperationException error)
         {
-            TicketRangeStatus.Text = "工作范围确认未完成，请检查当前工程状态后重试。";
+            Trace.TraceError("WorkRange apply command failed: {0}", error);
+            TicketRangeStatus.Text = "工作范围代入未完成，工程状态在准备后发生变化，请重新代入。";
             return;
         }
 
         TicketWorkspace.SelectTicket(plan.TicketId);
         _ticketRangeDraftOwner = null;
-        OnShowTicketWorkspace(this, new RoutedEventArgs());
+        ShowTicketWorkspace(commitPendingEdits: false);
         string notice = prepared.Status switch
         {
             WorkScopeHandoffStatus.ConfirmedButUnrepresentable => FormatHandoffDiagnostic(prepared),
             WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput =>
-                "工作范围已确认，工作票分析已生成；请补充或复核待输入信息。",
-            _ => "工作范围已确认，工作票分析已完成。"
+                "工作范围已代入，工作票分析已生成；请补充或复核待输入信息。",
+            _ => "工作范围已代入，工作票分析已完成。"
         };
         TicketWorkspace.SetHandoffNotice(plan.TicketId, plan.AfterTicket, notice);
-        TicketWorkspace.Refresh();
         RenderCurrentScene();
     }
 
     private static string ConfirmationFailureText(WorkScopeHandoffPlanningResult result)
     {
         if (result.Status == WorkScopeHandoffStatus.PreparationFailed)
-            return "工作范围确认未完成，请检查当前工程状态后重试。";
+            return "工作范围代入未完成，请检查当前工程状态后重试。";
         return result.ConfirmationDiagnostic?.Code switch
         {
-            WorkScopeConfirmationFailureCode.EmptyCandidate => "当前分析结果中没有可确认的停电工作范围。",
-            WorkScopeConfirmationFailureCode.ReviewedCandidateMismatch => "带电范围已发生变化，请重新检查工作范围。",
-            WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable => "请先完成或重新运行带电范围分析。",
-            _ => "当前工作范围无法确认，请检查工作票关联和分析诊断。"
+            WorkScopeConfirmationFailureCode.EmptyCandidate => "当前分析结果中没有可代入的停电工作范围。",
+            WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable => "带电分析已变化或不可用，请重新分析后代入。",
+            WorkScopeConfirmationFailureCode.ReviewedCandidateMismatch => "带电分析或已选设备已变化，请重新代入。",
+            WorkScopeConfirmationFailureCode.MultipleWorkScopes => "当前工作票关联多个工作范围，无法确定要替换的范围。",
+            WorkScopeConfirmationFailureCode.MissingLinkedWorkScope => "当前工作票引用的工作范围不存在，请检查工程关联。",
+            WorkScopeConfirmationFailureCode.MissingTargetTicket => "当前工作票与图纸不匹配，请重新打开工作票。",
+            WorkScopeConfirmationFailureCode.AmbiguousLegacyElectricalRange => "当前工作票的历史范围数据不完整，无法安全保留。",
+            WorkScopeConfirmationFailureCode.IdentityUnavailable => "无法生成唯一的工作范围标识，请检查工程后重试。",
+            _ => "工作范围数据与当前工程不一致，请检查分析诊断后重试。"
         };
     }
 
-    private void OnCancelWorkRange(object sender, RoutedEventArgs e)
-    {
-        _reviewedWorkScopeCandidate = null;
+    private void OnCancelWorkRange(object sender, RoutedEventArgs e) =>
         SetDrawingRightPanelMode(DrawingRightPanelMode.Inspector);
-    }
 
     private void DiscardTicketRangeBuffer()
     {
-        _reviewedWorkScopeCandidate = null;
         TicketRangeTaskContent.Clear();
         TicketRangeTaskObject.Clear();
         _ticketRangeDraftOwner = null;
@@ -186,17 +142,18 @@ public partial class MainWindow
     private static string FormatHandoffDiagnostic(WorkScopeHandoffPlanningResult result)
     {
         WorkScopeBoundaryProjectionDiagnosticCode? code = result.Projection?.Diagnostics
-            .Select(item => (WorkScopeBoundaryProjectionDiagnosticCode?)item.Code)
-            .FirstOrDefault();
+            .Select(item => (WorkScopeBoundaryProjectionDiagnosticCode?)item.Code).FirstOrDefault();
         return code switch
         {
             WorkScopeBoundaryProjectionDiagnosticCode.UnsupportedCustomerStationBoundary =>
-                "工作范围已经确认，但当前客户站进线隔离边界暂不能由现有工作票分析模型完整表示。",
+                "工作范围已经代入，但当前客户站进线隔离边界暂不能由现有工作票分析模型完整表示。",
             WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedPoleDirection =>
-                "工作范围已经确认，但当前杆上开关边界方向无法由现有工作票模型确定，请检查拓扑或边界条件。",
+                "工作范围已经代入，但当前杆上开关边界方向无法由现有工作票模型确定，请检查拓扑或边界条件。",
+            WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedSelectedWorkSide =>
+                "工作范围已经代入，但部分 EA 已选设备无法确定工作区侧，当前工作票分析受限。",
             WorkScopeBoundaryProjectionDiagnosticCode.WtaBoundarySetRejected =>
-                "工作范围已经确认，但其中多个隔离边界组合不满足现有工作票分析模型的约束。",
-            _ => "工作范围已经确认，但当前工作票分析模型无法完整表示部分隔离边界。"
+                "工作范围已经代入，但已选设备的隔离信息组合不满足现有工作票分析模型的约束。",
+            _ => "工作范围已经代入，但当前工作票分析模型无法完整表示已选设备的隔离信息。"
         };
     }
 }

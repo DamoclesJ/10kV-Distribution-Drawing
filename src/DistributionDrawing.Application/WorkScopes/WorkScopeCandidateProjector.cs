@@ -2,6 +2,7 @@ using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Application.Topology;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Energization;
 using DistributionDrawing.Domain.Topology;
 
 namespace DistributionDrawing.Application.WorkScopes;
@@ -13,10 +14,12 @@ public sealed class WorkScopeCandidateProjector
 
     public WorkScopeCandidateProjection Project(
         DrawingDocument drawing,
-        EnergizationAnalysisState analysisState)
+        EnergizationAnalysisState analysisState,
+        EnergizationScenario scenario)
     {
         ArgumentNullException.ThrowIfNull(drawing);
         ArgumentNullException.ThrowIfNull(analysisState);
+        ArgumentNullException.ThrowIfNull(scenario);
 
         EnergizationResult? result = analysisState.CurrentResult;
         if (result is null)
@@ -45,6 +48,16 @@ public sealed class WorkScopeCandidateProjector
 
         if (!HasConsistentIdentities(drawing, graph, result, out string? identityError))
             return Invalid(WorkScopeCandidateDiagnosticCode.IdentityMismatch, detail: identityError);
+
+        if (!result.Terminals.Values.SelectMany(point => point.EnergizedBy).ToHashSet()
+                .SetEquals(scenario.Seeds.Select(seed => seed.Id)))
+            return Invalid(WorkScopeCandidateDiagnosticCode.SelectedSeedsMismatch);
+        var seedPolicy = new EnergizationBoundaryPolicy();
+        foreach (EnergizedSeed seed in scenario.Seeds)
+            if (!seedPolicy.TryResolve(drawing, seed, out Guid terminalId, out _) ||
+                !result.Terminals.TryGetValue(terminalId, out EnergizationPointResult? point) ||
+                point.State != EnergizationState.Energized || !point.EnergizedBy.Contains(seed.Id))
+                return Invalid(WorkScopeCandidateDiagnosticCode.SelectedSeedsMismatch, seed.BoundaryDeviceId);
 
         HashSet<Guid> earthNodeIds = drawing.ElectricalNodes
             .Where(node => node.Type == ElectricalNodeType.Earth)
@@ -110,9 +123,12 @@ public sealed class WorkScopeCandidateProjector
                 .ToArray();
             return new WorkScopeCandidateRegion(component, nodeIds);
         }).ToList();
+        HashSet<Guid> coveredNodeIds = regions.SelectMany(region => region.ElectricalNodeIds).ToHashSet();
+        regions.AddRange(deenergizedNodeIds.Except(coveredNodeIds).Order()
+            .Select(nodeId => new WorkScopeCandidateRegion([], [nodeId])));
 
         WorkScopeCandidateBoundary[] boundaries = FindBoundaries(
-            drawing, result, deenergizedTerminalIds, earthTerminalIds, diagnostics);
+            drawing, result, scenario.Seeds, deenergizedTerminalIds, earthTerminalIds, diagnostics);
         if (diagnostics.Any(item => item.Code is WorkScopeCandidateDiagnosticCode.IdentityMismatch or
                 WorkScopeCandidateDiagnosticCode.BoundaryTransitionAmbiguous or
                 WorkScopeCandidateDiagnosticCode.UnsupportedStructure))
@@ -126,7 +142,7 @@ public sealed class WorkScopeCandidateProjector
         if (regions.Count == 0)
             diagnostics.Add(new WorkScopeCandidateDiagnostic(WorkScopeCandidateDiagnosticCode.EmptyCandidate));
 
-        WorkScopeCandidate candidate = new(regions, boundaries, SortDiagnostics(diagnostics));
+        WorkScopeCandidate candidate = new(regions, boundaries, SortDiagnostics(diagnostics), scenario.Seeds);
         return new WorkScopeCandidateProjection(candidate, candidate.Diagnostics);
     }
 
@@ -239,13 +255,16 @@ public sealed class WorkScopeCandidateProjector
     private static WorkScopeCandidateBoundary[] FindBoundaries(
         DrawingDocument drawing,
         EnergizationResult result,
+        IReadOnlyList<EnergizedSeed> selectedSeeds,
         IReadOnlySet<Guid> deenergizedTerminalIds,
         IReadOnlySet<Guid> earthTerminalIds,
         ICollection<WorkScopeCandidateDiagnostic> diagnostics)
     {
         var boundaries = new Dictionary<(Guid SwitchId, Guid Deenergized, Guid Energized), WorkScopeCandidateBoundary>();
         HashSet<Guid> terminalIds = drawing.Terminals.Select(item => item.Id).ToHashSet();
-        foreach (SwitchDevice device in drawing.Devices.OfType<SwitchDevice>().OrderBy(item => item.Id))
+        foreach (SwitchDevice device in selectedSeeds.Select(seed => drawing.Devices.OfType<SwitchDevice>()
+                     .Single(device => device.Id == seed.BoundaryDeviceId)).DistinctBy(device => device.Id)
+                     .OrderBy(item => item.Id))
         {
             if (device.SwitchKind == SwitchKind.GroundSwitch) continue;
             if (device.TerminalIds.Count != 2 || device.TerminalIds.Any(id => !terminalIds.Contains(id)))

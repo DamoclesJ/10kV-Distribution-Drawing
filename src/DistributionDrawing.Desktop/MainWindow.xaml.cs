@@ -1046,6 +1046,8 @@ public partial class MainWindow : Window
 
     private void OnEnergizationVisualStateChanged(object? sender, EventArgs e)
     {
+        if (_rightPanelMode == DrawingRightPanelMode.WorkRange && _workspace.CurrentSession is { } session)
+            RefreshWorkRange(session);
         RenderCurrentScene();
     }
 
@@ -1082,10 +1084,13 @@ public partial class MainWindow : Window
         LeftEnergizationModeButton.Content = TopEnergizationModeButton.Content = active ? "退出带电分析" : "带电分析";
     }
 
-    private void OnShowTicketWorkspace(object sender, RoutedEventArgs e)
+    private void OnShowTicketWorkspace(object sender, RoutedEventArgs e) =>
+        ShowTicketWorkspace(commitPendingEdits: true);
+
+    private void ShowTicketWorkspace(bool commitPendingEdits)
     {
         ApplyDrawingContextPanel();
-        TicketWorkspace.CommitPendingEdits();
+        if (commitPendingEdits) TicketWorkspace.CommitPendingEdits();
         TicketWorkspace.Refresh();
         DrawingWorkspace.Visibility = Visibility.Collapsed;
         TicketWorkspace.Visibility = Visibility.Visible;

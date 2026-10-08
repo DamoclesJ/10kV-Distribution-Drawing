@@ -1,4 +1,5 @@
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Energization;
 
 namespace DistributionDrawing.Application.WorkScopes;
 
@@ -12,6 +13,7 @@ public enum WorkScopeCandidateDiagnosticCode
     ConductingEdgeStateMismatch,
     BoundaryTransitionAmbiguous,
     UnsupportedStructure,
+    SelectedSeedsMismatch,
     EmptyCandidate
 }
 
@@ -25,16 +27,20 @@ public sealed class WorkScopeCandidate
     internal WorkScopeCandidate(
         IEnumerable<WorkScopeCandidateRegion> regions,
         IEnumerable<WorkScopeCandidateBoundary> boundaries,
-        IEnumerable<WorkScopeCandidateDiagnostic> diagnostics)
+        IEnumerable<WorkScopeCandidateDiagnostic> diagnostics,
+        IEnumerable<EnergizedSeed> selectedSeeds)
     {
         Regions = Array.AsReadOnly(regions.ToArray());
         Boundaries = Array.AsReadOnly(boundaries.ToArray());
         Diagnostics = Array.AsReadOnly(diagnostics.ToArray());
+        SelectedSeeds = Array.AsReadOnly(selectedSeeds.OrderBy(seed => seed.BoundaryDeviceId)
+            .ThenBy(seed => seed.Side).ThenBy(seed => seed.Id).ToArray());
     }
 
     public IReadOnlyList<WorkScopeCandidateRegion> Regions { get; }
     public IReadOnlyList<WorkScopeCandidateBoundary> Boundaries { get; }
     public IReadOnlyList<WorkScopeCandidateDiagnostic> Diagnostics { get; }
+    public IReadOnlyList<EnergizedSeed> SelectedSeeds { get; }
     public bool IsEmpty => Regions.Count == 0;
 }
 

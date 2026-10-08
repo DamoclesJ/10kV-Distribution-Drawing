@@ -9,6 +9,17 @@ namespace DistributionDrawing.Domain.Tests;
 
 public sealed class WorkScopeTests
 {
+    [Fact]
+    public void SelectedDeviceCanPersistWithoutGuessingAnUnavailableWorkSide()
+    {
+        Guid deviceId = Guid.NewGuid(), terminalId = Guid.NewGuid();
+        var boundary = new WorkScopeBoundary(deviceId, BoundarySide.Unknown, terminalId);
+        Assert.Equal(deviceId, boundary.DeviceId);
+        Assert.Equal(terminalId, boundary.TerminalId);
+        Assert.Equal(BoundarySide.Unknown, boundary.Side);
+        Assert.Null(boundary.ConnectionId);
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
@@ -59,7 +70,6 @@ public sealed class WorkScopeTests
     [InlineData("empty-device")]
     [InlineData("empty-boundary-terminal")]
     [InlineData("empty-boundary-connection")]
-    [InlineData("unknown-side")]
     [InlineData("undefined-side")]
     [InlineData("duplicate-boundary")]
     public void InvalidStructuralContractsAreRejected(string invalid)
@@ -83,7 +93,6 @@ public sealed class WorkScopeTests
                 case "empty-device": _ = new WorkScopeBoundary(Guid.Empty, BoundarySide.Line); break;
                 case "empty-boundary-terminal": _ = new WorkScopeBoundary(id, BoundarySide.Line, Guid.Empty); break;
                 case "empty-boundary-connection": _ = new WorkScopeBoundary(id, BoundarySide.Line, connectionId: Guid.Empty); break;
-                case "unknown-side": _ = new WorkScopeBoundary(id, BoundarySide.Unknown); break;
                 case "undefined-side": _ = new WorkScopeBoundary(id, (BoundarySide)999); break;
                 case "duplicate-boundary": _ = WorkScope.Create(id, [region], [boundary, new(id, BoundarySide.Line)]); break;
             }

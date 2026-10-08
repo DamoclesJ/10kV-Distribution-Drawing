@@ -2,6 +2,7 @@ using DistributionDrawing.Domain.Professional;
 using System.Windows;
 using System.Windows.Controls;
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Application.WorkScopes;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
@@ -20,6 +21,7 @@ public partial class WorkTicketWorkspace : UserControl
     private sealed record DraftChoice(string Section, DraftItem Item, string Display);
     private sealed record SectionChoice(string Code, string Display);
     private readonly WorkTicketAnalyzer _analyzer = new();
+    private readonly WorkScopeIsolationBoundaryProjector _scopeProjector = new();
     private readonly IWorkTicketTextExporter _exporter = new WorkTicketTextExporter();
     private ProjectRuntimeSession? _session;
     private Guid? _ticketId;
@@ -114,7 +116,10 @@ public partial class WorkTicketWorkspace : UserControl
             RefreshBoundaries();
             RangeSummary.Text = ticket is null ? "尚无范围" :
                 FormatWorkScopeSummary(drawing, ticket);
-            HandoffStatus.Text = ticket is null ? "" : HandoffNotice(ticket);
+            WorkScopeIsolationBoundaryProjection? handoff = drawing is not null && ticket?.WorkScopeIds.Count == 1
+                ? _scopeProjector.Project(drawing, ticket.WorkScopeIds[0]) : null;
+            HandoffStatus.Text = ticket is null ? "" : HandoffNotice(ticket, handoff);
+            AnalyzeTicketButton.IsEnabled = ticket is not null && (handoff is null || handoff.IsComplete);
             _facts = ticket?.UserFacts.ToList() ?? [];
             RefreshFacts();
             foreach (ScopeChoice choice in ScopeList.Items)
@@ -170,16 +175,15 @@ public partial class WorkTicketWorkspace : UserControl
         _ => state.ToString()
     };
 
-    private string HandoffNotice(WorkTicketSession ticket)
+    private string HandoffNotice(WorkTicketSession ticket, WorkScopeIsolationBoundaryProjection? projection)
     {
+        if (projection is { IsComplete: false })
+            return projection.Status == WorkScopeIsolationBoundaryProjectionStatus.Unrepresentable
+                ? "工作范围已代入，但当前工作票分析模型无法完整表示已选设备的隔离信息。"
+                : "已确认工作范围的引用或拓扑已变化，请重新分析并代入工作范围。";
         if (_handoffNoticeTicketId == ticket.Id && ReferenceEquals(ticket, _handoffNoticeSnapshot))
             return _handoffNoticeText ?? "";
-        bool staleDraft = ticket.Draft?.Sections.Any(section =>
-            section.Completion == SectionCompletion.Stale) == true;
-        return ticket.WorkScopeIds.Count == 1 && ticket.IsolationBoundaries.Count == 0 &&
-            ticket.Analysis is null && staleDraft
-            ? "工作范围已确认，但当前工作票分析模型无法完整表示部分隔离边界。"
-            : "";
+        return "";
     }
 
     private static string FormatWorkScopeSummary(DrawingDocument? drawing, WorkTicketSession ticket)
@@ -331,8 +335,9 @@ public partial class WorkTicketWorkspace : UserControl
         Task = new WorkTask(TaskContent.Text.Trim(), TaskObject.Text.Trim()),
         IsolationBoundaries = _boundaries.ToArray(),
         WorkScopeIds = ScopeList.SelectedItems.Cast<ScopeChoice>().Select(item => item.Id).ToArray(),
-        WorkScopeItems = EquipmentScopeList.SelectedItems.Cast<ScopeChoice>()
-            .Select(item => new WorkScopeItem(WorkScopeItemKind.Equipment, item.Id)).ToArray(),
+        WorkScopeItems = [.. ticket.WorkScopeItems.Where(item => item.Kind != WorkScopeItemKind.Equipment),
+            .. EquipmentScopeList.SelectedItems.Cast<ScopeChoice>()
+                .Select(item => new WorkScopeItem(WorkScopeItemKind.Equipment, item.Id))],
         GroundingPointIds = GroundList.SelectedItems.Cast<Choice>().Select(item => item.Id).ToArray(),
         UserFacts = _facts.ToArray()
     };
@@ -381,6 +386,17 @@ public partial class WorkTicketWorkspace : UserControl
         try
         {
             WorkTicketSession setup = CaptureEdits(CaptureSetup(before));
+            if (setup.WorkScopeIds.Count == 1)
+            {
+                WorkScopeIsolationBoundaryProjection handoff = _scopeProjector.Project(
+                    _session.PersistenceSession.Domain, setup.WorkScopeIds[0]);
+                if (!handoff.IsComplete || !setup.IsolationBoundaries.SequenceEqual(handoff.IsolationBoundaries))
+                {
+                    HandoffStatus.Text = !handoff.IsComplete ? HandoffNotice(setup, handoff) :
+                        "工作票隔离信息与已确认工作范围不一致，请重新代入。";
+                    return;
+                }
+            }
             WorkTicketSession after = setup.WorkScopeIds.Count == 1
                 ? _analyzer.AnalyzeConfirmedWorkScopeHandoff(_session.PersistenceSession.Domain, setup)
                 : _analyzer.Analyze(_session.PersistenceSession.Domain, setup);

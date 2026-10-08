@@ -2,6 +2,9 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DistributionDrawing.Application.WorkTickets;
+using DistributionDrawing.Application.Energization;
+using DistributionDrawing.Application.WorkScopes;
+using DistributionDrawing.Domain.Energization;
 using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Professional;
@@ -14,6 +17,60 @@ namespace DistributionDrawing.Infrastructure.Tests;
 public sealed class WorkScopePersistenceTests : IDisposable
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"ws-v10-{Guid.NewGuid():N}.kvdrawing");
+
+    [Fact]
+    public void V10RoundTripPreservesEaSelectedHandoffWithoutTransientCurrentResult()
+    {
+        (ProjectService service, ProjectSession project, RingCabinet cabinet) = CreateProject();
+        foreach (SwitchDevice device in cabinet.Intervals.Select(interval => interval.SwitchDevices[0]))
+            project.EnergizationScenario.AddSeed(new(Guid.NewGuid(), device.Id, EnergizationSide.Bus));
+        var state = new EnergizationAnalysisState();
+        state.Execute(project.Domain, project.EnergizationScenario);
+        WorkScopeHandoffPlanningResult result = new WorkScopeHandoffPlanner().PrepareFromAnalysis(
+            project.Domain, state, project.EnergizationScenario, project.WorkTickets);
+        Assert.True(result.CanExecute, result.ConfirmationDiagnostic?.Message);
+        WorkScopeConfirmationPlan plan = result.Plan!;
+        project.Domain.AddWorkScope(plan.AfterWorkScope);
+        project.WorkTickets.Add(plan.AfterTicket);
+        service.SaveProject();
+
+        ProjectSession restored = new ProjectService().LoadProject(_path);
+        Assert.Equal(10, restored.OpenedFormatVersion);
+        Assert.Equal(10, ProjectFileFormat.CurrentVersion);
+        Assert.Null(new EnergizationAnalysisState().CurrentResult);
+        WorkScope scope = Assert.Single(restored.Domain.WorkScopes);
+        WorkTicketSession ticket = Assert.Single(restored.WorkTickets.Tickets);
+        Assert.Equal(plan.AfterWorkScope.WorkScopeId, scope.WorkScopeId);
+        Assert.Equal(plan.TicketId, ticket.Id);
+        Assert.Equal(project.EnergizationScenario.Seeds, restored.EnergizationScenario.Seeds);
+        Assert.Equal(plan.AfterWorkScope.Boundaries, scope.Boundaries);
+        Assert.Equal(plan.AfterTicket.IsolationBoundaries, ticket.IsolationBoundaries);
+        Assert.Equal([scope.WorkScopeId], ticket.WorkScopeIds);
+        Assert.NotNull(ticket.Analysis);
+        Assert.NotNull(ticket.Draft);
+        Assert.Equal(plan.AfterTicket.AnalyzedFingerprint, ticket.AnalyzedFingerprint);
+        Assert.True(new WorkScopeIsolationBoundaryProjector().Project(restored.Domain, scope).IsComplete);
+    }
+
+    [Fact]
+    public void V10RoundTripPreservesSelectedDeviceWithUnknownWorkSideAsUnrepresentable()
+    {
+        (ProjectService service, ProjectSession project, RingCabinet cabinet) = CreateProject();
+        SwitchDevice selected = cabinet.Intervals[0].SwitchDevices[0];
+        WorkScope scope = project.Domain.CreateWorkScope(Guid.NewGuid(),
+            [new([selected.SecondTerminalId], [])],
+            [new(selected.Id, BoundarySide.Unknown, selected.SecondTerminalId)]);
+        service.SaveProject();
+        ProjectSession restored = new ProjectService().LoadProject(_path);
+        WorkScope actual = Assert.Single(restored.Domain.WorkScopes);
+        Assert.Equal(scope.Boundaries, actual.Boundaries);
+        Assert.Equal("Unknown", ScopeJson()["boundaries"]![0]!["side"]!.GetValue<string>());
+        WorkScopeIsolationBoundaryProjection projected = new WorkScopeIsolationBoundaryProjector()
+            .Project(restored.Domain, actual);
+        Assert.Equal(WorkScopeIsolationBoundaryProjectionStatus.Unrepresentable, projected.Status);
+        Assert.Empty(projected.IsolationBoundaries);
+        Assert.Equal(10, restored.OpenedFormatVersion);
+    }
 
     [Theory]
     [InlineData(false, 0, null)]
@@ -96,7 +153,6 @@ public sealed class WorkScopePersistenceTests : IDisposable
     [InlineData("duplicate-boundary")]
     [InlineData("invalid-side")]
     [InlineData("numeric-side")]
-    [InlineData("unknown-side")]
     [InlineData("missing-boundaries")]
     [InlineData("null-boundaries")]
     [InlineData("legacy-schema")]
@@ -139,7 +195,6 @@ public sealed class WorkScopePersistenceTests : IDisposable
                 case "duplicate-boundary": ((JsonArray)scope["boundaries"]!).Add(boundary.DeepClone()); break;
                 case "invalid-side": boundary["side"] = "Invalid"; break;
                 case "numeric-side": boundary["side"] = 2; break;
-                case "unknown-side": boundary["side"] = "Unknown"; break;
                 case "missing-boundaries": scope.Remove("boundaries"); break;
                 case "null-boundaries": scope["boundaries"] = null; break;
                 case "legacy-schema": scope.Remove("regions"); scope.Remove("boundaries"); scope["startBoundary"] = boundary.DeepClone(); scope["endBoundary"] = boundary.DeepClone(); scope["groundingPointIds"] = new JsonArray(); break;

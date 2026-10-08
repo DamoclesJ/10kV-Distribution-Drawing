@@ -1,6 +1,7 @@
 using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Energization;
 
 namespace DistributionDrawing.Application.WorkScopes;
 
@@ -44,6 +45,7 @@ public sealed class WorkScopeHandoffPlanner
     private readonly WorkScopeConfirmationPlanner _confirmationPlanner;
     private readonly IWorkScopeIsolationBoundaryProjectionService _projectionService;
     private readonly IWorkTicketHandoffAnalyzer _analyzer;
+    private readonly WorkScopeCandidateProjector _candidateProjector = new();
 
     public WorkScopeHandoffPlanner()
         : this(new WorkScopeConfirmationPlanner(), new WorkScopeIsolationBoundaryProjector(),
@@ -61,16 +63,34 @@ public sealed class WorkScopeHandoffPlanner
         _analyzer = analyzer ?? throw new ArgumentNullException(nameof(analyzer));
     }
 
+    public WorkScopeHandoffPlanningResult PrepareFromAnalysis(
+        DrawingDocument drawing,
+        EnergizationAnalysisState analysisState,
+        EnergizationScenario scenario,
+        WorkTicketDataRoot tickets,
+        Guid? targetTicketId = null,
+        WorkTask? task = null)
+    {
+        WorkScopeCandidateProjection projection = _candidateProjector.Project(drawing, analysisState, scenario);
+        if (projection.Candidate is not { } candidate)
+            return new WorkScopeHandoffPlanningResult(WorkScopeHandoffStatus.ConfirmationRejected,
+                null, new WorkScopeConfirmationDiagnostic(
+                    WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable,
+                    "当前 EA 结果不可用于代入工作范围。", projection.Diagnostics), null, null);
+        return Prepare(drawing, analysisState, scenario, candidate, tickets, targetTicketId, task);
+    }
+
     public WorkScopeHandoffPlanningResult Prepare(
         DrawingDocument drawing,
         EnergizationAnalysisState analysisState,
+        EnergizationScenario scenario,
         WorkScopeCandidate reviewedCandidate,
         WorkTicketDataRoot tickets,
         Guid? targetTicketId = null,
         WorkTask? task = null)
     {
         WorkScopeConfirmationPlanningResult confirmation = _confirmationPlanner.Prepare(
-            drawing, analysisState, reviewedCandidate, tickets, targetTicketId);
+            drawing, analysisState, scenario, reviewedCandidate, tickets, targetTicketId);
         if (confirmation.Plan is not WorkScopeConfirmationPlan confirmationPlan)
             return new WorkScopeHandoffPlanningResult(WorkScopeHandoffStatus.ConfirmationRejected,
                 null, confirmation.Diagnostic, null, null);

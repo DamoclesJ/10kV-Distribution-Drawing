@@ -4,6 +4,7 @@ using DistributionDrawing.Domain.Devices;
 using DistributionDrawing.Domain.Devices.CustomerStations;
 using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Energization;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 
@@ -94,6 +95,7 @@ public sealed class WorkScopeConfirmationPlanner
     public WorkScopeConfirmationPlanningResult Prepare(
         DrawingDocument drawing,
         EnergizationAnalysisState analysisState,
+        EnergizationScenario scenario,
         WorkScopeCandidate reviewedCandidate,
         WorkTicketDataRoot tickets,
         Guid? targetTicketId = null)
@@ -106,7 +108,7 @@ public sealed class WorkScopeConfirmationPlanner
             return Reject(WorkScopeConfirmationFailureCode.MissingTargetTicket,
                 "工作票数据与当前图纸不匹配。");
 
-        WorkScopeCandidateProjection currentProjection = _projector.Project(drawing, analysisState);
+        WorkScopeCandidateProjection currentProjection = _projector.Project(drawing, analysisState, scenario);
         if (!currentProjection.IsValid || currentProjection.Candidate is null)
             return Reject(WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable,
                 "当前 EA 结果不可用于确认工作范围。", currentProjection.Diagnostics);
@@ -133,10 +135,9 @@ public sealed class WorkScopeConfirmationPlanner
             (beforeTicket.WorkScopeIds is null || beforeTicket.WorkScopeItems is null))
             return Reject(WorkScopeConfirmationFailureCode.AmbiguousLegacyElectricalRange,
                 "工作票的工作范围数据不完整，无法安全确认。");
-        if (beforeTicket is not null && beforeTicket.WorkScopeItems.Any(item => item is null ||
-                item.Kind == WorkScopeItemKind.ElectricalRange))
+        if (beforeTicket is not null && beforeTicket.WorkScopeItems.Any(item => item is null))
             return Reject(WorkScopeConfirmationFailureCode.AmbiguousLegacyElectricalRange,
-                "工作票含有旧 ElectricalRange 范围项，无法判断唯一的 EA 工作范围。");
+                "工作票含有不完整的范围项，无法安全保留。");
         if (beforeTicket is not null && beforeTicket.WorkScopeIds.Count > 1)
             return Reject(WorkScopeConfirmationFailureCode.MultipleWorkScopes,
                 "目标工作票已引用多个 WorkScope，无法确定要替换的范围。");
@@ -176,14 +177,17 @@ public sealed class WorkScopeConfirmationPlanner
 
         var regions = reviewedCandidate.Regions.Select(region =>
             new WorkScopeRegion(region.TerminalIds, region.ElectricalNodeIds)).ToArray();
-        var boundaries = new List<WorkScopeBoundary>(reviewedCandidate.Boundaries.Count);
-        foreach (WorkScopeCandidateBoundary candidateBoundary in reviewedCandidate.Boundaries)
+        var boundaries = new List<WorkScopeBoundary>();
+        foreach (EnergizedSeed seed in reviewedCandidate.SelectedSeeds.DistinctBy(seed => seed.BoundaryDeviceId))
         {
-            if (!TryMaterializeBoundary(drawing, candidateBoundary,
-                    out WorkScopeBoundary? boundary, out string? issue))
-                return Reject(WorkScopeConfirmationFailureCode.BoundaryMaterializationAmbiguous,
-                    issue ?? "Candidate Boundary 无法确定性转换。");
-            boundaries.Add(boundary!);
+            WorkScopeCandidateBoundary? selected = reviewedCandidate.Boundaries
+                .SingleOrDefault(item => item.SwitchDeviceId == seed.BoundaryDeviceId);
+            WorkScopeBoundary? boundary = null;
+            if (selected is not null)
+                TryMaterializeBoundary(drawing, selected, out boundary, out _);
+            // Selection authority survives an unavailable WTA work-side conversion.
+            boundaries.Add(boundary ?? new WorkScopeBoundary(seed.BoundaryDeviceId,
+                BoundarySide.Unknown, selected?.DeenergizedTerminalId));
         }
 
         WorkScope workScope;
@@ -374,6 +378,7 @@ public sealed class WorkScopeConfirmationPlanner
          .. drawing.WorkScopes.Select(item => item.WorkScopeId)];
 
     private static bool Equivalent(WorkScopeCandidate left, WorkScopeCandidate right) =>
+        left.SelectedSeeds.SequenceEqual(right.SelectedSeeds) &&
         RegionSignature(left).SequenceEqual(RegionSignature(right)) &&
         BoundarySignature(left).SequenceEqual(BoundarySignature(right)) &&
         left.Diagnostics.Select(DiagnosticSignature).Order(StringComparer.Ordinal)

@@ -1,3 +1,4 @@
+using DistributionDrawing.TestSupport;
 using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Application.Devices.CustomerStations;
@@ -26,7 +27,7 @@ public sealed class WorkScopeCandidateProjectorTests
         EnergizationAnalysisState state = Analyze(drawing, seedSwitch, EnergizationSide.Bus);
         EnergizationResult result = Assert.IsType<EnergizationResult>(state.CurrentResult);
 
-        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state);
+        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state));
 
         WorkScopeCandidate candidate = Assert.IsType<WorkScopeCandidate>(projection.Candidate);
         Assert.NotEmpty(candidate.Regions);
@@ -61,7 +62,7 @@ public sealed class WorkScopeCandidateProjectorTests
         EnergizationAnalysisState state = Analyze(drawing, boundarySwitch, EnergizationSide.Bus);
         EnergizationResult ea = state.CurrentResult!;
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         WorkScopeCandidateBoundary boundary = Assert.Single(candidate.Boundaries,
             item => item.SwitchDeviceId == boundarySwitch.Id);
@@ -79,12 +80,12 @@ public sealed class WorkScopeCandidateProjectorTests
             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open));
         SwitchDevice[] switches = cabinet.Intervals.Select(LoadSwitch).ToArray();
         var state = new EnergizationAnalysisState();
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(),
             switches.Select(device => Seed(device, EnergizationSide.Line)), true));
         EnergizationResult result = Assert.IsType<EnergizationResult>(state.CurrentResult);
         var projector = new WorkScopeCandidateProjector();
 
-        WorkScopeCandidateProjection projection = projector.Project(drawing, state);
+        WorkScopeCandidateProjection projection = projector.Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state));
 
         Assert.True(projection.IsValid);
         WorkScopeCandidate candidate = Assert.IsType<WorkScopeCandidate>(projection.Candidate);
@@ -112,7 +113,7 @@ public sealed class WorkScopeCandidateProjectorTests
             Assert.Equal(EnergizationState.Energized, result.Terminals[device.SecondTerminalId].State);
         }
         Assert.Empty(candidate.Diagnostics);
-        Assert.Equal(Signature(candidate), Signature(projector.Project(drawing, state).Candidate!));
+        Assert.Equal(Signature(candidate), Signature(projector.Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!));
     }
 
     [Theory]
@@ -135,10 +136,14 @@ public sealed class WorkScopeCandidateProjectorTests
         SwitchDevice boundarySwitch = interval.SwitchDevices.Single(item => item.SwitchKind == boundaryKind);
         EnergizationAnalysisState state = Analyze(drawing, seedSwitch, EnergizationSide.Bus);
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
-        Assert.Contains(candidate.Boundaries, item => item.SwitchDeviceId == boundarySwitch.Id &&
-            item.DeenergizedTerminalId == boundarySwitch.SecondTerminalId);
+        Assert.Equal(seedSwitch.Id, Assert.Single(candidate.SelectedSeeds).BoundaryDeviceId);
+        if (boundaryKind == SwitchKind.IsolationSwitch)
+            Assert.Contains(candidate.Boundaries, item => item.SwitchDeviceId == seedSwitch.Id &&
+                item.DeenergizedTerminalId == seedSwitch.SecondTerminalId);
+        else
+            Assert.DoesNotContain(candidate.Boundaries, item => item.SwitchDeviceId == boundarySwitch.Id);
     }
 
     [Fact]
@@ -147,7 +152,7 @@ public sealed class WorkScopeCandidateProjectorTests
         (DrawingDocument drawing, SwitchDevice boundarySwitch) = PoleSwitch();
         EnergizationAnalysisState state = Analyze(drawing, boundarySwitch, EnergizationSide.SmallerNumber);
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         Assert.Contains(candidate.Boundaries, item => item.SwitchDeviceId == boundarySwitch.Id &&
             item.DeenergizedTerminalId == boundarySwitch.SecondTerminalId &&
@@ -178,7 +183,7 @@ public sealed class WorkScopeCandidateProjectorTests
         drawing.AddConnection(cable);
         EnergizationAnalysisState state = Analyze(drawing, LoadSwitch(cabinet.Intervals[0]), EnergizationSide.Bus);
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         WorkScopeCandidateRegion region = Assert.Single(candidate.Regions, item =>
             item.TerminalIds.Contains(termination.CableSideTerminalId));
@@ -202,7 +207,7 @@ public sealed class WorkScopeCandidateProjectorTests
         drawing.AddTransformer(transformer, hvTerminal);
         EnergizationAnalysisState state = Analyze(drawing, LoadSwitch(cabinet.Intervals[0]), EnergizationSide.Bus);
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         Assert.Contains(candidate.Regions, region => region.TerminalIds.SequenceEqual([hvTerminalId]) &&
             region.ElectricalNodeIds.Count == 0);
@@ -218,7 +223,7 @@ public sealed class WorkScopeCandidateProjectorTests
         drawing.AddCustomerStation(station);
         EnergizationAnalysisState state = Analyze(drawing, LoadSwitch(cabinet.Intervals[0]), EnergizationSide.Bus);
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         foreach (IncomingFeeder feeder in station.IncomingFeeders)
         {
@@ -247,7 +252,7 @@ public sealed class WorkScopeCandidateProjectorTests
         EnergizationAnalysisState state = Analyze(drawing, LoadSwitch(cabinet.Intervals[0]), EnergizationSide.Bus);
         EnergizationResult result = Assert.IsType<EnergizationResult>(state.CurrentResult);
 
-        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state);
+        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state));
 
         Assert.True(projection.IsValid);
         WorkScopeCandidate candidate = Assert.IsType<WorkScopeCandidate>(projection.Candidate);
@@ -274,14 +279,8 @@ public sealed class WorkScopeCandidateProjectorTests
         WorkScopeCandidateRegion region = Assert.Single(candidate.Regions);
         Assert.Equal([stationTerminal.Id], region.TerminalIds);
         Assert.Equal([node.Id], region.ElectricalNodeIds);
-        WorkScopeCandidateBoundary boundary = Assert.Single(candidate.Boundaries);
-        Assert.Equal(feeder.IsolationSwitch.Id, boundary.SwitchDeviceId);
-        Assert.Equal(SwitchKind.IsolationSwitch, boundary.SwitchKind);
-        Assert.Equal(SwitchInstallationType.CustomerStationIncomingFeeder, boundary.InstallationType);
-        Assert.Equal(stationTerminal.Id, boundary.DeenergizedTerminalId);
-        Assert.Equal(cableTerminal.Id, boundary.EnergizedTerminalId);
-        Assert.Equal(feeder.IncomingFeederId, boundary.TopologyParentId);
-        Assert.Equal([cable.Id], boundary.RelatedConnectionIds);
+        Assert.Empty(candidate.Boundaries);
+        Assert.DoesNotContain(candidate.SelectedSeeds, seed => seed.BoundaryDeviceId == feeder.IsolationSwitch.Id);
         Assert.Empty(candidate.Diagnostics);
     }
 
@@ -297,7 +296,7 @@ public sealed class WorkScopeCandidateProjectorTests
         EnergizationAnalysisState state = Analyze(drawing, seedSwitch, EnergizationSide.Bus);
         EnergizationResult result = state.CurrentResult!;
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         Assert.True(candidate.Regions.Count >= 3);
         Assert.Contains(candidate.Regions, region => region.TerminalIds.Count == 1 &&
@@ -327,7 +326,7 @@ public sealed class WorkScopeCandidateProjectorTests
         var state = new EnergizationAnalysisState();
         state.Publish(allEnergized);
 
-        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state);
+        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state));
 
         Assert.True(projection.IsValid);
         Assert.True(projection.Candidate!.IsEmpty);
@@ -351,7 +350,7 @@ public sealed class WorkScopeCandidateProjectorTests
         var state = new EnergizationAnalysisState();
         state.Publish(allDeenergized);
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         Assert.NotEmpty(candidate.Regions);
         Assert.Empty(candidate.Boundaries);
@@ -367,25 +366,25 @@ public sealed class WorkScopeCandidateProjectorTests
         var projector = new WorkScopeCandidateProjector();
 
         Assert.Equal(WorkScopeCandidateDiagnosticCode.CurrentResultUnavailable,
-            Assert.Single(projector.Project(drawing, new EnergizationAnalysisState()).Diagnostics).Code);
+            Assert.Single(projector.Project(drawing, new EnergizationAnalysisState(), WorkScopeAnalysisFixture.ScenarioFor(new EnergizationAnalysisState())).Diagnostics).Code);
 
         var noSeedState = new EnergizationAnalysisState();
-        noSeedState.Execute(drawing, new EnergizationScenario(Guid.NewGuid(), []));
+        WorkScopeAnalysisFixture.Execute(noSeedState, drawing, new EnergizationScenario(Guid.NewGuid(), []));
         Assert.Equal(WorkScopeCandidateDiagnosticCode.NoSeeds,
-            Assert.Single(projector.Project(drawing, noSeedState).Diagnostics).Code);
+            Assert.Single(projector.Project(drawing, noSeedState, WorkScopeAnalysisFixture.ScenarioFor(noSeedState)).Diagnostics).Code);
 
         var failedState = new EnergizationAnalysisState();
-        failedState.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+        WorkScopeAnalysisFixture.Execute(failedState, drawing, new EnergizationScenario(Guid.NewGuid(),
             [new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)]));
         Assert.Equal(WorkScopeCandidateDiagnosticCode.FailedAnalysis,
-            Assert.Single(projector.Project(drawing, failedState).Diagnostics).Code);
+            Assert.Single(projector.Project(drawing, failedState, WorkScopeAnalysisFixture.ScenarioFor(failedState)).Diagnostics).Code);
 
         var staleState = new EnergizationAnalysisState();
-        staleState.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+        WorkScopeAnalysisFixture.Execute(staleState, drawing, new EnergizationScenario(Guid.NewGuid(),
             [Seed(LoadSwitch(cabinet.Intervals[0]), EnergizationSide.Bus)]));
         staleState.Invalidate();
         Assert.Equal(WorkScopeCandidateDiagnosticCode.StaleAnalysis,
-            Assert.Single(projector.Project(drawing, staleState).Diagnostics).Code);
+            Assert.Single(projector.Project(drawing, staleState, WorkScopeAnalysisFixture.ScenarioFor(staleState)).Diagnostics).Code);
     }
 
     [Fact]
@@ -402,7 +401,7 @@ public sealed class WorkScopeCandidateProjectorTests
         var state = new EnergizationAnalysisState();
         state.Publish(mismatch);
 
-        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state);
+        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state));
 
         Assert.False(projection.IsValid);
         Assert.Contains(projection.Diagnostics, item => item.Code == WorkScopeCandidateDiagnosticCode.IdentityMismatch);
@@ -426,7 +425,7 @@ public sealed class WorkScopeCandidateProjectorTests
         var state = new EnergizationAnalysisState();
         state.Publish(inconsistent);
 
-        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state);
+        WorkScopeCandidateProjection projection = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state));
 
         Assert.False(projection.IsValid);
         Assert.Contains(projection.Diagnostics, item => item.Code ==
@@ -442,7 +441,7 @@ public sealed class WorkScopeCandidateProjectorTests
         SwitchDevice groundSwitch = interval.SwitchDevices.Single(item => item.SwitchKind == SwitchKind.GroundSwitch);
         EnergizationAnalysisState state = Analyze(drawing, LoadSwitch(interval), EnergizationSide.Bus);
 
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         Assert.DoesNotContain(candidate.Boundaries, item => item.SwitchDeviceId == groundSwitch.Id);
         Assert.DoesNotContain(candidate.Regions.SelectMany(region => region.ElectricalNodeIds),
@@ -460,28 +459,28 @@ public sealed class WorkScopeCandidateProjectorTests
         EnergizedSeed second = Seed(LoadSwitch(cabinet.Intervals[1]), EnergizationSide.Line);
         var scenario = new EnergizationScenario(Guid.NewGuid(), [first, second], true);
         var state = new EnergizationAnalysisState();
-        state.Execute(drawing, scenario);
+        WorkScopeAnalysisFixture.Execute(state, drawing, scenario);
         EnergizationResult beforeResult = state.CurrentResult!;
         int workScopeCount = drawing.WorkScopes.Count;
         SwitchState?[] switchStates = drawing.Devices.OfType<SwitchDevice>().Select(item => item.SwitchState).ToArray();
         var projector = new WorkScopeCandidateProjector();
 
-        WorkScopeCandidate one = projector.Project(drawing, state).Candidate!;
-        WorkScopeCandidate two = projector.Project(drawing, state).Candidate!;
+        WorkScopeCandidate one = projector.Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
+        WorkScopeCandidate two = projector.Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
         Assert.Equal(Signature(one), Signature(two));
         WorkScope persisted = WorkScope.Create(Guid.NewGuid(),
             [new WorkScopeRegion(one.Regions[0].TerminalIds, one.Regions[0].ElectricalNodeIds)], [], "historical");
         drawing.AddWorkScope(persisted);
-        WorkScopeCandidate afterHistoricalSnapshot = projector.Project(drawing, state).Candidate!;
+        WorkScopeCandidate afterHistoricalSnapshot = projector.Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
         Assert.Equal(Signature(one), Signature(afterHistoricalSnapshot));
         Assert.Same(beforeResult, state.CurrentResult);
         Assert.Equal(workScopeCount + 1, drawing.WorkScopes.Count);
         Assert.Equal(switchStates, drawing.Devices.OfType<SwitchDevice>().Select(item => item.SwitchState));
 
         var reversedState = new EnergizationAnalysisState();
-        reversedState.Execute(drawing, new EnergizationScenario(Guid.NewGuid(), [second, first], true));
-        Assert.Equal(Signature(one), Signature(projector.Project(drawing, reversedState).Candidate!));
+        WorkScopeAnalysisFixture.Execute(reversedState, drawing, new EnergizationScenario(Guid.NewGuid(), [second, first], true));
+        Assert.Equal(Signature(one), Signature(projector.Project(drawing, reversedState, WorkScopeAnalysisFixture.ScenarioFor(reversedState)).Candidate!));
     }
 
     [Fact]
@@ -499,8 +498,8 @@ public sealed class WorkScopeCandidateProjectorTests
             TopologyAndEaSignature(second.Drawing, second.State.CurrentResult!, second.Names));
         var projector = new WorkScopeCandidateProjector();
 
-        WorkScopeCandidateProjection firstProjection = projector.Project(first.Drawing, first.State);
-        WorkScopeCandidateProjection secondProjection = projector.Project(second.Drawing, second.State);
+        WorkScopeCandidateProjection firstProjection = projector.Project(first.Drawing, first.State, WorkScopeAnalysisFixture.ScenarioFor(first.State));
+        WorkScopeCandidateProjection secondProjection = projector.Project(second.Drawing, second.State, WorkScopeAnalysisFixture.ScenarioFor(second.State));
 
         Assert.True(firstProjection.IsValid);
         Assert.True(secondProjection.IsValid);
@@ -554,7 +553,10 @@ public sealed class WorkScopeCandidateProjectorTests
             names.Add(cable.Id, $"cable.{sequence}");
         }
         Assert.Equal(names.Count, names.Values.Distinct().Count());
-        return (drawing, Analyze(drawing, LoadSwitch(cabinets["source"].Intervals[0]), EnergizationSide.Bus), names);
+        var state = new EnergizationAnalysisState();
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(),
+            cabinets["downstream"].Intervals.Select(interval => Seed(LoadSwitch(interval), EnergizationSide.Line))));
+        return (drawing, state, names);
     }
 
     private static string TopologyAndEaSignature(
@@ -607,7 +609,7 @@ public sealed class WorkScopeCandidateProjectorTests
         DrawingDocument drawing, SwitchDevice seedSwitch, EnergizationSide side)
     {
         var state = new EnergizationAnalysisState();
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(), [Seed(seedSwitch, side)], true));
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(), [Seed(seedSwitch, side)], true));
         return state;
     }
 

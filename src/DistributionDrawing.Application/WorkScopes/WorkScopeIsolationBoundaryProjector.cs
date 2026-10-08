@@ -37,7 +37,8 @@ public enum WorkScopeBoundaryProjectionDiagnosticCode
     GroundingBoundary,
     UnsupportedInstallationType,
     DuplicateNormalizedOutput,
-    WtaBoundarySetRejected
+    WtaBoundarySetRejected,
+    UnresolvedSelectedWorkSide
 }
 
 public sealed record WorkScopeBoundaryProjectionDiagnostic(
@@ -221,6 +222,10 @@ public sealed class WorkScopeIsolationBoundaryProjector : IWorkScopeIsolationBou
             return Invalid(source, WorkScopeBoundaryProjectionDiagnosticCode.GroundingBoundary,
                 "GroundSwitch is GS grounding authority and cannot be projected as an ordinary WTA isolation boundary.");
 
+        if (source.Side == BoundarySide.Unknown)
+            return Unrepresentable(source, WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedSelectedWorkSide,
+                "The EA-selected device has no deterministically established Deenergized work side.");
+
         if (device.InstallationType == SwitchInstallationType.CustomerStationIncomingFeeder)
             return ProjectCustomerStationBoundary(drawing, device, source);
 
@@ -251,7 +256,7 @@ public sealed class WorkScopeIsolationBoundaryProjector : IWorkScopeIsolationBou
                 $"The existing WTA resolver rejected this boundary: {issue}");
 
         if (!MatchesPersistedIdentity(source, resolved!, out string? mismatch))
-            return Invalid(source, WorkScopeBoundaryProjectionDiagnosticCode.InvalidBoundaryOwnership, mismatch!);
+            return Unrepresentable(source, WorkScopeBoundaryProjectionDiagnosticCode.WtaResolverRejected, mismatch!);
 
         return ValidateResolved(drawing, source, resolved!,
             device.SwitchKind == SwitchKind.LoadSwitch && IsExact(source, resolved!)
@@ -346,7 +351,7 @@ public sealed class WorkScopeIsolationBoundaryProjector : IWorkScopeIsolationBou
                 "The Pole direction is Equal, Unresolved, or cannot be represented by the existing WTA resolver.");
 
         if (!MatchesPersistedIdentity(source, resolved!, out string? mismatch))
-            return Invalid(source, WorkScopeBoundaryProjectionDiagnosticCode.InvalidBoundaryOwnership, mismatch!);
+            return Unrepresentable(source, WorkScopeBoundaryProjectionDiagnosticCode.WtaResolverRejected, mismatch!);
         return ValidateResolved(drawing, source, resolved!, WorkScopeBoundaryClassification.B);
     }
 

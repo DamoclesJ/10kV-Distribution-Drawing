@@ -7,7 +7,7 @@
       <TextBlock Text="配电第一种工作票" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,6,0,16"/>
       <DockPanel Margin="0,0,0,12">
         <ComboBox x:Name="TicketList" DockPanel.Dock="Right" Width="230" DisplayMemberPath="Display" SelectionChanged="OnTicketSelectionChanged"/>
-        <Button Content="分析 / 重新分析" Click="OnAnalyze" Padding="14,6" Margin="0,0,8,0"/>
+        <Button x:Name="AnalyzeTicketButton" Content="分析 / 重新分析" Click="OnAnalyze" Padding="14,6" Margin="0,0,8,0"/>
         <Button Content="保存当前编辑" Click="OnSaveEdit" Padding="14,6" Margin="0,0,8,0"/>
         <Button Content="复制六栏文字" Click="OnCopyAll" Padding="14,6"/>
       </DockPanel>
@@ -18,7 +18,7 @@
           <TextBox x:Name="TaskContent" Margin="0,2,0,8" IsReadOnly="True"/>
           <TextBlock Text="工作对象 / 地点"/>
           <TextBox x:Name="TaskObject" Margin="0,2,0,8" IsReadOnly="True"/>
-          <Button Content="返回图纸修改工作范围" Click="OnRequestRangeEdit"
+          <Button Content="返回图纸代入工作范围" Click="OnRequestRangeEdit"
                   HorizontalAlignment="Left" Margin="0,0,0,8"/>
           <TextBlock Text="停电边界和工作任务请在图纸页的“工作范围”设置；下方为同一工作票的高级编辑。"
                      TextWrapping="Wrap" Margin="0,0,0,6" />

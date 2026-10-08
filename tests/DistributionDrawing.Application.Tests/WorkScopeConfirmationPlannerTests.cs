@@ -1,3 +1,4 @@
+using DistributionDrawing.TestSupport;
 using DistributionDrawing.Application.Devices;
 using DistributionDrawing.Application.Devices.CustomerStations;
 using DistributionDrawing.Application.Energization;
@@ -25,7 +26,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         Guid ticketId = Guid.NewGuid();
         Guid scopeId = Guid.NewGuid();
         WorkScopeConfirmationPlanningResult result = Planner(ticketId, scopeId)
-            .Prepare(drawing, state, candidate, tickets);
+            .Prepare(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, tickets);
 
         WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(result.Plan);
         Assert.Null(result.Diagnostic);
@@ -50,7 +51,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         Assert.Empty(tickets.Tickets);
 
         state.Invalidate();
-        WorkScopeConfirmationPlanningResult stale = Planner().Prepare(drawing, state, candidate, tickets);
+        WorkScopeConfirmationPlanningResult stale = Planner().Prepare(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, tickets);
         Assert.Equal(WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable, stale.Diagnostic!.Code);
         Assert.Contains(stale.Diagnostic.CandidateDiagnostics,
             item => item.Code == WorkScopeCandidateDiagnosticCode.StaleAnalysis);
@@ -70,17 +71,17 @@ public sealed class WorkScopeConfirmationPlannerTests
         AssertGate(absent, WorkScopeCandidateDiagnosticCode.CurrentResultUnavailable);
 
         var noSeed = new EnergizationAnalysisState();
-        noSeed.Execute(drawing, new EnergizationScenario(Guid.NewGuid(), []));
+        WorkScopeAnalysisFixture.Execute(noSeed, drawing, new EnergizationScenario(Guid.NewGuid(), []));
         AssertGate(noSeed, WorkScopeCandidateDiagnosticCode.NoSeeds);
 
         var failed = new EnergizationAnalysisState();
-        failed.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+        WorkScopeAnalysisFixture.Execute(failed, drawing, new EnergizationScenario(Guid.NewGuid(),
             [new EnergizedSeed(Guid.NewGuid(), Guid.NewGuid(), EnergizationSide.Bus)]));
         AssertGate(failed, WorkScopeCandidateDiagnosticCode.FailedAnalysis);
 
         void AssertGate(EnergizationAnalysisState state, WorkScopeCandidateDiagnosticCode expected)
         {
-            WorkScopeConfirmationPlanningResult result = Planner().Prepare(drawing, state, reviewed, tickets);
+            WorkScopeConfirmationPlanningResult result = Planner().Prepare(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), reviewed, tickets);
             Assert.False(result.CanConfirm);
             Assert.Equal(WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable, result.Diagnostic!.Code);
             Assert.Contains(result.Diagnostic.CandidateDiagnostics, item => item.Code == expected);
@@ -94,11 +95,11 @@ public sealed class WorkScopeConfirmationPlannerTests
     {
         (DrawingDocument drawing, RingCabinet cabinet, EnergizationAnalysisState state) = RingFixture();
         WorkScopeCandidate reviewed = Project(drawing, state);
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(),
             [Seed(cabinet.Intervals[0].SwitchDevices[0], EnergizationSide.Line)], true));
         var tickets = new WorkTicketDataRoot(drawing.Id);
 
-        WorkScopeConfirmationPlanningResult result = Planner().Prepare(drawing, state, reviewed, tickets);
+        WorkScopeConfirmationPlanningResult result = Planner().Prepare(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), reviewed, tickets);
 
         Assert.Equal(WorkScopeConfirmationFailureCode.ReviewedCandidateMismatch, result.Diagnostic!.Code);
         Assert.Empty(drawing.WorkScopes);
@@ -113,7 +114,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         AddIsolatedOpenSwitch(drawing);
         var tickets = new WorkTicketDataRoot(drawing.Id);
 
-        WorkScopeConfirmationPlanningResult result = Planner().Prepare(drawing, state, reviewed, tickets);
+        WorkScopeConfirmationPlanningResult result = Planner().Prepare(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), reviewed, tickets);
 
         Assert.Equal(WorkScopeConfirmationFailureCode.CurrentCandidateUnavailable, result.Diagnostic!.Code);
         Assert.Contains(result.Diagnostic.CandidateDiagnostics,
@@ -134,7 +135,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         tickets.Add(ticket);
 
         WorkScopeConfirmationPlanningResult result = Planner().Prepare(
-            drawing, state, candidate, tickets, ticket.Id);
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, tickets, ticket.Id);
 
         Assert.Equal(WorkScopeConfirmationFailureCode.EmptyCandidate, result.Diagnostic!.Code);
         Assert.Single(tickets.Tickets);
@@ -143,7 +144,7 @@ public sealed class WorkScopeConfirmationPlannerTests
     }
 
     [Fact]
-    public void Prepare_AllowsValidZeroBoundaryAndMultipleBoundaryCandidates()
+    public void Prepare_PreservesSelectedDeviceWithoutTransitionAndMapsMultipleSelectedBoundaries()
     {
         (DrawingDocument noBoundaryDrawing, RingCabinet closedCabinet, _) = RingFixture(SwitchState.Closed);
         SwitchDevice isolated = AddIsolatedOpenSwitch(noBoundaryDrawing);
@@ -153,10 +154,12 @@ public sealed class WorkScopeConfirmationPlannerTests
         Assert.NotEmpty(noBoundary.Regions);
         Assert.Empty(noBoundary.Boundaries);
         WorkScopeConfirmationPlanningResult noBoundaryPlan = Planner(Guid.NewGuid())
-            .Prepare(noBoundaryDrawing, noBoundaryState, noBoundary,
+            .Prepare(noBoundaryDrawing, noBoundaryState, WorkScopeAnalysisFixture.ScenarioFor(noBoundaryState), noBoundary,
                 new WorkTicketDataRoot(noBoundaryDrawing.Id));
         Assert.True(noBoundaryPlan.CanConfirm);
-        Assert.Empty(noBoundaryPlan.Plan!.AfterWorkScope.Boundaries);
+        WorkScopeBoundary unavailable = Assert.Single(noBoundaryPlan.Plan!.AfterWorkScope.Boundaries);
+        Assert.Equal(closedCabinet.Intervals[0].SwitchDevices[0].Id, unavailable.DeviceId);
+        Assert.Equal(BoundarySide.Unknown, unavailable.Side);
         Assert.Equal(RegionSignature(noBoundary), RegionSignature(noBoundaryPlan.Plan.AfterWorkScope));
         Assert.Contains(noBoundary.Regions.SelectMany(item => item.TerminalIds),
             id => id == isolated.FirstTerminalId || id == isolated.SecondTerminalId);
@@ -167,7 +170,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         Assert.Single(multiple.Regions);
         Assert.Equal(2, multiple.Boundaries.Count);
         WorkScopeConfirmationPlanningResult multiplePlan = Planner(Guid.NewGuid())
-            .Prepare(multipleDrawing, multipleState, multiple,
+            .Prepare(multipleDrawing, multipleState, WorkScopeAnalysisFixture.ScenarioFor(multipleState), multiple,
                 new WorkTicketDataRoot(multipleDrawing.Id));
         Assert.True(multiplePlan.CanConfirm);
         Assert.Equal(2, multiplePlan.Plan!.AfterWorkScope.Boundaries.Count);
@@ -198,13 +201,13 @@ public sealed class WorkScopeConfirmationPlannerTests
             .ToArray();
         foreach (RingCabinet cabinet in cabinets) drawing.AddDevice(cabinet);
         var state = new EnergizationAnalysisState();
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(), cabinets.Select(cabinet =>
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(), cabinets.Select(cabinet =>
             Seed(cabinet.Intervals[0].SwitchDevices[0], EnergizationSide.Bus)).ToArray(), true));
         WorkScopeCandidate candidate = Project(drawing, state);
         Assert.Equal(2, candidate.Regions.Count);
 
         WorkScopeConfirmationPlanningResult result = Planner(Guid.NewGuid()).Prepare(
-            drawing, state, candidate, new WorkTicketDataRoot(drawing.Id));
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, new WorkTicketDataRoot(drawing.Id));
 
         WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(result.Plan);
         Assert.Equal(RegionSignature(candidate), RegionSignature(plan.AfterWorkScope));
@@ -220,7 +223,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         WorkScopeCandidateBoundary candidateBoundary = Assert.Single(candidate.Boundaries);
 
         WorkScopeConfirmationPlanningResult result = Planner(Guid.NewGuid()).Prepare(
-            drawing, state, candidate, new WorkTicketDataRoot(drawing.Id));
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, new WorkTicketDataRoot(drawing.Id));
 
         WorkScopeBoundary boundary = Assert.Single(Assert.IsType<WorkScopeConfirmationPlan>(result.Plan)
             .AfterWorkScope.Boundaries);
@@ -230,7 +233,7 @@ public sealed class WorkScopeConfirmationPlannerTests
     }
 
     [Fact]
-    public void Prepare_MapsCustomerStationDeenergizedSideAndPreservesTopologyIdentities()
+    public void Prepare_PreservesCustomerStationMembershipWithoutAddingItsUnselectedSwitch()
     {
         (DrawingDocument drawing, RingCabinet cabinet, EnergizationAnalysisState state) =
             RingFixture(SwitchState.Closed);
@@ -244,14 +247,13 @@ public sealed class WorkScopeConfirmationPlannerTests
         WorkScopeCandidate candidate = Project(drawing, state);
 
         WorkScopeConfirmationPlanningResult result = Planner(Guid.NewGuid()).Prepare(
-            drawing, state, candidate, new WorkTicketDataRoot(drawing.Id));
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, new WorkTicketDataRoot(drawing.Id));
 
         Assert.True(result.CanConfirm, result.Diagnostic?.Message);
-        WorkScopeBoundary stationBoundary = Assert.Single(result.Plan!.AfterWorkScope.Boundaries,
+        Assert.DoesNotContain(result.Plan!.AfterWorkScope.Boundaries,
             item => item.DeviceId == feeder.IsolationSwitch.Id);
-        Assert.Equal(BoundarySide.Load, stationBoundary.Side);
-        Assert.Equal(feeder.StationTerminalId, stationBoundary.TerminalId);
-        Assert.Null(stationBoundary.ConnectionId);
+        Assert.Equal(cabinet.Intervals[0].SwitchDevices[0].Id,
+            Assert.Single(result.Plan.AfterWorkScope.Boundaries).DeviceId);
         Assert.DoesNotContain(result.Plan.AfterWorkScope.Regions.SelectMany(item => item.TerminalIds),
             id => id == feeder.CableTerminalId);
         Assert.Contains(result.Plan.AfterWorkScope.Regions.SelectMany(item => item.TerminalIds),
@@ -272,11 +274,11 @@ public sealed class WorkScopeConfirmationPlannerTests
         WorkTicketSession ticket = WorkTicketSession.Create() with { WorkScopeIds = [oldId] };
         var tickets = new WorkTicketDataRoot(drawing.Id, [ticket]);
 
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(),
             [Seed(cabinet.Intervals[0].SwitchDevices[0], EnergizationSide.Line)], true));
         WorkScopeCandidate second = Project(drawing, state);
         WorkScopeConfirmationPlanningResult exclusive = Planner(Guid.NewGuid())
-            .Prepare(drawing, state, second, tickets, ticket.Id);
+            .Prepare(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), second, tickets, ticket.Id);
         Assert.True(exclusive.CanConfirm, exclusive.Diagnostic?.Message);
         Assert.Equal(oldId, exclusive.Plan!.AfterWorkScope.WorkScopeId);
         Assert.Equal("保留的描述", exclusive.Plan.AfterWorkScope.Description);
@@ -286,7 +288,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         WorkTicketSession multi = ticket with { WorkScopeIds = [oldId, Guid.NewGuid()] };
         var multiTickets = new WorkTicketDataRoot(drawing.Id, [multi]);
         WorkScopeConfirmationPlanningResult multiple = Planner().Prepare(
-            drawing, state, second, multiTickets, multi.Id);
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), second, multiTickets, multi.Id);
         Assert.Equal(WorkScopeConfirmationFailureCode.MultipleWorkScopes, multiple.Diagnostic!.Code);
 
         WorkTicketSession legacy = ticket with
@@ -295,8 +297,9 @@ public sealed class WorkScopeConfirmationPlannerTests
         };
         var legacyTickets = new WorkTicketDataRoot(drawing.Id, [legacy]);
         WorkScopeConfirmationPlanningResult ambiguous = Planner().Prepare(
-            drawing, state, second, legacyTickets, legacy.Id);
-        Assert.Equal(WorkScopeConfirmationFailureCode.AmbiguousLegacyElectricalRange, ambiguous.Diagnostic!.Code);
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), second, legacyTickets, legacy.Id);
+        Assert.True(ambiguous.CanConfirm, ambiguous.Diagnostic?.Message);
+        Assert.Equal(legacy.WorkScopeItems, ambiguous.Plan!.AfterTicket.WorkScopeItems);
         Assert.Same(oldScope, drawing.GetWorkScope(oldId));
     }
 
@@ -306,10 +309,10 @@ public sealed class WorkScopeConfirmationPlannerTests
         (DrawingDocument drawing, _, EnergizationAnalysisState state) = RingFixture();
         WorkScopeCandidate candidate = Project(drawing, state);
         WorkScopeConfirmationPlanningResult missing = Planner().Prepare(
-            drawing, state, candidate, new WorkTicketDataRoot(drawing.Id), Guid.NewGuid());
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, new WorkTicketDataRoot(drawing.Id), Guid.NewGuid());
         Assert.Equal(WorkScopeConfirmationFailureCode.MissingTargetTicket, missing.Diagnostic!.Code);
         WorkScopeConfirmationPlanningResult mismatched = Planner().Prepare(
-            drawing, state, candidate, new WorkTicketDataRoot(Guid.NewGuid()));
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, new WorkTicketDataRoot(Guid.NewGuid()));
         Assert.Equal(WorkScopeConfirmationFailureCode.MissingTargetTicket, mismatched.Diagnostic!.Code);
     }
 
@@ -326,7 +329,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         var planner = new WorkScopeConfirmationPlanner(() => generated[index++]);
 
         WorkScopeConfirmationPlanningResult result = planner.Prepare(
-            drawing, state, candidate, tickets, ticket.Id);
+            drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, tickets, ticket.Id);
 
         WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(result.Plan);
         Assert.Equal(scopeId, plan.AfterWorkScope.WorkScopeId);
@@ -340,7 +343,7 @@ public sealed class WorkScopeConfirmationPlannerTests
     }
 
     private static WorkScopeCandidate Project(DrawingDocument drawing, EnergizationAnalysisState state) =>
-        new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
 
     private static string[] RegionSignature(WorkScopeCandidate candidate) => candidate.Regions
         .Select(region => string.Join(',', region.TerminalIds.Order()) + "/" +
@@ -375,7 +378,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         EnergizedSeed[] seeds = cabinet.Intervals.Select(interval => Seed(interval.SwitchDevices[0],
             EnergizationSide.Line)).ToArray();
         var state = new EnergizationAnalysisState();
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(), seeds, true));
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(), seeds, true));
         return (drawing, cabinet, state);
     }
 
@@ -429,7 +432,7 @@ public sealed class WorkScopeConfirmationPlannerTests
         EnergizationSide side)
     {
         var state = new EnergizationAnalysisState();
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(), [Seed(switchDevice, side)], true));
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(), [Seed(switchDevice, side)], true));
         return state;
     }
 

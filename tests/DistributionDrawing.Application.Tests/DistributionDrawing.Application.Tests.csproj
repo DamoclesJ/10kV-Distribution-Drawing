@@ -22,4 +22,9 @@
     <ProjectReference Include="../../src/DistributionDrawing.Application/DistributionDrawing.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="../Shared/WorkScopeAnalysisFixture.cs" Link="Fixtures/WorkScopeAnalysisFixture.cs" />
+    <Compile Include="../Shared/WorkScopeCorrectionFixture.cs" Link="Fixtures/WorkScopeCorrectionFixture.cs" />
+  </ItemGroup>
+
 </Project>

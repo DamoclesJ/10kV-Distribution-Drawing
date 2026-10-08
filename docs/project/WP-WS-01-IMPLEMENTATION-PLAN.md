@@ -15,9 +15,9 @@
 - **Phase 3:** VERIFIED / ACCEPTED at `2444fdf8a7e4e19440a3054fcc3fa0bcfae9c4ab`; Windows automated verification PASSED (1717/1717, 0 failed, 0 skipped)
 - **Phase 4:** VERIFIED / ACCEPTED at `3f4a5fea1827f22abee39c18dda980357368dd91`; Windows automated verification PASSED (1738/1738, 0 failed, 0 skipped)
 - **Phase 5:** VERIFIED / ACCEPTED at `10cb9187c37abe7dab55bed012b008030c952823`; Windows fixed-SHA verification PASSED (1755/1755, 0 failed, 0 skipped), full solution Release build 0 errors (22 nullable warnings).
-- **Phase 6:** IMPLEMENTED / CANDIDATE. Windows automated runtime verification and GUI acceptance remain PENDING.
+- **Phase 6:** CORRECTION / CANDIDATE. Correction implementation is prepared in the working tree; candidate commit/push awaits the Windows test gate or explicit candidate authorization. Windows GUI acceptance remains PENDING.
 
-This document records the approved package boundary and phase acceptance history; the current phase status above controls implementation and acceptance state.
+This document records the package boundary and phase acceptance history. The product-authorized [WorkScope inverse-selection correction](WP-WS-01-WORKSCOPE-CORRECTION.md), based on `2419eb4beae317552180553d25812b281983cd4b`, controls the current requirements and supersedes conflicting Phase 2–5 and original Phase 6 contracts below. Historical accepted SHAs and verification facts remain unchanged. In particular, all-graph transitions are no longer device-selection authority, user Region/Boundary review is removed, and an unavailable WTA conversion does not reject an otherwise valid WorkScope. The existing Unknown enum value can now persist such a selected device; DTOs and FormatVersion remain V10.
 
 ## Phase 1 acceptance
 
@@ -157,24 +157,28 @@ Windows fixed-SHA automated verification PASSED: Domain 236/236, Application 306
 
 At accepted SHA `10cb9187c37abe7dab55bed012b008030c952823`: Domain 236/236, Application 306/306, Infrastructure 152/152, Rendering.Wpf 674/674, Desktop 387/387; total 1755/1755, 0 failed, 0 skipped. Full solution Release build: 0 errors (22 nullable warnings). The full suites verify one history entry; no-ticket and shared-scope behavior; zero-boundary and legacy manual guard; Unrepresentable and WtaBoundarySetRejected no-partial handoff; Analyzer exactly once and replay call counts; NeedsInput and technical exception; confirmation rejection and Invalid short-circuit; all three re-confirm transitions; derived-state invalidation and user-fact preservation; rollback atomicity; V10 persistence without EA; and Phase 1-4, EA, GS, and WTA regressions.
 
-## Phase 6 — Windows GUI Integration & End-to-End Acceptance (IMPLEMENTED / CANDIDATE)
+## Phase 6 — WorkScope inverse-selection correction (CORRECTION / CANDIDATE)
 
-Phase 6 implementation is based on the accepted Phase 5 baseline `c2433292455c7684f4ef8be6d59461e02cd9de79`. Work Range now reviews the transient EA-derived Candidate, displays Region and Boundary counts and membership summaries, blocks invalid and empty candidates, and confirms all Regions through the existing integrated handoff planner and one `ConfirmWorkScopeCommand`. The EA panel shortcut enters the same review flow. The WorkTicket page displays its confirmed WorkScope link, isolation boundaries, analysis state, and handoff diagnostic. Complete, NeedsInput, and Unrepresentable outcomes navigate to the WorkTicket page; diagnostics use Chinese business-facing text. A reviewed Candidate is retained until Confirm so the accepted freshness gate rejects a stale snapshot rather than silently replacing it.
+The current WorkScope is the non-Earth Deenergized complement of current valid EA CurrentResult. All Regions are internal persisted membership, including isolated nodes; users do not review/select Regions or auto-discovered Boundaries. Selected devices come exclusively from EnergizationScenario.Seeds (1..N); Candidate transition facts are restricted to those devices. Seed.Side remains the EA direction. The work side is resolved from actual topology and EA state, never cast or guessed.
 
-No Domain schema, FormatVersion, EA, GS, WorkScope, Phase 4 mapping, or Analyzer contract was changed. Phase 5 planner gained only an optional WorkTask input so the task displayed in Work Range is part of the same prepared ticket snapshot before the existing Analyzer runs. Confirm, Undo, and Redo continue through the existing single atomic snapshot command.
+The Work Range page shows EA status, readonly selected devices, task and location, with one 代入 action. PrepareFromAnalysis reads the current result and Seeds at apply time, validates freshness and provenance, materializes the snapshot, and prepares the existing handoff. One ConfirmWorkScopeCommand captures scope, linkage and ticket changes as one history entry. Navigation does not commit another edit. Undo/Redo replay stable identities and snapshots without EA or Analyzer execution.
 
-macOS portable verification PASSED: Domain 236/236, Application 306/306, Infrastructure 152/152. Full solution Release build succeeded with 0 errors. Desktop and Rendering.Wpf test assemblies build successfully. Desktop test execution was attempted but could not start because this macOS host has no `Microsoft.WindowsDesktop.App`; this is unavailable platform execution, not a test failure or pass. Windows Domain/Application/Infrastructure/Rendering.Wpf/Desktop fixed-SHA verification, manual GUI scenarios 1–14, Save/Open, and GUI Undo/Redo remain PENDING. Phase 6 is not ACCEPTED; WP-WS-01 remains OPEN / IN PROGRESS; Phase 1–5 remain VERIFIED / ACCEPTED; FormatVersion remains V10.
+A selected device without deterministic WTA work-side conversion persists as WorkScopeBoundary.Side = Unknown using the existing V10 enum and DTO fields. This revises a Domain value constraint, not the serialized schema. It yields C-class Unrepresentable / UnresolvedSelectedWorkSide, preserves confirmed scope/linkage and independent ticket facts, sends no partial boundary set and skips Analyzer. The WorkTicket page retains the limitation after reopen and blocks incomplete manual analysis. A complete validated selected-device set uses the existing resolver/Analyzer once. Legacy WorkScopeItems are preserved and no longer treated as a second scope authority that blocks apply.
 
+Verification: Domain 236/236, Application 313/313, Infrastructure 153/153, and portable actual command/UI structure checks 13/13 PASSED. Full solution Release build: 0 errors, 3 NU1900 cache-access warnings. Rendering.Wpf and Desktop compiled; test hosts aborted before execution because Microsoft.WindowsDesktop.App is unavailable on macOS. This is neither PASS nor a production test failure. Candidate commit/push is pending the requested Windows full-suite gate or explicit candidate authorization. Details and regression evidence: [WorkScope Correction](WP-WS-01-WORKSCOPE-CORRECTION.md).
+
+First Windows GUI acceptance is the user-judged real scene: select two switches in EA → analyze → open Work Range → click 代入 → enter the correct WorkTicket. It is PENDING / NOT RUN for this correction. Do not resume the other 14 GUI scenarios until that scene passes; do not close WP-WS-01 or start another package.
 
 ## Goal and normal flow
 
 ```text
 Drawing → Seed + Seed Side → planned SwitchState → EA
-        → WorkScope Candidate → User Confirm → Confirmed WorkScope
-        → WorkTicket → existing WorkTicketAnalyzer exactly once
+        → CurrentResult.Deenergized + Scenario.Seeds → one 代入
+        → Confirmed WorkScope → WorkTicket
+        → existing WorkTicketAnalyzer exactly once for a complete handoff
 ```
 
-After EA completes, the normal flow does not ask the user to manually select Boundary A / Boundary B again.
+After EA completes, no second device, Region or Boundary selection/review is required. Only EA Seeds define selected devices; all-graph E/D transitions cannot add devices.
 
 ## Frozen architecture and data constraints
 
@@ -183,7 +187,7 @@ After EA completes, the normal flow does not ask the user to manually select Bou
 - A Confirmed WorkScope is the persisted snapshot explicitly confirmed by the user from the current valid EA Result.
 - It supports 1..N Regions. Each Region represents one Deenergized connected component and stores Terminal / ElectricalNode membership.
 - Region membership does not overlap. A WorkScope may contain multiple disconnected Regions.
-- It supports 0..N Boundaries.
+- It supports 0..N structural Boundaries. The current apply flow persists only distinct EA-selected devices; Unknown preserves selection when a work side cannot be resolved.
 - `StartBoundary + EndBoundary` is not the formal WorkScope authority. Device, Cable, and OHL membership is projection, not duplicate authority.
 - Description is optional metadata. WorkScope does not own GroundingPoint references.
 - Later EA or topology-state changes do not silently regenerate an already confirmed snapshot.
@@ -199,7 +203,7 @@ After EA completes, the normal flow does not ask the user to manually select Bou
 
 - GroundingPoint authority remains with GS. GroundingPoint is not WorkScope ownership or membership authority.
 - Existing WTA `IsolationBoundary` is retained as the adapter input from WorkScope Boundary to WorkTicketAnalyzer. It is not WorkScope authority.
-- When all required boundaries map deterministically, Confirm hands the ticket to the existing WorkTicketAnalyzer exactly once.
+- When all EA-selected device isolation inputs map deterministically and validate as a complete set, 代入 hands the ticket to the existing WorkTicketAnalyzer exactly once. Unrepresentable selected devices never trigger partial handoff or incomplete analysis.
 - A boundary that cannot be mapped deterministically is never guessed. The system emits a diagnostic and preserves the Confirmed WorkScope snapshot.
 
 ### Confirmation and history
@@ -211,7 +215,7 @@ After EA completes, the normal flow does not ask the user to manually select Bou
 
 - The formal project baseline was FormatVersion V9 when this package opened; current accepted FormatVersion is V10.
 - The audit confirmed that the frozen WorkScope contract requires a breaking V10 schema, implemented and accepted in Phase 1.
-- This governance commit does not change `ProjectFileFormat`, production code, DTOs, tests, or the format version.
+- The package-opening governance commit changed no production code. The current correction changes only WorkScope generation/confirmation/adapter and GUI flow plus tests; ProjectFileFormat, DTOs, enum values, and FormatVersion remain unchanged.
 - V8/V9 migration is not supported. Older development project files may be rejected; old development fixtures may be rebuilt.
 - Correctness takes priority over legacy compatibility.
 

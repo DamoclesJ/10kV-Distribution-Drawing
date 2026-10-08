@@ -518,23 +518,22 @@
           <ScrollViewer x:Name="TicketRangePanel" Visibility="Collapsed"
                         VerticalScrollBarVisibility="Auto">
             <StackPanel>
-            <TextBlock Text="候选工作范围" FontWeight="SemiBold" FontSize="17" />
-            <TextBlock Text="候选工作范围由当前有效带电分析自动推导；确认时将整体纳入，不需要重新选择边界。"
-                       TextWrapping="Wrap" Margin="0,6,0,8" />
-            <TextBlock x:Name="TicketRangeCandidateStatus" TextWrapping="Wrap" Margin="0,0,0,6" />
-            <TextBlock x:Name="TicketRangeCounts" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,6" />
-            <TextBlock Text="停电区域（一次确认包含全部区域）" FontWeight="SemiBold" Margin="0,4,0,2" />
-            <ListBox x:Name="TicketRangeRegions" MaxHeight="130" DisplayMemberPath="Display" />
-            <TextBlock Text="隔离边界候选" FontWeight="SemiBold" Margin="0,6,0,2" />
-            <ListBox x:Name="TicketRangeBoundaries" MaxHeight="130" DisplayMemberPath="Display" />
+            <TextBlock Text="工作范围" FontWeight="SemiBold" FontSize="17" />
+            <TextBlock x:Name="TicketRangeAnalysisStatus" TextWrapping="Wrap" Margin="0,6,0,8" />
+            <TextBlock Text="已选设备（来自带电分析）" FontWeight="SemiBold" Margin="0,4,0,2" />
+            <ItemsControl x:Name="TicketRangeSelectedDevices">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2,0,2" /></DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <TextBlock Text="工作内容" Margin="0,8,0,2" />
             <TextBox x:Name="TicketRangeTaskContent" />
-            <TextBlock Text="工作对象 / 地点" Margin="0,6,0,2" />
+            <TextBlock Text="工作地点" Margin="0,6,0,2" />
             <TextBox x:Name="TicketRangeTaskObject" />
             <TextBlock x:Name="TicketRangeStatus" TextWrapping="Wrap" Margin="0,2,0,8" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
               <Button Content="取消" Click="OnCancelWorkRange" Margin="0,0,8,0" />
-              <Button x:Name="ConfirmWorkScopeButton" Content="确认工作范围"
+              <Button x:Name="ConfirmWorkScopeButton" Content="代入"
                       Click="OnConfirmTicketRange" IsEnabled="False" />
             </StackPanel>
             </StackPanel>

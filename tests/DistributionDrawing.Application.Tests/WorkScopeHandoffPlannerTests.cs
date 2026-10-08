@@ -1,3 +1,4 @@
+using DistributionDrawing.TestSupport;
 using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Application.Devices.CustomerStations;
 using DistributionDrawing.Application.WorkScopes;
@@ -25,7 +26,7 @@ public sealed class WorkScopeHandoffPlannerTests
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(), projection, analyzer);
         var task = new WorkTask("校验集成确认任务", "测试工作对象");
 
-        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets, task: task);
 
         Assert.Equal(WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput, result.Status);
@@ -47,7 +48,7 @@ public sealed class WorkScopeHandoffPlannerTests
     }
 
     [Fact]
-    public void Prepare_ZeroBoundaryUsesDedicatedAnalyzerPathAndPreservesManualRangeGuard()
+    public void Prepare_SelectedDeviceWithoutWorkSideConfirmsWithoutAnalyzerOrManualFallback()
     {
         Fixture fixture = CreateFixture(withOpenBoundary: false);
         var tickets = new WorkTicketDataRoot(fixture.Drawing.Id);
@@ -55,16 +56,17 @@ public sealed class WorkScopeHandoffPlannerTests
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(),
             new CountingProjectionService(new WorkScopeIsolationBoundaryProjector()), analyzer);
 
-        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets);
 
-        Assert.Equal(WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput, result.Status);
+        Assert.Equal(WorkScopeHandoffStatus.ConfirmedButUnrepresentable, result.Status);
         Assert.True(result.CanExecute);
         Assert.Empty(result.Projection!.IsolationBoundaries);
         WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(result.Plan);
         Assert.Empty(plan.AfterTicket.IsolationBoundaries);
-        Assert.Equal(1, analyzer.Calls);
-        Assert.Equal(SectionCompletion.NeedsInput, plan.AfterTicket.Draft!.Section("6.1").Completion);
+        Assert.Equal(0, analyzer.Calls);
+        Assert.Null(plan.AfterTicket.Draft);
+        Assert.Equal(BoundarySide.Unknown, Assert.Single(plan.AfterWorkScope.Boundaries).Side);
         Assert.Throws<InvalidOperationException>(() => new WorkTicketAnalyzer().Analyze(
             fixture.Drawing, WorkTicketSession.Create()));
     }
@@ -78,7 +80,7 @@ public sealed class WorkScopeHandoffPlannerTests
         var analyzer = new CountingAnalyzer(new WorkTicketAnalyzer());
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(), projection, analyzer);
 
-        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, new WorkTicketDataRoot(fixture.Drawing.Id));
 
         Assert.Equal(WorkScopeHandoffStatus.ConfirmationRejected, result.Status);
@@ -99,7 +101,7 @@ public sealed class WorkScopeHandoffPlannerTests
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(),
             new CountingProjectionService(new WorkScopeIsolationBoundaryProjector()), analyzer);
 
-        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets);
 
         Assert.Equal(WorkScopeHandoffStatus.PreparationFailed, result.Status);
@@ -126,7 +128,7 @@ public sealed class WorkScopeHandoffPlannerTests
         });
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(), projection, analyzer);
 
-        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets);
 
         Assert.Equal(WorkScopeHandoffStatus.PreparationFailed, result.Status);
@@ -147,7 +149,7 @@ public sealed class WorkScopeHandoffPlannerTests
         var analyzer = new CountingAnalyzer(new WorkTicketAnalyzer());
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(), projection, analyzer);
 
-        WorkScopeHandoffPlanningResult result = planner.Prepare(current.Drawing, current.State,
+        WorkScopeHandoffPlanningResult result = planner.Prepare(current.Drawing, current.State, WorkScopeAnalysisFixture.ScenarioFor(current.State),
             other.Candidate, new WorkTicketDataRoot(current.Drawing.Id));
 
         Assert.Equal(WorkScopeHandoffStatus.ConfirmationRejected, result.Status);
@@ -159,7 +161,7 @@ public sealed class WorkScopeHandoffPlannerTests
     }
 
     [Fact]
-    public void Prepare_CustomerStationBoundaryConfirmsScopeButDoesNotAnalyzeOrKeepStaleDerivedState()
+    public void Prepare_DoesNotSubstituteUnselectedCustomerStationForUnavailableSelectedDevice()
     {
         var drawing = new DrawingDocument(Guid.NewGuid(), "CustomerStation handoff fixture");
         RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "Source",
@@ -176,10 +178,11 @@ public sealed class WorkScopeHandoffPlannerTests
         SwitchDevice seedSwitch = cabinet.Intervals[0].SwitchDevices.Single(item =>
             item.SwitchKind == SwitchKind.LoadSwitch);
         var state = new EnergizationAnalysisState();
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(),
             [new EnergizedSeed(Guid.NewGuid(), seedSwitch.Id, EnergizationSide.Bus)], true));
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
-        Assert.Contains(candidate.Boundaries, item => item.SwitchDeviceId == feeder.IsolationSwitch.Id);
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
+        Assert.DoesNotContain(candidate.Boundaries, item => item.SwitchDeviceId == feeder.IsolationSwitch.Id);
+        Assert.Equal(seedSwitch.Id, Assert.Single(candidate.SelectedSeeds).BoundaryDeviceId);
 
         WorkTicketSession oldTicket = WorkTicketSession.Create() with
         {
@@ -200,14 +203,14 @@ public sealed class WorkScopeHandoffPlannerTests
         var projection = new CountingProjectionService(new WorkScopeIsolationBoundaryProjector());
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(), projection, analyzer);
 
-        WorkScopeHandoffPlanningResult result = planner.Prepare(drawing, state, candidate, tickets, oldTicket.Id);
+        WorkScopeHandoffPlanningResult result = planner.Prepare(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state), candidate, tickets, oldTicket.Id);
 
         Assert.Equal(WorkScopeHandoffStatus.ConfirmedButUnrepresentable, result.Status);
         Assert.True(result.CanExecute);
         Assert.Equal(1, projection.Calls);
         Assert.Equal(0, analyzer.Calls);
         Assert.Contains(result.Projection!.Diagnostics, item =>
-            item.Code == WorkScopeBoundaryProjectionDiagnosticCode.UnsupportedCustomerStationBoundary);
+            item.Code == WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedSelectedWorkSide);
         WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(result.Plan);
         Assert.Equal(plan.AfterWorkScope.WorkScopeId, Assert.Single(plan.AfterTicket.WorkScopeIds));
         Assert.Empty(plan.AfterTicket.IsolationBoundaries);
@@ -243,7 +246,7 @@ public sealed class WorkScopeHandoffPlannerTests
         });
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(), projection, analyzer);
 
-        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult result = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets);
 
         Assert.Equal(WorkScopeHandoffStatus.ConfirmedButUnrepresentable, result.Status);
@@ -264,7 +267,7 @@ public sealed class WorkScopeHandoffPlannerTests
         var analyzer = new CountingAnalyzer(new WorkTicketAnalyzer());
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(),
             new CountingProjectionService(new WorkScopeIsolationBoundaryProjector()), analyzer);
-        WorkScopeHandoffPlanningResult first = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult first = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets);
         WorkScopeConfirmationPlan firstPlan = Assert.IsType<WorkScopeConfirmationPlan>(first.Plan);
         fixture.Drawing.AddWorkScope(firstPlan.AfterWorkScope);
@@ -273,7 +276,7 @@ public sealed class WorkScopeHandoffPlannerTests
         WorkTicketSession beforeSecond = firstPlan.AfterTicket with { IsolationBoundaries = [stale] };
         tickets.Replace(beforeSecond);
 
-        WorkScopeHandoffPlanningResult second = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult second = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets, beforeSecond.Id);
 
         Assert.Equal(WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput, second.Status);
@@ -305,12 +308,12 @@ public sealed class WorkScopeHandoffPlannerTests
                 : new WorkScopeIsolationBoundaryProjector().Project(drawing, scope));
         var planner = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(), projection, analyzer);
 
-        WorkScopeHandoffPlanningResult first = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult first = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets);
         WorkScopeConfirmationPlan firstPlan = Assert.IsType<WorkScopeConfirmationPlan>(first.Plan);
         fixture.Drawing.AddWorkScope(firstPlan.AfterWorkScope);
         tickets.Add(firstPlan.AfterTicket);
-        WorkScopeHandoffPlanningResult second = planner.Prepare(fixture.Drawing, fixture.State,
+        WorkScopeHandoffPlanningResult second = planner.Prepare(fixture.Drawing, fixture.State, WorkScopeAnalysisFixture.ScenarioFor(fixture.State),
             fixture.Candidate, tickets, firstPlan.TicketId);
 
         WorkScopeHandoffPlanningResult unrepresentable = startsUnrepresentable ? first : second;
@@ -344,9 +347,9 @@ public sealed class WorkScopeHandoffPlannerTests
         }
         SwitchDevice seedSwitch = cabinet.Intervals[0].SwitchDevices[0];
         var state = new EnergizationAnalysisState();
-        state.Execute(drawing, new EnergizationScenario(Guid.NewGuid(),
+        WorkScopeAnalysisFixture.Execute(state, drawing, new EnergizationScenario(Guid.NewGuid(),
             [new EnergizedSeed(Guid.NewGuid(), seedSwitch.Id, EnergizationSide.Bus)], true));
-        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state).Candidate!;
+        WorkScopeCandidate candidate = new WorkScopeCandidateProjector().Project(drawing, state, WorkScopeAnalysisFixture.ScenarioFor(state)).Candidate!;
         return new Fixture(drawing, state, candidate);
     }
 

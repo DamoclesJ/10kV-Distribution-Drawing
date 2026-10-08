@@ -1,6 +1,6 @@
 namespace DistributionDrawing.Domain.Professional;
 
-/// <summary>Immutable structural boundary; EA transition validation belongs to projection.</summary>
+/// <summary>Persisted selected device/work side; Unknown preserves selection when conversion is unavailable.</summary>
 public sealed record WorkScopeBoundary
 {
     public WorkScopeBoundary(Guid deviceId, BoundarySide side,
@@ -8,7 +8,7 @@ public sealed record WorkScopeBoundary
     {
         if (deviceId == Guid.Empty || terminalId == Guid.Empty || connectionId == Guid.Empty)
             throw new ArgumentException("Boundary identities cannot be empty.");
-        if (!Enum.IsDefined(side) || side == BoundarySide.Unknown)
+        if (!Enum.IsDefined(side))
             throw new ArgumentOutOfRangeException(nameof(side));
         DeviceId = deviceId;
         Side = side;
