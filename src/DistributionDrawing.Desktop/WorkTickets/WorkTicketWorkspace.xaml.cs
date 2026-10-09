@@ -118,7 +118,7 @@ public partial class WorkTicketWorkspace : UserControl
                 FormatWorkScopeSummary(drawing, ticket);
             WorkScopeIsolationBoundaryProjection? handoff = drawing is not null && ticket?.WorkScopeIds.Count == 1
                 ? _scopeProjector.Project(drawing, ticket.WorkScopeIds[0]) : null;
-            HandoffStatus.Text = ticket is null ? "" : HandoffNotice(ticket, handoff);
+            HandoffStatus.Text = ticket is null ? "" : HandoffNotice(drawing, ticket, handoff);
             AnalyzeTicketButton.IsEnabled = ticket is not null && (handoff is null || handoff.IsComplete);
             _facts = ticket?.UserFacts.ToList() ?? [];
             RefreshFacts();
@@ -175,15 +175,64 @@ public partial class WorkTicketWorkspace : UserControl
         _ => state.ToString()
     };
 
-    private string HandoffNotice(WorkTicketSession ticket, WorkScopeIsolationBoundaryProjection? projection)
+    private string HandoffNotice(
+        DrawingDocument? drawing,
+        WorkTicketSession ticket,
+        WorkScopeIsolationBoundaryProjection? projection)
     {
         if (projection is { IsComplete: false })
             return projection.Status == WorkScopeIsolationBoundaryProjectionStatus.Unrepresentable
-                ? "工作范围已代入，但当前工作票分析模型无法完整表示已选设备的隔离信息。"
+                ? FormatHandoffDiagnostic(drawing, projection)
                 : "已确认工作范围的引用或拓扑已变化，请重新分析并代入工作范围。";
         if (_handoffNoticeTicketId == ticket.Id && ReferenceEquals(ticket, _handoffNoticeSnapshot))
             return _handoffNoticeText ?? "";
         return "";
+    }
+
+    internal static string FormatHandoffDiagnostic(
+        DrawingDocument? drawing,
+        WorkScopeIsolationBoundaryProjection? projection)
+    {
+        WorkScopeBoundaryProjectionDiagnostic[] diagnostics = projection?.Diagnostics.ToArray() ?? [];
+        if (diagnostics.Length == 0)
+            return "工作范围已确认，但未生成工作票隔离信息，工作票分析未运行。";
+
+        string[] details = diagnostics.Select(diagnostic =>
+        {
+            string reason = diagnostic.Code switch
+            {
+                WorkScopeBoundaryProjectionDiagnosticCode.UnsupportedCustomerStationBoundary or
+                WorkScopeBoundaryProjectionDiagnosticCode.UnsupportedInstallationType =>
+                    "设备类型暂不受工作票隔离规则支持",
+                WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedPoleDirection =>
+                    "小号侧、大号侧或线路连接无法唯一确定",
+                WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedSelectedWorkSide =>
+                    "EA 判定的不带电侧无法唯一对应工作票侧别",
+                WorkScopeBoundaryProjectionDiagnosticCode.MissingConnection =>
+                    "线路连接信息不完整",
+                WorkScopeBoundaryProjectionDiagnosticCode.MissingTerminal =>
+                    "开关端子关系不完整",
+                WorkScopeBoundaryProjectionDiagnosticCode.InvalidBoundaryOwnership =>
+                    "开关、端子或线路归属关系不一致",
+                WorkScopeBoundaryProjectionDiagnosticCode.WtaResolverRejected =>
+                    "现有工作票侧别校验未接受该端子或线路连接",
+                WorkScopeBoundaryProjectionDiagnosticCode.WtaBoundarySetRejected =>
+                    "已选开关组合未通过现有工作票边界校验",
+                WorkScopeBoundaryProjectionDiagnosticCode.GroundingBoundary =>
+                    "该设备属于接地安全边界，不能作为普通隔离边界",
+                _ => "现有工作票模型无法表示该隔离信息"
+            };
+            Guid? deviceId = diagnostic.SourceBoundary?.DeviceId;
+            string deviceName = deviceId is Guid id && drawing is not null
+                ? drawing.Devices.SingleOrDefault(device => device.Id == id) is { } device
+                    ? DescribeSwitchOrDevice(drawing, device)
+                    : "未命名开关"
+                : "已选开关组合";
+            return $"{deviceName}：{reason}";
+        }).Distinct(StringComparer.Ordinal).ToArray();
+
+        return "工作范围已确认；工作票隔离信息未完整生成，因此未运行工作票分析。" +
+            Environment.NewLine + string.Join("；", details);
     }
 
     private static string FormatWorkScopeSummary(DrawingDocument? drawing, WorkTicketSession ticket)
@@ -392,7 +441,8 @@ public partial class WorkTicketWorkspace : UserControl
                     _session.PersistenceSession.Domain, setup.WorkScopeIds[0]);
                 if (!handoff.IsComplete || !setup.IsolationBoundaries.SequenceEqual(handoff.IsolationBoundaries))
                 {
-                    HandoffStatus.Text = !handoff.IsComplete ? HandoffNotice(setup, handoff) :
+                    HandoffStatus.Text = !handoff.IsComplete ? HandoffNotice(
+                        _session.PersistenceSession.Domain, setup, handoff) :
                         "工作票隔离信息与已确认工作范围不一致，请重新代入。";
                     return;
                 }

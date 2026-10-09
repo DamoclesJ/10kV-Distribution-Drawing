@@ -49,30 +49,6 @@ internal static class WorkTicketOverlayBuilder
         return elements;
     }
 
-    public static IReadOnlyList<SceneElement> BuildBoundarySelection(
-        SelectionHitTestIndex index, WorkTicketRangeOwner? owner,
-        Guid? currentProjectId, Guid? currentTicketId,
-        IReadOnlyList<IsolationBoundary?> boundaries)
-    {
-        if (owner is null || !owner.Matches(currentProjectId, currentTicketId)) return [];
-        List<SceneElement> elements = [];
-        for (int slot = 0; slot < boundaries.Count; slot++)
-        {
-            if (boundaries[slot] is not { } boundary) continue;
-            SelectionReference reference = new(SelectionTargetKind.Device, boundary.DeviceId);
-            SelectionHitTestEntry? entry = index.FindAll(reference).FirstOrDefault();
-            if (entry is null) continue;
-            DocumentRect bounds = entry.Bounds;
-            elements.Add(new SceneRectangle(new DocumentRect(bounds.XMillimeters - 3,
-                bounds.YMillimeters - 3, bounds.WidthMillimeters + 6, bounds.HeightMillimeters + 6),
-                Colors.SteelBlue, 1.8));
-            elements.Add(new SceneText(new DocumentPoint(bounds.XMillimeters - 3,
-                bounds.YMillimeters - 3), $"[{WorkTicketRangeSetup.SlotName(slot)}]",
-                Colors.SteelBlue, 4.5));
-        }
-        return elements;
-    }
-
     internal static SelectionReference? ToSelection(TicketReference reference) => reference.Kind switch
     {
         TicketReferenceKind.Device => new SelectionReference(SelectionTargetKind.Device, reference.Id),

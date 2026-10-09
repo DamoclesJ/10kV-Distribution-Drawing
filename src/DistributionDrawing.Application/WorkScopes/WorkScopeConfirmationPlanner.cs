@@ -233,118 +233,61 @@ public sealed class WorkScopeConfirmationPlanner
             return false;
         }
 
-        BoundarySide side;
-        switch (device.InstallationType)
+        if (device.InstallationType == SwitchInstallationType.CustomerStationIncomingFeeder)
         {
-            case SwitchInstallationType.CabinetInterval:
-                side = deenergized.Role switch
-                {
-                    "BusSide" => BoundarySide.Bus,
-                    "CircuitSide" => BoundarySide.Line,
-                    _ => BoundarySide.Unknown
-                };
-                break;
-            case SwitchInstallationType.CustomerStationIncomingFeeder:
-                IncomingFeeder? feeder = drawing.CustomerStations.SelectMany(station => station.IncomingFeeders)
-                    .SingleOrDefault(item => item.IsolationSwitch.Id == device.Id);
-                if (feeder is null || feeder.IncomingFeederId != candidate.TopologyParentId)
-                {
-                    issue = "CustomerStation Boundary 的 Feeder parent identity 不匹配。";
-                    return false;
-                }
-                side = deenergized.Id == feeder.CableTerminalId ? BoundarySide.Source :
-                    deenergized.Id == feeder.StationTerminalId ? BoundarySide.Load : BoundarySide.Unknown;
-                break;
-            case SwitchInstallationType.Pole:
-                if (!TryPoleSide(drawing, candidate, device, out side, out issue)) return false;
-                break;
-            default:
-                side = BoundarySide.Unknown;
-                break;
+            IncomingFeeder? feeder = drawing.CustomerStations.SelectMany(station => station.IncomingFeeders)
+                .SingleOrDefault(item => item.IsolationSwitch.Id == device.Id);
+            if (feeder is null || feeder.IncomingFeederId != candidate.TopologyParentId)
+            {
+                issue = "CustomerStation Boundary 的 Feeder parent identity 不匹配。";
+                return false;
+            }
+            BoundarySide stationSide = deenergized.Id == feeder.CableTerminalId ? BoundarySide.Source :
+                deenergized.Id == feeder.StationTerminalId ? BoundarySide.Load : BoundarySide.Unknown;
+            if (stationSide == BoundarySide.Unknown)
+            {
+                issue = "CustomerStation 的停电端子不属于该进线隔离开关。";
+                return false;
+            }
+            boundary = new WorkScopeBoundary(device.Id, stationSide, deenergized.Id);
+            return true;
         }
 
-        if (side == BoundarySide.Unknown)
-        {
-            issue ??= "Boundary 的 Deenergized side 无法由已保存的 Terminal identity 确定。";
-            return false;
-        }
-
-        Connection[] sideConnections = candidate.RelatedConnectionIds
-            .Select(id => drawing.Connections.SingleOrDefault(item => item.Id == id))
-            .Where(item => item?.UsesTerminal(deenergized.Id) == true)
-            .Cast<Connection>()
+        IsolationBoundary[] matches = WorkTicketRangeSetup.AvailableSides(device)
+            .Select(side => WorkTicketRangeSetup.TryResolve(drawing, device.Id, side,
+                    out IsolationBoundary? resolved, out _)
+                ? resolved
+                : null)
+            .Where(resolved => resolved?.TerminalId == deenergized.Id)
+            .Cast<IsolationBoundary>()
             .ToArray();
-        if (sideConnections.Length > 1)
+        if (matches.Length != 1)
         {
-            issue = "Boundary 的 Deenergized side 对应多个 Connection，无法无损 materialize。";
-            return false;
-        }
-        if (device.InstallationType == SwitchInstallationType.Pole && sideConnections.Length != 1)
-        {
-            issue = "Pole Boundary 缺少唯一的 Deenergized-side Connection。";
+            issue = matches.Length == 0
+                ? "WTA 支持的侧别无法解析到 EA 判定的不带电端子。"
+                : "多个 WTA 侧别解析到同一不带电端子，无法唯一确定。";
             return false;
         }
 
-        boundary = new WorkScopeBoundary(device.Id, side, deenergized.Id,
-            sideConnections.SingleOrDefault()?.Id);
+        IsolationBoundary matched = matches[0];
+        if (device.InstallationType == SwitchInstallationType.Pole)
+        {
+            Guid[] sideConnections = candidate.RelatedConnectionIds
+                .Select(id => drawing.Connections.SingleOrDefault(item => item.Id == id))
+                .Where(connection => connection?.UsesTerminal(deenergized.Id) == true)
+                .Select(connection => connection!.Id)
+                .Distinct()
+                .ToArray();
+            if (sideConnections.Length != 1 || matched.ConnectionId != sideConnections[0])
+            {
+                issue = "柱上开关不带电侧没有与 WTA 解析一致的唯一架空线路连接。";
+                return false;
+            }
+        }
+
+        boundary = new WorkScopeBoundary(device.Id, matched.Side, deenergized.Id,
+            matched.ConnectionId);
         return true;
-    }
-
-    private static bool TryPoleSide(
-        DrawingDocument drawing,
-        WorkScopeCandidateBoundary candidate,
-        SwitchDevice device,
-        out BoundarySide side,
-        out string? issue)
-    {
-        side = BoundarySide.Unknown;
-        issue = null;
-        PoleAttachment? attachment = drawing.PoleAttachments.SingleOrDefault(item =>
-            item.AttachedDeviceId == device.Id);
-        Pole? pole = attachment is null ? null : drawing.Devices.OfType<Pole>()
-            .SingleOrDefault(item => item.Id == attachment.PoleId);
-        if (attachment is null || pole is null || candidate.AttachedPoleId != pole.Id)
-        {
-            issue = "Pole Boundary 的 attached-pole identity 无法确定。";
-            return false;
-        }
-
-        Connection[] connections = candidate.RelatedConnectionIds
-            .Select(id => drawing.Connections.SingleOrDefault(item => item.Id == id))
-            .Where(item => item?.UsesTerminal(candidate.DeenergizedTerminalId) == true)
-            .Cast<Connection>()
-            .ToArray();
-        if (connections.Length != 1)
-        {
-            issue = "Pole Boundary 的 Deenergized side 没有唯一 Connection。";
-            return false;
-        }
-        OverheadLine? line = drawing.OverheadLines.SingleOrDefault(item =>
-            item.ConnectionId == connections[0].Id);
-        int index = line?.SupportPoleIds.ToList().IndexOf(pole.Id) ?? -1;
-        Guid? adjacentId = line is not null && index == 0 && line.SupportPoleIds.Count > 1
-            ? line.SupportPoleIds[1]
-            : line is not null && index == line.SupportPoleIds.Count - 1 && index > 0
-                ? line.SupportPoleIds[index - 1]
-                : null;
-        Pole? adjacent = adjacentId is Guid id
-            ? drawing.Devices.OfType<Pole>().SingleOrDefault(item => item.Id == id)
-            : null;
-        if (adjacent is null)
-        {
-            issue = "Pole Boundary 的 Deenergized-side 相邻 Pole 无法唯一确定。";
-            return false;
-        }
-
-        side = PoleNumberComparer.Compare(adjacent.PoleNumber, pole.PoleNumber) switch
-        {
-            PoleNumberOrder.Less => BoundarySide.SmallerNumber,
-            PoleNumberOrder.Greater => BoundarySide.LargerNumber,
-            _ => BoundarySide.Unknown
-        };
-        if (side == BoundarySide.Unknown)
-            issue = "Pole Boundary 的 Pole number 无法确定 Deenergized side。";
-        return side != BoundarySide.Unknown;
     }
 
     private bool TryCreateId(HashSet<Guid> reserved, out Guid id)

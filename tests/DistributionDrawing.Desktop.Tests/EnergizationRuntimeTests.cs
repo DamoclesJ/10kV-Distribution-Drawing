@@ -134,6 +134,16 @@ public sealed class EnergizationRuntimeTests : IDisposable
         Assert.False(stale.ShowEnergization);
         Assert.False(stale.ShowWorkTicket);
 
+        DrawingOverlayVisibility workRange = DrawingOverlayVisibility.Resolve(true, false,
+            true, true, true, workRangeOpen: true);
+        Assert.True(workRange.ShowEnergization);
+        Assert.False(workRange.ShowWorkTicket);
+
+        DrawingOverlayVisibility exitedWorkRange = DrawingOverlayVisibility.Resolve(true, false,
+            false, false, true);
+        Assert.False(exitedWorkRange.ShowEnergization);
+        Assert.True(exitedWorkRange.ShowWorkTicket);
+
         DrawingOverlayVisibility otherWorkspace = DrawingOverlayVisibility.Resolve(false,
             true, true, true, true);
         Assert.False(otherWorkspace.ShowEnergization);

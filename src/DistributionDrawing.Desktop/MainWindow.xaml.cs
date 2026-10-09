@@ -3655,7 +3655,8 @@ public partial class MainWindow : Window
             _rightPanelMode == DrawingRightPanelMode.Energization,
             energization?.CurrentResult is not null,
             energization?.OverlayRequested == true,
-            TicketOverlayToggle.IsChecked == true);
+            TicketOverlayToggle.IsChecked == true,
+            _rightPanelMode == DrawingRightPanelMode.WorkRange);
         if (overlayVisibility.ShowEnergization &&
             _workspace.CurrentSession?.Energization.CurrentResult is { } result)
         {

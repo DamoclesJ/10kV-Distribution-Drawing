@@ -7,12 +7,14 @@ public sealed record DrawingOverlayVisibility(bool ShowEnergization, bool ShowWo
         bool eaPanelOpen,
         bool eaResultCurrent,
         bool energizationDisplayRequested,
-        bool workTicketRequested)
+        bool workTicketRequested,
+        bool workRangeOpen = false)
     {
         bool showEnergization = drawingVisible && eaResultCurrent &&
             energizationDisplayRequested;
         return new DrawingOverlayVisibility(
             showEnergization,
-            drawingVisible && !eaPanelOpen && workTicketRequested && !showEnergization);
+            drawingVisible && !eaPanelOpen && !workRangeOpen &&
+            workTicketRequested && !showEnergization);
     }
 }

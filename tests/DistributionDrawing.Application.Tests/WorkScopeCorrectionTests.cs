@@ -2,7 +2,9 @@ using DistributionDrawing.Application.Energization;
 using DistributionDrawing.Application.WorkScopes;
 using DistributionDrawing.Application.WorkTickets;
 using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Energization;
+using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Professional;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.TestSupport;
@@ -132,8 +134,131 @@ public sealed class WorkScopeCorrectionTests
         Assert.Equal(0, analyzer.Calls);
     }
 
+    [Theory]
+    [InlineData(GroundingStructureKind.UpperIsolationGrounding, SwitchKind.IsolationSwitch)]
+    [InlineData(GroundingStructureKind.LowerLowerGrounding, SwitchKind.CircuitBreaker)]
+    public void Apply_IntegratedFeederSelectedSwitchMapsEaDeenergizedTerminalThroughWtaResolver(
+        GroundingStructureKind groundingStructure,
+        SwitchKind selectedKind)
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "Integrated feeder EA work scope");
+        SwitchState isolationState = groundingStructure == GroundingStructureKind.LowerLowerGrounding
+            ? SwitchState.Closed : SwitchState.Open;
+        SwitchState breakerState = groundingStructure == GroundingStructureKind.LowerLowerGrounding
+            ? SwitchState.Open : SwitchState.Closed;
+        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "测试环网柜",
+            [RingCabinetIntervalDefinition.CreateIntegratedFeeder(1, groundingStructure,
+                isolationState, breakerState, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open)]));
+        drawing.AddDevice(cabinet);
+        SwitchDevice selected = cabinet.Intervals.Single(interval =>
+            interval.IntervalKind == IntervalKind.IntegratedFeederInterval)
+            .SwitchDevices.Single(item => item.SwitchKind == selectedKind);
+        var scenario = new EnergizationScenario(Guid.NewGuid(),
+            [new EnergizedSeed(Guid.NewGuid(), selected.Id, EnergizationSide.Bus)]);
+        var state = new EnergizationAnalysisState();
+        state.Execute(drawing, scenario);
+        EnergizationResult result = Assert.IsType<EnergizationResult>(state.CurrentResult);
+        Assert.Equal(EnergizationState.Energized, result.Terminals[selected.FirstTerminalId].State);
+        Assert.Equal(EnergizationState.Deenergized, result.Terminals[selected.SecondTerminalId].State);
+
+        var analyzer = new CountingCorrectionAnalyzer();
+        WorkScopeHandoffPlanningResult handoff = Planner(analyzer).PrepareFromAnalysis(
+            drawing, state, scenario, new WorkTicketDataRoot(drawing.Id));
+
+        Assert.Contains(handoff.Status, new[]
+        {
+            WorkScopeHandoffStatus.ConfirmedAndAnalyzed,
+            WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput
+        });
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(handoff.Plan);
+        WorkScopeBoundary boundary = Assert.Single(plan.AfterWorkScope.Boundaries);
+        Assert.Equal(selected.Id, boundary.DeviceId);
+        Assert.Equal(BoundarySide.Line, boundary.Side);
+        Assert.Equal(selected.SecondTerminalId, boundary.TerminalId);
+        IsolationBoundary isolation = Assert.Single(plan.AfterTicket.IsolationBoundaries);
+        Assert.Equal(selected.Id, isolation.DeviceId);
+        Assert.True(WorkTicketRangeSetup.TryResolve(drawing, selected.Id, isolation.Side,
+            out IsolationBoundary? resolved, out string issue), issue);
+        Assert.Equal(resolved, isolation);
+        WorkTicketRangeSetup.ValidateBoundaries(drawing, [isolation]);
+        Assert.Equal(1, analyzer.Calls);
+    }
+
+    [Theory]
+    [InlineData(EnergizationSide.SmallerNumber, BoundarySide.LargerNumber)]
+    [InlineData(EnergizationSide.LargerNumber, BoundarySide.SmallerNumber)]
+    public void Apply_PoleSeedDirectionMapsByDeenergizedTerminalAndActualConnection(
+        EnergizationSide seedSide,
+        BoundarySide expectedWorkSide)
+    {
+        (DrawingDocument drawing, SwitchDevice selected, EnergizationAnalysisState state,
+            EnergizationScenario scenario, Guid expectedConnection) = PoleFixture(seedSide);
+        var analyzer = new CountingCorrectionAnalyzer();
+
+        WorkScopeHandoffPlanningResult handoff = Planner(analyzer).PrepareFromAnalysis(
+            drawing, state, scenario, new WorkTicketDataRoot(drawing.Id));
+
+        Assert.Contains(handoff.Status, new[]
+        {
+            WorkScopeHandoffStatus.ConfirmedAndAnalyzed,
+            WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput
+        });
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(handoff.Plan);
+        WorkScopeBoundary workBoundary = Assert.Single(plan.AfterWorkScope.Boundaries);
+        IsolationBoundary isolation = Assert.Single(plan.AfterTicket.IsolationBoundaries);
+        Assert.Equal(expectedWorkSide, workBoundary.Side);
+        Assert.Equal(expectedWorkSide, isolation.Side);
+        Assert.Equal(workBoundary.TerminalId, isolation.TerminalId);
+        Assert.Equal(expectedConnection, isolation.ConnectionId);
+        Assert.Equal(selected.Id, isolation.DeviceId);
+        WorkTicketRangeSetup.ValidateBoundaries(drawing, [isolation]);
+        Assert.Equal(1, analyzer.Calls);
+    }
+
     private static WorkScopeHandoffPlanner Planner(CountingCorrectionAnalyzer analyzer) =>
         new(new WorkScopeConfirmationPlanner(), new WorkScopeIsolationBoundaryProjector(), analyzer);
+
+    private static (DrawingDocument Drawing, SwitchDevice Selected, EnergizationAnalysisState State,
+        EnergizationScenario Scenario, Guid ExpectedConnection) PoleFixture(EnergizationSide seedSide)
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "Pole EA work scope");
+        Pole smaller = new(Guid.NewGuid(), "P01");
+        Pole current = new(Guid.NewGuid(), "P02");
+        Pole larger = new(Guid.NewGuid(), "P03");
+        drawing.AddDevice(smaller);
+        drawing.AddDevice(current);
+        drawing.AddDevice(larger);
+        Terminal smallerAnchor = smaller.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        Terminal largerAnchor = larger.CreateOverheadAnchorTerminal(Guid.NewGuid());
+        drawing.AddTerminal(smallerAnchor);
+        drawing.AddTerminal(largerAnchor);
+        SwitchDevice selected = SwitchDevice.CreateForPole(Guid.NewGuid(), SwitchKind.IsolationSwitch,
+            Guid.NewGuid(), Guid.NewGuid());
+        drawing.AddDevice(selected);
+        drawing.AddTerminal(new Terminal(selected.FirstTerminalId, TopologyOwnerType.Device,
+            selected.Id, "SwitchLeftTerminal", "10kV", true, true, null,
+            [ConnectionType.OverheadLine]));
+        drawing.AddTerminal(new Terminal(selected.SecondTerminalId, TopologyOwnerType.Device,
+            selected.Id, "SwitchRightTerminal", "10kV", true, true, null,
+            [ConnectionType.OverheadLine]));
+        drawing.AddPoleAttachment(new PoleAttachment(Guid.NewGuid(), current.Id, selected.Id));
+        Connection smallerConnection = new(Guid.NewGuid(), ConnectionType.OverheadLine,
+            smallerAnchor.Id, selected.FirstTerminalId, "P01-P02", "10kV");
+        Connection largerConnection = new(Guid.NewGuid(), ConnectionType.OverheadLine,
+            selected.SecondTerminalId, largerAnchor.Id, "P02-P03", "10kV");
+        drawing.AddConnection(smallerConnection);
+        drawing.AddConnection(largerConnection);
+        drawing.AddOverheadLine(new OverheadLine(smallerConnection.Id, "JKLYJ", [smaller.Id, current.Id]));
+        drawing.AddOverheadLine(new OverheadLine(largerConnection.Id, "JKLYJ", [current.Id, larger.Id]));
+        var scenario = new EnergizationScenario(Guid.NewGuid(),
+            [new EnergizedSeed(Guid.NewGuid(), selected.Id, seedSide)]);
+        var state = new EnergizationAnalysisState();
+        state.Execute(drawing, scenario);
+        Guid expectedConnection = seedSide == EnergizationSide.SmallerNumber
+            ? largerConnection.Id : smallerConnection.Id;
+        return (drawing, selected, state, scenario, expectedConnection);
+    }
 
     private static void AssertDeenergizedMembership(WorkScopeCorrectionFixture fixture, WorkScope scope)
     {

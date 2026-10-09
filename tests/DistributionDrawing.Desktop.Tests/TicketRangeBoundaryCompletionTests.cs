@@ -8,17 +8,38 @@ using DistributionDrawing.Domain.Devices.RingCabinets;
 using DistributionDrawing.Domain.Documents;
 using DistributionDrawing.Domain.Topology;
 using DistributionDrawing.Rendering.Wpf.Interaction;
+using DistributionDrawing.Rendering.Wpf.Scene;
+using System.Windows.Media;
 using DistributionDrawing.Rendering.Wpf.Layout;
 using DistributionDrawing.Rendering.Wpf.PropertyInspector;
 using DistributionDrawing.Rendering.Wpf.Professional;
 using DistributionDrawing.Rendering.Wpf.Rendering;
-using DistributionDrawing.Rendering.Wpf.Scene;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
 
 public sealed class TicketRangeBoundaryCompletionTests
 {
+    [Fact]
+    public void ConfirmedRetainedLiveTicketFactIsTheRedRectangleOverlaySource()
+    {
+        Guid deviceId = Guid.NewGuid();
+        var index = new SelectionHitTestIndex([
+            new SelectionHitTestEntry(new SelectionReference(SelectionTargetKind.Device, deviceId),
+                new DocumentRect(10, 20, 30, 12), 1)
+        ]);
+        WorkTicketSession ticket = WorkTicketSession.Create() with
+        {
+            UserFacts = [new UserTicketFact("RetainedLive", "邻近带电设备",
+                [new TicketReference(TicketReferenceKind.Device, deviceId)], true)]
+        };
+
+        SceneRectangle overlay = Assert.IsType<SceneRectangle>(Assert.Single(
+            WorkTicketOverlayBuilder.Build(index, ticket)));
+
+        Assert.Equal(Colors.Firebrick, overlay.Stroke);
+    }
+
     [Fact]
     public void RingAndPoleBoundarySideCompletionIsAtomicAndCanConfirmTogether()
     {
@@ -160,7 +181,7 @@ public sealed class TicketRangeBoundaryCompletionTests
     }
 
     [Fact]
-    public void PoleBoundaryOverlayTargetsActualSwitchSymbolAndDoesNotDependOnSelection()
+    public void PoleSwitchSelectionStillTargetsTheActualSwitchSymbol()
     {
         PoleCreationResult aggregate = new PoleCreationFactory().CreateWithAttachments(
             "P02", PoleType.Cement, null, [SwitchKind.IsolationSwitch], includeCableTerminal: false);
@@ -203,53 +224,13 @@ public sealed class TicketRangeBoundaryCompletionTests
         Assert.Equal(poleSwitch.Id, resolvedSelection.SwitchDevice!.Id);
         Assert.Equal(attachment.AttachmentId, resolvedSelection.PoleAttachment!.AttachmentId);
 
-        var owner = new WorkTicketRangeOwner(drawing.Id, Guid.NewGuid());
-        IsolationBoundary?[] pending = [new IsolationBoundary(poleSwitch.Id, BoundarySide.SmallerNumber,
-            poleSwitch.FirstTerminalId)];
-        IReadOnlyList<SceneElement> selectedOverlay = WorkTicketOverlayBuilder.BuildBoundarySelection(
-            scene.HitTestIndex, owner, drawing.Id, owner.TicketId, pending);
-        IReadOnlyList<SceneElement> otherSelectionOverlay = WorkTicketOverlayBuilder.BuildBoundarySelection(
-            scene.HitTestIndex, owner, drawing.Id, owner.TicketId, pending);
         IReadOnlyList<SceneElement> selectionOverlayBefore = SelectionOverlayBuilder.CreateElements(
             scene.HitTestIndex, switchTarget.Target);
         SelectionReference poleTarget = new(SelectionTargetKind.Device, aggregate.Pole.Id);
         IReadOnlyList<SceneElement> selectionOverlayAfter = SelectionOverlayBuilder.CreateElements(
             scene.HitTestIndex, poleTarget);
 
-        SceneRectangle halo = Assert.IsType<SceneRectangle>(Assert.Single(selectedOverlay,
-            element => element is SceneRectangle));
-        Assert.Equal(new DocumentRect(switchTarget.Bounds.XMillimeters - 3,
-            switchTarget.Bounds.YMillimeters - 3, switchTarget.Bounds.WidthMillimeters + 6,
-            switchTarget.Bounds.HeightMillimeters + 6), halo.Bounds);
-        Assert.Equal(selectedOverlay, otherSelectionOverlay);
         Assert.NotEqual(selectionOverlayBefore, selectionOverlayAfter);
-    }
-
-    [Fact]
-    public void RingBoundaryOverlayStillTargetsRealCabinetSwitchSceneEntry()
-    {
-        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "一号柜",
-            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Closed, SwitchState.Open),
-             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Closed, SwitchState.Open)]));
-        SwitchDevice ringSwitch = GetMainLoadSwitch(cabinet.Intervals[0]);
-        RingCabinetLayout layout = new RingCabinetLayoutFactory().Create(cabinet,
-            new DocumentPoint(10, 10));
-        DrawingScene scene = new DrawingSceneBuilder().Build(cabinet, layout);
-        SelectionHitTestEntry switchTarget = Assert.Single(scene.HitTestIndex.FindAll(
-            new SelectionReference(SelectionTargetKind.Device, ringSwitch.Id)));
-
-        Guid projectId = Guid.NewGuid();
-        Guid ticketId = Guid.NewGuid();
-        IReadOnlyList<SceneElement> overlay = WorkTicketOverlayBuilder.BuildBoundarySelection(
-            scene.HitTestIndex, new WorkTicketRangeOwner(projectId, ticketId), projectId, ticketId,
-            [new IsolationBoundary(ringSwitch.Id, BoundarySide.Line, ringSwitch.SecondTerminalId)]);
-
-        SceneRectangle halo = Assert.IsType<SceneRectangle>(Assert.Single(overlay,
-            element => element is SceneRectangle));
-        Assert.Equal(new DocumentRect(switchTarget.Bounds.XMillimeters - 3,
-            switchTarget.Bounds.YMillimeters - 3, switchTarget.Bounds.WidthMillimeters + 6,
-            switchTarget.Bounds.HeightMillimeters + 6), halo.Bounds);
-        Assert.Contains(overlay, element => element is SceneText { Text: "[A]" });
     }
 
     private static void PickAndChoose(TicketBoundarySlotCollection slots,

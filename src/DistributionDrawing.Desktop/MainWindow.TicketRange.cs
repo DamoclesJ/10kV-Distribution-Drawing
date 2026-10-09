@@ -102,7 +102,9 @@ public partial class MainWindow
         ShowTicketWorkspace(commitPendingEdits: false);
         string notice = prepared.Status switch
         {
-            WorkScopeHandoffStatus.ConfirmedButUnrepresentable => FormatHandoffDiagnostic(prepared),
+            WorkScopeHandoffStatus.ConfirmedButUnrepresentable =>
+                WorkTicketWorkspace.FormatHandoffDiagnostic(
+                    session.PersistenceSession.Domain, prepared.Projection),
             WorkScopeHandoffStatus.ConfirmedHandoffNeedsInput =>
                 "工作范围已代入，工作票分析已生成；请补充或复核待输入信息。",
             _ => "工作范围已代入，工作票分析已完成。"
@@ -139,21 +141,4 @@ public partial class MainWindow
         _ticketRangeDraftOwner = null;
     }
 
-    private static string FormatHandoffDiagnostic(WorkScopeHandoffPlanningResult result)
-    {
-        WorkScopeBoundaryProjectionDiagnosticCode? code = result.Projection?.Diagnostics
-            .Select(item => (WorkScopeBoundaryProjectionDiagnosticCode?)item.Code).FirstOrDefault();
-        return code switch
-        {
-            WorkScopeBoundaryProjectionDiagnosticCode.UnsupportedCustomerStationBoundary =>
-                "工作范围已经代入，但当前客户站进线隔离边界暂不能由现有工作票分析模型完整表示。",
-            WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedPoleDirection =>
-                "工作范围已经代入，但当前杆上开关边界方向无法由现有工作票模型确定，请检查拓扑或边界条件。",
-            WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedSelectedWorkSide =>
-                "工作范围已经代入，但部分 EA 已选设备无法确定工作区侧，当前工作票分析受限。",
-            WorkScopeBoundaryProjectionDiagnosticCode.WtaBoundarySetRejected =>
-                "工作范围已经代入，但已选设备的隔离信息组合不满足现有工作票分析模型的约束。",
-            _ => "工作范围已经代入，但当前工作票分析模型无法完整表示已选设备的隔离信息。"
-        };
-    }
 }
