@@ -53,6 +53,40 @@ internal sealed record WorkScopeCorrectionFixture(
         state.Execute(drawing, scenario);
         return new(drawing, state, scenario);
     }
+
+    public static WorkScopeCorrectionFixture ConnectedRing(bool unresolvedSecond = false,
+        bool integratedFeeder = false)
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "Selected switches with real external cables");
+        RingCabinet source = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "Source",
+            Enumerable.Range(1, 24).Select(index => index == 2 && integratedFeeder
+                ? RingCabinetIntervalDefinition.CreateIntegratedFeeder(index,
+                    GroundingStructureKind.UpperIsolationGrounding, SwitchState.Open,
+                    SwitchState.Closed, SwitchState.Open)
+                : RingCabinetIntervalDefinition.CreateLoadSwitch(index, SwitchState.Open, SwitchState.Open))));
+        RingCabinet downstream = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "Downstream",
+            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open)]));
+        drawing.AddDevice(source);
+        drawing.AddDevice(downstream);
+        SwitchDevice[] selected = source.Intervals.Take(2).Select(interval => interval.SwitchDevices
+            .Single(device => device.SwitchKind == (interval.IntervalKind == IntervalKind.IntegratedFeederInterval
+                ? SwitchKind.IsolationSwitch : SwitchKind.LoadSwitch))).ToArray();
+        for (int index = 0; index < selected.Length; index++)
+        {
+            Guid first = source.Intervals[index].CableTerminalId!.Value;
+            Guid second = downstream.Intervals[index].CableTerminalId!.Value;
+            var connection = new Connection(Guid.NewGuid(), ConnectionType.Cable, first, second, $"Cable {index}", "10kV");
+            drawing.AddCableSegment(new CableSegment(Guid.NewGuid(), $"Cable {index}", "YJV", 1,
+                "10kV", connection.Id, first, second), connection);
+        }
+        if (unresolvedSecond) drawing.ChangeSwitchState(selected[1].Id, SwitchState.Closed);
+        var scenario = new EnergizationScenario(Guid.NewGuid(), selected.Select(device =>
+            new EnergizedSeed(Guid.NewGuid(), device.Id, EnergizationSide.Bus)));
+        var state = new EnergizationAnalysisState();
+        state.Execute(drawing, scenario);
+        return new(drawing, state, scenario);
+    }
 }
 
 internal sealed class CountingCorrectionAnalyzer : IWorkTicketHandoffAnalyzer

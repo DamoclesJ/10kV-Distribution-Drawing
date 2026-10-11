@@ -127,6 +127,8 @@ public partial class MainWindow
             WorkScopeConfirmationFailureCode.MissingTargetTicket => "当前工作票与图纸不匹配，请重新打开工作票。",
             WorkScopeConfirmationFailureCode.AmbiguousLegacyElectricalRange => "当前工作票的历史范围数据不完整，无法安全保留。",
             WorkScopeConfirmationFailureCode.IdentityUnavailable => "无法生成唯一的工作范围标识，请检查工程后重试。",
+            WorkScopeConfirmationFailureCode.InvalidMaterializedWorkScope =>
+                "工作范围未代入：停电成员或已选设备的端子、节点或连接引用校验未通过，工作票尚未修改。",
             _ => "工作范围数据与当前工程不一致，请检查分析诊断后重试。"
         };
     }

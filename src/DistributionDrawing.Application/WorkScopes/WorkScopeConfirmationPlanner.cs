@@ -285,8 +285,13 @@ public sealed class WorkScopeConfirmationPlanner
             }
         }
 
+        // WTA cabinet connections identify the interval's external cable, not a connection
+        // incident to this internal switch terminal. The handoff projector resolves that
+        // adapter identity; only Pole connections are direct WorkScope boundary references.
+        Guid? scopeConnectionId = device.InstallationType == SwitchInstallationType.Pole
+            ? matched.ConnectionId : null;
         boundary = new WorkScopeBoundary(device.Id, matched.Side, deenergized.Id,
-            matched.ConnectionId);
+            scopeConnectionId);
         return true;
     }
 

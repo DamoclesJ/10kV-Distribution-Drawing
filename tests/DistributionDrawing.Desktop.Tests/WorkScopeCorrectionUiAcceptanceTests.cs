@@ -1,11 +1,27 @@
 using System.IO;
 using System.Xml.Linq;
+using DistributionDrawing.Application.WorkScopes;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
 
 public sealed class WorkScopeCorrectionUiAcceptanceTests
 {
+    [Fact]
+    public void InvalidMaterializedScopeReportsReferenceFailureWithoutInternalErrorTypes()
+    {
+        var failure = new WorkScopeHandoffPlanningResult(WorkScopeHandoffStatus.ConfirmationRejected,
+            null, new WorkScopeConfirmationDiagnostic(WorkScopeConfirmationFailureCode.InvalidMaterializedWorkScope,
+                "Boundary connection is not incident to boundary device/terminal.", []), null, null);
+        var formatter = typeof(MainWindow).GetMethod("ConfirmationFailureText",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        string message = Assert.IsType<string>(formatter.Invoke(null, [failure]));
+        Assert.Contains("端子、节点或连接引用校验未通过", message);
+        Assert.Contains("工作票尚未修改", message);
+        Assert.DoesNotContain(nameof(WorkScopeConfirmationFailureCode.InvalidMaterializedWorkScope), message);
+        Assert.DoesNotContain("Boundary", message);
+    }
+
     [Fact]
     public void WorkRangeShowsReadonlyEaDevicesAndOneApplyActionWithoutRegionOrBoundaryReview()
     {

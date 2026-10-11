@@ -12,6 +12,43 @@ namespace DistributionDrawing.Desktop.Tests;
 
 public sealed class WorkScopeCorrectionCommandTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Apply_ConnectedCabinetSwitchesConfirmAndReplayOneCompleteSnapshot(bool unresolvedSecond)
+    {
+        WorkScopeCorrectionFixture fixture = WorkScopeCorrectionFixture.ConnectedRing(unresolvedSecond, integratedFeeder: true);
+        var analyzer = new CountingCorrectionAnalyzer();
+        var tickets = new WorkTicketDataRoot(fixture.Drawing.Id);
+        WorkScopeHandoffPlanningResult prepared = new WorkScopeHandoffPlanner(new WorkScopeConfirmationPlanner(),
+            new WorkScopeIsolationBoundaryProjector(), analyzer).PrepareFromAnalysis(
+                fixture.Drawing, fixture.State, fixture.Scenario, tickets);
+        Assert.True(prepared.CanExecute, prepared.ConfirmationDiagnostic?.Message);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(prepared.Plan);
+        var stack = new CommandStack();
+        stack.ExecuteCommand(new ConfirmWorkScopeCommand(fixture.Drawing, tickets, plan));
+        Assert.Single(stack.History);
+        Assert.Same(plan.AfterTicket, Assert.Single(tickets.Tickets));
+        Assert.Equal(2, Assert.Single(fixture.Drawing.WorkScopes).Boundaries.Count);
+        Assert.Equal(unresolvedSecond ? 0 : 2, plan.AfterTicket.IsolationBoundaries.Count);
+        for (int replay = 0; replay < 2; replay++)
+        {
+            Assert.True(stack.Undo());
+            Assert.Empty(fixture.Drawing.WorkScopes);
+            Assert.Empty(tickets.Tickets);
+            Assert.True(stack.Redo());
+            WorkScope restored = Assert.Single(fixture.Drawing.WorkScopes);
+            fixture.Drawing.ValidateWorkScopeReferences(restored);
+            Assert.Equal(plan.AfterWorkScope.WorkScopeId, restored.WorkScopeId);
+            Assert.Equal(plan.AfterWorkScope.Boundaries, restored.Boundaries);
+            Assert.Equal(plan.AfterWorkScope.Regions.SelectMany(region => region.TerminalIds),
+                restored.Regions.SelectMany(region => region.TerminalIds));
+            Assert.Same(plan.AfterTicket, Assert.Single(tickets.Tickets));
+            Assert.Single(stack.History);
+        }
+        Assert.Equal(unresolvedSecond ? 0 : 1, analyzer.Calls);
+    }
+
     [Fact]
     public void Apply_PreservesIndependentFactsAndLegacyRangeItemsInOneSnapshot()
     {

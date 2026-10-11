@@ -19,6 +19,42 @@ public sealed class WorkScopePersistenceTests : IDisposable
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"ws-v10-{Guid.NewGuid():N}.kvdrawing");
 
     [Fact]
+    public void V10RoundTripPreservesConnectedSelectedSwitchScopeAndWtaCableIdentity()
+    {
+        (ProjectService service, ProjectSession project, RingCabinet cabinet) = CreateProject();
+        Guid first = cabinet.Intervals[0].CableTerminalId!.Value;
+        Guid second = cabinet.Intervals[1].CableTerminalId!.Value;
+        var connection = new Connection(Guid.NewGuid(), ConnectionType.Cable, first, second, "Selected work cable", "10kV");
+        project.Domain.AddConnection(connection);
+        foreach (SwitchDevice selected in cabinet.Intervals.Select(interval => interval.SwitchDevices[0]))
+            project.EnergizationScenario.AddSeed(new(Guid.NewGuid(), selected.Id, EnergizationSide.Bus));
+        var state = new EnergizationAnalysisState();
+        state.Execute(project.Domain, project.EnergizationScenario);
+        WorkScopeHandoffPlanningResult prepared = new WorkScopeHandoffPlanner().PrepareFromAnalysis(
+            project.Domain, state, project.EnergizationScenario, project.WorkTickets);
+        Assert.True(prepared.CanExecute, prepared.ConfirmationDiagnostic?.Message);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(prepared.Plan);
+        Assert.All(plan.AfterWorkScope.Boundaries, boundary => Assert.Null(boundary.ConnectionId));
+        Assert.Equal(2, plan.AfterTicket.IsolationBoundaries.Count);
+        Assert.All(plan.AfterTicket.IsolationBoundaries, boundary => Assert.Equal(connection.Id, boundary.ConnectionId));
+        project.Domain.AddWorkScope(plan.AfterWorkScope);
+        project.WorkTickets.Add(plan.AfterTicket);
+        service.SaveProject();
+
+        ProjectSession reopened = new ProjectService().LoadProject(_path);
+        WorkScope scope = Assert.Single(reopened.Domain.WorkScopes);
+        WorkTicketSession ticket = Assert.Single(reopened.WorkTickets.Tickets);
+        reopened.Domain.ValidateWorkScopeReferences(scope);
+        Assert.Equal(plan.AfterWorkScope.Boundaries, scope.Boundaries);
+        Assert.Equal(plan.AfterTicket.IsolationBoundaries, ticket.IsolationBoundaries);
+        WorkScopeIsolationBoundaryProjection projection = new WorkScopeIsolationBoundaryProjector().Project(reopened.Domain, scope);
+        Assert.True(projection.IsComplete);
+        Assert.Equal(ticket.IsolationBoundaries, projection.IsolationBoundaries);
+        Assert.Equal([scope.WorkScopeId], ticket.WorkScopeIds);
+        Assert.Equal(10, reopened.OpenedFormatVersion);
+    }
+
+    [Fact]
     public void V10RoundTripPreservesEaSelectedHandoffWithoutTransientCurrentResult()
     {
         (ProjectService service, ProjectSession project, RingCabinet cabinet) = CreateProject();

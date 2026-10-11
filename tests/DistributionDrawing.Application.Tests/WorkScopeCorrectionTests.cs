@@ -15,6 +15,60 @@ namespace DistributionDrawing.Application.Tests;
 public sealed class WorkScopeCorrectionTests
 {
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Apply_ExternalCabinetCableIsWtaAdapterIdentityNotDirectSwitchBoundaryConnection(
+        bool unresolvedSecond, bool integratedFeeder)
+    {
+        WorkScopeCorrectionFixture fixture = WorkScopeCorrectionFixture.ConnectedRing(unresolvedSecond, integratedFeeder);
+        Assert.Equal(EnergizationValidity.Complete, fixture.State.CurrentResult!.Validity);
+        SwitchDevice first = fixture.Drawing.Devices.OfType<SwitchDevice>().Single(device =>
+            device.Id == fixture.Scenario.Seeds[0].BoundaryDeviceId);
+        Assert.True(WorkTicketRangeSetup.TryResolve(fixture.Drawing, first.Id, BoundarySide.Line,
+            out IsolationBoundary? wta, out string issue), issue);
+        Assert.NotNull(wta!.ConnectionId);
+        var externalCable = fixture.Drawing.Connections.Single(connection => connection.Id == wta.ConnectionId);
+        Assert.False(externalCable.UsesTerminal(wta.TerminalId!.Value));
+        WorkScope invalidAdapterCopy = WorkScope.Create(Guid.NewGuid(), [new([first.SecondTerminalId], [])],
+            [new(first.Id, BoundarySide.Line, wta.TerminalId, wta.ConnectionId)]);
+        Assert.Throws<InvalidOperationException>(() => fixture.Drawing.ValidateWorkScopeReferences(invalidAdapterCopy));
+
+        var analyzer = new CountingCorrectionAnalyzer();
+        WorkScopeHandoffPlanningResult handoff = Planner(analyzer).PrepareFromAnalysis(
+            fixture.Drawing, fixture.State, fixture.Scenario, new(fixture.Drawing.Id));
+
+        Assert.True(handoff.CanExecute, $"{handoff.Status}/{handoff.ConfirmationDiagnostic?.Code}: {handoff.ConfirmationDiagnostic?.Message}");
+        Assert.Null(handoff.ConfirmationDiagnostic);
+        WorkScopeConfirmationPlan plan = Assert.IsType<WorkScopeConfirmationPlan>(handoff.Plan);
+        fixture.Drawing.ValidateWorkScopeReferences(plan.AfterWorkScope);
+        AssertDeenergizedMembership(fixture, plan.AfterWorkScope);
+        Assert.Equal(fixture.Scenario.Seeds.Select(seed => seed.BoundaryDeviceId).Order(),
+            plan.AfterWorkScope.Boundaries.Select(boundary => boundary.DeviceId).Order());
+        Assert.All(plan.AfterWorkScope.Boundaries, boundary => Assert.Null(boundary.ConnectionId));
+        if (unresolvedSecond)
+        {
+            Assert.Equal(WorkScopeHandoffStatus.ConfirmedButUnrepresentable, handoff.Status);
+            Assert.Contains(handoff.Projection!.Diagnostics, diagnostic =>
+                diagnostic.Code == WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedSelectedWorkSide);
+            Assert.Empty(plan.AfterTicket.IsolationBoundaries);
+            Assert.Null(plan.AfterTicket.Analysis);
+            Assert.Equal(0, analyzer.Calls);
+        }
+        else
+        {
+            Assert.True(handoff.Projection!.IsComplete);
+            Assert.Equal(2, plan.AfterTicket.IsolationBoundaries.Count);
+            Assert.Equal(fixture.Drawing.Connections.Select(connection => connection.Id).Order(),
+                plan.AfterTicket.IsolationBoundaries.Select(boundary => boundary.ConnectionId!.Value).Order());
+            WorkTicketRangeSetup.ValidateBoundaries(fixture.Drawing, plan.AfterTicket.IsolationBoundaries);
+            Assert.Equal(1, analyzer.Calls);
+        }
+        Assert.Empty(fixture.Drawing.WorkScopes);
+    }
+
+    [Theory]
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(5)]
