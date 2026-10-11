@@ -3,10 +3,11 @@
 ## Current status and baseline
 
 - WP-WS-01: OPEN / IN PROGRESS.
-- Phase 6: CORRECTION / CANDIDATE; implementation prepared, candidate commit/push pending the Windows test gate or explicit candidate authorization.
-- Starting branch: `wp-ws-01`; HEAD, origin tracking ref and live remote: `2419eb4beae317552180553d25812b281983cd4b`; starting working tree clean.
+- Phase 6: CORRECTION / CANDIDATE. The import connection-reference fix has passed Windows automated verification and product-owner core GUI acceptance; remaining GUI scenarios are pending.
+- Original correction starting baseline: `wp-ws-01` at `2419eb4beae317552180553d25812b281983cd4b`, with local/tracking/live remote SHAs matching and a clean working tree. The later import-fix baseline and commit are recorded below.
 - FormatVersion: V10. No DTO, enum-value or serialized schema change; V8/V9 migration remains unsupported.
-- Windows automated verification: PENDING. Windows GUI acceptance: PENDING / NOT RUN for this correction.
+- Windows automated verification: PASSED, 1779/1779, 0 failed, 0 skipped. Full Release build: 0 errors, 22 nullable warnings.
+- Windows core GUI import acceptance: product-owner-confirmed PASS on 2026-10-11 for EA → Work Range → 代入. The previous project-data inconsistency message did not recur. This is partial Phase 6 evidence, not full GUI acceptance or package closure.
 
 The product owner's inverse-selection decision supersedes conflicting Phase 2–5 and original Phase 6 contracts. Prior accepted commits remain unchanged historical evidence. All-graph E/D transitions, reviewed Region/Boundary lists, legacy ElectricalRange rejection, and mandatory deterministic materialization before scope confirmation are no longer the current requirements.
 
@@ -37,9 +38,9 @@ Message = Pole Boundary 的 Deenergized side 没有唯一 Connection。
 
 The accepted EA policy can resolve a selected Pole switch's energized side while its isolated Deenergized terminal has no unique downstream Connection. Original confirmation rejected that topology before allowing the scope to persist. The correction confirms it with an explicit C-class handoff limitation. The original GUI also collapsed several typed failures into generic text; the revised UI records status, confirmation code and candidate/projection diagnostics and displays specific messages.
 
-The original user project/log has not been supplied. This is a verified original-code reproduction, not an assertion that the user's particular GUI failure has the same code. That project's exact diagnostic remains to be checked.
+At the initial correction audit, the original user project/log had not been supplied. That original-code reproduction did not establish the cause of the user's particular GUI failure. The later real-project import failure and its independent fix are recorded below.
 
-## Verification evidence
+## Initial macOS verification evidence (historical)
 
 | Check | Result |
 |---|---|
@@ -57,11 +58,11 @@ Coverage includes two selected devices versus 24 transitions (also 1/5 selection
 
 ## Windows acceptance gate
 
-The requested all-suite PASS gate is not yet satisfied; do not represent unavailable Windows execution as PASS. A committed/pushed fixed candidate is required for Windows validation under the repository workflow, so publishing before Windows tests requires explicit candidate authorization under this request. No previous accepted commit is amended and no merge to main is authorized.
+Windows execution subsequently passed all five complete suites (1779/1779, 0 failed, 0 skipped) on the import-fix source. The product owner accepted the core real-GUI import and explicitly authorized an independent fix commit and push to `origin/wp-ws-01`. No previous accepted commit is amended and no merge to main is authorized.
 
-First run only the real user-judged Windows scene: EA selects two switches → EA analysis → Work Range → one 代入 → correct WorkTicket. Until the user accepts that scene, the remaining 14 GUI scenarios stay suspended and WP-WS-01 remains OPEN.
+The core user-judged Windows scene is now PASS: EA-selected switches → EA analysis → Work Range → one 代入. Scenario B (conversion-limited handoff) and the remaining extended GUI scenarios applicable to the revised correction contract remain PENDING. Automated tests and programmatic real-project reproduction do not establish those GUI results. WP-WS-01 remains OPEN.
 
-## Follow-up: selected isolation mapping and Work Range red frame
+## Historical follow-up: selected isolation mapping and Work Range red frame
 
 Follow-up baseline: `0b8cda846a1d8f8c83389b17129590389dd42074` on `wp-ws-01`, FormatVersion V10. This is a correction candidate; WP-WS-01 remains OPEN, and Windows verification / GUI acceptance are pending.
 
@@ -70,3 +71,18 @@ The selected-switch adapter previously inferred cabinet work side from terminal 
 The red rectangular outline has two source paths in code. EA's accepted energized-state styler still uses red for energized electrical geometry and remains enabled by the same EA display preference. `WorkTicketOverlayBuilder` creates a Firebrick rectangle for confirmed `RetainedLive` ticket facts, while ordinary drawing selection uses blue overlays. That ticket overlay could become visible when switching from the EA panel to Work Range if its toggle was requested and EA red display was off. Work Range now suppresses only the ticket overlay; leaving Work Range returns to the normal requested overlay lifecycle. The obsolete Boundary A/B slot halo was SteelBlue and had no production caller; it has been removed along with its overlay-only tests. Windows visual verification is still required to confirm the reported scene and ensure no residual outline.
 
 Local follow-up verification: Application 317/317, Domain 236/236, Infrastructure 153/153 passed. The full Release solution build and Desktop test-project build succeeded with 0 errors. Rendering.Wpf and Desktop runtime suites and Windows GUI were not run on macOS; the Desktop acceptance test code compiled. `git diff --check` and final repository status are recorded in the review handoff for this follow-up.
+
+## Windows import connection-reference fix acceptance — 2026-10-11
+
+- Baseline: `921641011e0318772fab32e683ec8292af62a9b7` on `wp-ws-01`, FormatVersion V10.
+- Fix commit: `4f1603ff16c182b69cc42bdf8edd0a26675f811f` — `fix(wp-ws-01): correct work scope boundary connection references`.
+- Reproduction used a copy of the product owner's actual V10 project. Both the two cabinet Seeds and its saved three-Seed scenario returned `ConfirmationRejected / InvalidMaterializedWorkScope` with complete EA. `WorkScope.Create` succeeded; the earliest rejection was `DrawingDocument.ValidateBoundaryConnection`. The isolation projector had not run, so this was not `ProjectionInvalid` or an unresolved work-side rejection.
+- Root cause: materialization copied the WTA interval-external cable `ConnectionId` into a WorkScope Boundary that referenced an internal switch terminal. That cable was not directly incident to the switch terminal. Domain reference validation correctly rejected the mismatched pair.
+- Fix: cabinet WorkScope Boundaries retain the selected switch and its work-side terminal; the existing WTA adapter resolves the external cable for ticket handoff. Pole direct-connection references remain captured. The UI specifically reports materialized reference validation failures without exposing internal types; the detailed diagnostic remains in Trace.
+- EA propagation/Seed rules, GS authority, WTA resolver/core rules, Domain reference safety checks and FormatVersion are unchanged. No original business drawing, copied project, diagnostic JSON or build artifact is included in either commit.
+- Four new Application regression cases failed with the same code before the fix and passed afterward. Eight additional cases cover connected load-switch/integrated-feeder topology, exact Deenergized membership, selected-device-only boundaries, unavailable conversion with no partial handoff/Analyzer, one history entry, snapshot Undo/Redo, diagnostic formatting and V10 persistence.
+- Real-project preparation after the fix returned `ConfirmedHandoffNeedsInput`, `Projection = Complete`, with no confirmation failure for both tested Seed sets. This programmatic result is separate from user GUI acceptance.
+- Full Windows Release build: PASSED, 0 errors, 22 nullable warnings. Full suites: Domain 236/236, Application 321/321, Infrastructure 154/154, Rendering.Wpf 674/674, Desktop 394/394; total 1779/1779, 0 failed, 0 skipped. `git diff --check` passed.
+- PDB document checksums for all seven submitted source/test files matched the assemblies used for Windows verification; the shared fixture matched both test assemblies. The product owner confirmed real-GUI EA → Work Range → 代入 PASS in the repair version and authorized commit/push; the prior inconsistency message did not recur.
+- Remaining GUI acceptance: conversion-limited business diagnostics; applicable multi-Region/multiple-boundary/zero-boundary scenes; Pole/CustomerStation and set-level limitations; re-confirmation and stale EA; grounding coexistence; Save/Open; repeated Undo/Redo; no-ticket first import; and shared-ticket isolation. Existing accepted EA/GS/WTA contracts remain authoritative.
+- WP-WS-01 remains OPEN / IN PROGRESS. Phase 6 remains CORRECTION / CANDIDATE until the remaining GUI acceptance is complete. No package closure or merge to main is authorized.
