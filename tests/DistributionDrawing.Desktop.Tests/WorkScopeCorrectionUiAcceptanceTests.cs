@@ -44,11 +44,21 @@ public sealed class WorkScopeCorrectionUiAcceptanceTests
         Assert.DoesNotContain("catch (Exception)", code);
         Assert.Contains("prepared.ConfirmationDiagnostic?.Code", apply);
         Assert.Contains("prepared.Projection?.Diagnostics", apply);
-        Assert.Contains("UnresolvedSelectedWorkSide", code);
+        Assert.Contains("WorkTicketWorkspace.FormatHandoffDiagnostic(", apply);
+        Assert.Contains("prepared.Projection", apply);
+        Assert.Contains("TicketWorkspace.SetHandoffNotice(plan.TicketId, plan.AfterTicket, notice)", apply);
+        Assert.True(apply.IndexOf("ShowTicketWorkspace(commitPendingEdits: false)", StringComparison.Ordinal) <
+            apply.IndexOf("WorkTicketWorkspace.FormatHandoffDiagnostic(", StringComparison.Ordinal));
+        Assert.True(apply.IndexOf("WorkTicketWorkspace.FormatHandoffDiagnostic(", StringComparison.Ordinal) <
+            apply.IndexOf("TicketWorkspace.SetHandoffNotice(plan.TicketId, plan.AfterTicket, notice)",
+                StringComparison.Ordinal));
         string workspace = File.ReadAllText(FilePath("WorkTicketWorkspace.xaml.cs"));
         Assert.Contains("ticket.WorkScopeItems.Where(item => item.Kind != WorkScopeItemKind.Equipment)", workspace);
         Assert.Contains("!handoff.IsComplete", workspace);
         Assert.Contains("AnalyzeTicketButton.IsEnabled", workspace);
+        Assert.Contains("FormatHandoffDiagnostic(drawing, projection)", workspace);
+        Assert.Contains("HandoffStatus.Text = ticket is null ? \"\" : HandoffNotice(drawing, ticket, handoff)",
+            workspace);
     }
 
     private static string FilePath(string name) => Path.Combine(AppContext.BaseDirectory, "Acceptance", name);

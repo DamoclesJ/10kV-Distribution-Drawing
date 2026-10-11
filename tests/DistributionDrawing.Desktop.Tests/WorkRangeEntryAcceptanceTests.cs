@@ -1,8 +1,13 @@
 using System.IO;
 using System.Xml.Linq;
+using DistributionDrawing.Application.WorkScopes;
 using DistributionDrawing.Desktop.Services;
 using DistributionDrawing.Desktop.ViewModels;
 using DistributionDrawing.Desktop.WorkTickets;
+using DistributionDrawing.Domain.Devices;
+using DistributionDrawing.Domain.Devices.RingCabinets;
+using DistributionDrawing.Domain.Documents;
+using DistributionDrawing.Domain.Professional;
 using Xunit;
 
 namespace DistributionDrawing.Desktop.Tests;
@@ -156,15 +161,53 @@ public sealed class WorkRangeEntryAcceptanceTests
         string workspace = File.ReadAllText(AcceptanceFile("WorkTicketWorkspace.xaml.cs"));
         string workspaceXaml = File.ReadAllText(AcceptanceFile("WorkTicketWorkspace.xaml"));
 
-        Assert.Contains("杆上开关边界方向无法由现有工作票模型确定", range);
-        Assert.Contains("客户站进线隔离边界暂不能由现有工作票分析模型完整表示", range);
-        Assert.Contains("已选设备的隔离信息组合不满足现有工作票分析模型的约束", range);
+        string confirm = HandlerBody(range, "private void OnConfirmTicketRange",
+            "private static string ConfirmationFailureText");
         Assert.Contains("TicketWorkspace.SelectTicket(plan.TicketId)", range);
         Assert.Contains("ShowTicketWorkspace(commitPendingEdits: false)", range);
+        Assert.Contains("WorkTicketWorkspace.FormatHandoffDiagnostic(", confirm);
+        Assert.Contains("TicketWorkspace.SetHandoffNotice(plan.TicketId, plan.AfterTicket, notice)", confirm);
+        Assert.Contains("UnresolvedSelectedWorkSide =>", workspace);
+        Assert.Contains("EA 判定的不带电侧无法唯一对应工作票侧别", workspace);
+        Assert.Contains("DescribeSwitchOrDevice(drawing, device)", workspace);
+        Assert.Contains("HandoffStatus.Text = ticket is null ? \"\" : HandoffNotice(drawing, ticket, handoff)",
+            workspace);
+        Assert.Contains("FormatHandoffDiagnostic(drawing, projection)", workspace);
         Assert.Contains("HandoffStatus", workspaceXaml);
-        Assert.Contains("工作范围已代入，但当前工作票分析模型无法完整表示已选设备的隔离信息", workspace);
+        Assert.Contains("x:Name=\"HandoffStatus\"", workspaceXaml);
         Assert.DoesNotContain("WtaBoundarySetRejected", workspaceXaml);
         Assert.DoesNotContain("UnresolvedPoleDirection", workspaceXaml);
+    }
+
+    [Fact]
+    public void UnresolvedSelectedWorkSideFormatsNamedBusinessDiagnosticForTicketUi()
+    {
+        var drawing = new DrawingDocument(Guid.NewGuid(), "handoff diagnostic");
+        RingCabinet cabinet = RingCabinet.Create(RingCabinetDefinition.Create(Guid.NewGuid(), "测试柜",
+            [RingCabinetIntervalDefinition.CreateLoadSwitch(1, SwitchState.Open, SwitchState.Open, "东线"),
+             RingCabinetIntervalDefinition.CreateLoadSwitch(2, SwitchState.Open, SwitchState.Open, "备用")]));
+        drawing.AddDevice(cabinet);
+        SwitchDevice selected = cabinet.Intervals[0].SwitchDevices.Single(item =>
+            item.SwitchKind == SwitchKind.LoadSwitch);
+        WorkScope unknownSideScope = WorkScope.Create(Guid.NewGuid(),
+            [new WorkScopeRegion([selected.FirstTerminalId], [])],
+            [new WorkScopeBoundary(selected.Id, BoundarySide.Unknown)]);
+
+        WorkScopeIsolationBoundaryProjection projection = new WorkScopeIsolationBoundaryProjector()
+            .Project(drawing, unknownSideScope);
+        string message = WorkTicketWorkspace.FormatHandoffDiagnostic(drawing, projection);
+
+        Assert.Equal(WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedSelectedWorkSide,
+            Assert.Single(projection.Diagnostics).Code);
+        Assert.Contains("工作范围已确认", message);
+        Assert.Contains("工作票隔离信息未完整生成", message);
+        Assert.Contains("未运行工作票分析", message);
+        Assert.Contains("测试柜", message);
+        Assert.Contains("东线", message);
+        Assert.Contains("EA 判定的不带电侧无法唯一对应工作票侧别", message);
+        Assert.DoesNotContain(nameof(WorkScopeBoundaryProjectionDiagnosticCode.UnresolvedSelectedWorkSide), message);
+        Assert.DoesNotContain(nameof(WorkScopeBoundaryProjectionDiagnosticCode), message);
+        Assert.DoesNotContain(nameof(WorkTicketWorkspace), message);
     }
 
     private static XDocument LoadXaml(string fileName) => XDocument.Load(AcceptanceFile(fileName));
