@@ -2,12 +2,13 @@
 
 ## Current status and baseline
 
-- WP-WS-01: OPEN / IN PROGRESS.
-- Phase 6: CORRECTION / CANDIDATE. The import connection-reference fix has passed Windows automated verification and product-owner core GUI acceptance; remaining GUI scenarios are pending.
+- WP-WS-01: CLOSED / ACCEPTED — 2026-10-17. Closure Gate: PASS. See [WP-WS-01 Closure](WP-WS-01-CLOSURE.md).
+- Phase 6: VERIFIED / ACCEPTED. Windows GUI acceptance: PASSED within approved scope, including final WTA Unrepresentable diagnostics, Work Range red overlay and GroundingPoint G1 coexistence.
 - Original correction starting baseline: `wp-ws-01` at `2419eb4beae317552180553d25812b281983cd4b`, with local/tracking/live remote SHAs matching and a clean working tree. The later import-fix baseline and commit are recorded below.
 - FormatVersion: V10. No DTO, enum-value or serialized schema change; V8/V9 migration remains unsupported.
-- Windows automated verification: PASSED, 1779/1779, 0 failed, 0 skipped. Full Release build: 0 errors, 22 nullable warnings.
-- Windows core GUI import acceptance: product-owner-confirmed PASS on 2026-10-11 for EA → Work Range → 代入. The previous project-data inconsistency message did not recur. This is partial Phase 6 evidence, not full GUI acceptance or package closure.
+- Windows automated verification: PASSED, 1779/1779, 0 failed, 0 skipped, at production-code SHA `4f1603ff16c182b69cc42bdf8edd0a26675f811f`. Full Release build: 0 errors, 22 nullable warnings. Accepted code baseline `2c8fa8291ff805cf434dc72b11ae8230e5ce16bc` differs only in governance documents; no rerun of the 1779 tests at that docs-only HEAD is claimed.
+- Windows core GUI import acceptance: product-owner-confirmed PASS on 2026-10-11 for EA → Work Range → 代入. The previous project-data inconsistency message did not recur. Later confirmations cover Undo/Redo, visible Save/Reopen, fresh-EA reapplication, stale-EA refusal and nonempty manual-content protection. Final combined fixture GUI A/B/C all PASS on 2026-10-17; the owner explicitly reconfirmed all three in the final docs-only closure authorization.
+- No-Ticket First Import and Shared Scope Isolation: Automated PASS / Dedicated GUI NOT RUN / NON-BLOCKING, expressly approved by the product owner on 2026-10-17. Real-engineering-project Save/Reopen per-field file comparison and actual GUI EA/Analyzer call counts remain NOT RUN / NON-BLOCKING. Full evidence attribution, legacy checklist disposition and closure authority are recorded in the closure report.
 
 The product owner's inverse-selection decision supersedes conflicting Phase 2–5 and original Phase 6 contracts. Prior accepted commits remain unchanged historical evidence. All-graph E/D transitions, reviewed Region/Boundary lists, legacy ElectricalRange rejection, and mandatory deterministic materialization before scope confirmation are no longer the current requirements.
 
@@ -56,13 +57,15 @@ TRX evidence is in `/tmp/wp-ws-01-correction-tests/` with `wp-ws-01-correction-{
 
 Coverage includes two selected devices versus 24 transitions (also 1/5 selections), exact Deenergized membership, Seed Bus to actual work-side Line conversion, isolated node membership, single apply/linkage/history, stale EA rejection and latest-result use after reanalysis, stable-ID Undo/Redo without analysis rerun, preserved independent ticket facts, unavailable selected sides without substitution/Analyzer, original Pole rejection reproduction, and V10 Save/Open with complete and Unknown boundaries.
 
-## Windows acceptance gate
+## Windows acceptance gate — PASSED within approved scope
 
 Windows execution subsequently passed all five complete suites (1779/1779, 0 failed, 0 skipped) on the import-fix source. The product owner accepted the core real-GUI import and explicitly authorized an independent fix commit and push to `origin/wp-ws-01`. No previous accepted commit is amended and no merge to main is authorized.
 
-The core user-judged Windows scene is now PASS: EA-selected switches → EA analysis → Work Range → one 代入. Scenario B (conversion-limited handoff) and the remaining extended GUI scenarios applicable to the revised correction contract remain PENDING. Automated tests and programmatic real-project reproduction do not establish those GUI results. WP-WS-01 remains OPEN.
+The core user-judged Windows scene is PASS: EA-selected switches → EA analysis → Work Range → one 代入. The final conversion-limited diagnostic, ticket red-overlay lifecycle and G1 coexistence/persistence GUI session also has product-owner-confirmed PASS. No-Ticket and Shared Scope use the owner's approved automated acceptance disposition; their Dedicated GUI is NOT RUN / NON-BLOCKING. Special internal topology facts are covered by formal automation, and removed Region/Boundary review interactions are superseded rather than restored. The full 14-category mapping is in the closure report; it does not claim 14/14 GUI executions. With the retained evidence boundaries, Closure Gate PASS and the owner's final docs-only authorization close WP-WS-01 as CLOSED / ACCEPTED.
 
 ## Historical follow-up: selected isolation mapping and Work Range red frame
+
+This section preserves the pending status and execution limits at the follow-up checkpoint. Its Windows visual requirement was subsequently satisfied by the final combined fixture GUI on 2026-10-17; the current accepted scope is recorded above and in the closure report.
 
 Follow-up baseline: `0b8cda846a1d8f8c83389b17129590389dd42074` on `wp-ws-01`, FormatVersion V10. This is a correction candidate; WP-WS-01 remains OPEN, and Windows verification / GUI acceptance are pending.
 
@@ -72,7 +75,9 @@ The red rectangular outline has two source paths in code. EA's accepted energize
 
 Local follow-up verification: Application 317/317, Domain 236/236, Infrastructure 153/153 passed. The full Release solution build and Desktop test-project build succeeded with 0 errors. Rendering.Wpf and Desktop runtime suites and Windows GUI were not run on macOS; the Desktop acceptance test code compiled. `git diff --check` and final repository status are recorded in the review handoff for this follow-up.
 
-## Windows import connection-reference fix acceptance — 2026-10-11
+## Historical Windows import connection-reference fix acceptance — 2026-10-11
+
+The pending-GUI and OPEN statements at the end of this historical record describe the 2026-10-11 checkpoint. They are superseded for current status by the 2026-10-17 final acceptance and closure recorded above.
 
 - Baseline: `921641011e0318772fab32e683ec8292af62a9b7` on `wp-ws-01`, FormatVersion V10.
 - Fix commit: `4f1603ff16c182b69cc42bdf8edd0a26675f811f` — `fix(wp-ws-01): correct work scope boundary connection references`.

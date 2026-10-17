@@ -2,7 +2,7 @@
 
 ## Governance and baseline
 
-- **Status:** OPEN / IN PROGRESS
+- **Status:** WP-WS-01 CLOSED / ACCEPTED — 2026-10-17
 - **Requirements Freeze:** COMPLETE
 - **Architecture / Data Model Freeze:** COMPLETE
 - **Implementation Plan Freeze:** v1.0 APPROVED
@@ -15,11 +15,15 @@
 - **Phase 3:** VERIFIED / ACCEPTED at `2444fdf8a7e4e19440a3054fcc3fa0bcfae9c4ab`; Windows automated verification PASSED (1717/1717, 0 failed, 0 skipped)
 - **Phase 4:** VERIFIED / ACCEPTED at `3f4a5fea1827f22abee39c18dda980357368dd91`; Windows automated verification PASSED (1738/1738, 0 failed, 0 skipped)
 - **Phase 5:** VERIFIED / ACCEPTED at `10cb9187c37abe7dab55bed012b008030c952823`; Windows fixed-SHA verification PASSED (1755/1755, 0 failed, 0 skipped), full solution Release build 0 errors (22 nullable warnings).
-- **Phase 6:** CORRECTION / CANDIDATE. The import connection-reference fix passed Windows full regression (1779/1779, 0 failed, 0 skipped; Release build 0 errors) and product-owner core real-GUI EA → Work Range → 代入 acceptance on 2026-10-11. Remaining GUI scenarios are PENDING; WP-WS-01 remains OPEN. Details are in the [WorkScope Correction](WP-WS-01-WORKSCOPE-CORRECTION.md).
+- **Phase 6:** VERIFIED / ACCEPTED. Closure Gate PASS; Windows automated PASSED at production-code SHA `4f1603ff16c182b69cc42bdf8edd0a26675f811f` (1779/1779, 0 failed, 0 skipped; Release build 0 errors, 22 nullable warnings). Windows GUI acceptance PASSED within approved scope, including final WTA-limited diagnostics, Work Range red overlay and G1 coexistence. Accepted code baseline: `2c8fa8291ff805cf434dc72b11ae8230e5ce16bc`; the delta from the automated evidence SHA is docs-only, with no claim of rerunning those suites at `2c8fa829`. See [WP-WS-01 Closure](WP-WS-01-CLOSURE.md).
+
+The product owner authorized the independent docs-only closure on 2026-10-17. No-Ticket First Import and Shared Scope Isolation are Automated PASS / Dedicated GUI NOT RUN / NON-BLOCKING under the owner's explicit acceptance-method approval. Real-project Save/Reopen per-field file comparison and actual GUI EA/Analyzer call counts remain NOT RUN / NON-BLOCKING. The closure report contains the final contract, legacy 14-category disposition and evidence boundaries. FormatVersion remains V10; no next Work Package or merge to main is authorized by closure.
 
 This document records the package boundary and phase acceptance history. The product-authorized [WorkScope inverse-selection correction](WP-WS-01-WORKSCOPE-CORRECTION.md), based on `2419eb4beae317552180553d25812b281983cd4b`, controls the current requirements and supersedes conflicting Phase 2–5 and original Phase 6 contracts below. Historical accepted SHAs and verification facts remain unchanged. In particular, all-graph transitions are no longer device-selection authority, user Region/Boundary review is removed, and an unavailable WTA conversion does not reject an otherwise valid WorkScope. The existing Unknown enum value can now persist such a selected device; DTOs and FormatVersion remain V10.
 
-## Phase 1 acceptance
+## Historical Phase 1 acceptance
+
+Phase 1–5 records below preserve the acceptance facts and phase boundaries as they stood at each accepted SHA. Their statements that later phases were NOT STARTED or GUI was NOT RUN describe those historical checkpoints, not the current closed package state. The final Phase 6 section and closure report control current acceptance.
 
 Phase 1 — Domain + V10 is VERIFIED / ACCEPTED at `47349b5c369c7cefb9e9f5a9b233b6f36ea5f6a3`. The accepted model includes immutable multi-Region snapshots with Terminal/Node membership, 0..N structural typed Boundaries, optional Description, complete command snapshots, V10-only persistence, and Domain referential-integrity protection. The existing WTA `BoundarySide` contract is shared from Domain without changing its values. WorkScope does not own GroundingPoint; WorkTicket references and Equipment semantics remain intact.
 
@@ -157,7 +161,7 @@ Windows fixed-SHA automated verification PASSED: Domain 236/236, Application 306
 
 At accepted SHA `10cb9187c37abe7dab55bed012b008030c952823`: Domain 236/236, Application 306/306, Infrastructure 152/152, Rendering.Wpf 674/674, Desktop 387/387; total 1755/1755, 0 failed, 0 skipped. Full solution Release build: 0 errors (22 nullable warnings). The full suites verify one history entry; no-ticket and shared-scope behavior; zero-boundary and legacy manual guard; Unrepresentable and WtaBoundarySetRejected no-partial handoff; Analyzer exactly once and replay call counts; NeedsInput and technical exception; confirmation rejection and Invalid short-circuit; all three re-confirm transitions; derived-state invalidation and user-fact preservation; rollback atomicity; V10 persistence without EA; and Phase 1-4, EA, GS, and WTA regressions.
 
-## Phase 6 — WorkScope inverse-selection correction (CORRECTION / CANDIDATE)
+## Phase 6 — WorkScope inverse-selection correction (VERIFIED / ACCEPTED)
 
 The current WorkScope is the non-Earth Deenergized complement of current valid EA CurrentResult. All Regions are internal persisted membership, including isolated nodes; users do not review/select Regions or auto-discovered Boundaries. Selected devices come exclusively from EnergizationScenario.Seeds (1..N); Candidate transition facts are restricted to those devices. Seed.Side remains the EA direction. The work side is resolved from actual topology and EA state, never cast or guessed.
 
@@ -167,7 +171,9 @@ A selected device without deterministic WTA work-side conversion persists as Wor
 
 Historical macOS correction verification passed Domain 236/236, Application 313/313, Infrastructure 153/153 and 13 portable command/UI structure checks; WPF/Desktop compiled but their test hosts could not execute without Microsoft.WindowsDesktop.App. Subsequent Windows verification of import fix `4f1603ff16c182b69cc42bdf8edd0a26675f811f` passed all five complete suites: Domain 236/236, Application 321/321, Infrastructure 154/154, Rendering.Wpf 674/674, Desktop 394/394; total 1779/1779, 0 failed, 0 skipped. Release build passed with 0 errors and 22 nullable warnings. Details and regression evidence: [WorkScope Correction](WP-WS-01-WORKSCOPE-CORRECTION.md).
 
-On 2026-10-11 the product owner confirmed the core real Windows GUI EA → Work Range → 代入 flow PASS in the import-fix version; the prior project-data inconsistency message did not recur. This satisfies the core import gate only. Conversion-limited handoff and the remaining extended GUI scenarios applicable to the revised contract are PENDING. WP-WS-01 remains OPEN, Phase 6 remains CORRECTION / CANDIDATE, and no package closure or merge to main is authorized.
+On 2026-10-11 the product owner confirmed the core real Windows GUI EA → Work Range → 代入 flow PASS in the import-fix version; the prior project-data inconsistency message did not recur. Subsequent owner confirmations cover Undo/Redo, visible Save/Reopen, switch change → new EA → reapply, stale EA rejection and nonempty manual-content preservation. On 2026-10-17 the final combined V10 fixture GUI confirmed WTA Unrepresentable diagnostics, Work Range ticket-overlay suppression/restoration without disturbing EA display, and GroundingPoint G1 coexistence/persistence: all PASS. Internal IDs, safe empty handoff and Analyzer invocation semantics are established by automated/read-only technical evidence; GUI call counts were not collected.
+
+No-Ticket and Shared Scope Dedicated GUI remain NOT RUN / NON-BLOCKING under the explicit 2026-10-17 product-owner approval; their Automated Acceptance is PASS at the fixed evidence SHA. Old Region/Boundary-selection interaction requirements are superseded, while internal topology/persistence cases retain their automated coverage. Closure Gate PASS, WP-WS-01 CLOSED / ACCEPTED, Phase 6 VERIFIED / ACCEPTED, and Windows GUI acceptance PASSED within approved scope are recorded in [WP-WS-01 Closure](WP-WS-01-CLOSURE.md), including the complete legacy disposition. No production, test or schema changes accompany this closure.
 
 ## Goal and normal flow
 
